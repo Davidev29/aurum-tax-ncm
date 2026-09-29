@@ -1,0 +1,15 @@
+{
+  "name": "Aurum Tax NCM — Classificador Fiscal",
+  "short_name": "Aurum Tax NCM",
+  "description": "Classificador fiscal da Reforma Tributária (LC 214/2025): NCM, IBS/CBS, SPED e NF-e.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#16233a",
+  "icons": [
+    { "src": "escudo.png", "sizes": "128x218", "type": "image/png", "purpose": "any" },
+    { "src": "logomarca-cheia.png", "sizes": "233x264", "type": "image/png", "purpose": "any" },
+    { "src": "icone.png", "sizes": "500x500", "type": "image/png", "purpose": "any" },
+    { "src": "logomarca.png", "sizes": "500x500", "type": "image/png", "purpose": "any" }
+  ]
+}

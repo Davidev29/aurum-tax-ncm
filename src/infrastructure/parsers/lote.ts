@@ -1,0 +1,328 @@
+/**
+ * Leitura de planilhas (CSV/XLSX/TXT) para classificação em lote e importação
+ * de empresas.
+ *
+ * ## Paridade com a v1
+ * - `mapearColunas` usa exatamente as mesmas expressões regulares de cabeçalho;
+ * - NCM é normalizado só com dígitos (`norm`) e precisa ter 8 posições;
+ * - NCM válido sem vínculo cai na regra geral, com `regraGeral = true`;
+ * - NCM inválido mantém `classificacoes = []` e `escolhida = null`.
+ *
+ * ## Melhorias
+ * - cabeçalhos de empresa e de produto ganharam sinônimos reais de planilhas
+ *   brasileiras (`referencia`, `código de barras`, `descrição`, `cod.produto`…);
+ * - a leitura é feita **primeiro pelo XLSX** e, se o arquivo não for suportado,
+ *   cai para um parser CSV próprio que entende `;` e `,` como separador;
+ * - os erros saem em `pt-BR` com a linha exata, em vez de "undefined";
+ * - o resultado já traz os totais que a tela precisa (classificadas, regra
+ *   geral, ambíguas, inválidas), evitando reprocessar na camada de UI.
+ */
+import * as XLSX from 'xlsx'
+import { fmtCnpj, norm, normalizeHeader } from '../../domain/services/format'
+import type { Classificacao, Empresa } from '../../domain/entities'
+import {
+  buscarNomenclatura,
+  classificacaoRegraGeral,
+  resolverClassificacoes,
+} from '../base/classificacao-repo'
+
+/* ------------------------------------------------------------ planilhas -- */
+
+export type TipoPlanilha = 'csv' | 'excel' | 'texto'
+
+/** Lê a primeira aba de um arquivo CSV/XLSX/TXT em matriz de células. */
+export async function lerPlanilha(file: File): Promise<unknown[][]> {
+  const nome = file.name.toLowerCase()
+  const tipo: TipoPlanilha = /\.(xlsx|xls|xlsm)$/.test(nome)
+    ? 'excel'
+    : /\.(csv|txt)$/.test(nome)
+      ? 'csv'
+      : 'texto'
+
+  try {
+    const buf = await file.arrayBuffer()
+    const wb = XLSX.read(buf, { type: 'array' })
+    const sheet = wb.Sheets[wb.SheetNames[0]]
+    if (!sheet) throw new Error('Primeira aba não encontrada.')
+    // `raw: false` devolve o valor *formatado* (datas e CNPJ legíveis), em vez
+    // do serial numérico — melhoria sobre a v1, sem alterar o mapeamento.
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false })
+    if (rows.length) return rows as unknown[][]
+    // Planilha vazia: tenta o parser textual abaixo.
+    if (tipo !== 'excel') return separarLinhas(new TextDecoder('utf-8').decode(buf))
+    throw new Error('Planilha vazia.')
+  } catch (erro) {
+    if (tipo === 'excel') throw erro
+    // Fallback textual: CSV/TXT malformado para o XLSX.
+    const texto = await file.text()
+    const linhas = separarLinhas(texto)
+    if (linhas.length) return linhas
+    throw erro
+  }
+}
+
+/** Parser CSV textual de emergência: detecta `;` ou `,` e respeita aspas. */
+function separarLinhas(texto: string): unknown[][] {
+  const limpo = texto.replace(/^﻿/, '').replace(/\r\n?/g, '\n')
+  if (!limpo.trim()) return []
+  const primeira = limpo.slice(0, limpo.indexOf('\n') === -1 ? limpo.length : limpo.indexOf('\n'))
+  const sep = (primeira.match(/;/g) || []).length >= (primeira.match(/,/g) || []).length ? ';' : ','
+
+  const out: unknown[][] = []
+  let atual: string[] = []
+  let campo = ''
+  let entreAspas = false
+
+  for (let i = 0; i < limpo.length; i++) {
+    const c = limpo[i]
+    if (entreAspas) {
+      if (c === '"') {
+        if (limpo[i + 1] === '"') {
+          campo += '"'
+          i++
+        } else entreAspas = false
+      } else campo += c
+    } else if (c === '"') entreAspas = true
+    else if (c === sep) {
+      atual.push(campo)
+      campo = ''
+    } else if (c === '\n') {
+      atual.push(campo)
+      campo = ''
+      out.push(atual)
+      atual = []
+    } else campo += c
+  }
+  atual.push(campo)
+  if (atual.length > 1 || atual[0] !== '') out.push(atual)
+  return out
+}
+
+/* ------------------------------------------------------------ mapeamento -- */
+
+export interface MapaColunas {
+  codigo?: number
+  nome?: number
+  ncm?: number
+  cfop?: number
+  cstIcms?: number
+  pis?: number
+  cofins?: number
+}
+
+/**
+ * Sinônimos adicionais sobre os da v1 — a expressão original continua sendo a
+ * primeira opção de cada campo, então qualquer arquivo que a v1 aceitava também
+ * é aceito aqui (o que a v1 rejeitava, agora é reconhecido).
+ */
+const ALIASES: Record<Exclude<keyof MapaColunas, 'ncm'>, RegExp> = {
+  // `codsku` é o cabeçalho exato do modelo que o próprio app baixa
+  // ("COD/SKU"): a v1 não o reconhecia e o SKU vinha vazio.
+  codigo: /^(cod|sku|codigo|codigosku|codsku|codigoproduto|codproduto|code|codigointerno|referencia|ref|codigodebarras|codbarra|codigoprod|produtocodigo)$/,
+  nome: /^(nome|nomedoproduto|produto|descricao|nomedescricao|descricaoproduto|desc|produtodescricao|nomedoprod)$/,
+  cfop: /^(cfop|codigocfop|cfopoperacao|cfopvenda|cfopitem)$/,
+  cstIcms: /^(cst|csticms|csticmsnf|cstsituacao|situacaotributaria|situacaofiscal)$/,
+  pis: /^(pis|cstpis|piscst|cstpiscofins)$/,
+  cofins: /^(cofins|cstcofins|cofinscst|cstpiscofins2)$/,
+}
+
+/** Mapeia cabeçalhos → índices de coluna (paridade + sinônimos). */
+export function mapearColunas(headers: unknown[]): MapaColunas {
+  const map: MapaColunas = {}
+  headers.forEach((h, i) => {
+    const n = normalizeHeader(h)
+    if (/^(cod|sku|codigo|codigosku|codigoproduto|code|codigointerno)$/.test(n)) map.codigo ??= i
+    else if (/^(nome|nomedoproduto|produto|descricao|nomedescricao|descricaoproduto)$/.test(n)) map.nome ??= i
+    else if (/^(ncm|codigoncm|ncmsh)$/.test(n)) map.ncm ??= i
+    else if (/^(cfop|codigocfop)$/.test(n)) map.cfop ??= i
+    else if (/^(cst|csticms)$/.test(n)) map.cstIcms ??= i
+    else if (/^(pis|cstpis|piscst)$/.test(n)) map.pis ??= i
+    else if (/^(cofins|cstcofins|cofinscst)$/.test(n)) map.cofins ??= i
+    else {
+      // Sinônimos não cobertos pela v1.
+      for (const [campo, re] of Object.entries(ALIASES) as [keyof MapaColunas, RegExp][]) {
+        if (re.test(n)) {
+          if (map[campo] === undefined) map[campo] = i
+          break
+        }
+      }
+    }
+  })
+  return map
+}
+
+const cel = (row: unknown[], idx: number | undefined): string =>
+  idx === undefined ? '' : String(row[idx] ?? '').trim()
+
+/* ------------------------------------------------------------- resultado -- */
+
+export interface ItemLote {
+  /** Linha da planilha (1 = cabeçalho), para rastreabilidade. */
+  indice: number
+  codigo: string
+  nome: string
+  ncm: string
+  cfop: string
+  cstIcms: string
+  pis: string
+  cofins: string
+  classificacoes: Classificacao[]
+  escolhida: Classificacao | null
+  regraGeral: boolean
+  /** `true` quando a escolhida veio de reclassificação manual do usuário. */
+  manual?: boolean
+}
+
+export interface ResumoLote {
+  itens: ItemLote[]
+  nomeArquivo: string
+  comClassificacao: number
+  regraGeral: number
+  manuais: number
+  semNcm: number
+  ambiguos: number
+}
+
+/**
+ * Lê o arquivo e resolve a classificação de cada linha.
+ *
+ * A resolução replica o laço da v1 (cache por NCM para não bater na base 2.345
+ * vezes) e aproveita `resolverClassificacoes`, que já devolve nomenclatura e o
+ * indicador de regra geral.
+ */
+export async function processarArquivoLote(
+  file: File,
+  onProgress?: (feito: number, total: number) => void,
+): Promise<ResumoLote> {
+  const rows = await lerPlanilha(file)
+  if (rows.length < 2) throw new Error('Arquivo vazio ou sem dados.')
+
+  const headers = rows[0]
+  const map = mapearColunas(headers)
+  if (map.ncm == null) {
+    throw new Error(
+      `Coluna NCM não encontrada no cabeçalho. Cabeçalhos lidos: ${headers
+        .map((h) => String(h ?? '').trim())
+        .filter(Boolean)
+        .join(', ') || '(nenhum)'}.`,
+    )
+  }
+
+  const dados = rows.slice(1).filter((r) => r.some((c) => String(c ?? '').trim() !== ''))
+  const cache = new Map<string, Classificacao[]>()
+  const cacheManual = new Map<string, boolean>()
+  const cacheVigente = new Map<string, Classificacao>()
+  const cacheRegra = new Map<string, Classificacao>()
+
+  const itens: ItemLote[] = []
+
+  for (let d = 0; d < dados.length; d++) {
+    const row = dados[d]
+    const cod = norm(row[map.ncm])
+    const item: ItemLote = {
+      indice: d + 2, // +1 cabeçalho, +1 base 1
+      codigo: cel(row, map.codigo),
+      nome: cel(row, map.nome),
+      ncm: cod,
+      cfop: cel(row, map.cfop),
+      cstIcms: cel(row, map.cstIcms),
+      pis: cel(row, map.pis),
+      cofins: cel(row, map.cofins),
+      classificacoes: [],
+      escolhida: null,
+      regraGeral: false,
+    }
+
+    if (cod.length === 8) {
+      let lista = cache.get(cod)
+      if (lista === undefined) {
+        // Prioridade base > manual > regra geral (mesma do resolvedor).
+        const r = await resolverClassificacoes(cod)
+        const oficiais = r.vinculos.length ? r.lista : []
+        cache.set(cod, oficiais)
+        cacheManual.set(cod, r.manual)
+        cacheVigente.set(cod, r.lista[0] ?? null as unknown as Classificacao)
+        lista = oficiais
+      }
+      const ehManual = cacheManual.get(cod) ?? false
+      const vigente = cacheVigente.get(cod)
+      item.classificacoes = lista
+      item.manual = ehManual || lista.some((c) => c.manual != null)
+
+      if (lista.length) {
+        item.escolhida = lista[0]
+      } else if (vigente) {
+        // Sem vínculo oficial: manual do usuário ou regra geral.
+        item.escolhida = vigente
+        item.regraGeral = vigente.regraGeral && !ehManual
+        item.manual = ehManual || vigente.manual != null
+      } else {
+        let regra = cacheRegra.get(cod)
+        if (!regra) {
+          const nom = await buscarNomenclatura(cod)
+          regra = await classificacaoRegraGeral(cod, nom)
+          cacheRegra.set(cod, regra)
+        }
+        item.escolhida = regra
+        item.regraGeral = true
+      }
+    }
+
+    itens.push(item)
+    if (onProgress && (d % 25 === 0 || d === dados.length - 1)) onProgress(d + 1, dados.length)
+  }
+
+  return {
+    itens,
+    nomeArquivo: file.name,
+    comClassificacao: itens.filter((i) => i.escolhida).length,
+    regraGeral: itens.filter((i) => i.regraGeral).length,
+    manuais: itens.filter((i) => i.manual).length,
+    semNcm: itens.filter((i) => i.ncm.length !== 8).length,
+    ambiguos: itens.filter((i) => i.classificacoes.length > 1).length,
+  }
+}
+
+/* ------------------------------------------------------------- empresas --- */
+
+const RE_RAZAO = /^(razaosocial|razao|nome|nomeempresa|empresa|clientes|razaosocialempresa)$/
+const RE_CNPJ = /^(cnpj|numerocnpj|cnpjempresa|cgc)$/
+const RE_FANTASIA = /^(nomefantasia|fantasia|apelido|nomecomercial|fantasiaempresa)$/
+
+/**
+ * Importa empresas em lote (paridade com `importarEmpresasLote` da v1).
+ * Lança erro em pt-BR; o chamador decide o `confirm`.
+ */
+export async function importarEmpresasDoArquivo(file: File): Promise<Empresa[]> {
+  const rows = await lerPlanilha(file)
+  if (rows.length < 2) throw new Error('Arquivo vazio ou sem dados.')
+
+  const headers = rows[0].map(normalizeHeader)
+  const idxRazao = headers.findIndex((h) => RE_RAZAO.test(h))
+  const idxCnpj = headers.findIndex((h) => RE_CNPJ.test(h))
+  const idxFant = headers.findIndex((h) => RE_FANTASIA.test(h))
+
+  if (idxRazao < 0) {
+    throw new Error(
+      `Coluna "Razão Social" não encontrada. Cabeçalhos lidos: ${
+        rows[0].map((h) => String(h ?? '').trim()).filter(Boolean).join(', ') || '(nenhum)'
+      }.`,
+    )
+  }
+
+  const agora = new Date().toISOString()
+  const lote: Empresa[] = []
+  for (const row of rows.slice(1)) {
+    const razao = String(row[idxRazao] ?? '').trim()
+    if (!razao) continue
+    lote.push({
+      razaoSocial: razao,
+      cnpj: idxCnpj >= 0 ? fmtCnpj(row[idxCnpj]) : '',
+      fantasia: idxFant >= 0 ? String(row[idxFant] ?? '').trim() : '',
+      criadoEm: agora,
+    })
+  }
+
+  if (!lote.length) throw new Error('Nenhuma empresa válida encontrada.')
+  return lote
+}

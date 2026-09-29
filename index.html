@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="Aurum Tax NCM — Classificador fiscal da Reforma Tributária (LC 214/2025). Consulte NCM, simule IBS/CBS e analise SPED e NF-e."
+    />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f2ea" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b1220" />
+    <meta property="og:title" content="Aurum Tax NCM — Classificador Fiscal" />
+    <meta
+      property="og:description"
+      content="Classificação fiscal da Reforma Tributária: NCM, IBS/CBS, SPED e NF-e."
+    />
+    <meta property="og:image" content="./logomarca.png" />
+    <link rel="icon" href="./icon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="./icone.png" />
+    <link rel="apple-touch-icon" href="./icone.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <title>Aurum Tax NCM — Classificador Fiscal</title>
+    <script>
+      // Aplica o tema persistido antes do primeiro paint para evitar flash.
+      (function () {
+        try {
+          var t = localStorage.getItem('tema')
+          if (t !== 'dark' && t !== 'light') {
+            t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+          }
+          if (t === 'dark') document.documentElement.classList.add('dark')
+        } catch (e) {
+          /* tema padrão claro */
+        }
+      })()
+    </script>
+  </head>
+  <body class="h-full">
+    <div id="raiz"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

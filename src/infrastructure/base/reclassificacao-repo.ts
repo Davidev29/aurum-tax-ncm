@@ -1,0 +1,138 @@
+import type {
+  Classificacao,
+  NomenclaturaNcm,
+  ReclassificacaoManual,
+  TabelaCst,
+  TabelaCstClassTrib,
+} from '@/domain/entities'
+import { montarClassificacaoManual, type ContextoClassificacao } from '@/domain/services/classificacao'
+import { norm } from '@/domain/services/format'
+import { db } from '../db/schema'
+
+/** Busca a reclassificação manual de um NCM (ou `null`). */
+export async function buscarReclassificacaoManual(codigo: unknown): Promise<ReclassificacaoManual | null> {
+  const c = norm(codigo)
+  if (c.length !== 8) return null
+  try {
+    return (await db.reclassificacoesManuais.get(c)) ?? null
+  } catch {
+    return null
+  }
+}
+
+/** Monta a `Classificacao` manual com join 3NF da CST/cClassTrib escolhida. */
+export async function classificacaoManual(
+  manual: ReclassificacaoManual,
+  nomenclatura?: NomenclaturaNcm | null,
+): Promise<Classificacao> {
+  const [cstDetalhes, cstClassTribDetalhes, referencia] = await Promise.all([
+    db.cst.get(manual.cst).catch(() => null),
+    db.cstClassTrib.get(`${manual.cst}|${manual.cClassTrib}`).catch(() => null),
+    db.referencia.get(`${manual.cst}|${manual.cClassTrib}`).catch(() => null),
+  ])
+  const ctx: ContextoClassificacao = {
+    cstDetalhes: (cstDetalhes ?? null) as ContextoClassificacao['cstDetalhes'],
+    cstClassTribDetalhes: (cstClassTribDetalhes ?? null) as ContextoClassificacao['cstClassTribDetalhes'],
+    referencia: (referencia ?? null) as ContextoClassificacao['referencia'],
+    nomenclatura: nomenclatura ?? null,
+  }
+  return montarClassificacaoManual(manual, ctx)
+}
+
+export interface EntradaReclassificacao {
+  ncm: string
+  cst: string
+  cClassTrib: string
+  descricao: string
+  fonteDescricao: string
+  fonteUrl: string
+}
+
+function validarEntrada(e: EntradaReclassificacao): string | null {
+  if (norm(e.ncm).length !== 8) return 'NCM deve ter 8 dígitos.'
+  if (!e.cst.trim()) return 'Escolha a CST.'
+  if (!e.cClassTrib.trim()) return 'Escolha a cClassTrib.'
+  if (!e.descricao.trim()) return 'Descreva a justificativa.'
+  if (!e.fonteDescricao.trim()) return 'Informe de onde tirou a informação (fonte).'
+  if (!e.fonteUrl.trim()) return 'Informe o link da legislação/fonte.'
+  try {
+    const u = new URL(e.fonteUrl.trim())
+    if (!['http:', 'https:'].includes(u.protocol)) return 'O link deve começar com http(s)://.'
+  } catch {
+    return 'O link informado não é uma URL válida.'
+  }
+  return null
+}
+
+/** Salva (upsert por NCM) a reclassificação manual. */
+export async function salvarReclassificacaoManual(
+  e: EntradaReclassificacao,
+): Promise<{ ok: true; manual: ReclassificacaoManual } | { ok: false; motivo: string }> {
+  const erro = validarEntrada(e)
+  if (erro) return { ok: false, motivo: erro }
+  const agora = new Date().toISOString()
+  const ncm = norm(e.ncm)
+  const anterior = await buscarReclassificacaoManual(ncm)
+  const manual: ReclassificacaoManual = {
+    ncm,
+    cst: e.cst.trim(),
+    cClassTrib: e.cClassTrib.trim(),
+    descricao: e.descricao.trim(),
+    fonteDescricao: e.fonteDescricao.trim(),
+    fonteUrl: e.fonteUrl.trim(),
+    criadoEm: anterior?.criadoEm ?? agora,
+    atualizadoEm: agora,
+  }
+  await db.reclassificacoesManuais.put(manual)
+  return { ok: true, manual }
+}
+
+/** Remove a reclassificação manual de um NCM (volta à regra geral). */
+export async function removerReclassificacaoManual(codigo: unknown): Promise<void> {
+  const c = norm(codigo)
+  if (c.length !== 8) return
+  await db.reclassificacoesManuais.delete(c)
+}
+
+/** Opção de classificação existente no sistema (auxílio do modal). */
+export interface OpcaoClassificacaoExistente {
+  id: string
+  cst: string
+  cClassTrib: string
+  nome: string
+  descricao: string
+  pRedIBS: number | null
+  pRedCBS: number | null
+  lcRef: string | null
+  anexo: string | null
+  urlLegislacao: string | null
+}
+
+/** Lista as classificações existentes (tabela cClassTrib + referência) para o modal. */
+export async function listarClassificacoesExistentes(limite = 500): Promise<OpcaoClassificacaoExistente[]> {
+  const [ccts, refs, csts] = await Promise.all([
+    db.cstClassTrib.limit(limite).toArray().catch((): Promise<TabelaCstClassTrib[]> => Promise.resolve([])),
+    db.referencia.limit(limite).toArray().catch(() => []),
+    db.cst.limit(limite).toArray().catch((): Promise<TabelaCst[]> => Promise.resolve([])),
+  ])
+  const refPorId = new Map(refs.map((r) => [r.id, r]))
+  const cstDesc = new Map(csts.map((c) => [c.codigo, c.descricao]))
+  return ccts
+    .map((c) => {
+      const ref = refPorId.get(c.id)
+      const nome = c.nome || c.descricao || ref?.descricao || `${c.cst} × ${c.cClassTrib}`
+      return {
+        id: c.id,
+        cst: c.cst,
+        cClassTrib: c.cClassTrib,
+        nome,
+        descricao: `${c.cst} · ${c.cClassTrib} — ${nome}${cstDesc.get(c.cst) ? ` (CST: ${cstDesc.get(c.cst)})` : ''}`,
+        pRedIBS: c.pRedIBS ?? ref?.pRedIBS ?? 0,
+        pRedCBS: c.pRedCBS ?? ref?.pRedCBS ?? 0,
+        lcRef: c.lcRef || c.lcRedacao || null,
+        anexo: ref?.anexo ?? null,
+        urlLegislacao: ref?.urlLegislacao ?? null,
+      }
+    })
+    .sort((a, b) => a.cst.localeCompare(b.cst) || a.cClassTrib.localeCompare(b.cClassTrib))
+}

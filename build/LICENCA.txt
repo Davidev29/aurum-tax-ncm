@@ -1,0 +1,86 @@
+AURUM TAX NCM — CONTRATO DE LICENÇA DE USO DE SOFTWARE DESKTOP
+Licença local (instalação na máquina do cliente) · Sem armazenamento em nuvem
+Versão 1.0 — Setembro/2026 · Aurum Bit Labs & Studios LTDA · CNPJ 44.366.379/0001-23
+
+LEIA COM ATENÇÃO. Para instalar e usar o Aurum Tax NCM você precisa aceitar
+este contrato. Se não concordar, cancele a instalação.
+
+1. OBJETO. Licença de uso, não exclusiva e intransferível, do software desktop
+"Aurum Tax NCM" (classificador fiscal da Reforma Tributária: NCM/NBS, CST de
+IBS/CBS, cClassTrib, calculadora, SPED Fiscal, XML de NF-e/NFC-e, produtos,
+tabelas auxiliares, legislação e relatórios), nos limites da versão adquirida
+(Proposta/Pedido). Não há transferência de propriedade, código-fonte ou
+propriedade intelectual (Leis 9.609/1998, 9.610/1998 e 9.279/1996).
+
+2. INSTALAÇÃO LOCAL — SEM NUVEM. O software roda 100% nesta máquina. Todos os
+seus dados (empresas, produtos, SPED, XMLs, classificações, emitente) ficam
+gravados EXCLUSIVAMENTE neste computador (banco local + pasta de dados do
+usuário) e NÃO são enviados, hospedados ou armazenados em nuvem pela Aurum.
+A Aurum NÃO recebe, NÃO coleta e NÃO tem acesso à sua base. Internet só é
+usada se você pedir: consulta de CNPJ (BrasilAPI), leitura de norma oficial
+(Planalto/CGIBS), portal CFF e verificação de atualizações — sua base nunca
+é transmitida à Aurum. Você é responsável pela segurança da máquina, pelos
+backups (menu Configurações > Backup) e pela guarda dos dados.
+
+3. ACEITE. Ao clicar "Aceito", você declara que leu este contrato (resumo
+nesta tela + texto integral em docs/CONTRATO - Aurum Tax NCM (Licenca de Uso
+Desktop Local).docx) e o aceita livremente. O aceite registra localmente
+versão do contrato, data/hora e identificação da instalação como prova da
+contratação (MP 2.200-2/2001, Lei 14.063/2020, arts. 104, 107 e 219 do
+Código Civil). Quem aceita declara ter poderes para obrigar a contratante.
+
+4. RESTRIÇÕES. É vedado: copiar além das instalações licenciadas, modificar,
+engenheirar reversa (salvo hipótese legal), sublicenciar/ceder/revender,
+burlar ativação, usar para fim ilícito, remover marcas/avisos da Aurum.
+Descumprimento autoriza suspensão da licença e rescisão por justa causa.
+
+5. BASE TRIBUTÁRIA DE REFERÊNCIA. EC 132/2023, LC 214/2025 (IBS/CBS/IS),
+Decreto 12.955/2026 (CBS), Resolução CGIBS 6/2026 (IBS) e NT 2025.002 da
+NF-e, conforme a versão instalada. A Reforma está em transição: em caso de
+divergência, vale o texto oficial (Planalto/CGIBS/SEFAZ). O software é
+ferramenta de APOIO e não substitui seu julgamento profissional, nem garante
+resultado perante o Fisco. Você é responsável por conferir, revisar e entregar
+obrigações e documentos, e por multas/autuações.
+
+6. ATUALIZAÇÕES E SUPORTE. Atualizações da base e do software por download;
+aplique-as, pois a legislação está em implantação. Suporte em regime de
+melhores esforços, nos canais e horários informados. Software fornecido "como
+está", sem garantias implícitas. Não cobre: falhas do seu ambiente, perda de
+dados sem backup, uso indevido e indisponibilidade de serviços externos
+opcionais.
+
+7. PREÇO E PAGAMENTO. Conforme a Proposta/Pedido. Inadimplência: multa de 2%,
+juros de 1% a.m., correção, e suspensão de atualizações/suporte/ativação.
+Reajuste anual pelo IPCA/IBGE (ou substituto), com aviso de 30 dias.
+
+8. DADOS PESSOAIS (LGPD 13.709/2018). Seus dados operacionais ficam só na sua
+máquina: você é a controladora deles. Dados de cadastro/ativação (nome,
+CPF/CNPJ, e-mail, licenciamento): a Aurum é controladora para ativação,
+faturamento e suporte. DPO: Francisco Davi Carneiro Brito,
+privacy@aurumbit.com.br, (85) 9665-2002. Sigilo por 5 anos.
+
+9. RESPONSABILIDADE LIMITADA. No máximo permitido em lei, a responsabilidade
+total da Aurum limita-se ao pago nos 12 meses anteriores (ou ao valor da
+licença perpétua, se menor). Sem danos indiretos, lucros cessantes, perda de
+dados locais sem backup, multas fiscais ou danos sem dolo/culpa grave
+comprovada.
+
+10. VIGÊNCIA E RESCISÃO. Vale do aceite em diante; licença perpétua da versão
+e/ou assinatura de atualizações, conforme o Pedido. Rescisão da assinatura a
+qualquer tempo (sem devolução de período iniciado). A Aurum pode rescindir
+com 30 dias (mantida a versão perpétua, se houver) ou de imediato por justa
+causa. Encerrado, cessam atualizações/suporte; seus dados locais permanecem
+na máquina para exportação — nada é apagado remotamente.
+
+11. LEI E FORO. Leis do Brasil (Lei de Software, Código Civil, Marco Civil no
+que couber, LGPD; matéria tributária: EC 132/2023, LC 214/2025, Decreto
+12.955/2026, Res. CGIBS 6/2026, NT 2025.002). Foro de Fortaleza/CE, ressalvada
+a competência legal do consumidor pessoa física. Mediação facultativa.
+
+CONTRATADA: AURUM BIT LABS & STUDIOS LTDA — CNPJ 44.366.379/0001-23, Rua
+Cônego de Castro, 5185, Loja 01, Canindezinho, Fortaleza/CE, CEP 60763-433,
+por seu sócio-administrador Francisco Davi Carneiro Brito.
+CONTRATANTE: você, pelos dados informados no assistente de instalação, com
+aceite local registrado.
+
+Ao clicar "Aceito" (I Agree), você conclui a contratação nestes termos.
