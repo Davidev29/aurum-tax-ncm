@@ -45,6 +45,7 @@ export const SUGGEST_LIMITS = {
   consulta: 15,
   formulario: 20,
   buscaNomenclatura: 30,
+  buscaTexto: 30,
   calcProdutos: 8,
   calcNcm: 5,
 } as const

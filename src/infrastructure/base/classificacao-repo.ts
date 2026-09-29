@@ -7,6 +7,12 @@ import {
   type ContextoClassificacao,
 } from '@/domain/services/classificacao'
 import { revogacaoDe, type Revogacao } from '@/domain/services/revogacao'
+import {
+  comporCaminho,
+  normalizarBusca,
+  pontuarCandidato,
+  tokenizarBusca,
+} from '@/domain/services/busca-texto'
 import { norm } from '@/domain/services/format'
 import { db } from '../db/schema'
 import { obterRevogacoesCff } from '../cff/cff-sync'
@@ -81,6 +87,94 @@ export async function sugerirNomenclatura(
     .toArray()
   achados.sort((a, b) => Number(Boolean(a.dataFim)) - Number(Boolean(b.dataFim)))
   return achados.slice(0, limite)
+}
+
+/* ------------------------------------------------- busca por texto (nome) -- */
+
+/** Resultado da busca textual: nomenclatura + contexto hierárquico e fiscal. */
+export interface ResultadoBuscaTexto extends NomenclaturaNcm {
+  /** Descrições dos ancestrais (capítulo → … → subposição). */
+  caminho: string[]
+  /** Caminho + descrição própria, para exibição (`A › B › C`). */
+  caminhoTexto: string
+  /** Quantos vínculos da Reforma existem para este NCM. */
+  totalClassificacoes: number
+  /** Pontuação interna (maior = melhor match). */
+  score: number
+}
+
+/** Cache em memória da nomenclatura para a busca textual ser fluida. */
+let _cacheBuscaTexto: NomenclaturaNcm[] | null = null
+let _cacheBuscaTextoTotal = -1
+
+/** Invalida o cache da busca textual (chamar após importar/apagar a base). */
+export function invalidarCacheBuscaTexto(): void {
+  _cacheBuscaTexto = null
+  _cacheBuscaTextoTotal = -1
+}
+
+/**
+ * Busca NCMs pelo **nome do produto** (ex.: "queijo mozarela").
+ *
+ * - Somente NCMs de 8 dígitos (os únicos classificáveis);
+ * - match sobre o caminho hierárquico completo (pais + item), insensível a
+ *   acento/caixa — `0406.10.10` ("Mozarela") é achado por "queijo";
+ * - vigentes antes dos extintos; genéricos ("Outros") por último;
+ * - enriquece com a contagem de vínculos da Reforma (`totalClassificacoes`).
+ */
+export async function buscarNomenclaturaPorTexto(
+  termo: unknown,
+  limite = 30,
+): Promise<ResultadoBuscaTexto[]> {
+  const tokens = tokenizarBusca(termo)
+  if (!tokens.length) return []
+  const total = await db.ncmNomenclatura.count()
+  if (_cacheBuscaTexto === null || _cacheBuscaTextoTotal !== total) {
+    _cacheBuscaTexto = await db.ncmNomenclatura.toArray()
+    _cacheBuscaTextoTotal = total
+  }
+  const todas = _cacheBuscaTexto ?? []
+  const porCodigo = new Map(todas.map((n) => [n.codigo, n.descricao]))
+
+  const candidatos: ResultadoBuscaTexto[] = []
+  for (const n of todas) {
+    if (n.codigo.length !== 8) continue
+    const caminho = comporCaminho(n.codigo, (p) => porCodigo.get(p))
+    const normPropria = normalizarBusca(n.descricao)
+    const normCaminho = normalizarBusca([...caminho, n.descricao].join(' '))
+    const score = pontuarCandidato(tokens, normPropria, normCaminho)
+    if (score < 0) continue
+    candidatos.push({
+      ...n,
+      caminho,
+      caminhoTexto: [...caminho, n.descricao].filter(Boolean).join(' › '),
+      totalClassificacoes: 0,
+      score,
+    })
+  }
+  candidatos.sort((a, b) => {
+    const vig = Number(Boolean(a.dataFim)) - Number(Boolean(b.dataFim))
+    if (vig !== 0) return vig
+    if (b.score !== a.score) return b.score - a.score
+    return a.codigo.localeCompare(b.codigo)
+  })
+  const pagina = candidatos.slice(0, Math.max(1, Math.min(limite, 100)))
+
+  // Enriquecimento fiscal: quantos vínculos cada NCM tem na base da Reforma.
+  if (pagina.length) {
+    try {
+      const vinculos = await db.ncm
+        .where('codigo')
+        .anyOf(pagina.map((p) => p.codigo))
+        .toArray()
+      const contagem = new Map<string, number>()
+      for (const v of vinculos) contagem.set(v.codigo, (contagem.get(v.codigo) ?? 0) + 1)
+      for (const p of pagina) p.totalClassificacoes = contagem.get(p.codigo) ?? 0
+    } catch {
+      // Sem vínculos (base da Reforma vazia): mantém 0, a busca continua útil.
+    }
+  }
+  return pagina
 }
 
 /** Monta a classificação de regra geral já com a nomenclatura do NCM. */

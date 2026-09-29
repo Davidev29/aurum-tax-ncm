@@ -14,6 +14,16 @@
 export const SISCOMEX_NCM_URL =
   'https://portalunico.siscomex.gov.br/classif/api/publico/nomenclatura/download/json'
 
+/**
+ * Variações do endpoint tentadas em ordem (fallback automático).
+ * Ambas são oficiais e retornam o mesmo JSON; se a primeira falhar por
+ * rede/proxy, a segunda é tentada antes de desistir.
+ */
+export const SISCOMEX_NCM_URLS = [
+  SISCOMEX_NCM_URL,
+  `${SISCOMEX_NCM_URL}?perfil=PUBLICO`,
+] as const
+
 export const SISCOMEX_PORTAL_URL = 'https://portalunico.siscomex.gov.br/classif/'
 
 /** Chave de metadados da sincronização no IndexedDB (store `meta`). */
@@ -25,10 +35,12 @@ export const SISCOMEX_SYNC_CONFIG = {
   intervaloMinimo: 24 * 60 * 60 * 1000,
   /** Timeout por tentativa (ms) — o arquivo tem ~3 MB */
   timeout: 90_000,
+  /** Timeout do diagnóstico de conexão (ms) — rápido para não travar a UI */
+  timeoutDiagnostico: 20_000,
   /** User-Agent enviado nas requisições */
   userAgent: 'AurumTaxNCM/1.0 (sincronização NCM Siscomex)',
-  /** Máximo de tentativas em caso de falha de rede (poucas: o portal limita taxa) */
-  maxTentativas: 2,
+  /** Rodadas de tentativa no total (URLs × repetição; gentil: o portal limita taxa) */
+  maxTentativas: 3,
   /** Delay entre tentativas (ms) */
   retryDelay: 10_000,
 } as const

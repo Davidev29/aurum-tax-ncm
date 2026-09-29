@@ -11,7 +11,7 @@ import { ehBackup, montarBackup, restaurarBackup, type Backup } from '@/applicat
 import { normalizarCor, processarLogo } from '@/application/emitente'
 import { ARQUIVOS_BASE } from '@/application/base'
 import { statusSincronizacao, sincronizacaoManual, importarTabelaProduto, coberturaTabelasProduto, type SyncResultado } from '@/application/cff-sync'
-import { importarTabelaNcm, sincronizacaoManualNcm, statusSincronizacaoNcm } from '@/application/ncm-sync'
+import { importarTabelaNcm, sincronizacaoManualNcm, statusSincronizacaoNcm, testarConexaoNcm } from '@/application/ncm-sync'
 import { SISCOMEX_PORTAL_URL } from '@/domain/constants/siscomex-apis'
 import { CFF_ENDPOINTS, LINK_PORTAL_CFF, SISTEMAS_CFF } from '@/domain/constants'
 import type { Emitente } from '@/domain/entities'
@@ -482,6 +482,8 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
   const [cffSyncProgresso, setCffSyncProgresso] = useState<{ etapa: string; pct: number; resultado?: SyncResultado } | null>(null)
   const [ncmStatus, setNcmStatus] = useState<Awaited<ReturnType<typeof statusSincronizacaoNcm>> | null>(null)
   const [ncmProg, setNcmProg] = useState<{ etapa: string; pct: number } | null>(null)
+  const [ncmDiag, setNcmDiag] = useState<Awaited<ReturnType<typeof testarConexaoNcm>> | null>(null)
+  const [ncmDiagRodando, setNcmDiagRodando] = useState(false)
   const inputBase = useRef<HTMLInputElement>(null)
   const inputBackup = useRef<HTMLInputElement>(null)
   const inputNcm = useRef<HTMLInputElement>(null)
@@ -919,7 +921,65 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
                 🔄 Sincronizar NCM agora
               </Btn>
               <Btn tam="sm" onClick={() => inputNcm.current?.click()}>⬆ Importar JSON do portal</Btn>
+              <Btn
+                tam="sm"
+                disabled={ncmDiagRodando}
+                onClick={() => {
+                  void (async () => {
+                    setNcmDiagRodando(true)
+                    setNcmDiag(null)
+                    try {
+                      setNcmDiag(await testarConexaoNcm())
+                    } finally {
+                      setNcmDiagRodando(false)
+                    }
+                  })()
+                }}
+              >
+                {ncmDiagRodando ? '⏳ Testando…' : '🔌 Testar conexão'}
+              </Btn>
+              <a
+                href={SISCOMEX_PORTAL_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700"
+              >
+                ↗ Abrir portal
+              </a>
             </div>
+            {ncmDiag ? (
+              <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2">
+                <div className={`text-xs font-bold ${ncmDiag.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
+                  {ncmDiag.ok ? '✅ Conexão funcionando' : '❌ Falha na conexão'} — {ncmDiag.resumo}
+                </div>
+                <div className="mt-1 space-y-0.5">
+                  {ncmDiag.etapas.map((e) => (
+                    <div key={e.etapa} className="flex items-center justify-between gap-2 text-[10px] text-slate-500">
+                      <span>{e.ok ? '✓' : '✗'} {e.etapa}</span>
+                      <span className="truncate">{e.detalhe} · {e.ms}ms</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-1.5">
+                  <Btn
+                    tam="sm"
+                    onClick={() => {
+                      const txt = [
+                        `Diagnóstico NCM Siscomex — ${new Date().toLocaleString('pt-BR')}`,
+                        ...ncmDiag.etapas.map((e) => `${e.ok ? '[OK]' : '[FALHA]'} ${e.etapa}: ${e.detalhe} (${e.ms}ms)`),
+                        `Resumo: ${ncmDiag.resumo}`,
+                      ].join('\n')
+                      void navigator.clipboard?.writeText(txt).then(
+                        () => toast('Diagnóstico copiado.', 'ok'),
+                        () => toast('Não foi possível copiar.', 'err'),
+                      )
+                    }}
+                  >
+                    📋 Copiar diagnóstico
+                  </Btn>
+                </div>
+              </div>
+            ) : null}
             <input
               ref={inputNcm}
               type="file"

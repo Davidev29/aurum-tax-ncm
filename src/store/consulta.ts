@@ -8,8 +8,10 @@ import { create } from 'zustand'
 import { SUGGEST_LIMITS } from '@/domain/constants'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
 import {
+  buscarNomenclaturaPorTexto,
   resolverClassificacoes,
   sugerirNomenclatura,
+  type ResultadoBuscaTexto,
 } from '@/infrastructure/base/classificacao-repo'
 import { registrarLimpeza } from './ui'
 
@@ -19,6 +21,8 @@ export interface ResultadoConsulta {
   regraGeral: boolean
   manual: boolean
 }
+
+export type ModoConsulta = 'ncm' | 'texto'
 
 interface ConsultaState {
   codigo: string
@@ -30,9 +34,22 @@ interface ConsultaState {
   carregando: boolean
   sugestoes: NomenclaturaNcm[]
 
+  /** Aba ativa da consulta: NCM (8 dígitos) ou texto (nome do produto). */
+  modo: ModoConsulta
+  /** Texto digitado na aba de busca por nome. */
+  buscaTexto: string
+  /** Resultados da busca textual (somente NCMs de 8 dígitos). */
+  resultadosTexto: ResultadoBuscaTexto[]
+  buscandoTexto: boolean
+
   setCodigo: (v: string) => void
   consultar: (codigo?: string) => Promise<void>
   buscarSugestoes: (texto: string) => Promise<void>
+  setModo: (m: ModoConsulta) => void
+  setBuscaTexto: (v: string) => void
+  buscarTexto: (termo?: string) => Promise<void>
+  /** Escolhe um NCM achado pelo nome e classifica imediatamente. */
+  escolherTexto: (codigo: string) => Promise<void>
   limpar: () => void
 }
 
@@ -45,6 +62,9 @@ function montarResultados(lista: Classificacao[]): ResultadoConsulta[] {
   }))
 }
 
+/** Geração da busca textual — só a mais recente pode escrever no estado. */
+let seqBuscaTexto = 0
+
 export const useConsulta = create<ConsultaState>((set, get) => ({
   codigo: '',
   nomenclatura: null,
@@ -54,6 +74,11 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
   avisoInvalido: false,
   carregando: false,
   sugestoes: [],
+
+  modo: 'ncm',
+  buscaTexto: '',
+  resultadosTexto: [],
+  buscandoTexto: false,
 
   setCodigo: (v) => set({ codigo: v }),
 
@@ -94,6 +119,30 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
     set({ sugestoes: lista })
   },
 
+  setModo: (m) => set({ modo: m }),
+
+  setBuscaTexto: (v) => set({ buscaTexto: v }),
+
+  buscarTexto: async (termo) => {
+    const alvo = (termo ?? get().buscaTexto).trim()
+    const seq = ++seqBuscaTexto
+    if (alvo.length < 2) {
+      set({ resultadosTexto: [], buscandoTexto: false })
+      return
+    }
+    set({ buscandoTexto: true })
+    const lista = await buscarNomenclaturaPorTexto(alvo, SUGGEST_LIMITS.buscaTexto)
+    if (seq !== seqBuscaTexto) return
+    set({ resultadosTexto: lista, buscandoTexto: false })
+  },
+
+  escolherTexto: async (codigo) => {
+    const digitos = codigo.replace(/\D+/g, '')
+    if (digitos.length !== 8) return
+    set({ modo: 'ncm' })
+    await get().consultar(digitos)
+  },
+
   limpar: () =>
     set({
       codigo: '',
@@ -104,6 +153,9 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
       avisoInvalido: false,
       carregando: false,
       sugestoes: [],
+      buscaTexto: '',
+      resultadosTexto: [],
+      buscandoTexto: false,
     }),
 }))
 

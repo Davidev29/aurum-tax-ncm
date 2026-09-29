@@ -6,6 +6,7 @@
  */
 import {
   deveSincronizarNcm,
+  diagnosticarConexaoNcm,
   importarTabelaNcmJson,
   obterStatusNcm,
   sincronizarNomenclatura,
@@ -104,4 +105,12 @@ export async function importarTabelaNcm(json: unknown, nomeArquivo: string) {
 /** Status atual da sincronização NCM para a UI. */
 export async function statusSincronizacaoNcm() {
   return obterStatusNcm()
+}
+
+/**
+ * Diagnóstico de conexão (botão "Testar conexão"): rápido, não grava nada.
+ * Devolve o passo a passo para a UI exibir e copiar para o suporte.
+ */
+export async function testarConexaoNcm() {
+  return diagnosticarConexaoNcm()
 }

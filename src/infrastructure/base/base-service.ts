@@ -8,6 +8,7 @@ import type {
 } from '@/domain/entities'
 import { lerArquivoBase } from '../bridge'
 import { bulkPut, db, type MetaRecord } from '../db/schema'
+import { invalidarCacheBuscaTexto } from './classificacao-repo'
 import {
   normalizarCst,
   normalizarCstClassTrib,
@@ -96,6 +97,7 @@ export async function importarBase(
       arquivo: nomeArquivo,
       total: itens.length,
     })
+    invalidarCacheBuscaTexto()
     onProgress('Finalizado', 100)
     return { formato, total: itens.length }
   }
@@ -274,6 +276,7 @@ export async function semearBaseEmbutida(
     quando: agora,
   })
 
+  invalidarCacheBuscaTexto()
   onProgress('Finalizado', 100)
   return statusBase()
 }
@@ -318,6 +321,7 @@ export async function apagarBaseImportada(): Promise<void> {
     db.meta.delete(META_KEYS.IMPORTACAO_NOMENCLATURA),
     db.meta.delete('base_embutida'),
   ])
+  invalidarCacheBuscaTexto()
 }
 
 export type { VinculoNcm, TabelaCst, TabelaCstClassTrib }
