@@ -26,12 +26,12 @@ export function MarcaSidebar() {
   return (
     // `items-stretch` + `justify-center`: o bloco de texto herda a altura do
     // escudo e centraliza nela — imagem e texto sempre alinhados.
-    <div className="flex min-w-0 items-stretch gap-3">
-      <EscudoAurum tamanho={68} />
+    <div className="flex w-full min-w-0 items-stretch justify-center gap-3">
+      <EscudoAurum tamanho={104} />
       <div className="flex min-w-0 flex-col justify-center leading-tight">
-        <div className="marca-nome truncate text-[19px]">AURUM</div>
-        <div className="marca-sub truncate">TAX · NCM</div>
-        <div className="marca-filete mt-1 w-full" aria-hidden="true" />
+        <div className="marca-nome truncate text-[26px]">AURUM</div>
+        <div className="marca-sub truncate text-[13px]">TAX · NCM</div>
+        <div className="marca-filete mt-1.5 w-full" aria-hidden="true" />
       </div>
     </div>
   )

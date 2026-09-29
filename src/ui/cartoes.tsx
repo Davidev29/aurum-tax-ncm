@@ -18,9 +18,12 @@ import {
   avisoInNatura,
   badgeReducao,
   calcularTributos,
+  observacaoTipoAliquota,
+  observacoesDiferimento,
   observacoesLegais,
 } from '@/domain/services/calculo'
-import { chipCondicao } from '@/domain/services/classificacao'
+import { chipCondicao, isNcmExtinto, observacaoExtincaoNcm, observacaoVigenciaCct } from '@/domain/services/classificacao'
+import { observacaoRevogacao } from '@/domain/services/revogacao'
 import { fmtMoeda, fmtNcm, parseMoeda } from '@/domain/services/format'
 import { useCalculadora } from '@/store/calculadora'
 import { AnexoBadge, Btn, Pill, Texto, type CorPill } from './kit'
@@ -30,7 +33,7 @@ import { ModalLegislacao, type DestinoLegislacao } from './ModalLegislacao'
 
 const COR_BADGE: Record<string, CorPill> = { red: 'red', amber: 'amber', emerald: 'emerald' }
 
-const RE_DOC = /^(NFe|NFCe|CTe|CTeOS|BPe|BPeTM|NF3e|NFCom|NFSe)$/i
+const RE_DOC = /^(NFe|NFCe|CTe|CTeOS|BPe|BPeTM|NF3e|NFCom|NFSe|NFAg|NFGas|BPeTA|NFSVIA|NFABI|DERE|DIR|DUIMP)$/i
 
 function docsLigados(docs: unknown): string[] {
   if (!docs || typeof docs !== 'object') return []
@@ -71,6 +74,65 @@ export function DocsHabilitados({ docs }: { docs: unknown }) {
 /** Selo de reclassificação manual — responsabilidade do usuário, isenta o sistema. */
 export function PillManual() {
   return <Pill cor="amber">✋ Manual · usuário</Pill>
+}
+
+/**
+ * Aviso de NCM extinto ("negado" na tabela vigente).
+ * O NCM saiu da TEC (Data_Fim preenchida) e passa a ser tributado por outro
+ * código — o vínculo/regra geral abaixo é referência histórica, não vigente.
+ */
+export function AvisoNcmExtinto({ nomenclatura }: { nomenclatura: NomenclaturaNcm | null | undefined }) {
+  const obs = observacaoExtincaoNcm(nomenclatura)
+  if (!obs) return null
+  return <ListaObservacoes itens={[obs]} />
+}
+
+/**
+ * Aviso de vigência do cClassTrib (`dIniVig/dFimVig` da base CFF).
+ * `null` quando vigente ou sem datas (caso comum atual).
+ */
+export function AvisoVigenciaCct({
+  cct,
+}: {
+  cct: Pick<import('@/domain/entities').TabelaCstClassTrib, 'cClassTrib' | 'inicioVigencia' | 'fimVigencia'> | null | undefined
+}) {
+  const obs = observacaoVigenciaCct(cct)
+  if (!obs) return null
+  return <ListaObservacoes itens={[obs]} />
+}
+
+/** Bloqueio por sistema vindo da tabela CFF (`classificacaoProduto`). */
+export interface BloqueioSistema {
+  sistema: string
+  permitido: boolean | null
+  sincronizadoEm: string
+}
+
+/**
+ * Selos permitido × negado por DFe (NFCom/NFAg/NF3e/NFGas).
+ * Só renderiza quando há cobertura local; sistemas sem dados não afirmam nada.
+ * Negado (`permitido === false`) vira selo vermelho — o cClassTrib não pode
+ * ser usado naquele documento.
+ */
+export function SelosPorSistema({ bloqueios }: { bloqueios?: BloqueioSistema[] | null }) {
+  if (!bloqueios?.length) return null
+  const negados = bloqueios.filter((b) => b.permitido === false)
+  const permitidos = bloqueios.filter((b) => b.permitido !== false)
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      <span className="mr-1 self-center text-[10px] font-bold uppercase text-slate-500">DFe:</span>
+      {negados.map((b) => (
+        <span key={b.sistema} title={`Negado em ${b.sistema} — tabela CFF de ${new Date(b.sincronizadoEm).toLocaleDateString('pt-BR')}`}>
+          <Pill cor="red">⛔ {b.sistema}</Pill>
+        </span>
+      ))}
+      {permitidos.map((b) => (
+        <span key={b.sistema} title={`Permitido em ${b.sistema} — tabela CFF de ${new Date(b.sincronizadoEm).toLocaleDateString('pt-BR')}`}>
+          <Pill cor="emerald">✓ {b.sistema}</Pill>
+        </span>
+      ))}
+    </div>
+  )
 }
 
 /** Aviso de isenção exibido sempre que a classificação veio do usuário. */
@@ -133,6 +195,8 @@ export function ListaObservacoes({ itens }: { itens: Observacao[] }) {
     emerald: 'border-emerald-200 bg-emerald-50/70 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-100',
     amber: 'border-amber-200 bg-amber-50/70 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100',
     slate: 'border-slate-200 bg-slate-50/70 text-slate-700 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-200',
+    violet: 'border-violet-300 bg-violet-50/80 text-violet-950 dark:border-violet-700 dark:bg-violet-950/40 dark:text-violet-100',
+    red: 'border-red-300 bg-red-50/80 text-red-950 dark:border-red-700 dark:bg-red-950/40 dark:text-red-100',
   } as const
   return (
     <div className="space-y-3">
@@ -140,6 +204,7 @@ export function ListaObservacoes({ itens }: { itens: Observacao[] }) {
         <div key={i} className={`rounded-xl border p-3 text-xs ${borda[o.cor]}`}>
           <div className="font-bold">{o.titulo}</div>
           <div className="mt-1 leading-relaxed">{o.texto}</div>
+          {o.adendo ? <div className="mt-2 leading-relaxed opacity-90">{o.adendo}</div> : null}
           {o.link ? (
             <BotaoVerLegislacao
               url={o.link}
@@ -152,6 +217,17 @@ export function ListaObservacoes({ itens }: { itens: Observacao[] }) {
       ))}
     </div>
   )
+}
+
+/**
+ * Aviso de diferimento (Anexo IX incluso) — mesmo padrão dos demais textos
+ * informativos. Retorna `null` quando a classificação não é diferida.
+ * Reutilizado em Produtos, SPED, NF-e e Lote.
+ */
+export function AvisoDiferimento({ cl }: { cl: Classificacao }) {
+  const obs = observacoesDiferimento(cl)
+  if (!obs.length) return null
+  return <ListaObservacoes itens={obs} />
 }
 
 /**
@@ -214,9 +290,9 @@ export function SimuladorRapido({ redIBS, redCBS }: { redIBS: number; redCBS: nu
   const c = calcularTributos(base, redIBS, redCBS, rateIBS, rateCBS)
   const carga = base > 0 ? c.carga : rateIBS + rateCBS
   const pct2 = (n: number) => n.toFixed(2).replace('.', ',')
-  const bcUnica = Math.abs(c.bcIBS - c.bcCBS) < 0.005
   const temReducao = (Number(redIBS) || 0) > 0 || (Number(redCBS) || 0) > 0
-  const zerada = temReducao && base > 0 && c.bcIBS < 0.005 && c.bcCBS < 0.005
+  const zerada = temReducao && base > 0 && c.aliqIBS < 0.005 && c.aliqCBS < 0.005
+  const aliqIguais = Math.abs(c.aliqIBS - c.aliqCBS) < 0.005
 
   return (
     <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-950/40">
@@ -227,11 +303,11 @@ export function SimuladorRapido({ redIBS, redCBS }: { redIBS: number; redCBS: nu
         </h4>
         {zerada ? (
           <span className="pill ml-auto bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-            BC zerada
+            Alíquota zero
           </span>
         ) : temReducao ? (
-          <span className="ml-auto font-mono text-[10px] text-slate-500">
-            BC {bcUnica ? fmtMoeda(c.bcIBS) : `${fmtMoeda(c.bcIBS)} / ${fmtMoeda(c.bcCBS)}`}
+          <span className="ml-auto font-mono text-[10px] text-slate-500" title="Alíquota de referência já com a redução aplicada; BC = valor cheio da operação">
+            Alíq. {aliqIguais ? `${pct2(c.aliqIBS)}%` : `${pct2(c.aliqIBS)}% / ${pct2(c.aliqCBS)}%`}
           </span>
         ) : null}
       </div>
@@ -296,6 +372,8 @@ export function CartaoClassificacao({
   indice,
   total,
   compact = false,
+  nomenclatura,
+  bloqueios,
   onSalvar,
   onAddCalc,
 }: {
@@ -303,6 +381,10 @@ export function CartaoClassificacao({
   indice: number
   total: number
   compact?: boolean
+  /** Nomenclatura vigente — quando extinta, exibe o aviso "negado". */
+  nomenclatura?: NomenclaturaNcm | null
+  /** Permitido × negado por DFe (tabela CFF local). Ausente = sem cobertura. */
+  bloqueios?: BloqueioSistema[] | null
   onSalvar?: () => void
   onAddCalc?: () => void
 }) {
@@ -315,6 +397,16 @@ export function CartaoClassificacao({
   const lc = cct?.lcRef || cl.baseLegal || ''
   const redacao = cct?.lcRedacao
   const ehManual = cl.manual != null
+  const temVigenciaCct = Boolean(cct?.inicioVigencia || cct?.fimVigencia)
+  // Textos informativos: diferimento SEMPRE primeiro (Anexo IX incluso).
+  // Tipo uniforme/fixo substitui a fundamentação por faixa (o artigo da faixa
+  // seria o do regime padrão — errado para CST 010/011). Prouni/misto precisa
+  // das duas reduções (art. 308 só aparece com redCBS).
+  const obsDiferimento = observacoesDiferimento(cl)
+  const obsTipo = observacaoTipoAliquota(cct?.tipoAliquota)
+  const obsLegais = observacoesLegais(cl.codigo, redIBS, redCBS)
+  const obsRev = observacaoRevogacao(cl.revogado)
+  const observacoes = [...(obsRev ? [obsRev] : []), ...obsDiferimento, ...(obsTipo ? [obsTipo] : obsLegais)]
 
   return (
     <div className="panel animate-fade-up card-hover p-5">
@@ -326,7 +418,23 @@ export function CartaoClassificacao({
         <BadgesReducao redIBS={redIBS} redCBS={redCBS} />
         {cl.regraGeral ? <Pill cor="amber">⚠ Regra geral</Pill> : null}
         {ehManual ? <PillManual /> : null}
+        {isNcmExtinto(nomenclatura) ? <Pill cor="red">⛔ NCM extinto</Pill> : null}
+        {cl.revogado ? <Pill cor="red">⛔ Revogado</Pill> : null}
+        {temVigenciaCct ? <Pill cor="amber">⏳ Vigência cClassTrib</Pill> : null}
+        {bloqueios?.some((b) => b.permitido === false) ? <Pill cor="red">⛔ Negado em DFe</Pill> : null}
       </div>
+
+      {isNcmExtinto(nomenclatura) ? (
+        <div className="mb-3">
+          <AvisoNcmExtinto nomenclatura={nomenclatura} />
+        </div>
+      ) : null}
+
+      {temVigenciaCct ? (
+        <div className="mb-3">
+          <AvisoVigenciaCct cct={cct} />
+        </div>
+      ) : null}
 
       {ehManual ? (
         <div className="mb-3">
@@ -358,6 +466,14 @@ export function CartaoClassificacao({
       </div>
 
       <DocsHabilitados docs={r.documentosHabilitados ?? cl.referencia?.documentos} />
+
+      {!compact ? <SelosPorSistema bloqueios={bloqueios} /> : null}
+
+      {!compact ? (
+        <div className="mt-3">
+          <ListaObservacoes itens={observacoes} />
+        </div>
+      ) : null}
 
       {!compact ? <SimuladorRapido redIBS={redIBS} redCBS={redCBS} /> : null}
 
@@ -413,12 +529,15 @@ export function CartaoClassificacao({
 export function CartaoTributacaoIntegral({
   cl,
   nomenclatura,
+  bloqueios,
   onSalvar,
   onAddCalc,
   onReclassificar,
 }: {
   cl: Classificacao
   nomenclatura: NomenclaturaNcm | null
+  /** Permitido × negado por DFe (tabela CFF local). Ausente = sem cobertura. */
+  bloqueios?: BloqueioSistema[] | null
   onSalvar?: () => void
   onAddCalc?: () => void
   /** Aberto somente quando não há classificação específica (caso regra geral). */
@@ -430,6 +549,9 @@ export function CartaoTributacaoIntegral({
   const codigo = nomenclatura?.codigoOriginal || nomenclatura?.codigo || cl.codigo
   const descricao = nomenclatura?.descricao || cl.descricao || 'NCM não localizado na nomenclatura vigente.'
   const docs = cstDet?.docs
+  const temVigenciaCct = Boolean(cct?.inicioVigencia || cct?.fimVigencia)
+  const obsRevIntegral = observacaoRevogacao(cl.revogado)
+  const extinto = isNcmExtinto(nomenclatura)
 
   return (
     <div className="animate-fade-up overflow-hidden rounded-2xl border border-amber-300 bg-white shadow-card dark:border-amber-800 dark:bg-slate-900">
@@ -437,6 +559,10 @@ export function CartaoTributacaoIntegral({
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Pill cor="amber">⚠ Sem classificação específica</Pill>
           <Pill cor="red">⚡ Alíquota cheia</Pill>
+          {extinto ? <Pill cor="red">⛔ NCM extinto</Pill> : null}
+          {cl.revogado ? <Pill cor="red">⛔ Revogado</Pill> : null}
+          {temVigenciaCct ? <Pill cor="amber">⏳ Vigência cClassTrib</Pill> : null}
+          {bloqueios?.some((b) => b.permitido === false) ? <Pill cor="red">⛔ Negado em DFe</Pill> : null}
         </div>
         <div className="font-mono text-2xl font-black tracking-tight">{fmtNcm(codigo)}</div>
         <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{descricao}</div>
@@ -446,6 +572,9 @@ export function CartaoTributacaoIntegral({
       </div>
 
       <div className="space-y-4 p-5">
+        {extinto ? <AvisoNcmExtinto nomenclatura={nomenclatura} /> : null}
+        {obsRevIntegral ? <ListaObservacoes itens={[obsRevIntegral]} /> : null}
+        {temVigenciaCct ? <AvisoVigenciaCct cct={cct} /> : null}
         {aviso ? (
           <div className="animate-fade-up rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
             <div className="mb-1 flex items-center gap-2 font-bold">
@@ -486,6 +615,8 @@ export function CartaoTributacaoIntegral({
         </div>
 
         <DocsHabilitados docs={docs} />
+
+        <SelosPorSistema bloqueios={bloqueios} />
 
         {onSalvar || onAddCalc || onReclassificar ? (
           <div className="mt-3 flex flex-wrap gap-2">

@@ -10,6 +10,7 @@ import {
   BarElement,
   CategoryScale,
   Chart as ChartJS,
+  Filler,
   Legend,
   LinearScale,
   LineElement,
@@ -21,6 +22,16 @@ import { ROWS_LIMIT } from '@/domain/constants'
 import { EMITENTE_PADRAO } from '@/domain/entities'
 import { fmtCarga, fmtCnpj, fmtMoeda, fmtNcm, fmtNum } from '@/domain/services/format'
 import { totaisNotas } from '@/application/notas-xml'
+import {
+  confrontoRegimes,
+  distribuicaoPorAnexo,
+  evolucaoMensal,
+  indicadoresXml,
+  resumoDivergencias,
+  topCfop,
+  topCstReforma,
+  topNcm,
+} from '@/application/nfe-insights'
 import { apurarIbsCbs, type ApuracaoIbsCbs } from '@/infrastructure/nfe/apuracao'
 import { exportarNfeCSV, exportarNfePDF } from '@/infrastructure/exporters/relatorios'
 import { registrarExportador } from '@/infrastructure/pdf/menu-exportacao'
@@ -35,7 +46,7 @@ import { CartaoStat } from '@/ui/cartoes'
 import { Btn, IconeBadge, Modal, Painel, Pill, Texto } from '@/ui/kit'
 import { EscudoAurum } from '@/ui/Marca'
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend)
+ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, LinearScale, LineElement, PointElement, Tooltip, Legend)
 
 const COR_DIRECAO: Record<DirecaoNota, 'brand' | 'emerald' | 'amber'> = {
   entrada: 'brand',
@@ -299,9 +310,9 @@ function ModalCarregamentoNotas({ visivel, primeiraCarga }: { visivel: boolean; 
       <div className="modal-box modal-box--loader glass-box max-w-sm text-center">
         <div className="h-1.5 rounded-t-2xl bg-gradient-to-r from-brand-700 via-aurum-400 to-emerald-500" />
         <div className="min-h-[240px] px-6 py-6">
-          <div className="relative mx-auto grid h-14 w-14 place-items-center">
+          <div className="relative mx-auto grid h-20 w-20 place-items-center">
             <span className="absolute inset-0 animate-spin rounded-full border-4 border-slate-200 border-t-brand-600 dark:border-slate-700 dark:border-t-aurum-300" />
-            <EscudoAurum tamanho={34} />
+            <EscudoAurum tamanho={52} />
           </div>
           <h2 className="mt-4 text-base font-black tracking-tight text-[var(--ink)]">
             {primeiraCarga ? 'Carregando notas fiscais…' : 'Atualizando notas…'}
@@ -421,6 +432,14 @@ function PainelHistorico() {
 
       <GraficosNfe notas={notas} />
 
+      <IndicadoresXml notas={notas} />
+
+      <ComparativoMensal notas={notas} />
+
+      <RegimeAntigoVsNovo notas={notas} />
+
+      <DistribuicaoReforma notas={notas} />
+
       {notas.length ? (
         /*
           Seção de ações do lote: Painel próprio com cabeçalho + descrição à
@@ -466,6 +485,10 @@ function PainelHistorico() {
       </div>
 
       <TopProdutosNfe notas={notas} />
+
+      <TopNcmCfop notas={notas} />
+
+      <QualidadeXml notas={notas} />
 
       {fornecedorAberto ? (
         <NotasFornecedor cnpj={fornecedorAberto} onFechar={fecharFornecedor} onVerDanfe={setDanfeNota} />
@@ -1536,13 +1559,19 @@ function BlocoCreditoIbsCbs({ nota }: { nota: NotaXml }) {
  * Identidade visual do crédito por anexo — rótulo e cores da microinteração
  * da borda. Sem redução, a legenda é **Crédito integral de IBS/CBS** com
  * verde cintilante; cada regra tem sua cor (integral = verde, alíquota
- * zero = roxo, redução 60% = âmbar, redução 30% = azul).
+ * zero = roxo, reduções 80/70/60% = âmbar/laranja, reduções 50/40/30% = azul,
+ * IBS ≠ CBS = violeta).
  */
 const CREDITO_POR_ANEXO: Record<string, { rotulo: string; cor: string; brilho: string }> = {
   isento: { rotulo: 'Crédito integral de IBS/CBS', cor: '#10b981', brilho: '#6ee7b7' },
   '0': { rotulo: 'Alíquota Zero', cor: '#8b5cf6', brilho: '#c4b5fd' },
+  '80': { rotulo: 'Redução 80%', cor: '#ea580c', brilho: '#fdba74' },
+  '70': { rotulo: 'Redução 70%', cor: '#f97316', brilho: '#fdba74' },
   '60': { rotulo: 'Redução 60%', cor: '#f59e0b', brilho: '#fcd34d' },
-  '30': { rotulo: 'Redução 30%', cor: '#3b82f6', brilho: '#93c5fd' },
+  '50': { rotulo: 'Redução 50%', cor: '#0ea5e9', brilho: '#7dd3fc' },
+  '40': { rotulo: 'Redução 40%', cor: '#3b82f6', brilho: '#93c5fd' },
+  '30': { rotulo: 'Redução 30%', cor: '#6366f1', brilho: '#a5b4fc' },
+  misto: { rotulo: 'Redução IBS ≠ CBS', cor: '#8b5cf6', brilho: '#c4b5fd' },
 }
 
 /** Selo do crédito com ponto na cor do anexo (claro e escuro). */
@@ -1892,6 +1921,435 @@ function GraficosNfe({ notas }: { notas: NotaXml[] }) {
         </div>
       </Painel>
     </div>
+  )
+}
+
+/* --------------------------------------- novas seções de visualização --- */
+
+/**
+ * Faixa de indicadores executivos do filtro atual: tickets médios por
+ * direção, maior nota, cargas efetivas, NCMs distintos e conferência
+ * XML × sistema. Leitura rápida antes dos gráficos comparativos.
+ */
+function IndicadoresXml({ notas }: { notas: NotaXml[] }) {
+  const ind = useMemo(() => indicadoresXml(notas), [notas])
+  if (!notas.length) return null
+  const cards: { rotulo: string; valor: string; sub: string }[] = [
+    { rotulo: 'Ticket médio', valor: fmtMoeda(ind.ticketMedio), sub: `entr ${fmtCompactoNfe(ind.ticketEntradas)} · saíd ${fmtCompactoNfe(ind.ticketSaidas)}` },
+    { rotulo: 'Maior nota', valor: ind.maiorNota ? fmtMoeda(ind.maiorNota.valor) : '—', sub: ind.maiorNota ? `Nº ${ind.maiorNota.numero} · ${ind.maiorNota.emitente.slice(0, 28)}` : '—' },
+    { rotulo: 'Carga entradas', valor: fmtCarga(ind.cargaEntradas), sub: 'IBS+CBS / base entradas' },
+    { rotulo: 'Carga saídas', valor: fmtCarga(ind.cargaSaidas), sub: 'IBS+CBS / base saídas' },
+    { rotulo: 'NCMs · itens', valor: `${ind.ncmsDistintos} · ${ind.totalItens}`, sub: 'distintos · linhas de item' },
+    { rotulo: 'Conferência XML', valor: ind.qtdComXml ? `${ind.qtdComXml - ind.qtdDivergentes}/${ind.qtdComXml}` : '—', sub: ind.qtdDivergentes ? `${ind.qtdDivergentes} divergente(s) ≠ XML` : 'sem divergências' },
+  ]
+  return (
+    <Painel className="overflow-hidden p-0">
+      <div className="border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
+        <h3 className="flex items-center gap-2 text-sm font-bold">
+          <IconeBadge nome="moeda" tom="brand" />
+          Indicadores do período
+        </h3>
+        <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
+          Tickets, cargas efetivas e conferência — calculados sobre o filtro atual
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-3 lg:grid-cols-6">
+        {cards.map((c) => (
+          <div key={c.rotulo} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/40">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{c.rotulo}</div>
+            <div className="mt-0.5 truncate font-mono text-sm font-black" title={`${c.valor} · ${c.sub}`}>{c.valor}</div>
+            <div className="truncate text-[10px] text-slate-400" title={c.sub}>{c.sub}</div>
+          </div>
+        ))}
+      </div>
+    </Painel>
+  )
+}
+
+/**
+ * Comparativo mês a mês Entradas × Saídas com alternância de visualização
+ * (barras / linha / tabela). Compara base (valor das notas) e tributos
+ * (IBS+CBS) no mesmo eixo temporal.
+ */
+function ComparativoMensal({ notas }: { notas: NotaXml[] }) {
+  const [modo, setModo] = useState<'barras' | 'linha' | 'tabela'>('barras')
+  const evo = useMemo(() => evolucaoMensal(notas), [notas])
+  if (!notas.length || !evo.length) return null
+  const labels = evo.map((p) => p.rotulo)
+  return (
+    <Painel className="overflow-hidden p-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-bold">
+            <IconeBadge nome="grafico" tom="brand" />
+            Entradas × Saídas por mês
+          </h3>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
+            Base (barras) e IBS+CBS (linha) · últimos {evo.length} mese(s) do filtro
+          </p>
+        </div>
+        <div className="flex gap-1 rounded-lg bg-slate-100 p-1 text-[11px] font-bold dark:bg-slate-800">
+          {(['barras', 'linha', 'tabela'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setModo(m)}
+              className={`rounded-md px-2.5 py-1 capitalize transition ${modo === m ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-900 dark:text-aurum-200' : 'text-slate-500'}`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="p-4">
+        {modo === 'tabela' ? (
+          <div className="overflow-x-auto">
+            <table className="tbl w-full">
+              <thead>
+                <tr>
+                  <th>Mês</th>
+                  <th className="th-r">Base entr.</th>
+                  <th className="th-r">Base saíd.</th>
+                  <th className="th-r">IBS+CBS entr.</th>
+                  <th className="th-r">IBS+CBS saíd.</th>
+                  <th className="th-r">Notas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {evo.map((p) => (
+                  <tr key={p.mes}>
+                    <td className="font-mono font-bold">{p.rotulo}</td>
+                    <td className="text-right font-mono">{fmtMoeda(p.baseEntradas)}</td>
+                    <td className="text-right font-mono">{fmtMoeda(p.baseSaidas)}</td>
+                    <td className="text-right font-mono text-emerald-700 dark:text-emerald-400">{fmtMoeda(p.tribEntradas)}</td>
+                    <td className="text-right font-mono text-brand-700 dark:text-aurum-200">{fmtMoeda(p.tribSaidas)}</td>
+                    <td className="text-right font-mono text-slate-500">{p.qtdEntradas + p.qtdSaidas}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : modo === 'linha' ? (
+          <div className="h-72">
+            <Line
+              data={{
+                labels,
+                datasets: [
+                  { label: 'Base entradas', data: evo.map((p) => p.baseEntradas), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.12)', fill: true, tension: 0.4, pointRadius: 3 },
+                  { label: 'Base saídas', data: evo.map((p) => p.baseSaidas), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.12)', fill: true, tension: 0.4, pointRadius: 3 },
+                  { label: 'IBS+CBS', data: evo.map((p) => p.tribEntradas + p.tribSaidas), borderColor: '#8b5cf6', borderDash: [6, 4], tension: 0.4, pointRadius: 3 },
+                ],
+              }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { font: { size: 10, weight: 'bold' as const }, boxWidth: 10, boxHeight: 10, padding: 10, color: '#64748b' } }, tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtMoeda(Number(ctx.raw))}` } } },
+                scales: {
+                  x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false }, border: { display: false } },
+                  y: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 5, callback: (v) => fmtCompactoNfe(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
+                },
+              }}
+            />
+          </div>
+        ) : (
+          <div className="h-72">
+            <Bar
+              data={{
+                labels,
+                datasets: [
+                  { label: 'Entradas', data: evo.map((p) => p.baseEntradas), backgroundColor: '#3b82f6', borderRadius: 6, borderSkipped: false, maxBarThickness: 26 },
+                  { label: 'Saídas', data: evo.map((p) => p.baseSaidas), backgroundColor: '#10b981', borderRadius: 6, borderSkipped: false, maxBarThickness: 26 },
+                ],
+              }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { font: { size: 10, weight: 'bold' as const }, boxWidth: 10, boxHeight: 10, padding: 10, color: '#64748b' } }, tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtMoeda(Number(ctx.raw))}`, afterLabel: (ctx) => { const p = evo[ctx.dataIndex]; return p ? ` IBS+CBS ${fmtMoeda((ctx.datasetIndex === 0 ? p.tribEntradas : p.tribSaidas))} · ${p.qtdEntradas + p.qtdSaidas} nota(s)` : '' } } } },
+                scales: {
+                  x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false }, border: { display: false } },
+                  y: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 5, callback: (v) => fmtCompactoNfe(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
+                },
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </Painel>
+  )
+}
+
+/**
+ * Confronto regime antigo × novo: ICMS+PIS+COFINS destacados nos itens
+ * contra IBS+CBS estimados, mês a mês (barras lado a lado) + veredito.
+ */
+function RegimeAntigoVsNovo({ notas }: { notas: NotaXml[] }) {
+  const evo = useMemo(() => evolucaoMensal(notas), [notas])
+  const conf = useMemo(() => confrontoRegimes(notas), [notas])
+  if (!notas.length || !evo.length) return null
+  const variacao = conf.variacaoPct
+  return (
+    <Painel className="overflow-hidden p-0">
+      <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-amber-950/30 dark:to-slate-900">
+        <h3 className="flex items-center gap-2 text-sm font-bold">
+          <IconeBadge nome="calculadora" tom="amber" />
+          Regime antigo × Reforma
+        </h3>
+        <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
+          ICMS + PIS + COFINS destacados × IBS + CBS estimados · diferença{' '}
+          <strong className={conf.delta >= 0 ? 'text-red-600' : 'text-emerald-600'}>
+            {conf.delta >= 0 ? '+' : ''}{fmtMoeda(conf.delta)}
+            {variacao != null ? ` (${variacao >= 0 ? '+' : ''}${variacao.toFixed(1).replace('.', ',')}%)` : ''}
+          </strong>
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[1fr_240px]">
+        <div className="h-64">
+          <Bar
+            data={{
+              labels: evo.map((p) => p.rotulo),
+              datasets: [
+                { label: 'Antigo (ICMS+PIS+COFINS)', data: evo.map((p) => p.antigoEntradas + p.antigoSaidas), backgroundColor: '#94a3b8', borderRadius: 6, borderSkipped: false, maxBarThickness: 26 },
+                { label: 'Novo (IBS+CBS)', data: evo.map((p) => p.tribEntradas + p.tribSaidas), backgroundColor: '#3a5dff', borderRadius: 6, borderSkipped: false, maxBarThickness: 26 },
+              ],
+            }}
+            options={{
+              responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { position: 'bottom', labels: { font: { size: 10, weight: 'bold' as const }, boxWidth: 10, boxHeight: 10, padding: 10, color: '#64748b' } }, tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtMoeda(Number(ctx.raw))}` } } },
+              scales: {
+                x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false }, border: { display: false } },
+                y: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 5, callback: (v) => fmtCompactoNfe(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
+              },
+            }}
+          />
+        </div>
+        <div className="space-y-2 text-xs">
+          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/40">
+            <div className="text-[10px] font-bold uppercase text-slate-500">Antigo destacado</div>
+            <div className="font-mono text-base font-black">{fmtMoeda(conf.antigo)}</div>
+            <div className="mt-0.5 text-[11px] text-slate-500">ICMS {fmtMoeda(conf.icms)} · PIS/COFINS {fmtMoeda(conf.pisCofins)}</div>
+          </div>
+          <div className="rounded-xl bg-brand-50/60 p-3 dark:bg-brand-950/20">
+            <div className="text-[10px] font-bold uppercase text-brand-600 dark:text-aurum-200">Novo estimado</div>
+            <div className="font-mono text-base font-black text-brand-700 dark:text-aurum-200">{fmtMoeda(conf.novo)}</div>
+            <div className="mt-0.5 text-[11px] text-slate-500">IBS {fmtMoeda(conf.ibs)} · CBS {fmtMoeda(conf.cbs)}</div>
+          </div>
+          <p className="px-1 text-[10px] leading-relaxed text-slate-400">
+            O antigo é o que o emitente destacou no XML; o novo é a estimativa do sistema (LC 214/2025). Use para
+            sentir o impacto da transição por competência.
+          </p>
+        </div>
+      </div>
+    </Painel>
+  )
+}
+
+/** Rótulos de anexo da Reforma. */
+const ROTULO_ANEXO: Record<string, string> = {
+  isento: 'Integral',
+  '0': 'Alíq. zero',
+  '80': 'Red. 80%',
+  '70': 'Red. 70%',
+  '60': 'Red. 60%',
+  '50': 'Red. 50%',
+  '40': 'Red. 40%',
+  '30': 'Red. 30%',
+  misto: 'IBS≠CBS',
+}
+
+/**
+ * Distribuição da Reforma: rosca por anexo/benefício + barras de CST e CFOP.
+ * Três leituras complementares do mesmo filtro.
+ */
+function DistribuicaoReforma({ notas }: { notas: NotaXml[] }) {
+  const anexo = useMemo(() => distribuicaoPorAnexo(notas), [notas])
+  const csts = useMemo(() => topCstReforma(notas), [notas])
+  const cfops = useMemo(() => topCfop(notas), [notas])
+  if (!notas.length) return null
+  const totalAnexo = anexo.reduce((s, l) => s + l.trib, 0)
+  const CORES = ['#10b981', '#8b5cf6', '#f59e0b', '#3b82f6', '#94a3b8', '#06b6d4']
+  return (
+    <div className="grid grid-cols-1 items-stretch gap-8 lg:grid-cols-3">
+      <Painel className="overflow-hidden p-0">
+        <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-emerald-950/30 dark:to-slate-900">
+          <h3 className="flex items-center gap-2 text-sm font-bold">
+            <IconeBadge nome="rosca" tom="emerald" />
+            Por benefício
+          </h3>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">IBS+CBS por anexo</p>
+        </div>
+        <div className="relative h-64 p-4">
+          {totalAnexo > 0 ? (
+            <>
+              <Doughnut
+                data={{
+                  labels: anexo.map((l) => ROTULO_ANEXO[l.anexo] ?? l.anexo),
+                  datasets: [{ data: anexo.map((l) => l.trib), backgroundColor: CORES, hoverOffset: 10, borderWidth: 3, borderColor: '#ffffff', spacing: 2, borderRadius: 6 }],
+                }}
+                options={{
+                  responsive: true, maintainAspectRatio: false, cutout: '68%',
+                  plugins: {
+                    legend: { position: 'bottom', labels: { font: { size: 10, weight: 'bold' as const }, boxWidth: 10, boxHeight: 10, borderRadius: 3, useBorderRadius: true, padding: 12, color: '#64748b' } },
+                    tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => { const v = Number(ctx.raw) || 0; const pct = totalAnexo > 0 ? ((v / totalAnexo) * 100).toFixed(1).replace('.', ',') : '0,0'; return ` ${fmtMoeda(v)} (${pct}%)` }, afterLabel: (ctx) => { const l = anexo[ctx.dataIndex]; return l ? ` ${l.itens} item(ns) · base ${fmtCompactoNfe(l.base)}` : '' } } },
+                  },
+                }}
+              />
+              <div className="pointer-events-none absolute inset-x-0 top-0 flex h-[calc(100%-52px)] flex-col items-center justify-center">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">IBS+CBS</span>
+                <span className="text-lg font-black text-slate-800 dark:text-slate-100">{fmtCompactoNfe(totalAnexo)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-slate-400">Sem tributos no filtro.</div>
+          )}
+        </div>
+      </Painel>
+
+      <Painel className="overflow-hidden p-0">
+        <div className="border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
+          <h3 className="flex items-center gap-2 text-sm font-bold">
+            <IconeBadge nome="trofeu" tom="brand" />
+            Por CST da Reforma
+          </h3>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Top {csts.length || 6} · IBS+CBS</p>
+        </div>
+        <div className="h-64 p-4">
+          {csts.length ? (
+            <Bar
+              data={{ labels: csts.map((c) => c.rotulo), datasets: [{ data: csts.map((c) => c.trib), backgroundColor: '#3a5dff', borderRadius: 7, borderSkipped: false, maxBarThickness: 22 }] }}
+              options={{
+                responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                plugins: { legend: { display: false }, tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => ` ${fmtMoeda(Number(ctx.raw))}`, afterLabel: (ctx) => { const c = csts[ctx.dataIndex]; return c ? ` ${c.sub} · ${c.qtd} item(ns)` : '' } } } },
+                scales: {
+                  x: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 4, callback: (v) => fmtCompactoNfe(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
+                  y: { ticks: { font: { size: 9, weight: 'bold' as const }, color: '#475569' }, grid: { display: false }, border: { display: false } },
+                },
+              }}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-slate-400">Sem CST no filtro.</div>
+          )}
+        </div>
+      </Painel>
+
+      <Painel className="overflow-hidden p-0">
+        <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-amber-950/30 dark:to-slate-900">
+          <h3 className="flex items-center gap-2 text-sm font-bold">
+            <IconeBadge nome="caixa" tom="amber" />
+            Por CFOP
+          </h3>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Top {cfops.length || 6} · valor da operação</p>
+        </div>
+        <div className="h-64 p-4">
+          {cfops.length ? (
+            <Bar
+              data={{ labels: cfops.map((c) => c.rotulo.replace('CFOP ', '')), datasets: [{ data: cfops.map((c) => c.base), backgroundColor: '#f59e0b', borderRadius: 7, borderSkipped: false, maxBarThickness: 22 }] }}
+              options={{
+                responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                plugins: { legend: { display: false }, tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => ` ${fmtMoeda(Number(ctx.raw))}`, afterLabel: (ctx) => { const c = cfops[ctx.dataIndex]; return c ? ` ${c.qtd} item(ns) · IBS+CBS ${fmtMoeda(c.trib)}` : '' } } } },
+                scales: {
+                  x: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 4, callback: (v) => fmtCompactoNfe(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
+                  y: { ticks: { font: { size: 9, weight: 'bold' as const }, color: '#475569' }, grid: { display: false }, border: { display: false } },
+                },
+              }}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-slate-400">Sem CFOP no filtro.</div>
+          )}
+        </div>
+      </Painel>
+    </div>
+  )
+}
+
+/**
+ * Top NCMs + qualidade do XML: duas leituras tabulares lado a lado —
+ * onde está o dinheiro (NCM) e o quanto o XML já vem com IBS/CBS.
+ */
+function TopNcmCfop({ notas }: { notas: NotaXml[] }) {
+  const linhas = useMemo(() => topNcm(notas, 8), [notas])
+  if (!notas.length) return null
+  const max = linhas.reduce((m, l) => Math.max(m, l.base), 0)
+  return (
+    <Painel className="overflow-hidden p-0">
+      <div className="border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
+        <h3 className="flex items-center gap-2 text-sm font-bold">
+          <IconeBadge nome="lupa" tom="brand" />
+          Top NCMs por valor
+        </h3>
+        <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
+          Onde está concentrada a base · top {linhas.length || 8} do filtro
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-2 p-4 md:grid-cols-2">
+        {!linhas.length ? (
+          <p className="py-4 text-center text-[11px] text-slate-500 md:col-span-2">Sem itens no filtro.</p>
+        ) : linhas.map((l, i) => (
+          <div key={l.chave} className="rounded-lg border border-transparent p-2 transition-all hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-950/40" title={`${l.sub ?? ''} · IBS+CBS ${fmtMoeda(l.trib)}`}>
+            <div className="flex items-baseline justify-between gap-2 text-[11px]">
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-slate-100 font-mono text-[10px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-400">{i + 1}</span>
+                <span className="truncate font-mono font-bold">{fmtNcm(l.rotulo)}</span>
+                <span className="truncate text-slate-400">{l.sub}</span>
+              </span>
+              <span className="shrink-0 font-mono font-bold text-brand-700 dark:text-aurum-200">{fmtMoeda(l.base)}</span>
+            </div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400" style={{ width: `${max > 0 ? Math.max(4, (l.base / max) * 100) : 0}%` }} />
+            </div>
+            <div className="mt-0.5 flex justify-between text-[10px] text-slate-400">
+              <span className="font-mono">{l.qtd} item(ns)</span>
+              <span className="font-mono">IBS+CBS <strong className="text-emerald-700 dark:text-emerald-400">{fmtMoeda(l.trib)}</strong></span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Painel>
+  )
+}
+
+/**
+ * Qualidade dos XMLs: quanto já traz o grupo IBSCBS, taxa de conferência
+ * com o sistema e quantos divergem — termômetro da prontidão para 2026.
+ */
+function QualidadeXml({ notas }: { notas: NotaXml[] }) {
+  const q = useMemo(() => resumoDivergencias(notas), [notas])
+  if (!notas.length) return null
+  const pctXml = q.totalItens > 0 ? (q.comXml / q.totalItens) * 100 : 0
+  return (
+    <Painel className="overflow-hidden p-0">
+      <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-emerald-950/30 dark:to-slate-900">
+        <h3 className="flex items-center gap-2 text-sm font-bold">
+          <IconeBadge nome="alerta" tom="emerald" />
+          Prontidão dos XMLs para a Reforma
+        </h3>
+        <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
+          {q.comXml} de {q.totalItens} item(ns) com grupo IBSCBS ·{' '}
+          {q.taxaConferencia != null ? `${q.taxaConferencia.toFixed(1).replace('.', ',')}% conferem com o sistema` : 'nenhum XML com IBS/CBS ainda'}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
+        <div className="rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-950/40">
+          <div className="font-mono text-xl font-black">{q.totalItens}</div>
+          <div className="text-[10px] font-bold uppercase text-slate-500">Itens</div>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-950/40">
+          <div className="font-mono text-xl font-black text-brand-700 dark:text-aurum-200">{pctXml.toFixed(0)}%</div>
+          <div className="text-[10px] font-bold uppercase text-slate-500">Com IBSCBS</div>
+        </div>
+        <div className="rounded-xl bg-emerald-50 p-3 text-center dark:bg-emerald-950/30">
+          <div className="font-mono text-xl font-black text-emerald-700 dark:text-emerald-300">{q.conferem}</div>
+          <div className="text-[10px] font-bold uppercase text-emerald-600">Conferem ✓</div>
+        </div>
+        <div className={`rounded-xl p-3 text-center ${q.divergentes ? 'bg-red-50 dark:bg-red-950/30' : 'bg-slate-50 dark:bg-slate-950/40'}`}>
+          <div className={`font-mono text-xl font-black ${q.divergentes ? 'text-red-700 dark:text-red-300' : ''}`}>{q.divergentes}</div>
+          <div className="text-[10px] font-bold uppercase text-slate-500">Divergem ≠</div>
+        </div>
+      </div>
+      {q.divergentes > 0 ? (
+        <p className="px-5 pb-4 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+          Abra a nota e confira as colunas <strong>No XML × Sistema</strong> — divergência costuma ser CST/cClassTrib
+          do emitente diferente da base oficial ou valores estimados com outra referência.
+        </p>
+      ) : null}
+    </Painel>
   )
 }
 

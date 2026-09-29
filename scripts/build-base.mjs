@@ -93,6 +93,15 @@ export const montarAto = (item) => {
   return [tipo, [numero, ano].filter(Boolean).join('/')].filter(Boolean).join(' ').trim() || null;
 };
 
+/** Ato de extinção ("negado" na vigente): "Res Gecex 926/2026". */
+export const montarAtoFim = (item) => {
+  const tipo = String(item?.Tipo_Ato_Fim ?? item?.atoFim ?? '').trim();
+  if (!tipo) return typeof item?.atoFim === 'string' && item.atoFim.trim() ? item.atoFim.trim() : null;
+  const numero = String(item?.Numero_Ato_Fim ?? '').trim();
+  const ano = String(item?.Ano_Ato_Fim ?? '').trim();
+  return [tipo, [numero, ano].filter(Boolean).join('/')].filter(Boolean).join(' ').trim() || null;
+};
+
 /** Converte o mapa {NFe:true,...} completo, sempre com todas as chaves canônicas. */
 const buildDocs = (registro, extrator) => {
   const docs = {};
@@ -248,16 +257,17 @@ export function normalizarNbs(bruto) {
 // ---------------------------------------------------------------------------
 
 export function normalizarNomenclatura(bruto) {
-  const itens = bruto?.Nomenclaturas ?? [];
+  const itens = bruto?.Nomenclaturas ?? bruto?.itens ?? [];
   return itens.map((n) => {
-    const original = String(n.Codigo ?? '').trim();
+    const original = String(n.Codigo ?? n.codigoOriginal ?? '').trim();
     return {
       codigo: digits(original),
       codigoOriginal: original,
-      descricao: String(n.Descricao ?? '').trim(),
-      dataInicio: n.Data_Inicio || null,
-      dataFim: n.Data_Fim && n.Data_Fim !== '31/12/9999' ? n.Data_Fim : null,
-      ato: montarAto(n),
+      descricao: String(n.Descricao ?? n.descricao ?? '').trim(),
+      dataInicio: n.Data_Inicio ?? n.dataInicio ?? null,
+      dataFim: (n.Data_Fim ?? n.dataFim) && (n.Data_Fim ?? n.dataFim) !== '31/12/9999' ? (n.Data_Fim ?? n.dataFim) : null,
+      ato: montarAto(n) ?? (typeof n.ato === 'string' && n.ato.trim() ? n.ato.trim() : null),
+      atoFim: montarAtoFim(n),
     };
   }).filter((n) => n.codigo.length >= 2);
 }

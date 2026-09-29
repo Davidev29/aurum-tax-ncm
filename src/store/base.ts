@@ -12,6 +12,8 @@ import {
   statusBase,
   type StatusBase,
 } from '@/application/base'
+import { sincronizacaoAutomatica } from '@/application/cff-sync'
+import { sincronizacaoAutomaticaNcm } from '@/application/ncm-sync'
 import { toast } from './ui'
 import { useAuxiliares } from './auxiliares'
 
@@ -43,6 +45,17 @@ export const useBase = create<BaseState>((set, get) => {
       try {
         const status = await inicializarBase(onProgress)
         set({ status, pronta: true, erro: null, progresso: null })
+
+        // Dispara sincronização CFF em background (não bloqueia a UI)
+        // Só roda se passou 24h desde a última verificação
+        void sincronizacaoAutomatica().catch((e) => {
+          console.warn('[CFF Sync] Falha na sincronização automática:', e)
+        })
+
+        // NCM vigente (Siscomex): mesma regra de 24h, em background
+        void sincronizacaoAutomaticaNcm().catch((e) => {
+          console.warn('[NCM Sync] Falha na sincronização automática:', e)
+        })
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         set({ erro: msg, progresso: null, pronta: true })

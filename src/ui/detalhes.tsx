@@ -10,8 +10,9 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { fmtMoeda, fmtNcm, fmtNum, fmtPct } from '@/domain/services/format'
+import { observacoesDiferimento } from '@/domain/services/calculo'
 import { Btn, Modal, Pill } from '@/ui/kit'
-import { AvisoManual } from '@/ui/cartoes'
+import { AvisoManual, AvisoNcmExtinto, ListaObservacoes } from '@/ui/cartoes'
 import type { ProdutoLinha } from '@/store/produtos'
 import type { ResultadoItemNfe } from '@/infrastructure/nfe/tipos'
 import { creditoIbsCbsDoItem, divergenciaXmlSistema } from '@/infrastructure/nfe/credito'
@@ -145,6 +146,7 @@ export function ModalProdutoDetalhe({
     >
       {produto ? (
         <div className="space-y-3">
+          <BlocoDiferimentoProduto produto={produto} />
           <Secao titulo="Identificação" icone="📦">
             <Grade cols="grid-cols-2 md:grid-cols-3">
               <Campo rotulo="SKU" valor={produto.codigo} mono forte />
@@ -203,6 +205,48 @@ export function ModalProdutoDetalhe({
         </div>
       ) : null}
     </Modal>
+  )
+}
+
+/**
+ * Aviso de diferimento no detalhe do produto — reconstrói uma classificação
+ * mínima a partir do snapshot congelado (Anexo IX incluso).
+ */function BlocoDiferimentoProduto({ produto }: { produto: ProdutoLinha }) {
+  const snap = produto.classificacaoSnapshot
+  const pseudo = {
+    id: 'snapshot',
+    codigo: produto.ncm,
+    codigoFormatado: fmtNcm(produto.ncm),
+    cst: produto.cstReforma || snap?.cst || '',
+    cClassTrib: produto.cClassTrib || snap?.cClassTrib || '',
+    baseLegal: produto.baseLegal || snap?.baseLegal || '',
+    descricao: produto.nome,
+    vinculo: null,
+    cstDetalhes: null,
+    cstClassTribDetalhes: null,
+    referencia: null,
+    resumo: {
+      descricaoCClassTrib: produto.descClass || snap?.classificacao || '',
+      percentualReducaoIBS: produto.redIBS ?? 0,
+      percentualReducaoCBS: produto.redCBS ?? 0,
+      anexo: snap?.anexo ?? null,
+      urlLegislacao: null,
+      documentosHabilitados: null,
+    },
+    regraGeral: false,
+  } as unknown as import('@/domain/entities').Classificacao
+  const obs = observacoesDiferimento(pseudo)
+  if (!obs.length) return null
+  return <ListaObservacoes itens={obs} />
+}
+
+function BlocoDiferimentoClassificacao({ cl }: { cl: import('@/domain/entities').Classificacao }) {
+  const obs = observacoesDiferimento(cl)
+  if (!obs.length) return null
+  return (
+    <div className="mt-2">
+      <ListaObservacoes itens={obs} />
+    </div>
   )
 }
 
@@ -294,6 +338,7 @@ export function ModalItemNfeDetalhe({
     >
       {item && cred ? (
         <div className="space-y-3">
+          <AvisoNcmExtinto nomenclatura={item.nomenclatura} />
           <FaixaDivergencia item={item} />
           <Secao titulo="Produto" icone="📦">
             <Grade cols="grid-cols-2 md:grid-cols-4">
@@ -370,6 +415,7 @@ export function ModalItemNfeDetalhe({
                 Base legal: {item.classificacao.baseLegal.slice(0, 140)}
               </p>
             ) : null}
+            <BlocoDiferimentoClassificacao cl={item.classificacao} />
           </Secao>
           <p className="rounded-xl bg-brand-50/70 px-3 py-2 text-[11px] leading-relaxed text-brand-800 dark:bg-brand-950/30 dark:text-brand-300">
             Gostou deste item? Use <strong>＋ Salvar produto</strong> abaixo para gravá-lo no cadastro

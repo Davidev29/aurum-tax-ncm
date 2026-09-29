@@ -15,9 +15,33 @@
  *   `[BUG] L1560`, que imprimia R$ 0,00 fixo).
  */
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import {
+  ArcElement,
+  BarElement,
+  CategoryScale,
+  Chart as ChartJS,
+  Filler,
+  Legend,
+  LinearScale,
+  LineElement,
+  PointElement,
+  Tooltip,
+} from 'chart.js'
+import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import { RENDER_LIMITS, ROWS_LIMIT } from '@/domain/constants'
 import { EMITENTE_PADRAO } from '@/domain/entities'
-import { fmtMoeda, fmtNcm, fmtNum } from '@/domain/services/format'
+import { fmtCarga, fmtMoeda, fmtNcm, fmtNum } from '@/domain/services/format'
+import {
+  confrontoRegimesSped,
+  distribuicaoPorAnexoSped,
+  evolucaoMensalSped,
+  indicadoresResumoSped,
+  indicadoresSped,
+  topCfopSped,
+  topCstIcmsSped,
+  topCstSped,
+  topNcmSped,
+} from '@/application/sped-insights'
 import { exportarSpedCSV, exportarSpedPDF, totaisSped } from '@/infrastructure/exporters/relatorios'
 import { registrarExportador } from '@/infrastructure/pdf/menu-exportacao'
 import { ehResumo } from '@/infrastructure/sped/tipos'
@@ -32,8 +56,41 @@ import { AnexoBadge, Btn, IconeBadge, Painel, Pill, Texto } from '@/ui/kit'
 
 /** Gráficos sob demanda: o Chart.js só é baixado quando a análise os mostra. */
 const GraficosSped = lazy(() => import('@/ui/graficos'))
-const ANEXOS = ['0', '60', '30', 'isento'] as const
-const ROTULOS_ANEXO = ['Alíquota Zero', 'Redução 60%', 'Redução 30%', 'Sem redução']
+const ANEXOS = ['0', '80', '70', '60', '50', '40', '30', 'misto', 'isento'] as const
+const ROTULOS_ANEXO = ['Alíquota Zero', 'Redução 80%', 'Redução 70%', 'Redução 60%', 'Redução 50%', 'Redução 40%', 'Redução 30%', 'IBS ≠ CBS', 'Sem redução']
+
+ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, LinearScale, LineElement, PointElement, Tooltip, Legend)
+
+const TOOLTIP_ESCURO_SPED = {
+  backgroundColor: 'rgba(15, 23, 42, 0.94)',
+  titleFont: { size: 11, weight: 'bold' as const },
+  bodyFont: { size: 11 },
+  padding: 10,
+  cornerRadius: 10,
+  displayColors: true,
+  boxWidth: 10,
+  boxHeight: 10,
+  boxPadding: 3,
+}
+
+const fmtCompactoSped = (v: number): string =>
+  v >= 1000000
+    ? `R$ ${(v / 1000000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`
+    : v >= 1000
+      ? `R$ ${(v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil`
+      : fmtMoeda(v)
+
+const ROTULO_ANEXO_SPED: Record<string, string> = {
+  isento: 'Integral',
+  '0': 'Alíq. zero',
+  '80': 'Red. 80%',
+  '70': 'Red. 70%',
+  '60': 'Red. 60%',
+  '50': 'Red. 50%',
+  '40': 'Red. 40%',
+  '30': 'Red. 30%',
+  misto: 'IBS≠CBS',
+}
 
 export function Sped() {
   const painel = useSped((s) => s.painel)
@@ -444,7 +501,7 @@ function BannerIdentificado({ stats, tipo }: { stats: SpedStats; tipo: SpedTipo[
 function VisaoItens({ itens }: { itens: ResultadoItem[] }) {
   const abrirDetalhe = useSped((s) => s.abrirDetalhe)
   const tot = useMemo(() => totaisSped(itens), [itens])
-  const zero = useMemo(() => itens.filter((r) => r.redIBS >= 100), [itens])
+  const zero = useMemo(() => itens.filter((r) => r.redIBS >= 100 && r.redCBS >= 100), [itens])
   const grupos = useMemo(() => agruparPorAnexo(itens), [itens])
   const top = useMemo(() => topProdutos(itens), [itens])
 
@@ -516,6 +573,12 @@ function VisaoItens({ itens }: { itens: ResultadoItem[] }) {
         </div>
       </Painel>
 
+      <IndicadoresSpedSecao itens={itens} />
+
+      <ComparativoMensalSped itens={itens} />
+
+      <RegimeAntigoVsNovoSped itens={itens} />
+
       {zero.length ? <TabelaAliquotaZero itens={zero} /> : null}
 
       <Painel>
@@ -558,6 +621,10 @@ function VisaoItens({ itens }: { itens: ResultadoItem[] }) {
       </Painel>
 
       <TopProdutosSped itens={itens} />
+
+      <RankingsSped itens={itens} />
+
+      <QualidadeSped itens={itens} />
 
       <Suspense
         fallback={
@@ -886,6 +953,8 @@ function VisaoResumo({ linhas }: { linhas: ResultadoResumo[] }) {
         </div>
       </Painel>
 
+      <ResumoComparativo linhas={linhas} />
+
       <Painel className="overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 dark:border-slate-800">
           <h3 className="flex items-center gap-2 text-sm font-bold">
@@ -955,6 +1024,522 @@ function VisaoResumo({ linhas }: { linhas: ResultadoResumo[] }) {
   )
 }
 
+/* --------------------------------------- novas seções de visualização --- */
+
+/**
+ * Indicadores executivos do arquivo: ticket médio por item, maior item,
+ * carga efetiva, NCMs distintos e qualidade da classificação
+ * (regra geral × oficial × manual).
+ */
+function IndicadoresSpedSecao({ itens }: { itens: ResultadoItem[] }) {
+  const ind = useMemo(() => indicadoresSped(itens), [itens])
+  if (!itens.length) return null
+  const cards = [
+    { rotulo: 'Ticket médio', valor: fmtMoeda(ind.ticketMedio), sub: `${ind.qtd} itens · base ${fmtCompactoSped(ind.base)}` },
+    { rotulo: 'Maior item', valor: ind.maiorItem ? fmtMoeda(ind.maiorItem.valor) : '—', sub: ind.maiorItem ? `${ind.maiorItem.codigo} · ${ind.maiorItem.descricao.slice(0, 28)}` : '—' },
+    { rotulo: 'Carga efetiva', valor: fmtCarga(ind.carga), sub: `IBS+CBS ${fmtCompactoSped(ind.trib)}` },
+    { rotulo: 'NCMs distintos', valor: String(ind.ncmsDistintos), sub: 'nomenclaturas no arquivo' },
+    { rotulo: 'Regra geral', valor: String(ind.regraGeral), sub: ind.regraGeral ? 'alíquota cheia aplicada' : 'tudo classificado' },
+    { rotulo: 'Manuais', valor: String(ind.manuais), sub: 'reclassificados pelo usuário' },
+  ]
+  return (
+    <Painel className="overflow-hidden p-0">
+      <div className="border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
+        <h3 className="flex items-center gap-2 text-sm font-bold">
+          <IconeBadge nome="moeda" tom="brand" />
+          Indicadores do arquivo
+        </h3>
+        <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
+          Tickets, carga e qualidade da classificação — sobre as saídas analisadas
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-3 lg:grid-cols-6">
+        {cards.map((c) => (
+          <div key={c.rotulo} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/40">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{c.rotulo}</div>
+            <div className="mt-0.5 truncate font-mono text-sm font-black" title={`${c.valor} · ${c.sub}`}>{c.valor}</div>
+            <div className="truncate text-[10px] text-slate-400" title={c.sub}>{c.sub}</div>
+          </div>
+        ))}
+      </div>
+    </Painel>
+  )
+}
+
+/**
+ * Evolução mensal das saídas com alternância de visualização
+ * (barras / linha / tabela): base, IBS+CBS e regime antigo no tempo.
+ */
+function ComparativoMensalSped({ itens }: { itens: ResultadoItem[] }) {
+  const [modo, setModo] = useState<'barras' | 'linha' | 'tabela'>('barras')
+  const evo = useMemo(() => evolucaoMensalSped(itens), [itens])
+  if (!itens.length || !evo.length) return null
+  const labels = evo.map((p) => p.rotulo)
+  return (
+    <Painel className="overflow-hidden p-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-bold">
+            <IconeBadge nome="grafico" tom="brand" />
+            Saídas por mês
+          </h3>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
+            Base e IBS+CBS · últimos {evo.length} mese(s) do arquivo
+          </p>
+        </div>
+        <div className="flex gap-1 rounded-lg bg-slate-100 p-1 text-[11px] font-bold dark:bg-slate-800">
+          {(['barras', 'linha', 'tabela'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setModo(m)}
+              className={`rounded-md px-2.5 py-1 capitalize transition ${modo === m ? 'bg-white text-brand-700 shadow-sm dark:bg-slate-900 dark:text-aurum-200' : 'text-slate-500'}`}
+            >
+              {m}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="p-4">
+        {modo === 'tabela' ? (
+          <div className="overflow-x-auto">
+            <table className="tbl w-full">
+              <thead>
+                <tr>
+                  <th>Mês</th>
+                  <th className="th-r">Base</th>
+                  <th className="th-r">IBS + CBS</th>
+                  <th className="th-r">Antigo</th>
+                  <th className="th-r">Itens</th>
+                </tr>
+              </thead>
+              <tbody>
+                {evo.map((p) => (
+                  <tr key={p.mes}>
+                    <td className="font-mono font-bold">{p.rotulo}</td>
+                    <td className="text-right font-mono">{fmtMoeda(p.base)}</td>
+                    <td className="text-right font-mono text-emerald-700 dark:text-emerald-400">{fmtMoeda(p.trib)}</td>
+                    <td className="text-right font-mono text-slate-500">{fmtMoeda(p.antigo)}</td>
+                    <td className="text-right font-mono text-slate-500">{p.qtd}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : modo === 'linha' ? (
+          <div className="h-72">
+            <Line
+              data={{
+                labels,
+                datasets: [
+                  { label: 'Base', data: evo.map((p) => p.base), borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.12)', fill: true, tension: 0.4, pointRadius: 3 },
+                  { label: 'IBS + CBS', data: evo.map((p) => p.trib), borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.12)', fill: true, tension: 0.4, pointRadius: 3 },
+                  { label: 'Antigo', data: evo.map((p) => p.antigo), borderColor: '#94a3b8', borderDash: [6, 4], tension: 0.4, pointRadius: 3 },
+                ],
+              }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { font: { size: 10, weight: 'bold' as const }, boxWidth: 10, boxHeight: 10, padding: 10, color: '#64748b' } }, tooltip: { ...TOOLTIP_ESCURO_SPED, callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtMoeda(Number(ctx.raw))}` } } },
+                scales: {
+                  x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false }, border: { display: false } },
+                  y: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 5, callback: (v) => fmtCompactoSped(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
+                },
+              }}
+            />
+          </div>
+        ) : (
+          <div className="h-72">
+            <Bar
+              data={{
+                labels,
+                datasets: [
+                  { label: 'Base', data: evo.map((p) => p.base), backgroundColor: '#3b82f6', borderRadius: 6, borderSkipped: false, maxBarThickness: 26 },
+                  { label: 'IBS + CBS', data: evo.map((p) => p.trib), backgroundColor: '#10b981', borderRadius: 6, borderSkipped: false, maxBarThickness: 26 },
+                ],
+              }}
+              options={{
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { font: { size: 10, weight: 'bold' as const }, boxWidth: 10, boxHeight: 10, padding: 10, color: '#64748b' } }, tooltip: { ...TOOLTIP_ESCURO_SPED, callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtMoeda(Number(ctx.raw))}`, afterLabel: (ctx) => { const p = evo[ctx.dataIndex]; return p ? ` Antigo ${fmtMoeda(p.antigo)} · ${p.qtd} item(ns)` : '' } } } },
+                scales: {
+                  x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false }, border: { display: false } },
+                  y: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 5, callback: (v) => fmtCompactoSped(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
+                },
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </Painel>
+  )
+}
+
+/**
+ * Confronto regime antigo × novo no SPED: ICMS+PIS+COFINS destacados nos
+ * itens contra IBS+CBS estimados, mês a mês + veredito.
+ */
+function RegimeAntigoVsNovoSped({ itens }: { itens: ResultadoItem[] }) {
+  const evo = useMemo(() => evolucaoMensalSped(itens), [itens])
+  const conf = useMemo(() => confrontoRegimesSped(itens), [itens])
+  if (!itens.length || !evo.length) return null
+  const variacao = conf.variacaoPct
+  return (
+    <Painel className="overflow-hidden p-0">
+      <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-amber-950/30 dark:to-slate-900">
+        <h3 className="flex items-center gap-2 text-sm font-bold">
+          <IconeBadge nome="calculadora" tom="amber" />
+          Regime antigo × Reforma
+        </h3>
+        <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
+          ICMS + PIS + COFINS destacados × IBS + CBS estimados · diferença{' '}
+          <strong className={conf.delta >= 0 ? 'text-red-600' : 'text-emerald-600'}>
+            {conf.delta >= 0 ? '+' : ''}{fmtMoeda(conf.delta)}
+            {variacao != null ? ` (${variacao >= 0 ? '+' : ''}${variacao.toFixed(1).replace('.', ',')}%)` : ''}
+          </strong>
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[1fr_240px]">
+        <div className="h-64">
+          <Bar
+            data={{
+              labels: evo.map((p) => p.rotulo),
+              datasets: [
+                { label: 'Antigo (ICMS+PIS+COFINS)', data: evo.map((p) => p.antigo), backgroundColor: '#94a3b8', borderRadius: 6, borderSkipped: false, maxBarThickness: 26 },
+                { label: 'Novo (IBS+CBS)', data: evo.map((p) => p.trib), backgroundColor: '#3a5dff', borderRadius: 6, borderSkipped: false, maxBarThickness: 26 },
+              ],
+            }}
+            options={{
+              responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { position: 'bottom', labels: { font: { size: 10, weight: 'bold' as const }, boxWidth: 10, boxHeight: 10, padding: 10, color: '#64748b' } }, tooltip: { ...TOOLTIP_ESCURO_SPED, callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtMoeda(Number(ctx.raw))}` } } },
+              scales: {
+                x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false }, border: { display: false } },
+                y: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 5, callback: (v) => fmtCompactoSped(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
+              },
+            }}
+          />
+        </div>
+        <div className="space-y-2 text-xs">
+          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/40">
+            <div className="text-[10px] font-bold uppercase text-slate-500">Antigo destacado</div>
+            <div className="font-mono text-base font-black">{fmtMoeda(conf.antigo)}</div>
+            <div className="mt-0.5 text-[11px] text-slate-500">ICMS {fmtMoeda(conf.icms)} · PIS/COFINS {fmtMoeda(conf.pisCofins)}</div>
+          </div>
+          <div className="rounded-xl bg-brand-50/60 p-3 dark:bg-brand-950/20">
+            <div className="text-[10px] font-bold uppercase text-brand-600 dark:text-aurum-200">Novo estimado</div>
+            <div className="font-mono text-base font-black text-brand-700 dark:text-aurum-200">{fmtMoeda(conf.novo)}</div>
+            <div className="mt-0.5 text-[11px] text-slate-500">IBS {fmtMoeda(conf.ibs)} · CBS {fmtMoeda(conf.cbs)}</div>
+          </div>
+          <p className="px-1 text-[10px] leading-relaxed text-slate-400">
+            O antigo é o que veio destacado nos itens do SPED; o novo é a estimativa do sistema (LC 214/2025).
+          </p>
+        </div>
+      </div>
+    </Painel>
+  )
+}
+
+/**
+ * Rankings complementares: rosca por benefício + barras de CST da Reforma,
+ * CFOP e top NCMs — leituras que os gráficos padrão (anexo + top produtos)
+ * não cobrem.
+ */
+function RankingsSped({ itens }: { itens: ResultadoItem[] }) {
+  const anexo = useMemo(() => distribuicaoPorAnexoSped(itens), [itens])
+  const csts = useMemo(() => topCstSped(itens), [itens])
+  const cfops = useMemo(() => topCfopSped(itens), [itens])
+  const ncms = useMemo(() => topNcmSped(itens), [itens])
+  if (!itens.length) return null
+  const totalAnexo = anexo.reduce((s, l) => s + l.trib, 0)
+  const CORES = ['#10b981', '#8b5cf6', '#f59e0b', '#3b82f6', '#94a3b8', '#06b6d4']
+  const maxNcm = ncms.reduce((m, l) => Math.max(m, l.base), 0)
+  return (
+    <>
+      <div className="grid grid-cols-1 items-stretch gap-8 lg:grid-cols-3">
+        <Painel className="overflow-hidden p-0">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-emerald-950/30 dark:to-slate-900">
+            <h3 className="flex items-center gap-2 text-sm font-bold">
+              <IconeBadge nome="rosca" tom="emerald" />
+              IBS+CBS por benefício
+            </h3>
+            <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Tributos por anexo</p>
+          </div>
+          <div className="relative h-64 p-4">
+            {totalAnexo > 0 ? (
+              <>
+                <Doughnut
+                  data={{
+                    labels: anexo.map((l) => ROTULO_ANEXO_SPED[l.chave] ?? l.rotulo),
+                    datasets: [{ data: anexo.map((l) => l.trib), backgroundColor: CORES, hoverOffset: 10, borderWidth: 3, borderColor: '#ffffff', spacing: 2, borderRadius: 6 }],
+                  }}
+                  options={{
+                    responsive: true, maintainAspectRatio: false, cutout: '68%',
+                    plugins: {
+                      legend: { position: 'bottom', labels: { font: { size: 10, weight: 'bold' as const }, boxWidth: 10, boxHeight: 10, borderRadius: 3, useBorderRadius: true, padding: 12, color: '#64748b' } },
+                      tooltip: { ...TOOLTIP_ESCURO_SPED, callbacks: { label: (ctx) => { const v = Number(ctx.raw) || 0; const pct = totalAnexo > 0 ? ((v / totalAnexo) * 100).toFixed(1).replace('.', ',') : '0,0'; return ` ${fmtMoeda(v)} (${pct}%)` }, afterLabel: (ctx) => { const l = anexo[ctx.dataIndex]; return l ? ` ${l.qtd} item(ns) · base ${fmtCompactoSped(l.base)}` : '' } } },
+                    },
+                  }}
+                />
+                <div className="pointer-events-none absolute inset-x-0 top-0 flex h-[calc(100%-52px)] flex-col items-center justify-center">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">IBS+CBS</span>
+                  <span className="text-lg font-black text-slate-800 dark:text-slate-100">{fmtCompactoSped(totalAnexo)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-slate-400">Sem tributos no arquivo.</div>
+            )}
+          </div>
+        </Painel>
+
+        <Painel className="overflow-hidden p-0">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
+            <h3 className="flex items-center gap-2 text-sm font-bold">
+              <IconeBadge nome="trofeu" tom="brand" />
+              Por CST da Reforma
+            </h3>
+            <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Top {csts.length || 6} · IBS+CBS</p>
+          </div>
+          <div className="h-64 p-4">
+            {csts.length ? (
+              <Bar
+                data={{ labels: csts.map((c) => c.rotulo), datasets: [{ data: csts.map((c) => c.trib), backgroundColor: '#3a5dff', borderRadius: 7, borderSkipped: false, maxBarThickness: 22 }] }}
+                options={{
+                  responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                  plugins: { legend: { display: false }, tooltip: { ...TOOLTIP_ESCURO_SPED, callbacks: { label: (ctx) => ` ${fmtMoeda(Number(ctx.raw))}`, afterLabel: (ctx) => { const c = csts[ctx.dataIndex]; return c ? ` ${c.sub} · ${c.qtd} item(ns)` : '' } } } },
+                  scales: {
+                    x: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 4, callback: (v) => fmtCompactoSped(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
+                    y: { ticks: { font: { size: 9, weight: 'bold' as const }, color: '#475569' }, grid: { display: false }, border: { display: false } },
+                  },
+                }}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-slate-400">Sem CST no arquivo.</div>
+            )}
+          </div>
+        </Painel>
+
+        <Painel className="overflow-hidden p-0">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-amber-950/30 dark:to-slate-900">
+            <h3 className="flex items-center gap-2 text-sm font-bold">
+              <IconeBadge nome="caixa" tom="amber" />
+              Por CFOP
+            </h3>
+            <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Top {cfops.length || 6} · valor da operação</p>
+          </div>
+          <div className="h-64 p-4">
+            {cfops.length ? (
+              <Bar
+                data={{ labels: cfops.map((c) => c.rotulo.replace('CFOP ', '')), datasets: [{ data: cfops.map((c) => c.base), backgroundColor: '#f59e0b', borderRadius: 7, borderSkipped: false, maxBarThickness: 22 }] }}
+                options={{
+                  responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                  plugins: { legend: { display: false }, tooltip: { ...TOOLTIP_ESCURO_SPED, callbacks: { label: (ctx) => ` ${fmtMoeda(Number(ctx.raw))}`, afterLabel: (ctx) => { const c = cfops[ctx.dataIndex]; return c ? ` ${c.qtd} item(ns) · IBS+CBS ${fmtMoeda(c.trib)}` : '' } } } },
+                  scales: {
+                    x: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 4, callback: (v) => fmtCompactoSped(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
+                    y: { ticks: { font: { size: 9, weight: 'bold' as const }, color: '#475569' }, grid: { display: false }, border: { display: false } },
+                  },
+                }}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-slate-400">Sem CFOP no arquivo.</div>
+            )}
+          </div>
+        </Painel>
+      </div>
+
+      <Painel className="overflow-hidden p-0">
+        <div className="border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
+          <h3 className="flex items-center gap-2 text-sm font-bold">
+            <IconeBadge nome="lupa" tom="brand" />
+            Top NCMs por valor
+          </h3>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
+            Onde está concentrada a base · top {ncms.length || 8} do arquivo
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-2 p-4 md:grid-cols-2">
+          {!ncms.length ? (
+            <p className="py-4 text-center text-[11px] text-slate-500 md:col-span-2">Sem itens no arquivo.</p>
+          ) : ncms.map((l, i) => (
+            <div key={l.chave} className="rounded-lg border border-transparent p-2 transition-all hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-950/40" title={`${l.sub ?? ''} · IBS+CBS ${fmtMoeda(l.trib)}`}>
+              <div className="flex items-baseline justify-between gap-2 text-[11px]">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-slate-100 font-mono text-[10px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-400">{i + 1}</span>
+                  <span className="truncate font-mono font-bold">{fmtNcm(l.rotulo)}</span>
+                  <span className="truncate text-slate-400">{l.sub}</span>
+                </span>
+                <span className="shrink-0 font-mono font-bold text-brand-700 dark:text-aurum-200">{fmtMoeda(l.base)}</span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400" style={{ width: `${maxNcm > 0 ? Math.max(4, (l.base / maxNcm) * 100) : 0}%` }} />
+              </div>
+              <div className="mt-0.5 flex justify-between text-[10px] text-slate-400">
+                <span className="font-mono">{l.qtd} item(ns)</span>
+                <span className="font-mono">IBS+CBS <strong className="text-emerald-700 dark:text-emerald-400">{fmtMoeda(l.trib)}</strong></span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Painel>
+    </>
+  )
+}
+
+/**
+ * Qualidade da classificação no SPED: regra geral × oficial × manual —
+ * termômetro de quanto da estimativa veio de enquadramento específico.
+ */
+function QualidadeSped({ itens }: { itens: ResultadoItem[] }) {
+  const q = useMemo(() => {
+    let regraGeral = 0
+    let manuais = 0
+    for (const it of itens) {
+      if (it?.regraGeral) regraGeral++
+      if (it?.manual || it?.classificacao?.manual) manuais++
+    }
+    return { total: itens.length, regraGeral, manuais, oficial: itens.length - regraGeral }
+  }, [itens])
+  if (!itens.length) return null
+  const pctOficial = q.total > 0 ? (q.oficial / q.total) * 100 : 0
+  return (
+    <Painel className="overflow-hidden p-0">
+      <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-emerald-950/30 dark:to-slate-900">
+        <h3 className="flex items-center gap-2 text-sm font-bold">
+          <IconeBadge nome="alerta" tom="emerald" />
+          Qualidade da classificação
+        </h3>
+        <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
+          {q.oficial} de {q.total} item(ns) com enquadramento específico ({pctOficial.toFixed(1).replace('.', ',')}%)
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
+        <div className="rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-950/40">
+          <div className="font-mono text-xl font-black">{q.total}</div>
+          <div className="text-[10px] font-bold uppercase text-slate-500">Itens</div>
+        </div>
+        <div className="rounded-xl bg-emerald-50 p-3 text-center dark:bg-emerald-950/30">
+          <div className="font-mono text-xl font-black text-emerald-700 dark:text-emerald-300">{q.oficial}</div>
+          <div className="text-[10px] font-bold uppercase text-emerald-600">Específicos ✓</div>
+        </div>
+        <div className="rounded-xl bg-amber-50 p-3 text-center dark:bg-amber-950/30">
+          <div className="font-mono text-xl font-black text-amber-700 dark:text-amber-300">{q.regraGeral}</div>
+          <div className="text-[10px] font-bold uppercase text-amber-600">Regra geral ⚠</div>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-950/40">
+          <div className="font-mono text-xl font-black">{q.manuais}</div>
+          <div className="text-[10px] font-bold uppercase text-slate-500">Manuais ✋</div>
+        </div>
+      </div>
+      {q.regraGeral > 0 ? (
+        <p className="px-5 pb-4 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+          Itens em <strong>regra geral</strong> usam alíquota cheia por falta de enquadramento oficial para o NCM —
+          reclassifique manualmente quando souber a regra correta.
+        </p>
+      ) : null}
+    </Painel>
+  )
+}
+
+/**
+ * Comparativo do modo resumo (só C190): ICMS total × IBS+CBS estimados +
+ * ranking de CST ICMS e CFOP por valor de operação.
+ */
+function ResumoComparativo({ linhas }: { linhas: ResultadoResumo[] }) {
+  const ind = useMemo(() => indicadoresResumoSped(linhas), [linhas])
+  const csts = useMemo(() => topCstIcmsSped(linhas), [linhas])
+  const cfops = useMemo(() => topCfopSped(linhas), [linhas])
+  const conf = useMemo(() => confrontoRegimesSped(linhas), [linhas])
+  if (!linhas.length) return null
+  const max = csts.reduce((m, l) => Math.max(m, l.base), 0)
+  return (
+    <>
+      <Painel className="overflow-hidden p-0">
+        <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-amber-950/30 dark:to-slate-900">
+          <h3 className="flex items-center gap-2 text-sm font-bold">
+            <IconeBadge nome="calculadora" tom="amber" />
+            ICMS × Reforma (modo resumo)
+          </h3>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
+            ICMS total {fmtMoeda(ind.icms)} × IBS+CBS {fmtMoeda(ind.trib)} · diferença{' '}
+            <strong className={conf.delta >= 0 ? 'text-red-600' : 'text-emerald-600'}>
+              {conf.delta >= 0 ? '+' : ''}{fmtMoeda(conf.delta)}
+            </strong>
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
+          <div className="rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-950/40">
+            <div className="font-mono text-base font-black">{ind.grupos}</div>
+            <div className="text-[10px] font-bold uppercase text-slate-500">Grupos CST×CFOP</div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-950/40">
+            <div className="font-mono text-base font-black">{fmtCompactoSped(ind.icms)}</div>
+            <div className="text-[10px] font-bold uppercase text-slate-500">ICMS total</div>
+          </div>
+          <div className="rounded-xl bg-brand-50/60 p-3 text-center dark:bg-brand-950/20">
+            <div className="font-mono text-base font-black text-brand-700 dark:text-aurum-200">{fmtCompactoSped(ind.trib)}</div>
+            <div className="text-[10px] font-bold uppercase text-brand-600">IBS + CBS</div>
+          </div>
+          <div className="rounded-xl bg-emerald-50 p-3 text-center dark:bg-emerald-950/30">
+            <div className="font-mono text-base font-black text-emerald-700 dark:text-emerald-300">{fmtCarga(ind.carga)}</div>
+            <div className="text-[10px] font-bold uppercase text-emerald-600">Carga efetiva</div>
+          </div>
+        </div>
+      </Painel>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <Painel className="overflow-hidden p-0">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
+            <h3 className="flex items-center gap-2 text-sm font-bold">
+              <IconeBadge nome="trofeu" tom="brand" />
+              CST ICMS por valor
+            </h3>
+            <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Top {csts.length || 8} grupos do C190</p>
+          </div>
+          <div className="space-y-2 p-4">
+            {csts.map((l, i) => (
+              <div key={l.chave} title={`${l.qtd} grupo(s) · IBS+CBS ${fmtMoeda(l.trib)}`}>
+                <div className="flex items-baseline justify-between gap-2 text-[11px]">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-slate-100 font-mono text-[10px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-400">{i + 1}</span>
+                    <span className="truncate font-mono font-bold">{l.rotulo}</span>
+                  </span>
+                  <span className="shrink-0 font-mono font-bold">{fmtMoeda(l.base)}</span>
+                </div>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400" style={{ width: `${max > 0 ? Math.max(4, (l.base / max) * 100) : 0}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Painel>
+        <Painel className="overflow-hidden p-0">
+          <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-amber-950/30 dark:to-slate-900">
+            <h3 className="flex items-center gap-2 text-sm font-bold">
+              <IconeBadge nome="caixa" tom="amber" />
+              CFOP por valor
+            </h3>
+            <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Top {cfops.length || 6} operações do C190</p>
+          </div>
+          <div className="h-64 p-4">
+            {cfops.length ? (
+              <Bar
+                data={{ labels: cfops.map((c) => c.rotulo.replace('CFOP ', '')), datasets: [{ data: cfops.map((c) => c.base), backgroundColor: '#f59e0b', borderRadius: 7, borderSkipped: false, maxBarThickness: 22 }] }}
+                options={{
+                  responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                  plugins: { legend: { display: false }, tooltip: { ...TOOLTIP_ESCURO_SPED, callbacks: { label: (ctx) => ` ${fmtMoeda(Number(ctx.raw))}` } } },
+                  scales: {
+                    x: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 4, callback: (v) => fmtCompactoSped(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
+                    y: { ticks: { font: { size: 9, weight: 'bold' as const }, color: '#475569' }, grid: { display: false }, border: { display: false } },
+                  },
+                }}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-slate-400">Sem CFOP no arquivo.</div>
+            )}
+          </div>
+        </Painel>
+      </div>
+    </>
+  )
+}
+
 /* -------------------------------------------------------------- apoio ----- */
 
 function FaixaEstatisticas({
@@ -995,7 +1580,7 @@ function CartaoTaxa({
 }
 
 function agruparPorAnexo(itens: ResultadoItem[]): Record<(typeof ANEXOS)[number], ResultadoItem[]> {
-  const mapa = { '0': [], '60': [], '30': [], isento: [] } as Record<
+  const mapa = { '0': [], '80': [], '70': [], '60': [], '50': [], '40': [], '30': [], misto: [], isento: [] } as Record<
     (typeof ANEXOS)[number],
     ResultadoItem[]
   >

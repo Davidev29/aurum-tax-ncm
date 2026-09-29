@@ -7,6 +7,9 @@
  *   vazios; a store `meta` não é tocada (a v1 também não limpava, o que é
  *   documentado como `[⚠] L2059` — aqui preservamos o comportamento para não
  *   perder o registro de importação embutida).
+ * - A store `classificacaoProduto` (tabelas CFF por DFe) é opcional no backup:
+ *   backups antigos restauram sem ela; como é dado oficial ressincronizável,
+ *   a ausência só oculta os selos de DFe até o próximo sync/importação.
  */
 import { db } from '@/infrastructure/db/schema'
 import { META_KEYS, type StoreName } from '@/domain/constants'
@@ -24,6 +27,7 @@ const LOJA_BACKUP: StoreName[] = [
   'cstPisCofins',
   'nfeNotas',
   'reclassificacoesManuais',
+  'classificacaoProduto',
 ]
 
 export interface Backup {
@@ -40,10 +44,11 @@ export interface Backup {
   cstPisCofins: unknown[]
   nfeNotas: unknown[]
   reclassificacoesManuais?: unknown[]
+  classificacaoProduto?: unknown[]
 }
 
 export async function montarBackup(): Promise<Backup> {
-  const [ncm, cst, cstClassTrib, ncmNomenclatura, empresas, produtos, cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais] =
+  const [ncm, cst, cstClassTrib, ncmNomenclatura, empresas, produtos, cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto] =
     await Promise.all([
       db.ncm.toArray(),
       db.cst.toArray(),
@@ -56,6 +61,7 @@ export async function montarBackup(): Promise<Backup> {
       db.cstPisCofins.toArray(),
       db.nfeNotas.toArray(),
       db.reclassificacoesManuais.toArray().catch(() => []),
+      db.classificacaoProduto.toArray().catch(() => []),
     ])
   const metaEmitente = await db.meta.get(META_KEYS.EMITENTE)
   return {
@@ -72,6 +78,7 @@ export async function montarBackup(): Promise<Backup> {
     cstPisCofins,
     nfeNotas,
     reclassificacoesManuais,
+    classificacaoProduto,
   }
 }
 
@@ -96,6 +103,7 @@ export async function restaurarBackup(b: Backup): Promise<void> {
   await gravar('cstPisCofins', b.cstPisCofins)
   await gravar('nfeNotas', b.nfeNotas)
   await gravar('reclassificacoesManuais', b.reclassificacoesManuais)
+  await gravar('classificacaoProduto', b.classificacaoProduto)
 
   if (b.emitente) {
     await db.meta.put({ chave: META_KEYS.EMITENTE, valor: b.emitente, atualizadoEm: new Date().toISOString() })

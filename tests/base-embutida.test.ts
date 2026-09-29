@@ -240,6 +240,7 @@ describe('importação em tempo de execução (JSON oficiais brutos)', () => {
         dataInicio: '01/04/2022',
         dataFim: null,
         ato: 'Res Gecex 272/2021',
+        atoFim: null,
       },
     ])
   })

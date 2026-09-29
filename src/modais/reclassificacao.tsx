@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { NomenclaturaNcm } from '@/domain/entities'
 import { REF_DEFAULT } from '@/domain/constants'
-import { anexoDeReducao, calcularTributos, observacoesLegais } from '@/domain/services/calculo'
+import { anexoDeReducao, calcularTributos, observacoesFiscais } from '@/domain/services/calculo'
 import { fmtNcm, fmtPct, norm } from '@/domain/services/format'
 import { propagarClassificacaoNcm } from '@/application/reclassificacao'
 import { resolverClassificacoes } from '@/infrastructure/base/classificacao-repo'
@@ -75,6 +75,7 @@ async function remendarSpedAberto(codigoInput: string): Promise<void> {
   const manualFlag = cl.manual != null || r.manual
   const refIBS = Number(st.refIBS) || REF_DEFAULT.IBS
   const refCBS = Number(st.refCBS) || REF_DEFAULT.CBS
+  const obs = observacoesFiscais(cod, cl, r.nomenclatura)
   const dados = st.dados.map((row) => {
     if ('_isResumo' in row || norm(row.ncm) !== cod) return row
     const base = Number(row.vlItem) || 0
@@ -91,8 +92,9 @@ async function remendarSpedAberto(codigoInput: string): Promise<void> {
       cbs: calc.vCBS,
       totalTributos: calc.total,
       carga: calc.carga,
-      anexo: anexoDeReducao(redIBS),
-      observacoes: observacoesLegais(cod, redIBS),
+      anexo: anexoDeReducao(redIBS, redCBS),
+      observacoes: obs,
+      nomenclatura: r.nomenclatura,
     }
   })
   useSped.setState({ dados: dados as typeof st.dados })

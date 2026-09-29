@@ -79,6 +79,16 @@ export const montarAto = (item: Record<string, unknown> | null | undefined): str
   return [tipo, comp].filter(Boolean).join(' ').trim() || null
 }
 
+/** Monta o rótulo do ato de extinção: "Res Gecex 926/2026". Null quando vigente. */
+export const montarAtoFim = (item: Record<string, unknown> | null | undefined): string | null => {
+  const tipo = str(item?.Tipo_Ato_Fim)
+  if (!tipo) return str(item?.atoFim) || null
+  const numero = str(item?.Numero_Ato_Fim)
+  const ano = str(item?.Ano_Ato_Fim)
+  const comp = [numero, ano].filter(Boolean).join('/')
+  return [tipo, comp].filter(Boolean).join(' ').trim() || null
+}
+
 const DOC_ALIASES: Record<string, string> = {
   NFe: 'NFe', NFCe: 'NFCe', CTe: 'CTe', 'CTe OS': 'CTeOS', CTeOS: 'CTeOS',
   BPe: 'BPe', 'BPe TM': 'BPeTM', BPeTM: 'BPeTM', NF3e: 'NF3e', NFCom: 'NFCom',
@@ -312,7 +322,7 @@ export function normalizarNomenclatura(bruto: unknown): NomenclaturaNcm[] {
   const fonte = Array.isArray(pacote?.itens) ? pacote?.itens : pacote?.Nomenclaturas
   const itens = (Array.isArray(fonte) ? fonte : []) as Record<string, unknown>[]
   return itens
-    .map((n) => {
+    .map((n): NomenclaturaNcm | null => {
       const original = str(alt(n, 'Codigo', 'codigoOriginal'))
       const codigo = digits(original)
       if (codigo.length < 2) return null
@@ -325,10 +335,127 @@ export function normalizarNomenclatura(bruto: unknown): NomenclaturaNcm[] {
         dataInicio: dataInicio || null,
         dataFim: dataFim && dataFim !== '31/12/9999' ? dataFim : null,
         ato: montarAto(n) ?? (str(n.ato) || null),
-      } satisfies NomenclaturaNcm
+        atoFim: montarAtoFim(n),
+      }
     })
     .filter((n): n is NomenclaturaNcm => n !== null)
 }
 
 const fmtNcmLocal = (d: string): string =>
   d.length === 8 ? `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6, 8)}` : d
+
+/* --------------------------------------------------------------------------
+   Formato D — `ConsultaClassificacaoProduto?sistema=*` (CFF, tabelas por DFe)
+   -------------------------------------------------------------------------- */
+
+/** Candidatos de chave para o código da classificação tributária na linha. */
+const CCT_KEYS = [
+  'cClassTrib', 'codClassificacao', 'codigoClassificacao', 'cod_classificacao',
+  'classificacao', 'cclass', 'cct', 'codigo', 'cod',
+]
+
+/** Candidatos de chave para descrição. */
+const DESC_KEYS = ['descricao', 'nome', 'descNome', 'descricaoClassificacao', 'desc']
+
+/** Candidatos de chave para o flag permitido × negado. */
+const PERMITIDO_KEYS = [
+  'permitido', 'habilitado', 'ativo', 'vigente', 'indPermitido', 'permiteEmissao',
+  'habilitadoParaEmissao', 'permiteUso', 'indAtivo', 'situacaoPermitida',
+]
+
+/** Candidatos de chave para vigência da linha. */
+const INI_KEYS = ['dIniVig', 'inicioVigencia', 'dtInicio', 'dataInicio', 'vigenciaInicio', 'iniVig']
+const FIM_KEYS = ['dFimVig', 'fimVigencia', 'dtFim', 'dataFim', 'vigenciaFim', 'fimVig']
+
+const pega = (r: Record<string, unknown>, chaves: string[]): unknown => {
+  for (const k of chaves) {
+    if (r[k] !== undefined && r[k] !== null && String(r[k]).trim() !== '') return r[k]
+  }
+  const lower = Object.fromEntries(Object.entries(r).map(([k, v]) => [k.toLowerCase(), v]))
+  for (const k of chaves) {
+    const v = lower[k.toLowerCase()]
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v
+  }
+  return undefined
+}
+
+/** Interpreta flag permitido × negado; `undefined` quando a linha não informa. */
+const parsePermitido = (v: unknown): boolean | undefined => {
+  if (v === null || v === undefined || v === '') return undefined
+  if (typeof v === 'boolean') return v
+  if (typeof v === 'number') return v !== 0
+  const s = String(v).trim().toLowerCase()
+  if (['sim', 's', '1', 'true', 'ativo', 'ativa', 'permitido', 'permitida', 'habilitado', 'habilitada', 'vigente', 'liberado', 'liberada'].includes(s)) return true
+  if (['não', 'nao', 'n', '0', 'false', 'inativo', 'inativa', 'negado', 'negada', 'bloqueado', 'bloqueada', 'vedado', 'vedada', 'suspenso', 'suspensa'].includes(s)) return false
+  return undefined
+}
+
+const ehBooleano = (v: unknown): boolean => {
+  if (typeof v === 'boolean' || typeof v === 'number') return true
+  const s = String(v ?? '').trim().toLowerCase()
+  return ['sim', 'não', 'nao', 's', 'n', '1', '0', 'true', 'false'].includes(s)
+}
+
+/**
+ * Normaliza a tabela de Classificação de Produtos de um sistema (NFCom, NFAg,
+ * NF3e, NFGas) para `ClassificacaoProdutoSistema[]`.
+ *
+ * Tolerante ao formato: aceita array direto ou envelope
+ * `{ itens | data | produtos | tabela | lista | result | registros }`, chaves
+ * em qualquer caixa e linhas que trazem o flag com nomes diversos. Quando a
+ * linha não informa permitido × negado, a presença na tabela conta como
+ * permitido (`confianca: 'presenca'`); flag explícito vira `'explicita'`.
+ * Idempotente e sem rede.
+ */
+export function normalizarClassificacaoProduto(
+  bruto: unknown,
+  sistema: string,
+  agora = new Date().toISOString(),
+): import('@/domain/entities').ClassificacaoProdutoSistema[] {
+  const b = bruto as Record<string, unknown> | unknown[] | null
+  const lista = Array.isArray(b)
+    ? b
+    : (['itens', 'data', 'produtos', 'tabela', 'lista', 'result', 'registros', 'classificacoes']
+      .map((k) => (b as Record<string, unknown>)?.[k])
+      .find((v) => Array.isArray(v)) as unknown[] | undefined) ?? []
+  if (!Array.isArray(lista)) return []
+
+  const vistos = new Map<string, import('@/domain/entities').ClassificacaoProdutoSistema>()
+
+  for (const raw of lista) {
+    if (!raw || typeof raw !== 'object') continue
+    const r = raw as Record<string, unknown>
+    const cct = padCct(pega(r, CCT_KEYS))
+    if (!cct) continue
+
+    const flagRaw = pega(r, PERMITIDO_KEYS)
+    const permitidoExpl = parsePermitido(flagRaw)
+    const descricao = str(pega(r, DESC_KEYS)) || null
+    const ini = str(pega(r, INI_KEYS)) || null
+    const fim = str(pega(r, FIM_KEYS)) || null
+
+    const flags: Record<string, boolean> = {}
+    for (const [k, v] of Object.entries(r)) {
+      if (CCT_KEYS.includes(k) || DESC_KEYS.includes(k) || PERMITIDO_KEYS.includes(k) || INI_KEYS.includes(k) || FIM_KEYS.includes(k)) continue
+      if (ehBooleano(v)) flags[k] = toBool(v)
+    }
+
+    const id = `${sistema}|${cct}`
+    const anterior = vistos.get(id)
+    const item: import('@/domain/entities').ClassificacaoProdutoSistema = {
+      id,
+      sistema,
+      cClassTrib: cct,
+      descricao: descricao ?? anterior?.descricao ?? null,
+      permitido: permitidoExpl ?? anterior?.permitido ?? true,
+      confianca: permitidoExpl !== undefined ? 'explicita' : (anterior?.confianca ?? 'presenca'),
+      flags: { ...(anterior?.flags ?? {}), ...flags },
+      inicioVigencia: ini ?? anterior?.inicioVigencia ?? null,
+      fimVigencia: fim ?? anterior?.fimVigencia ?? null,
+      sincronizadoEm: agora,
+    }
+    vistos.set(id, item)
+  }
+
+  return [...vistos.values()]
+}

@@ -19,7 +19,7 @@
  */
 import * as XLSX from 'xlsx'
 import { fmtCnpj, norm, normalizeHeader } from '../../domain/services/format'
-import type { Classificacao, Empresa } from '../../domain/entities'
+import type { Classificacao, Empresa, NomenclaturaNcm } from '../../domain/entities'
 import {
   buscarNomenclatura,
   classificacaoRegraGeral,
@@ -171,6 +171,8 @@ export interface ItemLote {
   regraGeral: boolean
   /** `true` quando a escolhida veio de reclassificação manual do usuário. */
   manual?: boolean
+  /** Nomenclatura vigente — quando `dataFim` preenchida, o NCM está extinto. */
+  nomenclatura?: NomenclaturaNcm | null
 }
 
 export interface ResumoLote {
@@ -213,6 +215,7 @@ export async function processarArquivoLote(
   const cacheManual = new Map<string, boolean>()
   const cacheVigente = new Map<string, Classificacao>()
   const cacheRegra = new Map<string, Classificacao>()
+  const cacheNomen = new Map<string, NomenclaturaNcm | null>()
 
   const itens: ItemLote[] = []
 
@@ -242,12 +245,14 @@ export async function processarArquivoLote(
         cache.set(cod, oficiais)
         cacheManual.set(cod, r.manual)
         cacheVigente.set(cod, r.lista[0] ?? null as unknown as Classificacao)
+        cacheNomen.set(cod, r.nomenclatura)
         lista = oficiais
       }
       const ehManual = cacheManual.get(cod) ?? false
       const vigente = cacheVigente.get(cod)
       item.classificacoes = lista
       item.manual = ehManual || lista.some((c) => c.manual != null)
+      item.nomenclatura = cacheNomen.get(cod) ?? null
 
       if (lista.length) {
         item.escolhida = lista[0]
@@ -260,11 +265,13 @@ export async function processarArquivoLote(
         let regra = cacheRegra.get(cod)
         if (!regra) {
           const nom = await buscarNomenclatura(cod)
+          cacheNomen.set(cod, nom)
           regra = await classificacaoRegraGeral(cod, nom)
           cacheRegra.set(cod, regra)
         }
         item.escolhida = regra
         item.regraGeral = true
+        item.nomenclatura = cacheNomen.get(cod) ?? null
       }
     }
 

@@ -3,10 +3,13 @@ import type { Classificacao, NomenclaturaNcm, VinculoNcm } from '@/domain/entiti
 import {
   montarClassificacao,
   montarRegraGeral,
+  isNcmExtinto,
   type ContextoClassificacao,
 } from '@/domain/services/classificacao'
+import { revogacaoDe, type Revogacao } from '@/domain/services/revogacao'
 import { norm } from '@/domain/services/format'
 import { db } from '../db/schema'
+import { obterRevogacoesCff } from '../cff/cff-sync'
 import { buscarReclassificacaoManual, classificacaoManual } from './reclassificacao-repo'
 
 /**
@@ -68,12 +71,16 @@ export async function sugerirNomenclatura(
 ): Promise<NomenclaturaNcm[]> {
   const t = norm(prefixo)
   if (t.length < 2) return []
+  // Busca folga extra para ordenar vigentes antes dos extintos ("negados")
+  // sem ocultar os extintos (o usuário pode estar com o NCM antigo na nota).
+  const folga = Math.min(limite + 20, 100)
   const achados = await db.ncmNomenclatura
     .where('codigo')
     .between(t, `${t}\uffff`, true, true)
-    .limit(limite)
+    .limit(folga)
     .toArray()
-  return achados
+  achados.sort((a, b) => Number(Boolean(a.dataFim)) - Number(Boolean(b.dataFim)))
+  return achados.slice(0, limite)
 }
 
 /** Monta a classificação de regra geral já com a nomenclatura do NCM. */
@@ -94,28 +101,71 @@ export async function classificacaoRegraGeral(
  * 1. vínculos oficiais da base (sempre preferidos);
  * 2. reclassificação manual do usuário (só quando não há vínculo);
  * 3. regra geral (fallback universal).
+ *
+ * Rebaixamentos (nunca apresentam redução como vigente):
+ * - NCM extinto (`dataFim` na nomenclatura) COM vínculo: o vínculo é
+ *   histórico — lista vira regra geral com `extinto: true`.
+ * - Vínculo com anexo/cct revogado: filtrado; se nada restar, regra geral
+ *   com `revogado` (ato + motivo). A manual do usuário prevalece sobre ambos
+ *   (responsabilidade dela, sinalizada na UI).
  */
 export async function resolverClassificacoes(
   codigo: unknown,
-): Promise<{ vinculos: VinculoNcm[]; lista: Classificacao[]; nomenclatura: NomenclaturaNcm | null; regraGeral: boolean; manual: boolean }> {
+): Promise<{
+  vinculos: VinculoNcm[]
+  lista: Classificacao[]
+  nomenclatura: NomenclaturaNcm | null
+  regraGeral: boolean
+  manual: boolean
+  extinto: boolean
+  revogado: Revogacao | null
+}> {
   const c = norm(codigo)
   const nomenclatura = await buscarNomenclatura(c)
   const vinculos = c.length === 8 ? await db.ncm.where('codigo').equals(c).toArray() : []
-  if (!vinculos.length) {
-    if (c.length !== 8) {
-      return { vinculos: [], lista: [], nomenclatura, regraGeral: false, manual: false }
-    }
+  const extinto = isNcmExtinto(nomenclatura) && c.length === 8
+  if (c.length !== 8) {
+    return { vinculos: [], lista: [], nomenclatura, regraGeral: false, manual: false, extinto: false, revogado: null }
+  }
+  // NCM extinto: o vínculo virou histórico, sem valor como tributação vigente.
+  // A manual do usuário prevalece (responsabilidade dela, sinalizada na UI).
+  if (extinto) {
     const manualReg = await buscarReclassificacaoManual(c)
     if (manualReg) {
       const cl = await classificacaoManual(manualReg, nomenclatura)
-      return { vinculos: [], lista: [cl], nomenclatura, regraGeral: false, manual: true }
+      return { vinculos, lista: [cl], nomenclatura, regraGeral: false, manual: true, extinto, revogado: null }
     }
     const rg = await classificacaoRegraGeral(c, nomenclatura)
-    return { vinculos: [], lista: [rg], nomenclatura, regraGeral: true, manual: false }
+    return { vinculos, lista: [rg], nomenclatura, regraGeral: true, manual: false, extinto, revogado: null }
   }
-  const ctxs = await Promise.all(vinculos.map(contextoDe))
-  const lista = vinculos.map((v, i) =>
+  // Vínculos vivos: filtra anexo/cct revogado (curadoria + achados do CFF).
+  let revogado: Revogacao | null = null
+  let vivos = vinculos
+  if (vivos.length) {
+    const dinamicas = await obterRevogacoesCff()
+    const mantidos: VinculoNcm[] = []
+    for (const v of vivos) {
+      const ctx = await contextoDe(v)
+      const rev = revogacaoDe(v.cClassTrib, ctx.referencia?.anexo, dinamicas)
+      if (rev && !revogado) revogado = rev
+      if (!rev) mantidos.push(v)
+    }
+    vivos = mantidos
+  }
+  if (!vivos.length) {
+    // Manual do usuário prevalece sobre ausência total de vínculo vivo.
+    const manualReg = await buscarReclassificacaoManual(c)
+    if (manualReg) {
+      const cl = await classificacaoManual(manualReg, nomenclatura)
+      return { vinculos, lista: [cl], nomenclatura, regraGeral: false, manual: true, extinto, revogado }
+    }
+    const rg = await classificacaoRegraGeral(c, nomenclatura)
+    if (revogado) rg.revogado = revogado
+    return { vinculos, lista: [rg], nomenclatura, regraGeral: true, manual: false, extinto, revogado }
+  }
+  const ctxs = await Promise.all(vivos.map(contextoDe))
+  const lista = vivos.map((v, i) =>
     montarClassificacao(v, nomenclatura ? { ...ctxs[i], nomenclatura } : ctxs[i]),
   )
-  return { vinculos, lista, nomenclatura, regraGeral: false, manual: false }
+  return { vinculos, lista, nomenclatura, regraGeral: false, manual: false, extinto: false, revogado: null }
 }

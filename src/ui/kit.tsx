@@ -16,7 +16,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react'
-import { ANEXO_LABELS } from '@/domain/constants/tributarios'
+import { ANEXO_LABELS, rotuloAnexoOficial } from '@/domain/constants/tributarios'
 import { MASK, type MaskKey } from '@/domain/services/format'
 import { useUi } from '@/store/ui'
 
@@ -267,11 +267,28 @@ export function IconeBadge({
   )
 }
 
-/** Badge de anexo derivado (`0`, `60`, `30`, `isento`) — SPEC R3.3 (emoji incluído). */
+/** Badge de anexo — SPEC R3.3 (emoji incluído).
+ *
+ * Duas famílias distintas (nunca misturar):
+ * - Derivado (`0`, `80`…`30`, `misto`, `isento`): faixa calculada da redução,
+ *   usada no SPED/NF-e/Lote — rótulo em `ANEXO_LABELS`.
+ * - Oficial (`1`…`15`, `9xxxx`): `Número do Anexo` da base CFF, exibido nos
+ *   cartões de consulta — rótulo em `rotuloAnexoOficial` (antes caía no
+ *   fallback "Sem redução", falso para ex.: Anexo I com alíquota zero).
+ */
 export function AnexoBadge({ anexo }: { anexo: string | null | undefined }) {
   const chave = anexo && anexo !== '' ? String(anexo) : 'isento'
-  const classe = ['0', '60', '30'].includes(chave) ? `anexo-${chave}` : 'anexo-isento'
-  return <span className={`anexo-badge ${classe}`}>{ANEXO_LABELS[chave] ?? ANEXO_LABELS.isento}</span>
+  const derivado = ['0', '80', '70', '60', '50', '40', '30', 'misto', 'isento'].includes(chave)
+  const classe = ['0', '80', '70', '60', '50', '40', '30'].includes(chave)
+    ? `anexo-${chave}`
+    : chave === 'misto'
+      ? 'anexo-misto'
+      : 'anexo-isento'
+  return (
+    <span className={`anexo-badge ${classe}`}>
+      {derivado ? (ANEXO_LABELS[chave] ?? ANEXO_LABELS.isento) : rotuloAnexoOficial(chave)}
+    </span>
+  )
 }
 
 export function Vazio({

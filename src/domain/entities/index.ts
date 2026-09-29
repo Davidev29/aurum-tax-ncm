@@ -104,6 +104,32 @@ export interface VinculoNbs {
   descricao: string
 }
 
+/**
+ * Linha da tabela de Classificação de Produtos de um DFe (CFF
+ * `ConsultaClassificacaoProduto?sistema=NFCom|NFAg|NF3e|NFGas`).
+ *
+ * É o "permitido × negado" por sistema: indica se um `cClassTrib` pode ser
+ * usado naquele documento fiscal e em qual vigência. `permitido === null`
+ * = a fonte não informa o flag (só a presença na tabela).
+ */
+export interface ClassificacaoProdutoSistema {
+  /** Chave `sistema|cClassTrib` (keyPath da store `classificacaoProduto`). */
+  id: string
+  /** NFCom | NFAg | NF3e | NFGas */
+  sistema: string
+  cClassTrib: string
+  descricao: string | null
+  permitido: boolean | null
+  /** `explicita` (flag Sim/Não no JSON) ou `presenca` (linha existe na tabela). */
+  confianca: 'explicita' | 'presenca'
+  /** Demais flags Sim/Não da linha (regras de validação do MOC). */
+  flags: Record<string, boolean>
+  inicioVigencia: string | null
+  fimVigencia: string | null
+  /** Quando a linha foi sincronizada/importada. */
+  sincronizadoEm: string
+}
+
 /** Entrada da tabela NCM/SH vigente (nomenclatura). */
 export interface NomenclaturaNcm {
   codigo: string
@@ -112,6 +138,8 @@ export interface NomenclaturaNcm {
   dataInicio: string | null
   dataFim: string | null
   ato: string | null
+  /** Ato que extinguiu o NCM (Tipo_Ato_Fim + Numero/Ano). Null/ausente = vigente. */
+  atoFim?: string | null
 }
 
 /* ---------------------------------------------------------------------------
@@ -278,17 +306,21 @@ export interface Classificacao {
   resumo: ResumoClassificacao
   regraGeral: boolean
   manual?: ReclassificacaoManual | null
+  /**
+   * Revogação que rebaixou este item para regra geral (anexo/cct revogado).
+   * Reduções do vínculo original NÃO valem — ver `revogacao.ts`.
+   */
+  revogado?: import('../services/revogacao').Revogacao | null
 }
 
 /** Resultado de cálculo tributário de uma base (LC 214/2025).
  *
- * Mecânica da Reforma: a redução de alíquota opera via **redução da base
- * de cálculo** — `BC = valorOperacao × (1 − red/100)` e
- * `tributo = BC × aliquotaRef/100`.
+ * Mecânica da Reforma: a redução incide sobre a **alíquota** —
+ * `aliq = ref × (1 − red/100)` e `tributo = base × aliq/100`.
  * `base`/`valorOperacao` = valor cheio da operação (qtd × valor unitário).
- * `bcIBS`/`bcCBS` = bases já reduzidas (0 quando red = 100%).
- * `aliqIBS`/`aliqCBS` = alíquotas efetivas sobre o valor cheio
- * (compat: `ref × (1 − red/100)`); `refIBS`/`refCBS` = referências cheias.
+ * `bcIBS`/`bcCBS` = base cheia (iguais a `base`; sem redução de base).
+ * `aliqIBS`/`aliqCBS` = alíquotas efetivas já reduzidas;
+ * `refIBS`/`refCBS` = referências cheias.
  */
 export interface ResultadoCalculo {
   base: number
@@ -311,7 +343,7 @@ export interface ResultadoCalculo {
 export interface Observacao {
   titulo: string
   texto: string
-  cor: 'emerald' | 'amber' | 'slate'
+  cor: 'emerald' | 'amber' | 'slate' | 'violet' | 'red'
   link?: string
   /** Segundo parágrafo opcional (ex.: o "Verifique…" do aviso in natura). */
   adendo?: string

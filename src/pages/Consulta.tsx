@@ -20,9 +20,10 @@ import { ModalReclassificacao } from '@/modais/reclassificacao'
 import { useBase } from '@/store/base'
 import { useConsulta } from '@/store/consulta'
 import { toast, useUi } from '@/store/ui'
-import { CartaoClassificacao, CartaoTributacaoIntegral } from '@/ui/cartoes'
+import { CartaoClassificacao, CartaoTributacaoIntegral, type BloqueioSistema } from '@/ui/cartoes'
 import { Btn, Painel, Texto, Vazio } from '@/ui/kit'
 import { SUGGEST_LIMITS } from '@/domain/constants'
+import { bloqueiosParaCcts } from '@/application/cff-sync'
 
 /** Debounce das sugestões (paridade com os 150 ms da v1). */
 const DEBOUNCE_SUGESTAO = 150
@@ -45,12 +46,34 @@ export function Consulta() {
 
   const [paraSalvar, setParaSalvar] = useState<Classificacao | null>(null)
   const [reclassificando, setReclassificando] = useState(false)
+  const [bloqueios, setBloqueios] = useState<Record<string, BloqueioSistema[]>>({})
 
   // Sugestões com debounce (paridade com o `input` listener da v1).
   useEffect(() => {
     const t = window.setTimeout(() => void buscarSugestoes(codigo), DEBOUNCE_SUGESTAO)
     return () => window.clearTimeout(t)
   }, [codigo, buscarSugestoes])
+
+  // Permitido × negado por DFe (tabela CFF local) para os cClassTribs exibidos.
+  // Sem cobertura local, os cartões não afirmam nada (sem selos).
+  useEffect(() => {
+    const ccts = [...new Set(resultados.map((r) => r.classificacao.cClassTrib).filter(Boolean))]
+    if (!ccts.length) {
+      setBloqueios({})
+      return
+    }
+    let vivo = true
+    void bloqueiosParaCcts(ccts)
+      .then((m) => {
+        if (vivo) setBloqueios(m)
+      })
+      .catch(() => {
+        if (vivo) setBloqueios({})
+      })
+    return () => {
+      vivo = false
+    }
+  }, [resultados])
 
   const submeter = () => void consultar()
   const aoEscolher = (c: string) => {
@@ -127,8 +150,17 @@ export function Consulta() {
           <>
             {nomenclatura ? (
               <div className="rounded-2xl border border-brand-200 bg-gradient-to-r from-brand-50 to-white p-4 dark:border-aurum-900 dark:from-brand-950/40 dark:to-slate-900">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-brand-600 dark:text-aurum-200">
-                  NCM {nomenclatura.codigoOriginal}
+                <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-brand-600 dark:text-aurum-200">
+                  <span>NCM {nomenclatura.codigoOriginal}</span>
+                  {nomenclatura.dataFim ? (
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-800 dark:bg-red-950/60 dark:text-red-200">
+                      ⛔ Extinto em {nomenclatura.dataFim}
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
+                      ✓ Vigente
+                    </span>
+                  )}
                 </div>
                 <div className="mt-1 text-sm font-semibold text-brand-900 dark:text-brand-100">
                   {nomenclatura.descricao}
@@ -136,6 +168,8 @@ export function Consulta() {
                 {nomenclatura.ato ? (
                   <div className="mt-1 text-[10px] text-brand-700 dark:text-brand-300">
                     📎 {nomenclatura.ato}
+                    {nomenclatura.dataInicio ? ` · desde ${nomenclatura.dataInicio}` : ''}
+                    {nomenclatura.dataFim ? ` · até ${nomenclatura.dataFim}${nomenclatura.atoFim ? ` · ${nomenclatura.atoFim}` : ''}` : ''}
                   </div>
                 ) : null}
               </div>
@@ -153,6 +187,7 @@ export function Consulta() {
                 <CartaoTributacaoIntegral
                   cl={resultados[0].classificacao}
                   nomenclatura={nomenclatura}
+                  bloqueios={bloqueios[resultados[0].classificacao.cClassTrib] ?? null}
                   onSalvar={() => setParaSalvar(resultados[0].classificacao)}
                   onAddCalc={() => abrirCalc({ tipo: 'classificacao', classificacao: resultados[0].classificacao })}
                   onReclassificar={() => setReclassificando(true)}
@@ -164,6 +199,8 @@ export function Consulta() {
                     cl={r.classificacao}
                     indice={i}
                     total={resultados.length}
+                    nomenclatura={nomenclatura}
+                    bloqueios={bloqueios[r.classificacao.cClassTrib] ?? null}
                     onSalvar={() => setParaSalvar(r.classificacao)}
                     onAddCalc={() => abrirCalc({ tipo: 'classificacao', classificacao: r.classificacao })}
                   />
@@ -206,7 +243,7 @@ function ListaSugestaoNcm({
   baseVazia,
   onEscolher,
 }: {
-  sugestoes: { codigo: string; codigoOriginal: string; descricao: string }[]
+  sugestoes: { codigo: string; codigoOriginal: string; descricao: string; dataFim?: string | null }[]
   texto: string
   baseVazia: boolean
   onEscolher: (codigo: string) => void
@@ -248,6 +285,11 @@ function ListaSugestaoNcm({
               <span className="min-w-0 flex-1 truncate text-slate-600 dark:text-slate-300">
                 {n.descricao}
               </span>
+              {n.dataFim ? (
+                <span className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-black text-red-800 dark:bg-red-950/60 dark:text-red-200" title={`Extinto em ${n.dataFim}`}>
+                  ⛔ {n.dataFim}
+                </span>
+              ) : null}
             </button>
           ))}
           {restantes > 0 ? (

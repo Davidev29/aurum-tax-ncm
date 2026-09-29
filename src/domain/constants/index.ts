@@ -5,8 +5,8 @@
 
 /** Nome/versão do IndexedDB legado (paridade com a v1). */
 export const DB_NAME = 'aurum_tax_ncm_v1'
-/** Versão do IndexedDB. A v6 adiciona `reclassificacoesManuais` (NCM → regra do usuário). */
-export const DB_VERSION = 6
+/** Versão do IndexedDB. A v7 adiciona `classificacaoProduto` (CFF por sistema). */
+export const DB_VERSION = 7
 
 /** Itens por página nas listagens. */
 export const PAGE_SIZE = 10
@@ -21,7 +21,21 @@ export const TEMA_KEY = 'tema'
 export const BANNER_KEY = 'banner_dismissed'
 
 /** Alíquotas de referência padrão de IBS/CBS (%). */
-export const REF_DEFAULT = { IBS: 17.7, CBS: 8.8 } as const
+export const REF_DEFAULT = { IBS: 19, CBS: 9 } as const
+
+/**
+ * Proveniência das alíquotas de referência.
+ *
+ * Parâmetro legal móvel: estes percentuais DEVEM ser confrontados com o ato
+ * vigente (LC 214/2025 e regulamentação) antes de cada entrega fiscal — o
+ * valor histórico da SPEC era 17.70/8.80 (total 26.5%). Todo cálculo do
+ * sistema usa este ponto único (stores + relatórios), e a tela Calculadora
+ * permite editar por sessão; aqui fica o carimbo exibido na UI.
+ */
+export const REF_FONTE = {
+  fonte: 'Parâmetro editável — confirmar contra o ato vigente (LC 214/2025 e regulamentação)',
+  soma: 28,
+} as const
 
 /** Limite de linhas das tabelas de dados (SPED/lote). */
 export const ROWS_LIMIT = 200
@@ -74,6 +88,7 @@ export const STORES = {
   CSTPISCOFINS: 'cstPisCofins',
   NFENOTAS: 'nfeNotas',
   RECLASS: 'reclassificacoesManuais',
+  CLASSPROD: 'classificacaoProduto',
 } as const
 
 export type StoreName = (typeof STORES)[keyof typeof STORES]
@@ -102,3 +117,6 @@ export const LINK_RES_CGIBS_6 =
 
 /** Portal da Conformidade Fácil (CFF). */
 export const LINK_PORTAL_CFF = 'https://dfe-portal.svrs.rs.gov.br/Cff'
+
+/** Re-exporta constantes da API CFF */
+export * from './cff-apis'

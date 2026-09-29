@@ -1,4 +1,4 @@
-import type { Classificacao, Observacao } from '@/domain/entities'
+import type { Classificacao, NomenclaturaNcm, Observacao } from '@/domain/entities'
 
 /** Tipo de arquivo SPED detectado. */
 export interface SpedTipo {
@@ -109,6 +109,8 @@ export interface ResultadoItem extends ItemSped {
   carga: number
   anexo: string
   observacoes: Observacao[]
+  /** Nomenclatura vigente — `dataFim` preenchida = NCM extinto. */
+  nomenclatura?: NomenclaturaNcm | null
 }
 
 /** Grupo do modo resumo (agrupamento CST ICMS × CFOP). */

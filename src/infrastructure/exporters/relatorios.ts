@@ -632,15 +632,25 @@ export interface RelatorioSpedParams {
 
 const CORES_GRAFICO_PDF: Record<string, string> = {
   '0': '#10b981',
+  '80': '#ea580c',
+  '70': '#f97316',
   '60': '#f59e0b',
-  '30': '#3b82f6',
+  '50': '#0ea5e9',
+  '40': '#3b82f6',
+  '30': '#6366f1',
+  misto: '#8b5cf6',
   isento: '#94a3b8',
 }
 
 const ROTULOS_GRAFICO_PDF: Record<string, string> = {
   '0': 'Alíquota Zero',
+  '80': 'Redução 80%',
+  '70': 'Redução 70%',
   '60': 'Redução 60%',
+  '50': 'Redução 50%',
+  '40': 'Redução 40%',
   '30': 'Redução 30%',
+  misto: 'Redução IBS ≠ CBS',
   isento: 'Sem redução',
 }
 
@@ -690,7 +700,7 @@ function graficosSpedPdf(resultados: ResultadoSped): NonNullable<Content>[] {
   }
 
   const itens = resultados as ResultadoItem[]
-  const chaves = ['0', '60', '30', 'isento']
+  const chaves = ['0', '80', '70', '60', '50', '40', '30', 'misto', 'isento']
   const porAnexo = chaves.map((a) => ({
     anexo: a,
     valor: itens.filter((r) => r.anexo === a).reduce((s, r) => s + (Number(r.vlItem) || 0), 0),

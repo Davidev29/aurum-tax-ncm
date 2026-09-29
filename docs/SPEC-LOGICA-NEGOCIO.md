@@ -338,16 +338,18 @@ function calcularTributos(valorBase, redIBS, redCBS) {
 
 **R3.2** — Redução é aplicada **linearmente** (`1 - red/100`), por tributo de forma **independente** (IBS usa `redIBS`, CBS usa `redCBS`). Não há teto, arredondamento ou validação de `red > 100` (uma redução de 150% geraria alíquota negativa).
 
-**R3.3** — `anexo` derivado (**somente** em `Sped.analisar`, l.1482):
+**R3.3** — `anexo` derivado (`anexoDeReducao(redIBS, redCBS)` em `src/domain/services/calculo.ts`):
 
 ```
-redIBS >= 100  → '0'
-redIBS >=  60  → '60'
-redIBS >=  30  → '30'
-senão          → 'isento'
+100/100 → '0'
+IBS ≠ CBS → 'misto' (ex.: Prouni 60/100)
+faixa por percentual comum → '80' | '70' | '60' | '50' | '40' | '30'
+senão → 'isento'
 ```
 
-Rótulos de badge (l.1518): `'0'` → "🟢 Anexo I — Alíquota Zero"; `'60'` → "🟡 Redução 60%"; `'30'` → "🔵 Redução 30%"; `'isento'` → "⚪ Sem redução". Qualquer valor desconhecido cai em `map['isento']`.
+Chamadores (todos passam os dois tributos): `sped/analisar`, `nfe/analisar`, `application/reclassificacao`, `modais/reclassificacao`. Rótulos de badge (`ANEXO_LABELS`): `'0'` → "🟢 Alíquota zero"; `'80'…'30'` → faixas; `'misto'` → "🟣 Redução IBS ≠ CBS"; `'isento'` → "⚪ Sem redução".
+
+ATENÇÃO — duas famílias, nunca misturar: o `AnexoBadge` dos cartões de consulta recebe o anexo **oficial** da base (`Número do Anexo`: "1".."15", "9xxxx") e o rotula via `rotuloAnexoOficial` ("Anexo IX — LC 214/2025" / "Ref. oficial 9xxxx"); o derivado acima só vale para SPED/NF-e/Lote.
 
 **R3.4** — `carga` (carga efetiva) = `(vIBS+vCBS)/base * 100`, ou `0` quando `base === 0`. Na UI é formatada com `toFixed(2).replace('.',',') + '%'`.
 

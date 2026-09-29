@@ -45,7 +45,7 @@ Tudo roda **localmente** (IndexedDB via Dexie, sem servidor, sem enviar dados fi
 
 | Módulo | O que faz |
 |---|---|
-| 🧮 **Calculadora** | Monte cestas com produtos salvos ou NCM manual, edite qtd/valor e veja base, IBS, CBS, total e carga efetiva em tempo real. Alíquotas de referência editáveis (padrão IBS 17,70% + CBS 8,80%). |
+| 🧮 **Calculadora** | Monte cestas com produtos salvos ou NCM manual, edite qtd/valor e veja base, IBS, CBS, total e carga efetiva em tempo real. Alíquotas de referência editáveis (padrão IBS 19% + CBS 9%). |
 | 🔍 **Consulta NCM** | Digite 8 dígitos (com ou sem ponto) e veja todas as classificações possíveis, reduções, anexo, documentos habilitados (NFe, NFCe, CTe…), observações legais (Art. 128/135/137) e simulação. |
 | 📋 **Classificação individual** | Cadastro de produto (SKU, nome, NCM, qtd, valor, CFOP, CST ICMS/PIS/COFINS) + escolha da classificação da Reforma na lateral. Gera snapshot tributário no produto. |
 | 📁 **Classificação em lote** | Arraste CSV/XLSX (`COD/SKU; NOME DO PRODUTO; NCM; CFOP; CST; PIS; COFINS`), o sistema classifica centenas de linhas de uma vez, permite trocar entre múltiplas opções e salvar tudo como produtos. Inclui modelo CSV para download. |
@@ -195,24 +195,33 @@ COD/SKU;NOME DO PRODUTO;NCM;CFOP;CST;PIS;COFINS
 Fórmula única, aplicada em todos os módulos:
 
 ```
-aliqIBS = 17,70 × (1 − redIBS/100)
-aliqCBS =  8,80 × (1 − redCBS/100)
+aliqIBS = 19 × (1 − redIBS/100)
+aliqCBS =  9 × (1 − redCBS/100)
 vIBS    = base × aliqIBS / 100
 vCBS    = base × aliqCBS / 100
 total   = vIBS + vCBS
 carga   = base > 0 ? total/base × 100 : 0
 ```
 
-Derivação do **anexo** (só no SPED, pela `redIBS`):
+Derivação do **anexo** (SPED/NF-e/Lote, por `redIBS`+`redCBS`):
 
-| redIBS | Anexo | Rótulo |
+| redIBS / redCBS | Anexo | Rótulo |
 |---|---|---|
-| ≥ 100% | `0` | 🟢 Anexo I — Alíquota Zero |
-| ≥ 60% | `60` | 🟡 Redução 60% |
-| ≥ 30% | `30` | 🔵 Redução 30% |
-| < 30% | `isento` | ⚪ Sem redução |
+| 100% / 100% | `0` | 🟢 Alíquota zero |
+| 80% | `80` | 🟠 Redução 80% (art. 158) |
+| 70% | `70` | 🟠 Redução 70% (art. 261) |
+| 60% / 60% | `60` | 🟡 Redução 60% (arts. 128/135/137) |
+| 50% | `50` | 🔵 Redução 50% (art. 261) |
+| 40% | `40` | 🔵 Redução 40% (arts. 275–289) |
+| 30% | `30` | 🔵 Redução 30% (art. 127) |
+| IBS ≠ CBS | `misto` | 🟣 Redução IBS ≠ CBS (ex.: Prouni 60/100, art. 308) |
+| 0% | `isento` | ⚪ Sem redução |
 
-Observações legais automáticas: `≥100` → Alíquota Zero · `≥60` → Art. 128 (+ Art. 137 se in natura + Art. 135 se alimento) · `≥30` → Redução parcial · senão → Regra geral.
+Os cartões de consulta exibem o anexo **oficial** da base (`Número do Anexo`: "Anexo IX — LC 214/2025" etc.), nunca confundir com a faixa derivada acima.
+
+Cálculo (LC 214/2025 — redução de **alíquota**): BC = valor cheio da operação · alíquota efetiva = referência × (1 − red/100) · tributo = base × alíquota efetiva.
+
+Observações legais automáticas: `100` → Alíquota Zero · `60` → Art. 128 (+ Art. 137 se in natura + Art. 135 se alimento) · `80` → Art. 158 · `70`/`50` → Art. 261 · `40` → Arts. 275–289 · `30` → Art. 127 · `60/100` → Art. 308 (Prouni) · senão → Regra geral.
 
 ---
 

@@ -313,6 +313,7 @@ export async function apagarBaseImportada(): Promise<void> {
     db.referencia.clear(),
     db.ncmNomenclatura.clear(),
     db.nbs.clear(),
+    db.classificacaoProduto.clear(),
     db.meta.delete(META_KEYS.IMPORTACAO),
     db.meta.delete(META_KEYS.IMPORTACAO_NOMENCLATURA),
     db.meta.delete('base_embutida'),

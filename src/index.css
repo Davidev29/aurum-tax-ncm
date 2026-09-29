@@ -326,8 +326,8 @@
   }
   .marca-sub {
     font-weight: 800;
-    font-size: 0.6875rem;
-    letter-spacing: 0.3em;
+    font-size: 0.8125rem;
+    letter-spacing: 0.28em;
     color: var(--color-aurum-600);
   }
   .dark .marca-sub {
@@ -696,13 +696,24 @@
     background: #dcfce7;
     color: #166534;
   }
+  .anexo-80,
+  .anexo-70 {
+    background: #ffedd5;
+    color: #9a3412;
+  }
   .anexo-60 {
     background: #fef3c7;
     color: #92400e;
   }
+  .anexo-50,
+  .anexo-40,
   .anexo-30 {
     background: #dbeafe;
     color: #1e40af;
+  }
+  .anexo-misto {
+    background: #ede9fe;
+    color: #5b21b6;
   }
   .anexo-isento {
     background: #eef0f4;
@@ -712,13 +723,24 @@
     background: #052e16;
     color: #86efac;
   }
+  .dark .anexo-80,
+  .dark .anexo-70 {
+    background: #431407;
+    color: #fdba74;
+  }
   .dark .anexo-60 {
     background: #451a03;
     color: #fcd34d;
   }
+  .dark .anexo-50,
+  .dark .anexo-40,
   .dark .anexo-30 {
     background: #172554;
     color: #93c5fd;
+  }
+  .dark .anexo-misto {
+    background: #2e1065;
+    color: #c4b5fd;
   }
   .dark .anexo-isento {
     background: #1e293b;
@@ -734,7 +756,8 @@
   /*
    * Contorno animado que percorre a borda com a cor do anexo
    * (`--cor-borda` / `--cor-brilho` via style): verde = crédito integral,
-   * roxo = alíquota zero, âmbar = redução 60%, azul = redução 30%.
+   * roxo = alíquota zero, âmbar/laranja = reduções 80/70/60%, azul = reduções
+   * 50/40/30%, violeta = redução assimétrica IBS ≠ CBS.
    * Sem `@property` (navegador antigo), resta a borda estática + brilho.
    */
   .borda-cintilante {

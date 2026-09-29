@@ -22,9 +22,9 @@ import { Painel } from '@/ui/kit'
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
-/** Ordem: Alíquota Zero, Redução 60%, Redução 30%, Sem redução. */
-export const CORES_ANEXO = ['#10b981', '#f59e0b', '#3b82f6', '#94a3b8'] as const
-const CORES_ANEXO_SUAVE = ['#6ee7b7', '#fcd34d', '#93c5fd', '#cbd5e1'] as const
+/** Ordem: Alíquota Zero, Redução 80%, 70%, 60%, 50%, 40%, 30%, IBS≠CBS, Sem redução. */
+export const CORES_ANEXO = ['#10b981', '#ea580c', '#f97316', '#f59e0b', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#94a3b8'] as const
+const CORES_ANEXO_SUAVE = ['#6ee7b7', '#fdba74', '#fdba74', '#fcd34d', '#7dd3fc', '#93c5fd', '#a5b4fc', '#c4b5fd', '#cbd5e1'] as const
 
 const TOOLTIP_ESCURO = {
   backgroundColor: 'rgba(15, 23, 42, 0.94)',

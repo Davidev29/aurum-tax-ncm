@@ -18,7 +18,7 @@
  */
 import { REF_DEFAULT } from '@/domain/constants'
 import type { ClassificacaoSnapshot } from '@/domain/entities'
-import { anexoDeReducao, calcularTributos, observacoesLegais } from '@/domain/services/calculo'
+import { anexoDeReducao, calcularTributos, observacoesFiscais } from '@/domain/services/calculo'
 import { norm } from '@/domain/services/format'
 import { resolverClassificacoes } from '@/infrastructure/base/classificacao-repo'
 import { db } from '@/infrastructure/db/schema'
@@ -109,8 +109,9 @@ export async function propagarClassificacaoNcm(codigoInput: unknown): Promise<Re
           cbs: calc.vCBS,
           totalTributos: calc.total,
           carga: calc.carga,
-          anexo: anexoDeReducao(redIBS),
-          observacoes: observacoesLegais(cod, redIBS),
+          anexo: anexoDeReducao(redIBS, redCBS),
+          nomenclatura: r.nomenclatura,
+          observacoes: observacoesFiscais(cod, cl, r.nomenclatura),
         }
       })
       let totalIBS = 0

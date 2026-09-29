@@ -63,7 +63,6 @@
   "build": {
     "appId": "br.com.aurumbitlabs.aurumtaxncm",
     "productName": "Aurum Tax NCM",
-    "artifactName": "AurumTaxNCM-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -88,7 +87,8 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "artifactName": "AurumTaxNCM-${version}-win-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -98,12 +98,16 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Aurum Tax NCM",
       "language": "1046",
-      "license": "build/LICENCA.txt",
+      "license": "build/LICENCA.rtf",
       "installerHeaderIcon": "build/icon.ico",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "menuCategory": "Aurum Tax",
-      "runAfterFinish": true
+      "runAfterFinish": true,
+      "artifactName": "AurumTaxNCM-Setup-${version}-win-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "AurumTaxNCM-Portatil-${version}-win-${arch}.${ext}"
     },
     "mac": {
       "target": [

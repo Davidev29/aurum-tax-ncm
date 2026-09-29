@@ -5,6 +5,7 @@ import {
   STORES,
 } from '@/domain/constants'
 import type {
+  ClassificacaoProdutoSistema,
   Empresa,
   NomenclaturaNcm,
   Produto,
@@ -182,9 +183,14 @@ export class AurumDatabase extends Dexie {
   /** Reclassificações manuais do usuário por NCM (keyPath `ncm`). */
   reclassificacoesManuais!: Table<ReclassificacaoManual, string>
 
+  /** Classificação de Produtos por DFe (CFF — permitido × negado por sistema). */
+  classificacaoProduto!: Table<ClassificacaoProdutoSistema, string>
+
   constructor() {
     super(DB_NAME)
-    this.version(DB_VERSION)
+    // v6: schema anterior (sem `classificacaoProduto`). Mantido para a
+    // migração de bancos legados não perder dados ao subir para a v7.
+    this.version(6)
       .stores({
         [STORES.NCM]: 'id, codigo, cst, cClassTrib',
         [STORES.NBS]: 'id, codigo, cClassTrib',
@@ -202,6 +208,24 @@ export class AurumDatabase extends Dexie {
         [STORES.RECLASS]: 'ncm',
       })
       .upgrade((trans) => migrarBancoLegado(trans))
+    this.version(DB_VERSION)
+      .stores({
+        [STORES.NCM]: 'id, codigo, cst, cClassTrib',
+        [STORES.NBS]: 'id, codigo, cClassTrib',
+        [STORES.CST]: 'codigo',
+        [STORES.CSTCT]: 'id, cst, cClassTrib',
+        [STORES.REFERENCIA]: 'id, cst, cClassTrib',
+        [STORES.NCMNOM]: 'codigo, descricao',
+        [STORES.EMPRESAS]: '++id, razaoSocial, cnpj',
+        [STORES.PRODUTOS]: '++id, empresaId, ncm, codigo, cstReforma',
+        [STORES.META]: 'chave',
+        [STORES.CFOP]: 'codigo',
+        [STORES.CSTICMS]: 'codigo',
+        [STORES.CSTPISCOFINS]: 'codigo',
+        [STORES.NFENOTAS]: '++id, empresaId, dataEmissao, direcao, emitCnpj, chave, &[empresaId+chave]',
+        [STORES.RECLASS]: 'ncm',
+        [STORES.CLASSPROD]: 'id, sistema, cClassTrib',
+      })
   }
 }
 
@@ -228,7 +252,7 @@ export async function bulkPut<T, K>(
 export async function contarTodos(): Promise<Record<string, number>> {
   const [
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
-    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais,
+    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto,
   ] = await Promise.all([
     db.ncm.count(),
     db.nbs.count(),
@@ -243,9 +267,10 @@ export async function contarTodos(): Promise<Record<string, number>> {
     db.cstPisCofins.count(),
     db.nfeNotas.count(),
     db.reclassificacoesManuais.count(),
+    db.classificacaoProduto.count(),
   ])
   return {
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
-    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais,
+    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto,
   }
 }

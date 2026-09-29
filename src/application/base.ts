@@ -19,6 +19,7 @@ import {
   type StatusBase,
 } from '@/infrastructure/base/base-service'
 import { garantirSementes } from './auxiliares'
+import { revalidarBaseGravada, resumirRevalidacao } from './revalidacao'
 import { SEED_CFOP, SEED_CST_ICMS, SEED_CST_PISCOFINS } from '@/domain/constants/seeds'
 import type { Progresso } from '@/infrastructure/base/base-service'
 
@@ -52,6 +53,8 @@ export async function inicializarBase(onProgress: Progresso = () => {}): Promise
 export async function resemearBase(onProgress: Progresso = () => {}): Promise<StatusBase> {
   const status = await semearBaseEmbutida(onProgress, true)
   await semearAuxiliares()
+  // Regra mudou → reaplica a vigente em tudo que já foi gravado.
+  await revalidarSilencioso(onProgress)
   return status
 }
 
@@ -66,6 +69,8 @@ export async function importarArquivoBase(
 ): Promise<FormatoBase> {
   const formato = await importarBase(json, nomeArquivo, onProgress)
   await semearAuxiliares()
+  // Regra mudou → reaplica a vigente em tudo que já foi gravado.
+  await revalidarSilencioso(onProgress)
   return formato
 }
 
@@ -83,6 +88,22 @@ export async function restaurarBasePadrao(onProgress: Progresso = () => {}): Pro
  */
 export async function apagarBase(): Promise<void> {
   await apagarBaseImportada()
+}
+
+/**
+ * Revalidação best-effort após mudança de base: nunca quebra o fluxo
+ * principal; o relatório vai para o progresso do chamador.
+ */
+async function revalidarSilencioso(onProgress: Progresso): Promise<void> {
+  try {
+    onProgress('Reaplicando vigente em produtos e notas', 96)
+    const r = await revalidarBaseGravada()
+    if (r.produtos || r.notas) {
+      onProgress(`Base gravada atualizada: ${resumirRevalidacao(r)}`, 100)
+    }
+  } catch {
+    /* revalidação é complementar — a base nova já está valendo */
+  }
 }
 
 export { statusBase }

@@ -13,7 +13,7 @@
  *   os manuais** (R7.9–R7.13).
  */
 import { useEffect, useRef, useState } from 'react'
-import { SUGGEST_LIMITS } from '@/domain/constants'
+import { REF_DEFAULT, REF_FONTE, SUGGEST_LIMITS } from '@/domain/constants'
 import type { NomenclaturaNcm } from '@/domain/entities'
 import {
   MASK,
@@ -113,8 +113,7 @@ function ItemLinha({ item, indice }: { item: ItemCalc; indice: number }) {
 
   const c = calculoDoItem(item, rateIBS, rateCBS)
   const base = baseDoItem(item)
-  const bcUnica = Math.abs(c.bcIBS - c.bcCBS) < 0.005
-  const bcZerada = c.bcIBS < 0.005 && c.bcCBS < 0.005
+  const aliqZerada = c.aliqIBS < 0.005 && c.aliqCBS < 0.005
   const temReducao = (Number(item.redIBS) || 0) > 0 || (Number(item.redCBS) || 0) > 0
 
   return (
@@ -132,9 +131,9 @@ function ItemLinha({ item, indice }: { item: ItemCalc; indice: number }) {
               <span className="pill bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
                 regra geral
               </span>
-            ) : bcZerada ? (
+            ) : aliqZerada ? (
               <span className="pill bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-                BC zerada · alíquota zero
+                Alíquota zero
               </span>
             ) : null}
           </div>
@@ -191,9 +190,9 @@ function ItemLinha({ item, indice }: { item: ItemCalc; indice: number }) {
         </span>
         {temReducao ? (
           <span className="text-slate-500">
-            BC{' '}
-            <span className="font-mono font-semibold text-slate-700 dark:text-slate-200" title="Base de cálculo já com a redução aplicada">
-              {bcUnica ? fmtMoeda(c.bcIBS) : `${fmtMoeda(c.bcIBS)} / ${fmtMoeda(c.bcCBS)}`}
+            Alíq.{' '}
+            <span className="font-mono font-semibold text-slate-700 dark:text-slate-200" title="Alíquota de referência já com a redução aplicada; BC = valor cheio da operação">
+              {`${c.aliqIBS.toFixed(2).replace('.', ',')}% / ${c.aliqCBS.toFixed(2).replace('.', ',')}%`}
             </span>
           </span>
         ) : null}
@@ -376,7 +375,7 @@ export function Calculadora() {
 
   const r = resumoDaCalculadora(itens, rateIBS, rateCBS)
   const pctCarga = fmtCarga(r.carga)
-  const temReducao = r.base - Math.min(r.bcIBS, r.bcCBS) > 0.005
+  const temReducao = itens.some((it) => (Number(it.redIBS) || 0) > 0 || (Number(it.redCBS) || 0) > 0)
 
   const abrirCustom = (codigo: string) => {
     setNcmInicial(codigo)
@@ -460,16 +459,11 @@ export function Calculadora() {
           </div>
 
           <div className="space-y-2 p-5 text-sm">
-            <LinhaResumo rotulo="Operação" valor={fmtMoeda(r.base)} />
+            <LinhaResumo rotulo="Operação (BC)" valor={fmtMoeda(r.base)} />
             {temReducao ? (
-              Math.abs(r.bcIBS - r.bcCBS) < 0.005 ? (
-                <LinhaResumo rotulo="BC (reduzida)" valor={fmtMoeda(r.bcIBS)} />
-              ) : (
-                <>
-                  <LinhaResumo rotulo="BC IBS" valor={fmtMoeda(r.bcIBS)} />
-                  <LinhaResumo rotulo="BC CBS" valor={fmtMoeda(r.bcCBS)} />
-                </>
-              )
+              <p className="-mt-1 text-[10px] text-slate-400">
+                BC = valor cheio · alíquotas já com redução.
+              </p>
             ) : null}
             <LinhaResumo rotulo="IBS" valor={fmtMoeda(r.ibs)} destaque />
             <LinhaResumo rotulo="CBS" valor={fmtMoeda(r.cbs)} destaque />
@@ -514,11 +508,17 @@ export function Calculadora() {
             <CampoTaxa tributo="IBS" />
             <CampoTaxa tributo="CBS" />
           </div>
+          <p
+            className="px-5 pb-4 text-[10px] leading-relaxed text-slate-400"
+            title={REF_FONTE.fonte}
+          >
+            Padrão IBS {REF_DEFAULT.IBS}% · CBS {REF_DEFAULT.CBS}% — {REF_FONTE.fonte}.
+          </p>
         </Painel>
 
         <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300">
-          <span className="font-bold">💡 BC já com redução.</span> Red. 100% ⇒ BC zerada.
-          Carga = tributos ÷ operação.
+          <span className="font-bold">💡 Alíquota já com redução.</span> Red. 100% ⇒ alíquota zero.
+          BC = valor cheio da operação. Carga = tributos ÷ operação.
         </div>
       </aside>
 

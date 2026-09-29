@@ -1,4 +1,4 @@
-import { anexoDeReducao, calcularTributos, observacoesLegais } from '@/domain/services/calculo'
+import { anexoDeReducao, calcularTributos, observacoesFiscais } from '@/domain/services/calculo'
 import { classificacaoNcmInvalido } from '@/domain/services/classificacao'
 import { norm } from '@/domain/services/format'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
@@ -88,8 +88,9 @@ export async function analisarItensNfe(
       cbs: calc.vCBS,
       totalTributos: calc.total,
       carga: calc.carga,
-      anexo: anexoDeReducao(redIBS),
-      observacoes: observacoesLegais(cod, redIBS),
+      anexo: anexoDeReducao(redIBS, redCBS),
+      nomenclatura: cacheNomen.get(cod) ?? null,
+      observacoes: observacoesFiscais(cod, classificacao, cacheNomen.get(cod) ?? null),
     })
 
     onProgress?.(i + 1, itens.length)

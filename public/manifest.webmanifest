@@ -9,7 +9,7 @@
   "icons": [
     { "src": "escudo.png", "sizes": "128x218", "type": "image/png", "purpose": "any" },
     { "src": "logomarca-cheia.png", "sizes": "233x264", "type": "image/png", "purpose": "any" },
-    { "src": "icone.png", "sizes": "500x500", "type": "image/png", "purpose": "any" },
+    { "src": "icone.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "logomarca.png", "sizes": "500x500", "type": "image/png", "purpose": "any" }
   ]
 }

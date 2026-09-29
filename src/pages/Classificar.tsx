@@ -18,6 +18,7 @@ import { useClassificar } from '@/store/classificar'
 import { useSessao } from '@/store/sessao'
 import { useUi, toast } from '@/store/ui'
 import { ListaSugestoes, Btn, Campo, Painel, Pill, Texto, TituloSecao } from '@/ui/kit'
+import { AvisoNcmExtinto } from '@/ui/cartoes'
 import { SelectAux } from '@/ui/opcoes'
 
 const DEBOUNCE_NCM = 300
@@ -213,6 +214,11 @@ export function Classificar() {
           </div>
 
           <div className="max-h-[calc(100vh-220px)] overflow-y-auto p-4 text-sm">
+            {nomenclatura?.dataFim ? (
+              <div className="mb-2">
+                <AvisoNcmExtinto nomenclatura={nomenclatura} />
+              </div>
+            ) : null}
             {carregando ? (
               <div className="rounded-xl bg-slate-50 p-6 text-center text-xs text-slate-500 dark:bg-slate-950/40">
                 Carregando classificações…

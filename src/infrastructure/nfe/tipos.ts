@@ -1,4 +1,4 @@
-import type { Classificacao, Observacao } from '@/domain/entities'
+import type { Classificacao, NomenclaturaNcm, Observacao } from '@/domain/entities'
 
 /** Direção da nota em relação à empresa ativa (decidida pelo CNPJ). */
 export type DirecaoNota = 'entrada' | 'saida' | 'quarentena'
@@ -119,6 +119,8 @@ export interface ResultadoItemNfe extends ItemNotaXml {
   carga: number
   anexo: string
   observacoes: Observacao[]
+  /** Nomenclatura vigente — `dataFim` preenchida = NCM extinto. */
+  nomenclatura?: NomenclaturaNcm | null
 }
 
 /** Filtros da tela de notas (todos opcionais). */

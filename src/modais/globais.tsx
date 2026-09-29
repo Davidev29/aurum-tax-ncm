@@ -10,6 +10,10 @@ import { AUX_META, DOCUMENTOS_AUX, type CampoAux } from '@/application/aux-meta'
 import { ehBackup, montarBackup, restaurarBackup, type Backup } from '@/application/backup'
 import { normalizarCor, processarLogo } from '@/application/emitente'
 import { ARQUIVOS_BASE } from '@/application/base'
+import { statusSincronizacao, sincronizacaoManual, importarTabelaProduto, coberturaTabelasProduto, type SyncResultado } from '@/application/cff-sync'
+import { importarTabelaNcm, sincronizacaoManualNcm, statusSincronizacaoNcm } from '@/application/ncm-sync'
+import { SISCOMEX_PORTAL_URL } from '@/domain/constants/siscomex-apis'
+import { CFF_ENDPOINTS, LINK_PORTAL_CFF, SISTEMAS_CFF } from '@/domain/constants'
 import type { Emitente } from '@/domain/entities'
 import { EMITENTE_PADRAO } from '@/domain/entities'
 import type { DadosCnpjBrasilApi } from '@/infrastructure/receita/brasilapi'
@@ -376,6 +380,85 @@ function Contador({ rotulo, valor }: { rotulo: string; valor: number | string })
   )
 }
 
+/** Importação manual do JSON da tabela por DFe (portal CFF, com certificado). */
+function ImportarTabelaProduto({ onImportado }: { onImportado: () => void }) {
+  const input = useRef<HTMLInputElement>(null)
+  const [sistema, setSistema] = useState<string>(SISTEMAS_CFF[0])
+  const [enviando, setEnviando] = useState(false)
+
+  const enviar = async (file: File | null) => {
+    if (!file || enviando) return
+    setEnviando(true)
+    try {
+      const json = JSON.parse(await file.text())
+      await importarTabelaProduto(sistema, json)
+      onImportado()
+    } catch (e) {
+      toast(`Erro na importação (${sistema}): ${e instanceof Error ? e.message : String(e)}`, 'err')
+    } finally {
+      setEnviando(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <select
+        value={sistema}
+        onChange={(e) => setSistema(e.target.value)}
+        className="field field-sm w-28"
+        aria-label="Sistema da tabela"
+      >
+        {SISTEMAS_CFF.map((s) => (
+          <option key={s} value={s}>{s}</option>
+        ))}
+      </select>
+      <Btn tam="sm" variante="primary" onClick={() => input.current?.click()} disabled={enviando}>
+        {enviando ? 'Importando…' : `⬆ Importar JSON ${sistema}`}
+      </Btn>
+      <input
+        ref={input}
+        type="file"
+        accept=".json"
+        className="hidden"
+        onChange={(e) => void enviar(e.target.files?.[0] ?? null)}
+      />
+    </div>
+  )
+}
+
+/** Cobertura local das tabelas por sistema (totais + negados + data). */
+function CoberturaTabelas() {
+  const [cobertura, setCobertura] = useState<Awaited<ReturnType<typeof coberturaTabelasProduto>> | null>(null)
+
+  useEffect(() => {
+    void coberturaTabelasProduto().then(setCobertura)
+  }, [])
+
+  if (!cobertura?.length) {
+    return (
+      <p className="mt-2 text-[10px] text-slate-400">
+        Nenhuma tabela por DFe carregada — os cartões não exibem selos de DFe até a primeira sincronização ou importação.
+      </p>
+    )
+  }
+
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+      {cobertura.map((c) => (
+        <div key={c.sistema} className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2">
+          <div className="text-xs font-bold">{c.sistema}</div>
+          <div className="font-mono text-[10px] text-slate-500">
+            {c.total} cClassTrib{c.negados ? ` · ⛔ ${c.negados}` : ''}
+          </div>
+          <div className="text-[10px] text-slate-400">
+            {c.sincronizadoEm ? new Date(c.sincronizadoEm).toLocaleDateString('pt-BR') : '—'}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => void }) {
   const status = useBase((s) => s.status)
   const progresso = useBase((s) => s.progresso)
@@ -387,21 +470,28 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
   const emitente = useSessao((s) => s.emitente)
   const persistirEmitente = useSessao((s) => s.persistirEmitente)
 
-  const [contagens, setContagens] = useState<Record<string, number>>({})
   // Começa do padrão em vez de `null`: se o emitente ainda não carregou da
   // sessão, o modal continua utilizável e assume o salvo assim que chegar.
   const [form, setForm] = useState<Emitente>({ ...EMITENTE_PADRAO })
   const [cor, setCor] = useState('#0f215c')
   const [mostrarPreview, setMostrarPreview] = useState(false)
-  const [aba, setAba] = useState<'emitente' | 'base' | 'backup'>('emitente')
+  const [contagens, setContagens] = useState<Record<string, number>>({})
+  const [aba, setAba] = useState<'emitente' | 'base' | 'backup' | 'cff'>('emitente')
   const [buscandoCnpj, setBuscandoCnpj] = useState(false)
+  const [cffStatus, setCffStatus] = useState<Awaited<ReturnType<typeof statusSincronizacao>> | null>(null)
+  const [cffSyncProgresso, setCffSyncProgresso] = useState<{ etapa: string; pct: number; resultado?: SyncResultado } | null>(null)
+  const [ncmStatus, setNcmStatus] = useState<Awaited<ReturnType<typeof statusSincronizacaoNcm>> | null>(null)
+  const [ncmProg, setNcmProg] = useState<{ etapa: string; pct: number } | null>(null)
   const inputBase = useRef<HTMLInputElement>(null)
   const inputBackup = useRef<HTMLInputElement>(null)
+  const inputNcm = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!aberto) return
     void contarTodos().then(setContagens)
     void recarregarStatus()
+    void statusSincronizacao().then(setCffStatus)
+    void statusSincronizacaoNcm().then(setNcmStatus)
   }, [aberto, recarregarStatus])
 
   useEffect(() => {
@@ -455,6 +545,20 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
     }
   }
 
+  /** Importação manual da tabela NCM baixada no Portal Siscomex. */
+  const importarNcmArquivo = async (file: File | null) => {
+    if (!file) return
+    try {
+      const json: unknown = JSON.parse(await file.text())
+      await importarTabelaNcm(json, file.name)
+      const st = await statusSincronizacaoNcm()
+      setNcmStatus(st)
+      void contarTodos().then(setContagens)
+    } catch (e) {
+      toast(`Erro ao ler o JSON: ${e instanceof Error ? e.message : String(e)}`, 'err')
+    }
+  }
+
   const baixarBackup = async () => {
     const b = await montarBackup()
     const blob = new Blob([JSON.stringify(b, null, 2)], { type: 'application/json' })
@@ -499,7 +603,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
       aberto={aberto}
       onFechar={onFechar}
       titulo="Configurações"
-      subtitulo="Emitente dos relatórios, base tributária e backup"
+      subtitulo="Emitente dos relatórios, base tributária, sincronização CFF e backup"
       largura="max-w-2xl"
       rodape={
         <>
@@ -515,6 +619,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
           [
             ['emitente', '🏷 Emitente'],
             ['base', '🧱 Base'],
+            ['cff', '☁ CFF Sync'],
             ['backup', '💾 Backup'],
           ] as const
         ).map(([t, rotulo]) => (
@@ -733,6 +838,262 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
               className="hidden"
               onChange={(e) => void importarJson(e.target.files?.[0] ?? null)}
             />
+          </Painel>
+
+          <Painel className="mt-3 space-y-2 p-3">
+            <h4 className="text-xs font-black uppercase tracking-wide text-slate-500">
+              NCM vigente — Portal Único Siscomex{' '}
+              <span
+                className={`pill ${
+                  ncmStatus?.status === 'ok'
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                    : ncmStatus?.status === 'erro'
+                      ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                }`}
+              >
+                {ncmStatus?.status === 'ok'
+                  ? 'sincronizado'
+                  : ncmStatus?.status === 'erro'
+                    ? 'erro'
+                    : 'nunca'}
+              </span>
+            </h4>
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              Tabela oficial do módulo Classif, verificada automaticamente a cada 24h na abertura.
+              Códigos que somem da tabela são marcados como extintos (nunca apagados) para manter o histórico.
+              Fonte:{' '}
+              <a href={SISCOMEX_PORTAL_URL} target="_blank" rel="noreferrer" className="font-semibold text-brand-600 underline">
+                Portal Único Siscomex
+              </a>
+            </p>
+
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <Contador rotulo="Vigência" valor={ncmStatus?.vigencia ?? '—'} />
+              <Contador rotulo="Códigos" valor={ncmStatus?.totalRegistros ?? contagens.ncmNomenclatura ?? '—'} />
+              <Contador
+                rotulo="Último diff"
+                valor={
+                  ncmStatus && (ncmStatus.novos || ncmStatus.alterados || ncmStatus.extintos)
+                    ? `+${ncmStatus.novos ?? 0} ~${ncmStatus.alterados ?? 0} ⛔${ncmStatus.extintos ?? 0}`
+                    : '—'
+                }
+              />
+              <Contador
+                rotulo="Verificado em"
+                valor={
+                  ncmStatus?.ultimaVerificacao
+                    ? new Date(ncmStatus.ultimaVerificacao).toLocaleDateString('pt-BR')
+                    : '—'
+                }
+              />
+            </div>
+            {ncmStatus?.ato ? (
+              <p className="text-[10px] text-slate-400">📎 {ncmStatus.ato}</p>
+            ) : null}
+            {ncmStatus?.ultimoErro ? (
+              <p className="text-[10px] leading-relaxed text-red-600 dark:text-red-300">{ncmStatus.ultimoErro}</p>
+            ) : null}
+
+            {ncmProg ? (
+              <BarraProgresso pct={ncmProg.pct} etapa={ncmProg.etapa} />
+            ) : null}
+
+            <div className="flex flex-wrap gap-1.5">
+              <Btn
+                tam="sm"
+                variante="primary"
+                onClick={() => {
+                  void (async () => {
+                    setNcmProg({ etapa: 'Baixando tabela oficial', pct: 20 })
+                    try {
+                      await sincronizacaoManualNcm((etapa, pct) => setNcmProg({ etapa, pct }))
+                      setNcmStatus(await statusSincronizacaoNcm())
+                      void contarTodos().then(setContagens)
+                    } finally {
+                      setNcmProg(null)
+                    }
+                  })()
+                }}
+              >
+                🔄 Sincronizar NCM agora
+              </Btn>
+              <Btn tam="sm" onClick={() => inputNcm.current?.click()}>⬆ Importar JSON do portal</Btn>
+            </div>
+            <input
+              ref={inputNcm}
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={(e) => void importarNcmArquivo(e.target.files?.[0] ?? null)}
+            />
+          </Painel>
+        </section>
+        ) : null}
+
+        {aba === 'cff' ? (
+        <section>
+          <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">
+            Sincronização Conformidade Fácil (CFF)
+          </h3>
+          <Painel className="space-y-3 p-3">
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              Verifica atualizações nos endpoints oficiais da Conformidade Fácil (SVRS) e atualiza a base local.
+              A verificação automática ocorre a cada 24h na abertura do sistema.
+              As tabelas por DFe (NFCom/NFAg/NF3e/NFGas) exigem certificado digital ICP-Brasil:
+              quando o acesso direto falha, baixe o JSON no portal e importe manualmente abaixo.
+            </p>
+
+            <div className="flex flex-wrap gap-1.5">
+              <Btn
+                tam="sm"
+                variante="primary"
+                onClick={async () => {
+                  setCffSyncProgresso({ etapa: 'Iniciando...', pct: 0 })
+                  try {
+                    const resultados = await sincronizacaoManual((etapa, pct, resultado) =>
+                      setCffSyncProgresso({ etapa, pct, resultado }),
+                    )
+                    const atualizados = resultados.filter((r) => r.status === 'atualizado').length
+                    const erros = resultados.filter((r) => r.status === 'erro').length
+                    toast(
+                      `Sincronização concluída: ${atualizados} atualizado(s)${erros ? `, ${erros} erro(s)` : ''}.`,
+                      erros ? 'warn' : 'ok',
+                    )
+                    const status = await statusSincronizacao()
+                    setCffStatus(status)
+                  } catch (e) {
+                    toast(e instanceof Error ? e.message : String(e), 'err')
+                  } finally {
+                    setCffSyncProgresso(null)
+                  }
+                }}
+              >
+                🔄 Sincronizar agora
+              </Btn>
+              <Btn
+                tam="sm"
+                onClick={async () => {
+                  const status = await statusSincronizacao()
+                  setCffStatus(status)
+                  toast('Status atualizado.', 'ok')
+                }}
+              >
+                🔃 Atualizar status
+              </Btn>
+            </div>
+
+            {cffSyncProgresso ? (
+              <div className="mt-2">
+                <BarraProgresso
+                  pct={cffSyncProgresso.pct}
+                  etapa={
+                    cffSyncProgresso.resultado
+                      ? `${cffSyncProgresso.etapa} (${cffSyncProgresso.resultado.endpoint.servico}: ${cffSyncProgresso.resultado.status})`
+                      : cffSyncProgresso.etapa
+                  }
+                />
+              </div>
+            ) : null}
+
+            {cffStatus ? (
+              <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  Última verificação geral:{' '}
+                  {cffStatus.ultimaVerificacaoGeral
+                    ? new Date(cffStatus.ultimaVerificacaoGeral).toLocaleString('pt-BR')
+                    : 'nunca'}
+                </div>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {cffStatus.endpoints.map((ep) => (
+                    <div
+                      key={ep.endpoint.servico}
+                      className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-semibold truncate">{ep.endpoint.servico}</div>
+                          <div className="text-[10px] text-slate-400 truncate">{ep.endpoint.descricao}</div>
+                        </div>
+                        <span
+                          className={`pill shrink-0 ${
+                            ep.status === 'ok'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                              : ep.status === 'certificado'
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                : ep.status === 'erro'
+                                  ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                          }`}
+                        >
+                          {ep.status === 'ok'
+                            ? 'sincronizado'
+                            : ep.status === 'certificado'
+                              ? '🔐 certificado'
+                              : ep.status === 'erro'
+                                ? 'erro'
+                                : 'nunca'}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-slate-400">
+                        <span>Última: {ep.ultimaSinc ? new Date(ep.ultimaSinc).toLocaleString('pt-BR') : '—'}</span>
+                        <span>Registros: {ep.totalRegistros ?? '—'}</span>
+                        {ep.totalNegados != null ? <span>Negados: {ep.totalNegados}</span> : null}
+                        <span>Hash: {ep.hash ? `${ep.hash.slice(0, 12)}…` : '—'}</span>
+                      </div>
+                      {ep.status === 'certificado' || (ep.precisaCert && ep.ultimoErro) ? (
+                        <div className="mt-1 text-[10px] leading-relaxed text-amber-700 dark:text-amber-300">
+                          🔐 {ep.ultimoErro ?? 'Exige certificado digital ICP-Brasil.'} Importe o JSON manualmente abaixo.
+                        </div>
+                      ) : ep.status === 'erro' && ep.ultimoErro ? (
+                        <div className="mt-1 text-[10px] leading-relaxed text-red-600 dark:text-red-300">
+                          {ep.ultimoErro}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2 text-center text-xs text-slate-400 py-4">
+                Clique em "Atualizar status" para ver o estado da sincronização.
+              </div>
+            )}
+
+            <div className="mt-3 pt-3 border-t border-[var(--line)]">
+              <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+                Importar tabela por DFe (JSON do portal, com certificado)
+              </h4>
+              <p className="mb-2 text-[10px] leading-relaxed text-slate-400">
+                Baixe em{' '}
+                <a href={LINK_PORTAL_CFF} target="_blank" rel="noreferrer" className="font-semibold text-brand-600 underline">
+                  {LINK_PORTAL_CFF}
+                </a>{' '}
+                a tabela do sistema (resposta JSON da ConsultaClassificacaoProduto) e importe abaixo.
+                O sistema detecta permitido × negado e vigência por cClassTrib.
+              </p>
+              <ImportarTabelaProduto
+                onImportado={async () => {
+                  const status = await statusSincronizacao()
+                  setCffStatus(status)
+                  void contarTodos().then(setContagens)
+                }}
+              />
+              <CoberturaTabelas />
+            </div>
+
+            <div className="mt-3 pt-3 border-t border-[var(--line)]">
+              <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Endpoints monitorados</h4>
+              <div className="grid grid-cols-1 gap-1 text-[10px] text-slate-400 max-h-40 overflow-y-auto">
+                {CFF_ENDPOINTS.map((e) => (
+                  <div key={e.servico} className="flex gap-2">
+                    <span className="font-mono text-brand-600">{e.servico}</span>
+                    <span>{e.descricao}</span>
+                    <span className="ml-auto font-mono">{e.url}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </Painel>
         </section>
         ) : null}

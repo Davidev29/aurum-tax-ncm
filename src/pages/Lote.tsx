@@ -20,7 +20,7 @@ import type { ItemLote, ResumoLote } from '@/infrastructure/parsers/lote'
 import { useLote } from '@/store/lote'
 import { useSessao } from '@/store/sessao'
 import { useUi, toast } from '@/store/ui'
-import { ZonaArquivo, AvisoManual } from '@/ui/cartoes'
+import { ZonaArquivo, AvisoDiferimento, AvisoManual, AvisoNcmExtinto } from '@/ui/cartoes'
 import { BarraProgresso, Btn, Modal, Painel, Pill } from '@/ui/kit'
 import { Campo, Olho, Secao } from '@/ui/detalhes'
 
@@ -213,6 +213,7 @@ function ModalLoteDetalhe({ item, onFechar }: { item: ItemLote | null; onFechar:
     >
       {item ? (
         <div className="space-y-3">
+          <AvisoNcmExtinto nomenclatura={item.nomenclatura} />
           <Secao titulo="Regime anterior" icone="🧾">
             <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
               <Campo rotulo="CFOP" valor={item.cfop || '—'} mono />
@@ -225,6 +226,11 @@ function ModalLoteDetalhe({ item, onFechar }: { item: ItemLote | null; onFechar:
             {c?.manual ? (
               <div className="mb-2">
                 <AvisoManual compact fonteDescricao={c.manual.fonteDescricao} fonteUrl={c.manual.fonteUrl} />
+              </div>
+            ) : null}
+            {c ? (
+              <div className="mb-2">
+                <AvisoDiferimento cl={c} />
               </div>
             ) : null}
             <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3">
@@ -265,6 +271,11 @@ function celulaLote(
   if (item.ncm.length !== 8) {
     return <span className="text-red-500">NCM inválido</span>
   }
+  const seloExtinto = item.nomenclatura?.dataFim ? (
+    <div className="mt-1 inline-block rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-black text-red-800 dark:bg-red-950/60 dark:text-red-200" title={`Extinto em ${item.nomenclatura.dataFim}`}>
+      ⛔ extinto
+    </div>
+  ) : null
   if (item.manual && c) {
     return (
       <div className="rounded-lg bg-amber-50 px-2 py-1 dark:bg-amber-950/30">
@@ -274,6 +285,7 @@ function celulaLote(
         <div className="text-[10px] text-amber-700 dark:text-amber-400" title={c.manual?.fonteDescricao}>
           Manual · usuário — isenta o sistema
         </div>
+        {seloExtinto}
       </div>
     )
   }
@@ -286,6 +298,7 @@ function celulaLote(
         <div className="text-[10px] text-amber-700 dark:text-amber-400">
           ⚡ {r?.descricaoCClassTrib || 'Tributação integral'}
         </div>
+        {seloExtinto}
       </div>
     )
   }
@@ -298,6 +311,7 @@ function celulaLote(
         <div className="truncate text-[10px] text-slate-500" title={r?.descricaoCClassTrib}>
           {r?.descricaoCClassTrib || c.baseLegal}
         </div>
+        {seloExtinto}
       </div>
     )
   }

@@ -29,7 +29,7 @@ import { useSped } from '@/store/sped'
 import { toast, useUi, type FonteCalc } from '@/store/ui'
 import { Btn, Campo, Modal, Painel, Pill, Texto, TituloSecao } from '@/ui/kit'
 import { SelectAux } from '@/ui/opcoes'
-import { ListaObservacoes, AvisoManual } from '@/ui/cartoes'
+import { ListaObservacoes, AvisoManual, AvisoNcmExtinto } from '@/ui/cartoes'
 
 /* ------------------------------------------------------- salvar classe ---- */
 
@@ -512,7 +512,6 @@ function PreviaCalculo({
 }) {
   const base = (parseQtd(qtd) || 0) * parseMoeda(valor)
   const c = calcularTributos(base, redIBS, redCBS, rateIBS, rateCBS)
-  const bcUnica = Math.abs(c.bcIBS - c.bcCBS) < 0.005
   const temReducao = (Number(redIBS) || 0) > 0 || (Number(redCBS) || 0) > 0
 
   return (
@@ -523,8 +522,8 @@ function PreviaCalculo({
           Prévia
         </h4>
         {temReducao ? (
-          <span className="ml-auto font-mono text-[10px] text-slate-500">
-            BC {bcUnica ? fmtMoeda(c.bcIBS) : `${fmtMoeda(c.bcIBS)} / ${fmtMoeda(c.bcCBS)}`}
+          <span className="ml-auto font-mono text-[10px] text-slate-500" title="Alíquota de referência já com a redução aplicada; BC = valor cheio da operação">
+            Alíq. {fmtCarga(c.aliqIBS)} / {fmtCarga(c.aliqCBS)}
           </span>
         ) : null}
       </div>
@@ -809,6 +808,8 @@ export function ModalDetalheSped() {
   const r = c?.resumo
   const cstDet = c?.cstDetalhes
   const observacoes = item?.observacoes ?? []
+  const nomenExtinto =
+    item && !ehResumo ? (item as { nomenclatura?: import('@/domain/entities').NomenclaturaNcm | null }).nomenclatura ?? null : null
 
   const confirmar = async () => {
     if (!item) return
@@ -964,6 +965,11 @@ export function ModalDetalheSped() {
             {('manual' in (item as object) && (item as { manual?: boolean }).manual) || c.manual ? (
               <div className="mb-3">
                 <AvisoManual compact fonteDescricao={c.manual?.fonteDescricao} fonteUrl={c.manual?.fonteUrl} />
+              </div>
+            ) : null}
+            {nomenExtinto?.dataFim ? (
+              <div className="mb-3">
+                <AvisoNcmExtinto nomenclatura={nomenExtinto} />
               </div>
             ) : null}
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
