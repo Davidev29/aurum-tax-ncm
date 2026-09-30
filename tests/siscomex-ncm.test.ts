@@ -70,6 +70,8 @@ afterEach(async () => {
   vi.unstubAllGlobals()
   await db.ncmNomenclatura.clear()
   await db.meta.clear()
+  const w = globalThis as unknown as { window?: Record<string, unknown> }
+  if (w.window && 'aurum' in w.window) delete w.window.aurum
 })
 
 // Retry de 10s estouraria o timeout do vitest — zera só nestes testes.
@@ -236,9 +238,11 @@ describe('sincronizarNomenclatura', () => {
 })
 
 describe('classificarErroRede', () => {
-  it('distingue timeout, TLS e rede/DNS', () => {
+  it('distingue timeout, CORS, TLS e rede/DNS', () => {
     expect(classificarErroRede(new DOMException('aborted', 'AbortError')).codigo).toBe('timeout')
-    expect(classificarErroRede(new TypeError('Failed to fetch')).codigo).toBe('rede')
+    // `Failed to fetch` no navegador = bloqueio CORS (portal sem ACAO).
+    expect(classificarErroRede(new TypeError('Failed to fetch')).codigo).toBe('cors')
+    expect(classificarErroRede(new TypeError('Failed to fetch')).mensagem).toMatch(/CORS/i)
     expect(classificarErroRede(new Error('unable to verify the first certificate')).codigo).toBe('tls')
     expect(classificarErroRede(new Error('EAI_AGAIN portalunico')).codigo).toBe('rede')
   })
@@ -258,7 +262,7 @@ describe('diagnosticarConexaoNcm', () => {
     expect(d.etapas.every((e) => e.ok)).toBe(true)
   })
 
-  it('falha classificada quando a rede bloqueia', async () => {
+  it('falha classificada como CORS quando o navegador bloqueia', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => {
@@ -268,7 +272,7 @@ describe('diagnosticarConexaoNcm', () => {
     const d = await diagnosticarConexaoNcm()
     expect(d.ok).toBe(false)
     expect(d.etapas[0].ok).toBe(false)
-    expect(d.resumo).toMatch(/proxy\/firewall|Sem acesso/i)
+    expect(d.resumo).toMatch(/CORS|bloqueou/i)
   })
 
   it('tabela parcial é recusada no diagnóstico', async () => {
@@ -321,5 +325,76 @@ describe('aplicarTabelaNcm', () => {
     expect(diff.extintos).toBe(0) // já estava extinto — não conta de novo
     const mantido = await db.ncmNomenclatura.get('03011100')
     expect(mantido?.dataFim).toBe('Vigente em 20/09/2026')
+  })
+})
+
+describe('canal IPC do Electron (sem CORS)', () => {
+  const comBridge = (buscarTexto: (url: string) => Promise<unknown>) => {
+    const w = globalThis as unknown as { window: Record<string, unknown> }
+    w.window = w.window ?? {}
+    w.window.aurum = { buscarTexto }
+  }
+
+  it('buscarTabelaNcm usa o IPC e nem chama fetch (sem CORS)', async () => {
+    const linhas = [LINHA('0201.10.00', 'Carcaças de bovino'), ...padRemoto()]
+    const buscarTexto = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      urlFinal: 'https://portalunico.siscomex.gov.br/classif/api/publico/nomenclatura/download/json',
+      contentType: 'application/json',
+      texto: JSON.stringify(REMOTO(linhas)),
+    }))
+    comBridge(buscarTexto)
+    const fetchMock = vi.fn(async () => {
+      throw new Error('fetch não deveria ser chamado com bridge ativo')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const r = await sincronizarNomenclatura()
+    expect(r.status).toBe('atualizado')
+    expect(buscarTexto).toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('erro HTTP 429 via IPC vira rate-limit sem cair no fetch', async () => {
+    const buscarTexto = vi.fn(async () => {
+      throw new Error('Documento indisponível (HTTP 429, Retry-After: 120).')
+    })
+    comBridge(buscarTexto)
+    const fetchMock = vi.fn(async () => {
+      throw new Error('fetch não deveria ser chamado em erro HTTP definitivo')
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const r = await sincronizarNomenclatura()
+    expect(r.status).toBe('erro')
+    expect(r.codigoErro).toBe('limite')
+    expect(r.mensagem).toMatch(/120s/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('diagnóstico via IPC relata o canal Electron', async () => {
+    const tabela = REMOTO(
+      Array.from({ length: 1001 }, (_, i) => LINHA(`0101.${String(i % 100).padStart(2, '0')}.00`, `Item ${i}`)),
+    )
+    comBridge(
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        urlFinal: 'ipc',
+        contentType: 'application/json',
+        texto: JSON.stringify(tabela),
+      })),
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('fetch não deveria ser chamado com bridge ativo')
+      }),
+    )
+    const d = await diagnosticarConexaoNcm()
+    expect(d.ok).toBe(true)
+    expect(d.etapas[0].etapa).toBe('Canal Electron')
+    expect(d.etapas[0].ok).toBe(true)
   })
 })

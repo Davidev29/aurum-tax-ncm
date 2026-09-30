@@ -1,19 +1,22 @@
 /**
- * Modais globais: **Empresas**, **Configurações** (emitente + base) e a
- * edição genérica de registros das tabelas auxiliares.
+ * Modais globais: **Empresas**, **Configurações** (emitente + CFF Sync +
+ * atualização do programa + backup) e a edição genérica de registros das
+ * tabelas auxiliares.
+ *
+ * As bases tributárias (NCM, CST, cClassTrib, nomenclatura) viajam embutidas
+ * no programa e são renovadas pela atualização geral (electron-updater) —
+ * não há mais aba "Base" nem sincronização avulsa de NCM.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { fmtCnpj } from '@/domain/services/format'
 import { baixarModeloEmpresas } from '@/infrastructure/exporters/relatorios'
 import { contarTodos } from '@/infrastructure/db/schema'
 import { AUX_META, DOCUMENTOS_AUX, type CampoAux } from '@/application/aux-meta'
 import { ehBackup, montarBackup, restaurarBackup, type Backup } from '@/application/backup'
 import { normalizarCor, processarLogo } from '@/application/emitente'
-import { ARQUIVOS_BASE } from '@/application/base'
-import { statusSincronizacao, sincronizacaoManual, importarTabelaProduto, coberturaTabelasProduto, type SyncResultado } from '@/application/cff-sync'
-import { importarTabelaNcm, sincronizacaoManualNcm, statusSincronizacaoNcm, testarConexaoNcm } from '@/application/ncm-sync'
-import { SISCOMEX_PORTAL_URL } from '@/domain/constants/siscomex-apis'
-import { CFF_ENDPOINTS, LINK_PORTAL_CFF, SISTEMAS_CFF } from '@/domain/constants'
+import { statusSincronizacao, coberturaTabelasProduto } from '@/application/cff-sync'
+import { baixarAtualizacao, instalarAtualizacao, versaoInstalada, verificarAtualizacaoManual } from '@/application/atualizacao'
+import { bridge, type EventoAtualizacao } from '@/infrastructure/bridge'
 import type { Emitente } from '@/domain/entities'
 import { EMITENTE_PADRAO } from '@/domain/entities'
 import type { DadosCnpjBrasilApi } from '@/infrastructure/receita/brasilapi'
@@ -181,7 +184,7 @@ function ModalEmpresas({ aberto, onFechar }: { aberto: boolean; onFechar: () => 
             </div>
             <p className="mt-1.5 text-[11px] text-slate-400">
               Razão social, endereço e contatos vêm da BrasilAPI. IE/IM são completados
-              ao importar SPED/XML.
+              ao importar XML.
             </p>
 
             {preview ? (
@@ -380,53 +383,49 @@ function Contador({ rotulo, valor }: { rotulo: string; valor: number | string })
   )
 }
 
-/** Importação manual do JSON da tabela por DFe (portal CFF, com certificado). */
-function ImportarTabelaProduto({ onImportado }: { onImportado: () => void }) {
-  const input = useRef<HTMLInputElement>(null)
-  const [sistema, setSistema] = useState<string>(SISTEMAS_CFF[0])
-  const [enviando, setEnviando] = useState(false)
+/** Milhares em pt-BR (`15156` → `15.156`); `—` quando ausente. */
+function fmtQtd(valor: number | null | undefined): string {
+  return valor == null ? '—' : valor.toLocaleString('pt-BR')
+}
 
-  const enviar = async (file: File | null) => {
-    if (!file || enviando) return
-    setEnviando(true)
-    try {
-      const json = JSON.parse(await file.text())
-      await importarTabelaProduto(sistema, json)
-      onImportado()
-    } catch (e) {
-      toast(`Erro na importação (${sistema}): ${e instanceof Error ? e.message : String(e)}`, 'err')
-    } finally {
-      setEnviando(false)
-    }
-  }
-
+/** Cartão de estatística da aba CFF Sync (ícone + número grande). */
+function StatTabela({ icone, rotulo, valor, chip }: { icone: string; rotulo: string; valor: number | string; chip: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <select
-        value={sistema}
-        onChange={(e) => setSistema(e.target.value)}
-        className="field field-sm w-28"
-        aria-label="Sistema da tabela"
-      >
-        {SISTEMAS_CFF.map((s) => (
-          <option key={s} value={s}>{s}</option>
-        ))}
-      </select>
-      <Btn tam="sm" variante="primary" onClick={() => input.current?.click()} disabled={enviando}>
-        {enviando ? 'Importando…' : `⬆ Importar JSON ${sistema}`}
-      </Btn>
-      <input
-        ref={input}
-        type="file"
-        accept=".json"
-        className="hidden"
-        onChange={(e) => void enviar(e.target.files?.[0] ?? null)}
-      />
+    <div className="card-hover rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5 shadow-card">
+      <div className="flex items-center gap-1.5">
+        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-sm ${chip}`}>{icone}</span>
+        <span className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-500">{rotulo}</span>
+      </div>
+      <div className="num mt-1.5 font-mono text-lg font-black tracking-tight">{valor}</div>
     </div>
   )
 }
 
-/** Cobertura local das tabelas por sistema (totais + negados + data). */
+/** Aparência por status do serviço CFF (ponto da timeline + selo). */
+const STATUS_CFF: Record<string, { rotulo: string; ponto: string; selo: string }> = {
+  ok: {
+    rotulo: '✓ Atualizado',
+    ponto: 'bg-emerald-500 ring-emerald-200 dark:ring-emerald-900',
+    selo: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  },
+  certificado: {
+    rotulo: '🔐 Certificado',
+    ponto: 'bg-amber-500 ring-amber-200 dark:ring-amber-900',
+    selo: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+  },
+  erro: {
+    rotulo: '✕ Erro',
+    ponto: 'bg-red-500 ring-red-200 dark:ring-red-900',
+    selo: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
+  },
+  nunca: {
+    rotulo: '○ Nunca',
+    ponto: 'bg-slate-300 ring-slate-200 dark:bg-slate-600 dark:ring-slate-800',
+    selo: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+  },
+}
+
+/** Cobertura local das tabelas por sistema (totais + negados + data). Leitura local, sem rede. */
 function CoberturaTabelas() {
   const [cobertura, setCobertura] = useState<Awaited<ReturnType<typeof coberturaTabelasProduto>> | null>(null)
 
@@ -437,21 +436,35 @@ function CoberturaTabelas() {
   if (!cobertura?.length) {
     return (
       <p className="mt-2 text-[10px] text-slate-400">
-        Nenhuma tabela por DFe carregada — os cartões não exibem selos de DFe até a primeira sincronização ou importação.
+        Nenhuma tabela por DFe carregada — os cartões de classificação não exibem selos de DFe.
       </p>
     )
   }
 
   return (
-    <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
       {cobertura.map((c) => (
-        <div key={c.sistema} className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2">
-          <div className="text-xs font-bold">{c.sistema}</div>
-          <div className="font-mono text-[10px] text-slate-500">
-            {c.total} cClassTrib{c.negados ? ` · ⛔ ${c.negados}` : ''}
-          </div>
-          <div className="text-[10px] text-slate-400">
-            {c.sincronizadoEm ? new Date(c.sincronizadoEm).toLocaleDateString('pt-BR') : '—'}
+        <div key={c.sistema} className="card-hover overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] shadow-card">
+          <div className="h-1 w-full bg-gradient-to-r from-brand-500 to-aurum-500" />
+          <div className="p-2.5">
+            <div className="flex items-center gap-1.5">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-brand-100 text-[11px] font-black text-brand-700 dark:bg-brand-950/60 dark:text-brand-300">
+                {c.sistema.slice(0, 2)}
+              </span>
+              <span className="truncate text-xs font-black">{c.sistema}</span>
+            </div>
+            <div className="num mt-1.5 font-mono text-base font-black">
+              {c.total.toLocaleString('pt-BR')}{' '}
+              <span className="text-[10px] font-bold text-slate-400">cClassTrib</span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px] text-slate-400">
+              <span>📅 {c.sincronizadoEm ? new Date(c.sincronizadoEm).toLocaleDateString('pt-BR') : '—'}</span>
+              {c.negados ? (
+                <span className="rounded-full bg-red-100 px-1.5 py-0.5 font-bold text-red-700 dark:bg-red-950/60 dark:text-red-300">
+                  ⛔ {c.negados}
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
       ))}
@@ -461,12 +474,7 @@ function CoberturaTabelas() {
 
 function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => void }) {
   const status = useBase((s) => s.status)
-  const progresso = useBase((s) => s.progresso)
   const recarregarStatus = useBase((s) => s.recarregar)
-  const resemear = useBase((s) => s.resemear)
-  const restaurarPadrao = useBase((s) => s.restaurar)
-  const apagarBase = useBase((s) => s.apagar)
-  const importarBase = useBase((s) => s.importar)
   const emitente = useSessao((s) => s.emitente)
   const persistirEmitente = useSessao((s) => s.persistirEmitente)
 
@@ -476,25 +484,50 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
   const [cor, setCor] = useState('#0f215c')
   const [mostrarPreview, setMostrarPreview] = useState(false)
   const [contagens, setContagens] = useState<Record<string, number>>({})
-  const [aba, setAba] = useState<'emitente' | 'base' | 'backup' | 'cff'>('emitente')
+  const [aba, setAba] = useState<'emitente' | 'backup' | 'cff' | 'atualizacao'>('emitente')
   const [buscandoCnpj, setBuscandoCnpj] = useState(false)
   const [cffStatus, setCffStatus] = useState<Awaited<ReturnType<typeof statusSincronizacao>> | null>(null)
-  const [cffSyncProgresso, setCffSyncProgresso] = useState<{ etapa: string; pct: number; resultado?: SyncResultado } | null>(null)
-  const [ncmStatus, setNcmStatus] = useState<Awaited<ReturnType<typeof statusSincronizacaoNcm>> | null>(null)
-  const [ncmProg, setNcmProg] = useState<{ etapa: string; pct: number } | null>(null)
-  const [ncmDiag, setNcmDiag] = useState<Awaited<ReturnType<typeof testarConexaoNcm>> | null>(null)
-  const [ncmDiagRodando, setNcmDiagRodando] = useState(false)
-  const inputBase = useRef<HTMLInputElement>(null)
+  const [versao, setVersao] = useState<string>('—')
+  const [verificando, setVerificando] = useState(false)
+  const [versaoNova, setVersaoNova] = useState<string | null>(null)
+  const [notasVersao, setNotasVersao] = useState<string | null>(null)
+  const [baixando, setBaixando] = useState<{ pct: number } | null>(null)
+  const [atualizacaoPronta, setAtualizacaoPronta] = useState<string | null>(null)
   const inputBackup = useRef<HTMLInputElement>(null)
-  const inputNcm = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!aberto) return
     void contarTodos().then(setContagens)
     void recarregarStatus()
     void statusSincronizacao().then(setCffStatus)
-    void statusSincronizacaoNcm().then(setNcmStatus)
+    void versaoInstalada().then(setVersao)
   }, [aberto, recarregarStatus])
+
+  // Eventos do auto-updater (verificação automática em background no instalado).
+  useEffect(() => {
+    if (!aberto || !bridge) return
+    bridge.onAtualizacao((ev: EventoAtualizacao) => {
+      if (ev.tipo === 'disponivel') {
+        setVersaoNova(ev.versao ?? 'nova versão')
+        setNotasVersao(ev.notas ?? null)
+        toast(`⬇ Nova versão do programa disponível: ${ev.versao ?? ''}. Veja a aba Atualização.`, 'ok')
+      } else if (ev.tipo === 'baixando') {
+        setBaixando({ pct: ev.pct })
+      } else if (ev.tipo === 'baixada') {
+        setBaixando(null)
+        setAtualizacaoPronta(ev.versao ?? 'nova versão')
+        toast('✅ Atualização baixada. Reinicie para aplicar.', 'ok')
+      } else if (ev.tipo === 'erro') {
+        setBaixando(null)
+        setVerificando(false)
+      } else if (ev.tipo === 'em-dia') {
+        setVerificando(false)
+      } else if (ev.tipo === 'verificando') {
+        setVerificando(true)
+      }
+    })
+    return () => bridge?.onAtualizacao(() => undefined)
+  }, [aberto])
 
   useEffect(() => {
     if (emitente) {
@@ -533,31 +566,6 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
       toast(e instanceof Error ? e.message : String(e), 'err')
     } finally {
       setBuscandoCnpj(false)
-    }
-  }
-
-  const importarJson = async (file: File | null) => {
-    if (!file) return
-    try {
-      const json = JSON.parse(await file.text())
-      const ok = await importarBase(json, file.name)
-      if (ok) void contarTodos().then(setContagens)
-    } catch (e) {
-      toast(`Erro ao ler o JSON: ${e instanceof Error ? e.message : String(e)}`, 'err')
-    }
-  }
-
-  /** Importação manual da tabela NCM baixada no Portal Siscomex. */
-  const importarNcmArquivo = async (file: File | null) => {
-    if (!file) return
-    try {
-      const json: unknown = JSON.parse(await file.text())
-      await importarTabelaNcm(json, file.name)
-      const st = await statusSincronizacaoNcm()
-      setNcmStatus(st)
-      void contarTodos().then(setContagens)
-    } catch (e) {
-      toast(`Erro ao ler o JSON: ${e instanceof Error ? e.message : String(e)}`, 'err')
     }
   }
 
@@ -605,7 +613,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
       aberto={aberto}
       onFechar={onFechar}
       titulo="Configurações"
-      subtitulo="Emitente dos relatórios, base tributária, sincronização CFF e backup"
+      subtitulo="Emitente dos relatórios, sincronização CFF, atualização do programa e backup"
       largura="max-w-2xl"
       rodape={
         <>
@@ -620,8 +628,8 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
         {(
           [
             ['emitente', '🏷 Emitente'],
-            ['base', '🧱 Base'],
             ['cff', '☁ CFF Sync'],
+            ['atualizacao', '🔄 Atualização'],
             ['backup', '💾 Backup'],
           ] as const
         ).map(([t, rotulo]) => (
@@ -673,7 +681,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
             <Campo label="Inscrição estadual">
               <Texto value={form.ie} onChange={(e) => campo('ie', e.target.value)} />
             </Campo>
-            <Campo label="Endereço" dica="IE completada via SPED/XML">
+            <Campo label="Endereço" dica="IE completada via XML">
               <Texto value={form.endereco} onChange={(e) => campo('endereco', e.target.value)} />
             </Campo>
             <Campo label="Cidade/UF">
@@ -746,415 +754,287 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
         </section>
         ) : null}
 
-        {aba === 'base' ? (
+        {aba === 'cff' ? (
         <section>
-          <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">
-            Base tributária
-          </h3>
-          <Painel className="p-3">
-            <div className="grid grid-cols-3 gap-1.5">
-              <Contador rotulo="NCM" valor={status?.ncm ?? '—'} />
-              <Contador rotulo="CST" valor={status?.cst ?? '—'} />
-              <Contador rotulo="cClassTrib" valor={status?.cstClassTrib ?? '—'} />
-              <Contador rotulo="Referência" valor={status?.referencia ?? '—'} />
-              <Contador rotulo="Nomenclatura" valor={status?.nomenclatura ?? '—'} />
-              <Contador rotulo="NBS" valor={status?.nbs ?? '—'} />
-              <Contador rotulo="CFOP" valor={contagens.cfop ?? '—'} />
-              <Contador rotulo="CST ICMS" valor={contagens.cstIcms ?? '—'} />
-              <Contador rotulo="PIS/COFINS" valor={contagens.cstPisCofins ?? '—'} />
-              <Contador rotulo="Empresas" valor={contagens.empresas ?? '—'} />
-              <Contador rotulo="Produtos" valor={contagens.produtos ?? '—'} />
-              <Contador
-                rotulo="Origem"
-                valor={status?.embutida ? 'embutida' : status?.ultimaImportacao ? 'importada' : '—'}
-              />
-            </div>
-
-            {progresso ? (
-              <div className="mt-2">
-                <BarraProgresso pct={progresso.pct} etapa={progresso.etapa} />
+          <div className="mb-3 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 via-teal-700 to-cyan-800 p-4 text-white shadow-card dark:from-emerald-950 dark:via-teal-950 dark:to-cyan-950 dark:ring-1 dark:ring-emerald-900">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/20 text-2xl shadow-inner backdrop-blur">
+                🛡
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-black tracking-tight">Tabelas tributárias em vigor</div>
+                <div className="mt-0.5 text-[11px] leading-relaxed text-emerald-50/90 dark:text-slate-300">
+                  Base gerada em{' '}
+                  <strong>{status?.geradoEm ? new Date(status.geradoEm).toLocaleDateString('pt-BR') : '—'}</strong>
+                  {' '}· programa v{versao} · renovada a cada atualização do programa
+                </div>
               </div>
-            ) : null}
-
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <Btn tam="sm" onClick={() => inputBase.current?.click()}>⬆ Importar JSON</Btn>
-              <Btn
-                tam="sm"
-                onClick={() => {
-                  void (async () => {
-                    const ok = await confirmar(
-                      'Reler base embutida?',
-                      'Reler a base embutida e substituir os dados atuais?',
-                      { icone: '🔄', confirmar: 'Reler base' },
-                    )
-                    if (ok) void resemear()
-                  })()
-                }}
+              <button
+                type="button"
+                onClick={() => setAba('atualizacao')}
+                className="btn-press shrink-0 rounded-xl bg-white/95 px-3 py-1.5 text-xs font-black text-emerald-800 shadow transition hover:bg-white"
               >
-                🔄 Reler base
-              </Btn>
-              <Btn
-                tam="sm"
-                onClick={() => {
-                  void (async () => {
-                    const ok = await confirmar(
-                      'Restaurar padrão?',
-                      'Restaurar a base padrão embutida?',
-                      { icone: '♻', confirmar: 'Restaurar' },
-                    )
-                    if (ok) void restaurarPadrao()
-                  })()
-                }}
-              >
-                ♻ Padrão
-              </Btn>
-              <Btn
-                tam="sm"
-                onClick={() => {
-                  void (async () => {
-                    const ok = await confirmar(
-                      'Apagar base importada?',
-                      'Apagar a base importada (NCM, CST, cClassTrib, Nomenclatura, NBS)? ' +
-                        'Empresas, produtos, CFOP, CST ICMS e PIS/COFINS serão mantidos.',
-                      { icone: '🗑', confirmar: 'Apagar', perigo: true },
-                    )
-                    if (ok) void apagarBase().then(() => void contarTodos().then(setContagens))
-                  })()
-                }}
-              >
-                🗑 Apagar
-              </Btn>
+                🔄 Atualização
+              </button>
             </div>
+          </div>
 
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-              Aceita <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">reforma_tributaria_por_ncm.json</code>,{' '}
-              <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">Tabela_NCM_Vigente_*.json</code> e{' '}
-              <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">classificacao_tributaria.json</code>.
-              O mesmo conteúdo já vem embutido ({ARQUIVOS_BASE.join(' · ')}).
+          <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <StatTabela icone="🔢" rotulo="NCM" valor={fmtQtd(status?.ncm)} chip="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300" />
+            <StatTabela icone="🧾" rotulo="CST" valor={fmtQtd(status?.cst)} chip="bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300" />
+            <StatTabela icone="🏷" rotulo="cClassTrib" valor={fmtQtd(status?.cstClassTrib)} chip="bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300" />
+            <StatTabela icone="📚" rotulo="Referência" valor={fmtQtd(status?.referencia)} chip="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300" />
+            <StatTabela icone="📖" rotulo="Nomenclatura" valor={fmtQtd(status?.nomenclatura)} chip="bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300" />
+            <StatTabela icone="🧮" rotulo="NBS" valor={fmtQtd(status?.nbs)} chip="bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300" />
+            <StatTabela icone="🏢" rotulo="Empresas" valor={fmtQtd(contagens.empresas)} chip="bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300" />
+            <StatTabela icone="📦" rotulo="Produtos" valor={fmtQtd(contagens.produtos)} chip="bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300" />
+          </div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">
+              🕘 Histórico de atualizações
+            </h3>
+            {cffStatus ? (
+              <span className="pill bg-brand-100 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300">
+                {cffStatus.endpoints.filter((e) => e.status === 'ok').length}/{cffStatus.endpoints.length} serviços atualizados
+              </span>
+            ) : null}
+          </div>
+          <Painel className="mb-3 p-3">
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              Monitoramento das atualizações que realmente foram aplicadas à base local.
+              Novas atualizações chegam somente pela <strong>atualização do programa</strong>.
             </p>
 
-            <input
-              ref={inputBase}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={(e) => void importarJson(e.target.files?.[0] ?? null)}
-            />
+            {cffStatus ? (
+              <div className="mt-3">
+                <div className="mb-2 flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <span className="font-bold uppercase tracking-wide">Última atualização registrada:</span>
+                  <span className="font-mono font-bold text-slate-700 dark:text-slate-200">
+                    {cffStatus.ultimaVerificacaoGeral
+                      ? new Date(cffStatus.ultimaVerificacaoGeral).toLocaleString('pt-BR')
+                      : 'nunca'}
+                  </span>
+                </div>
+                <div className="relative ml-1.5 space-y-2 border-l-2 border-slate-200 pl-4 dark:border-slate-700">
+                  {cffStatus.endpoints.map((ep) => {
+                    const conf = STATUS_CFF[ep.status] ?? STATUS_CFF.nunca
+                    return (
+                      <div key={ep.endpoint.servico} className="relative">
+                        <span
+                          className={`absolute -left-[23px] top-3.5 h-3 w-3 rounded-full ring-4 ${conf.ponto}`}
+                          aria-hidden="true"
+                        />
+                        <div className="card-hover rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5 shadow-card">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-xs font-black">{ep.endpoint.servico}</div>
+                              <div className="truncate text-[10px] text-slate-400">{ep.endpoint.descricao}</div>
+                            </div>
+                            <span className={`pill shrink-0 ${conf.selo}`}>{conf.rotulo}</span>
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
+                            <span title="Data da atualização aplicada">
+                              📅 {ep.ultimaSinc ? new Date(ep.ultimaSinc).toLocaleString('pt-BR') : '—'}
+                            </span>
+                            <span title="Registros aplicados">📊 {ep.totalRegistros != null ? ep.totalRegistros.toLocaleString('pt-BR') : '—'}</span>
+                            {ep.totalNegados != null ? <span title="Negados">⛔ {ep.totalNegados}</span> : null}
+                            {ep.hash ? (
+                              <span title={ep.hash} className="font-mono">#️⃣ {ep.hash.slice(0, 8)}…</span>
+                            ) : null}
+                          </div>
+                          {ep.status === 'certificado' || (ep.precisaCert && ep.ultimoErro) ? (
+                            <div className="mt-1 text-[10px] leading-relaxed text-amber-700 dark:text-amber-300">
+                              🔐 {ep.ultimoErro ?? 'Exige certificado digital ICP-Brasil.'}
+                            </div>
+                          ) : ep.status === 'erro' && ep.ultimoErro ? (
+                            <div className="mt-1 text-[10px] leading-relaxed text-red-600 dark:text-red-300">
+                              {ep.ultimoErro}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2 flex items-center justify-center gap-2 py-4 text-xs text-slate-400">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+                Carregando histórico…
+              </div>
+            )}
           </Painel>
 
-          <Painel className="mt-3 space-y-2 p-3">
-            <h4 className="text-xs font-black uppercase tracking-wide text-slate-500">
-              NCM vigente — Portal Único Siscomex{' '}
-              <span
-                className={`pill ${
-                  ncmStatus?.status === 'ok'
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                    : ncmStatus?.status === 'erro'
-                      ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
-                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                }`}
-              >
-                {ncmStatus?.status === 'ok'
-                  ? 'sincronizado'
-                  : ncmStatus?.status === 'erro'
-                    ? 'erro'
-                    : 'nunca'}
-              </span>
-            </h4>
-            <p className="text-[11px] leading-relaxed text-slate-400">
-              Tabela oficial do módulo Classif, verificada automaticamente a cada 24h na abertura.
-              Códigos que somem da tabela são marcados como extintos (nunca apagados) para manter o histórico.
-              Fonte:{' '}
-              <a href={SISCOMEX_PORTAL_URL} target="_blank" rel="noreferrer" className="font-semibold text-brand-600 underline">
-                Portal Único Siscomex
-              </a>
-            </p>
-
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-              <Contador rotulo="Vigência" valor={ncmStatus?.vigencia ?? '—'} />
-              <Contador rotulo="Códigos" valor={ncmStatus?.totalRegistros ?? contagens.ncmNomenclatura ?? '—'} />
-              <Contador
-                rotulo="Último diff"
-                valor={
-                  ncmStatus && (ncmStatus.novos || ncmStatus.alterados || ncmStatus.extintos)
-                    ? `+${ncmStatus.novos ?? 0} ~${ncmStatus.alterados ?? 0} ⛔${ncmStatus.extintos ?? 0}`
-                    : '—'
-                }
-              />
-              <Contador
-                rotulo="Verificado em"
-                valor={
-                  ncmStatus?.ultimaVerificacao
-                    ? new Date(ncmStatus.ultimaVerificacao).toLocaleDateString('pt-BR')
-                    : '—'
-                }
-              />
-            </div>
-            {ncmStatus?.ato ? (
-              <p className="text-[10px] text-slate-400">📎 {ncmStatus.ato}</p>
-            ) : null}
-            {ncmStatus?.ultimoErro ? (
-              <p className="text-[10px] leading-relaxed text-red-600 dark:text-red-300">{ncmStatus.ultimoErro}</p>
-            ) : null}
-
-            {ncmProg ? (
-              <BarraProgresso pct={ncmProg.pct} etapa={ncmProg.etapa} />
-            ) : null}
-
-            <div className="flex flex-wrap gap-1.5">
-              <Btn
-                tam="sm"
-                variante="primary"
-                onClick={() => {
-                  void (async () => {
-                    setNcmProg({ etapa: 'Baixando tabela oficial', pct: 20 })
-                    try {
-                      await sincronizacaoManualNcm((etapa, pct) => setNcmProg({ etapa, pct }))
-                      setNcmStatus(await statusSincronizacaoNcm())
-                      void contarTodos().then(setContagens)
-                    } finally {
-                      setNcmProg(null)
-                    }
-                  })()
-                }}
-              >
-                🔄 Sincronizar NCM agora
-              </Btn>
-              <Btn tam="sm" onClick={() => inputNcm.current?.click()}>⬆ Importar JSON do portal</Btn>
-              <Btn
-                tam="sm"
-                disabled={ncmDiagRodando}
-                onClick={() => {
-                  void (async () => {
-                    setNcmDiagRodando(true)
-                    setNcmDiag(null)
-                    try {
-                      setNcmDiag(await testarConexaoNcm())
-                    } finally {
-                      setNcmDiagRodando(false)
-                    }
-                  })()
-                }}
-              >
-                {ncmDiagRodando ? '⏳ Testando…' : '🔌 Testar conexão'}
-              </Btn>
-              <a
-                href={SISCOMEX_PORTAL_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold hover:bg-slate-50 dark:border-slate-700"
-              >
-                ↗ Abrir portal
-              </a>
-            </div>
-            {ncmDiag ? (
-              <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2">
-                <div className={`text-xs font-bold ${ncmDiag.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'}`}>
-                  {ncmDiag.ok ? '✅ Conexão funcionando' : '❌ Falha na conexão'} — {ncmDiag.resumo}
-                </div>
-                <div className="mt-1 space-y-0.5">
-                  {ncmDiag.etapas.map((e) => (
-                    <div key={e.etapa} className="flex items-center justify-between gap-2 text-[10px] text-slate-500">
-                      <span>{e.ok ? '✓' : '✗'} {e.etapa}</span>
-                      <span className="truncate">{e.detalhe} · {e.ms}ms</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-1.5">
-                  <Btn
-                    tam="sm"
-                    onClick={() => {
-                      const txt = [
-                        `Diagnóstico NCM Siscomex — ${new Date().toLocaleString('pt-BR')}`,
-                        ...ncmDiag.etapas.map((e) => `${e.ok ? '[OK]' : '[FALHA]'} ${e.etapa}: ${e.detalhe} (${e.ms}ms)`),
-                        `Resumo: ${ncmDiag.resumo}`,
-                      ].join('\n')
-                      void navigator.clipboard?.writeText(txt).then(
-                        () => toast('Diagnóstico copiado.', 'ok'),
-                        () => toast('Não foi possível copiar.', 'err'),
-                      )
-                    }}
-                  >
-                    📋 Copiar diagnóstico
-                  </Btn>
-                </div>
-              </div>
-            ) : null}
-            <input
-              ref={inputNcm}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={(e) => void importarNcmArquivo(e.target.files?.[0] ?? null)}
-            />
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">
+              📑 Cobertura por documento fiscal
+            </h3>
+          </div>
+          <Painel className="p-3">
+            <CoberturaTabelas />
           </Painel>
         </section>
         ) : null}
 
-        {aba === 'cff' ? (
+        {aba === 'atualizacao' ? (
         <section>
-          <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">
-            Sincronização Conformidade Fácil (CFF)
-          </h3>
-          <Painel className="space-y-3 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">
+              🚀 Atualização do programa
+            </h3>
+            {verificando || baixando ? (
+              <span className="pill bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500" />
+                trabalhando…
+              </span>
+            ) : null}
+          </div>
+          <div
+            className={`borda-fluida ${verificando || baixando ? 'borda-fluida-viva' : ''}`}
+            style={{ '--cor-fluxo-1': '#22d3ee', '--cor-fluxo-2': '#818cf8', '--cor-fluxo-3': '#e879f9' } as CSSProperties}
+          >
+          <div className="space-y-3 rounded-[14px] bg-[var(--surface-2)] p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-cyan-500 to-indigo-600 text-xl text-white shadow">
+                🚀
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-black tracking-tight">
+                  {atualizacaoPronta
+                    ? `Versão ${atualizacaoPronta} pronta`
+                    : versaoNova
+                      ? `Versão ${versaoNova} disponível`
+                      : `Programa v${versao}`}
+                </div>
+                <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <span
+                    className={`inline-block h-2 w-2 shrink-0 rounded-full ${
+                      verificando || baixando
+                        ? 'animate-ping bg-indigo-500'
+                        : atualizacaoPronta || versaoNova
+                          ? 'bg-amber-500'
+                          : 'bg-emerald-500'
+                    }`}
+                  />
+                  {verificando
+                    ? 'Consultando novidades…'
+                    : baixando
+                      ? `Baixando… ${baixando.pct}%`
+                      : atualizacaoPronta
+                        ? 'Baixada — reinicie para aplicar'
+                        : versaoNova
+                          ? 'Nova versão encontrada'
+                          : 'Tudo em dia'}
+                </div>
+              </div>
+            </div>
             <p className="text-[11px] leading-relaxed text-slate-400">
-              Verifica atualizações nos endpoints oficiais da Conformidade Fácil (SVRS) e atualiza a base local.
-              A verificação automática ocorre a cada 24h na abertura do sistema.
-              As tabelas por DFe (NFCom/NFAg/NF3e/NFGas) exigem certificado digital ICP-Brasil:
-              quando o acesso direto falha, baixe o JSON no portal e importe manualmente abaixo.
+              As tabelas tributárias (NCM, CST, cClassTrib, nomenclatura vigente) vêm
+              embutidas no programa e são renovadas aqui, na atualização geral.
+              A verificação automática ocorre ao abrir o sistema (app instalado).
             </p>
 
-            <div className="flex flex-wrap gap-1.5">
-              <Btn
-                tam="sm"
-                variante="primary"
-                onClick={async () => {
-                  setCffSyncProgresso({ etapa: 'Iniciando...', pct: 0 })
-                  try {
-                    const resultados = await sincronizacaoManual((etapa, pct, resultado) =>
-                      setCffSyncProgresso({ etapa, pct, resultado }),
-                    )
-                    const atualizados = resultados.filter((r) => r.status === 'atualizado').length
-                    const erros = resultados.filter((r) => r.status === 'erro').length
-                    toast(
-                      `Sincronização concluída: ${atualizados} atualizado(s)${erros ? `, ${erros} erro(s)` : ''}.`,
-                      erros ? 'warn' : 'ok',
-                    )
-                    const status = await statusSincronizacao()
-                    setCffStatus(status)
-                  } catch (e) {
-                    toast(e instanceof Error ? e.message : String(e), 'err')
-                  } finally {
-                    setCffSyncProgresso(null)
-                  }
-                }}
-              >
-                🔄 Sincronizar agora
-              </Btn>
-              <Btn
-                tam="sm"
-                onClick={async () => {
-                  const status = await statusSincronizacao()
-                  setCffStatus(status)
-                  toast('Status atualizado.', 'ok')
-                }}
-              >
-                🔃 Atualizar status
-              </Btn>
+            <div className="grid grid-cols-2 gap-1.5">
+              <Contador rotulo="Versão instalada" valor={versao} />
+              <Contador
+                rotulo="Canal"
+                valor={bridge ? `desktop (${bridge.plataforma})` : 'navegador'}
+              />
+              {versaoNova ? <Contador rotulo="Nova versão" valor={versaoNova} /> : null}
+              {atualizacaoPronta ? <Contador rotulo="Pronta p/ instalar" valor={atualizacaoPronta} /> : null}
             </div>
 
-            {cffSyncProgresso ? (
-              <div className="mt-2">
-                <BarraProgresso
-                  pct={cffSyncProgresso.pct}
-                  etapa={
-                    cffSyncProgresso.resultado
-                      ? `${cffSyncProgresso.etapa} (${cffSyncProgresso.resultado.endpoint.servico}: ${cffSyncProgresso.resultado.status})`
-                      : cffSyncProgresso.etapa
-                  }
-                />
+            {notasVersao ? (
+              <p className="max-h-28 overflow-y-auto whitespace-pre-wrap text-[10px] leading-relaxed text-slate-400">
+                {notasVersao}
+              </p>
+            ) : null}
+
+            {baixando ? (
+              <div className="space-y-1.5">
+                <div className="relative h-2.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-fuchsia-500 transition-[width] duration-300"
+                    style={{ width: `${Math.max(2, Math.min(100, baixando.pct))}%` }}
+                  />
+                  <div className="animate-shimmer pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent bg-[length:200%_100%]" />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span>Baixando atualização…</span>
+                  <span className="num font-mono">{baixando.pct}%</span>
+                </div>
               </div>
             ) : null}
 
-            {cffStatus ? (
-              <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                  Última verificação geral:{' '}
-                  {cffStatus.ultimaVerificacaoGeral
-                    ? new Date(cffStatus.ultimaVerificacaoGeral).toLocaleString('pt-BR')
-                    : 'nunca'}
-                </div>
-                <div className="grid grid-cols-1 gap-1.5">
-                  {cffStatus.endpoints.map((ep) => (
-                    <div
-                      key={ep.endpoint.servico}
-                      className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] p-2"
+            <div className="flex flex-wrap gap-1.5">
+              {!bridge ? (
+                <p className="text-[11px] text-slate-400">
+                  Atualização automática disponível apenas no app instalado (Electron).
+                </p>
+              ) : (
+                <>
+                  <Btn
+                    tam="sm"
+                    variante="primary"
+                    disabled={verificando}
+                    onClick={() => {
+                      void (async () => {
+                        setVerificando(true)
+                        setVersaoNova(null)
+                        setNotasVersao(null)
+                        try {
+                          const r = await verificarAtualizacaoManual()
+                          if (r?.disponivel) {
+                            setVersaoNova(r.versao ?? 'nova versão')
+                            setNotasVersao(r.notas ?? null)
+                          }
+                        } finally {
+                          setVerificando(false)
+                        }
+                      })()
+                    }}
+                  >
+                    {verificando ? '⏳ Verificando…' : '🔄 Verificar atualizações'}
+                  </Btn>
+                  {versaoNova && !atualizacaoPronta ? (
+                    <button
+                      type="button"
+                      disabled={baixando !== null}
+                      onClick={() => {
+                        void (async () => {
+                          setBaixando({ pct: 0 })
+                          const ok = await baixarAtualizacao()
+                          if (!ok) setBaixando(null)
+                        })()
+                      }}
+                      className="btn-press rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="text-xs font-semibold truncate">{ep.endpoint.servico}</div>
-                          <div className="text-[10px] text-slate-400 truncate">{ep.endpoint.descricao}</div>
-                        </div>
-                        <span
-                          className={`pill shrink-0 ${
-                            ep.status === 'ok'
-                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                              : ep.status === 'certificado'
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                                : ep.status === 'erro'
-                                  ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
-                                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                          }`}
-                        >
-                          {ep.status === 'ok'
-                            ? 'sincronizado'
-                            : ep.status === 'certificado'
-                              ? '🔐 certificado'
-                              : ep.status === 'erro'
-                                ? 'erro'
-                                : 'nunca'}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-slate-400">
-                        <span>Última: {ep.ultimaSinc ? new Date(ep.ultimaSinc).toLocaleString('pt-BR') : '—'}</span>
-                        <span>Registros: {ep.totalRegistros ?? '—'}</span>
-                        {ep.totalNegados != null ? <span>Negados: {ep.totalNegados}</span> : null}
-                        <span>Hash: {ep.hash ? `${ep.hash.slice(0, 12)}…` : '—'}</span>
-                      </div>
-                      {ep.status === 'certificado' || (ep.precisaCert && ep.ultimoErro) ? (
-                        <div className="mt-1 text-[10px] leading-relaxed text-amber-700 dark:text-amber-300">
-                          🔐 {ep.ultimoErro ?? 'Exige certificado digital ICP-Brasil.'} Importe o JSON manualmente abaixo.
-                        </div>
-                      ) : ep.status === 'erro' && ep.ultimoErro ? (
-                        <div className="mt-1 text-[10px] leading-relaxed text-red-600 dark:text-red-300">
-                          {ep.ultimoErro}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="mt-2 text-center text-xs text-slate-400 py-4">
-                Clique em "Atualizar status" para ver o estado da sincronização.
-              </div>
-            )}
-
-            <div className="mt-3 pt-3 border-t border-[var(--line)]">
-              <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-                Importar tabela por DFe (JSON do portal, com certificado)
-              </h4>
-              <p className="mb-2 text-[10px] leading-relaxed text-slate-400">
-                Baixe em{' '}
-                <a href={LINK_PORTAL_CFF} target="_blank" rel="noreferrer" className="font-semibold text-brand-600 underline">
-                  {LINK_PORTAL_CFF}
-                </a>{' '}
-                a tabela do sistema (resposta JSON da ConsultaClassificacaoProduto) e importe abaixo.
-                O sistema detecta permitido × negado e vigência por cClassTrib.
-              </p>
-              <ImportarTabelaProduto
-                onImportado={async () => {
-                  const status = await statusSincronizacao()
-                  setCffStatus(status)
-                  void contarTodos().then(setContagens)
-                }}
-              />
-              <CoberturaTabelas />
+                      {baixando ? '⬇ Baixando…' : '⬇ Baixar atualização'}
+                    </button>
+                  ) : null}
+                  {atualizacaoPronta ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void (async () => {
+                          const ok = await confirmar(
+                            'Reiniciar e atualizar?',
+                            `O programa será fechado para aplicar a versão ${atualizacaoPronta}.`,
+                            { icone: '🔄', confirmar: 'Reiniciar e atualizar' },
+                          )
+                          if (ok) void instalarAtualizacao()
+                        })()
+                      }}
+                      className="btn-press animate-pulse-soft rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-xs font-bold text-white shadow transition hover:brightness-110"
+                    >
+                      🔄 Reiniciar e atualizar
+                    </button>
+                  ) : null}
+                </>
+              )}
             </div>
-
-            <div className="mt-3 pt-3 border-t border-[var(--line)]">
-              <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Endpoints monitorados</h4>
-              <div className="grid grid-cols-1 gap-1 text-[10px] text-slate-400 max-h-40 overflow-y-auto">
-                {CFF_ENDPOINTS.map((e) => (
-                  <div key={e.servico} className="flex gap-2">
-                    <span className="font-mono text-brand-600">{e.servico}</span>
-                    <span>{e.descricao}</span>
-                    <span className="ml-auto font-mono">{e.url}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Painel>
+          </div>
+          </div>
         </section>
         ) : null}
 

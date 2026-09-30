@@ -147,7 +147,8 @@ describe('processarArquivoLote', () => {
     expect(comVinculo.escolhida?.regraGeral).toBe(false)
 
     expect(regraGeral.regraGeral).toBe(true)
-    expect(regraGeral.classificacoes).toHaveLength(0)
+    // Motor único: o cartão de regra geral aparece na lista, como na Consulta.
+    expect(regraGeral.classificacoes).toHaveLength(1)
     expect(regraGeral.escolhida?.regraGeral).toBe(true)
     expect(regraGeral.escolhida?.cst).toBe('000')
 

@@ -6,9 +6,7 @@ import { lerAceite } from '@/domain/contrato';
 import { useUi } from '@/store/ui';
 import { Calculadora } from '@/pages/Calculadora';
 import { Consulta } from '@/pages/Consulta';
-import { Classificar } from '@/pages/Classificar';
 import { Lote } from '@/pages/Lote';
-import { Sped } from '@/pages/Sped';
 import { NfeXml } from '@/pages/NfeXml';
 import { Produtos } from '@/pages/Produtos';
 import { Auxiliares } from '@/pages/Auxiliares';
@@ -27,14 +25,8 @@ export function App() {
     case 'consulta':
       pagina = <Consulta />;
       break;
-    case 'classificar':
-      pagina = <Classificar />;
-      break;
     case 'lote':
       pagina = <Lote />;
-      break;
-    case 'sped':
-      pagina = <Sped />;
       break;
     case 'nfe':
       pagina = <NfeXml />;

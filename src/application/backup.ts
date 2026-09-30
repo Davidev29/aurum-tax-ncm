@@ -19,6 +19,10 @@ const LOJA_BACKUP: StoreName[] = [
   'ncm',
   'cst',
   'cstClassTrib',
+  'referencia',
+  'nbs',
+  'cest',
+  'audit_log',
   'ncmNomenclatura',
   'empresas',
   'produtos',
@@ -35,6 +39,10 @@ export interface Backup {
   ncm: unknown[]
   cst: unknown[]
   cstClassTrib: unknown[]
+  referencia?: unknown[]
+  nbs?: unknown[]
+  cest?: unknown[]
+  auditLog?: unknown[]
   nomenclatura: unknown[]
   empresas: unknown[]
   produtos: unknown[]
@@ -48,11 +56,15 @@ export interface Backup {
 }
 
 export async function montarBackup(): Promise<Backup> {
-  const [ncm, cst, cstClassTrib, ncmNomenclatura, empresas, produtos, cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto] =
+  const [ncm, cst, cstClassTrib, referencia, nbs, cest, auditLog, ncmNomenclatura, empresas, produtos, cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto] =
     await Promise.all([
       db.ncm.toArray(),
       db.cst.toArray(),
       db.cstClassTrib.toArray(),
+      db.table('referencia').toArray().catch(() => []),
+      db.table('nbs').toArray().catch(() => []),
+      db.table('cest').toArray().catch(() => []),
+      db.table('audit_log').toArray().catch(() => []),
       db.ncmNomenclatura.toArray(),
       db.empresas.toArray(),
       db.produtos.toArray(),
@@ -69,6 +81,10 @@ export async function montarBackup(): Promise<Backup> {
     ncm,
     cst,
     cstClassTrib,
+    referencia,
+    nbs,
+    cest,
+    auditLog,
     nomenclatura: ncmNomenclatura,
     empresas,
     produtos,
@@ -84,7 +100,9 @@ export async function montarBackup(): Promise<Backup> {
 
 /** Grava um backup previamente exportado (importação do arquivo). */
 export async function restaurarBackup(b: Backup): Promise<void> {
-  await Promise.all(LOJA_BACKUP.map((s) => db.table(s).clear()))
+  // audit_log é append-only: nunca sofre clear — só acrescenta.
+  const lojasLimpaveis = LOJA_BACKUP.filter((s) => s !== 'audit_log')
+  await Promise.all(lojasLimpaveis.map((s) => db.table(s).clear()))
 
   const gravar = async (store: StoreName, itens: unknown[] | undefined) => {
     if (Array.isArray(itens) && itens.length) {
@@ -95,6 +113,9 @@ export async function restaurarBackup(b: Backup): Promise<void> {
   await gravar('ncm', b.ncm)
   await gravar('cst', b.cst)
   await gravar('cstClassTrib', b.cstClassTrib)
+  await gravar('referencia', b.referencia)
+  await gravar('nbs', b.nbs)
+  await gravar('cest', b.cest)
   await gravar('ncmNomenclatura', b.nomenclatura)
   await gravar('empresas', b.empresas)
   await gravar('produtos', b.produtos)
@@ -104,6 +125,7 @@ export async function restaurarBackup(b: Backup): Promise<void> {
   await gravar('nfeNotas', b.nfeNotas)
   await gravar('reclassificacoesManuais', b.reclassificacoesManuais)
   await gravar('classificacaoProduto', b.classificacaoProduto)
+  await gravar('audit_log', b.auditLog)
 
   if (b.emitente) {
     await db.meta.put({ chave: META_KEYS.EMITENTE, valor: b.emitente, atualizadoEm: new Date().toISOString() })

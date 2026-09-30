@@ -200,6 +200,7 @@ function lerItem(det: No, chave: string): ItemNotaXml | null {
     codProd,
     descricao: str(prod['xProd']) || codProd,
     ncm: digitos.length > 8 ? digitos.slice(0, 8) : digitos,
+    cest: str(prod['CEST']).replace(/\D/g, '').slice(0, 7) || '',
     cfop: str(prod['CFOP']),
     ...icms,
     qtd,

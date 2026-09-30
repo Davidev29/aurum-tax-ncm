@@ -10,6 +10,8 @@ export interface ItemNotaXml {
   codProd: string
   descricao: string
   ncm: string
+  /** CEST (7 dígitos, `prod/CEST`) — informativo, não altera a Reforma. */
+  cest?: string
   cfop: string
   /** CST (regime normal) ou CSOSN (Simples) do ICMS — `CST`/`CSOSN` do grupo do item. */
   cstIcms: string
@@ -111,6 +113,14 @@ export interface ResultadoItemNfe extends ItemNotaXml {
   regraGeral: boolean
   /** `true` quando a classificação veio de reclassificação manual do usuário. */
   manual?: boolean
+  /** `true` quando o NCM do XML tinha >8 dígitos e foi truncado (NBS/EX). Exige conferência. */
+  ncmTruncado?: boolean
+  /** NCM como veio no XML, antes da normalização (auditoria). */
+  ncmOriginal?: string
+  /** `true` quando o NCM é inválido (<>8 dígitos após normalização). */
+  ncmInvalido?: boolean
+  /** Quantas classificações oficiais existem para este NCM (1 = unívoco, >1 = ambíguo). */
+  opcoesClassificacao?: number
   redIBS: number
   redCBS: number
   ibs: number
@@ -160,6 +170,31 @@ export const FILTROS_NFE_VAZIOS: FiltrosNfe = {
   cClassTrib: '',
   cstReforma: '',
   reducao: '',
+}
+
+/** Data local em ISO `aaaa-mm-dd` (sem o deslocamento UTC do `toISOString`). */
+function isoLocal(d: Date): string {
+  const a = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const dia = String(d.getDate()).padStart(2, '0')
+  return `${a}-${m}-${dia}`
+}
+
+/**
+ * Período padrão da tela — **últimos 30 dias** (hoje − 29 dias até hoje).
+ * Usado na abertura do módulo e no "Limpar", para a lista nunca abrir vazia
+ * ou com o histórico inteiro sem recorte.
+ */
+export function periodoUltimos30Dias(ref = new Date()): { inicio: string; fim: string } {
+  const fim = isoLocal(ref)
+  const ini = new Date(ref)
+  ini.setDate(ini.getDate() - 29)
+  return { inicio: isoLocal(ini), fim }
+}
+
+/** Filtros iniciais da tela: vazios + período dos últimos 30 dias. */
+export function filtrosIniciaisNfe(ref = new Date()): FiltrosNfe {
+  return { ...FILTROS_NFE_VAZIOS, ...periodoUltimos30Dias(ref) }
 }
 
 /** Linha do ranking de fornecedores por crédito (sobre as entradas). */

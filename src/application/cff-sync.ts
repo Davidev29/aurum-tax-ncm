@@ -1,7 +1,13 @@
 /**
- * Casos de uso para sincronização com a Conformidade Fácil (CFF).
+ * Casos de uso da Conformidade Fácil (CFF) — modo SOMENTE LEITURA.
  *
- * Integra a sincronização automática no fluxo de inicialização da aplicação.
+ * @deprecated As atualizações (automática de 24h, manual e importação de JSON
+ * por DFe) foram desativadas: toda atualização de tabelas chega embutida na
+ * atualização geral do programa (electron-updater). A aba CFF Sync apenas
+ * monitora as datas/registros das atualizações que realmente foram aplicadas.
+ *
+ * Mantidos ativos: `statusSincronizacao`, `coberturaTabelasProduto` e
+ * `bloqueiosParaCcts` (leituras locais, sem rede).
  */
 
 import {
@@ -42,6 +48,9 @@ function resumoEndpoint(resultado: SyncResultado): { titulo: string; nivel: 'ok'
 export type CffProgresso = (etapa: string, pct: number, resultadoAtual?: SyncResultado) => void
 
 /**
+ * @deprecated Desativada — atualizações chegam via atualização do programa.
+ * Mantida sem chamadas ativas para referência histórica.
+ *
  * Verifica se deve sincronizar e executa em background se necessário.
  * Não bloqueia a inicialização da UI.
  * Mostra toasts de progresso e resultado final.
@@ -99,6 +108,9 @@ export async function sincronizacaoAutomatica(
 }
 
 /**
+ * @deprecated Desativada — atualizações chegam via atualização do programa.
+ * Mantida sem chamadas ativas para referência histórica.
+ *
  * Força uma sincronização manual (ex.: botão na UI)
  * Mostra toasts detalhados de progresso e resultado.
  */
@@ -144,6 +156,9 @@ export async function sincronizacaoManual(
 }
 
 /**
+ * @deprecated Desativada — atualizações chegam via atualização do programa.
+ * Mantida sem chamadas ativas para referência histórica.
+ *
  * Importação manual do JSON da tabela por DFe (baixado no portal CFF com
  * certificado digital). Valida o sistema e grava via o mesmo normalizador
  * do sync automático.

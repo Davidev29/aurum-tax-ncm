@@ -15,54 +15,59 @@ import {
   observacoesLegais,
 } from '@/domain/services/calculo'
 import { OBS_ARTIGOS } from '@/domain/constants/tributarios'
+import { REF_DEFAULT } from '@/domain/constants'
+
+// Usa as alíquotas de referência padrão do sistema (dinâmicas conforme regras vigentes)
+const REF_IBS = REF_DEFAULT.IBS
+const REF_CBS = REF_DEFAULT.CBS
 
 describe('calcularTributos', () => {
   it('aplica a alíquota cheia sobre a base cheia', () => {
-    const r = calcularTributos(1000, 0, 0, 17.7, 8.8)
+    const r = calcularTributos(1000, 0, 0, REF_IBS, REF_CBS)
     expect(r.base).toBe(1000)
     expect(r.bcIBS).toBeCloseTo(1000, 9)
     expect(r.bcCBS).toBeCloseTo(1000, 9)
-    expect(r.aliqIBS).toBeCloseTo(17.7, 9)
-    expect(r.aliqCBS).toBeCloseTo(8.8, 9)
-    expect(r.vIBS).toBeCloseTo(177, 9)
-    expect(r.vCBS).toBeCloseTo(88, 9)
-    expect(r.total).toBeCloseTo(265, 9)
-    expect(r.carga).toBeCloseTo(26.5, 9)
+    expect(r.aliqIBS).toBeCloseTo(REF_IBS, 9)
+    expect(r.aliqCBS).toBeCloseTo(REF_CBS, 9)
+    expect(r.vIBS).toBeCloseTo(1000 * REF_IBS / 100, 9)
+    expect(r.vCBS).toBeCloseTo(1000 * REF_CBS / 100, 9)
+    expect(r.total).toBeCloseTo(1000 * (REF_IBS + REF_CBS) / 100, 9)
+    expect(r.carga).toBeCloseTo(REF_IBS + REF_CBS, 9)
   })
 
   it('reduz a ALÍQUOTA (LC 214/2025): base cheia, débito = base × alíquota reduzida', () => {
-    const r = calcularTributos(50, 60, 60, 17.7, 8.8)
+    const r = calcularTributos(50, 60, 60, REF_IBS, REF_CBS)
     // BC preservada (valor cheio da operação)
     expect(r.bcIBS).toBeCloseTo(50, 9)
     expect(r.bcCBS).toBeCloseTo(50, 9)
     // Alíquota efetiva = referência × (1 − red)
-    expect(r.aliqIBS).toBeCloseTo(17.7 * 0.4, 9)
-    expect(r.aliqCBS).toBeCloseTo(8.8 * 0.4, 9)
+    expect(r.aliqIBS).toBeCloseTo(REF_IBS * 0.4, 9)
+    expect(r.aliqCBS).toBeCloseTo(REF_CBS * 0.4, 9)
     // Débito = base cheia × alíquota reduzida
-    expect(r.vIBS).toBeCloseTo(50 * 17.7 * 0.4 / 100, 9)
-    expect(r.vCBS).toBeCloseTo(50 * 8.8 * 0.4 / 100, 9)
+    expect(r.vIBS).toBeCloseTo(50 * REF_IBS * 0.4 / 100, 9)
+    expect(r.vCBS).toBeCloseTo(50 * REF_CBS * 0.4 / 100, 9)
     expect(r.total).toBeCloseTo(r.vIBS + r.vCBS, 9)
   })
 
   it('reduz cada tributo de forma linear e independente', () => {
-    const r = calcularTributos(1000, 60, 60, 17.7, 8.8)
+    const r = calcularTributos(1000, 60, 60, REF_IBS, REF_CBS)
     expect(r.bcIBS).toBeCloseTo(1000, 9)
-    expect(r.aliqIBS).toBeCloseTo(17.7 * 0.4, 9)
-    expect(r.aliqCBS).toBeCloseTo(8.8 * 0.4, 9)
-    expect(r.vIBS).toBeCloseTo(1000 * (17.7 * 0.4) / 100, 9)
+    expect(r.aliqIBS).toBeCloseTo(REF_IBS * 0.4, 9)
+    expect(r.aliqCBS).toBeCloseTo(REF_CBS * 0.4, 9)
+    expect(r.vIBS).toBeCloseTo(1000 * (REF_IBS * 0.4) / 100, 9)
     expect(r.total).toBeCloseTo(r.vIBS + r.vCBS, 9)
   })
 
   it('aplica reduções parciais oficiais sobre a alíquota (30/40/50/70/80)', () => {
     const casos: Array<[number, number, number]> = [
-      [30, 17.7 * 0.7, 8.8 * 0.7],
-      [40, 17.7 * 0.6, 8.8 * 0.6],
-      [50, 17.7 * 0.5, 8.8 * 0.5],
-      [70, 17.7 * 0.3, 8.8 * 0.3],
-      [80, 17.7 * 0.2, 8.8 * 0.2],
+      [30, REF_IBS * 0.7, REF_CBS * 0.7],
+      [40, REF_IBS * 0.6, REF_CBS * 0.6],
+      [50, REF_IBS * 0.5, REF_CBS * 0.5],
+      [70, REF_IBS * 0.3, REF_CBS * 0.3],
+      [80, REF_IBS * 0.2, REF_CBS * 0.2],
     ]
     for (const [red, espIBS, espCBS] of casos) {
-      const r = calcularTributos(1000, red, red, 17.7, 8.8)
+      const r = calcularTributos(1000, red, red, REF_IBS, REF_CBS)
       expect(r.bcIBS).toBeCloseTo(1000, 9)
       expect(r.aliqIBS).toBeCloseTo(espIBS, 9)
       expect(r.aliqCBS).toBeCloseTo(espCBS, 9)
@@ -72,7 +77,7 @@ describe('calcularTributos', () => {
   })
 
   it('redução 100% zera a ALÍQUOTA e o tributo, preservando a BC', () => {
-    const r = calcularTributos(50, 100, 100, 17.7, 8.8)
+    const r = calcularTributos(50, 100, 100, REF_IBS, REF_CBS)
     expect(r.bcIBS).toBeCloseTo(50, 9)
     expect(r.bcCBS).toBeCloseTo(50, 9)
     expect(r.aliqIBS).toBeCloseTo(0, 9)
@@ -83,35 +88,35 @@ describe('calcularTributos', () => {
   })
 
   it('mantém reduções assimétricas (Prouni: IBS 60% / CBS 100%)', () => {
-    const r = calcularTributos(1000, 60, 100, 17.7, 8.8)
+    const r = calcularTributos(1000, 60, 100, REF_IBS, REF_CBS)
     expect(r.bcIBS).toBeCloseTo(1000, 9)
     expect(r.bcCBS).toBeCloseTo(1000, 9)
-    expect(r.aliqIBS).toBeCloseTo(17.7 * 0.4, 9)
+    expect(r.aliqIBS).toBeCloseTo(REF_IBS * 0.4, 9)
     expect(r.aliqCBS).toBeCloseTo(0, 9)
-    expect(r.vIBS).toBeCloseTo(1000 * 17.7 * 0.4 / 100, 9)
+    expect(r.vIBS).toBeCloseTo(1000 * REF_IBS * 0.4 / 100, 9)
     expect(r.vCBS).toBeCloseTo(0, 9)
   })
 
   it('mantém reduções assimétricas gerais', () => {
-    const r = calcularTributos(1000, 100, 0, 17.7, 8.8)
+    const r = calcularTributos(1000, 100, 0, REF_IBS, REF_CBS)
     expect(r.bcIBS).toBeCloseTo(1000, 9)
     expect(r.bcCBS).toBeCloseTo(1000, 9)
     expect(r.vIBS).toBeCloseTo(0, 9)
-    expect(r.vCBS).toBeCloseTo(88, 9)
-    expect(r.total).toBeCloseTo(88, 9)
+    expect(r.vCBS).toBeCloseTo(1000 * REF_CBS / 100, 9)
+    expect(r.total).toBeCloseTo(1000 * REF_CBS / 100, 9)
   })
 
   it('clampa red > 100 em 100 (alíquota zerada, sem alíquota negativa)', () => {
-    const r = calcularTributos(1000, 150, 0, 17.7, 8.8)
+    const r = calcularTributos(1000, 150, 0, REF_IBS, REF_CBS)
     expect(r.bcIBS).toBeCloseTo(1000, 9)
     expect(r.vIBS).toBeCloseTo(0, 9)
     expect(r.aliqIBS).toBeCloseTo(0, 9)
   })
 
   it('zero a carga quando a base é nula ou inválida', () => {
-    expect(calcularTributos(0, 0, 0, 17.7, 8.8).carga).toBe(0)
-    expect(calcularTributos(NaN, 0, 0, 17.7, 8.8).base).toBe(0)
-    expect(calcularTributos(1000, NaN, NaN, 17.7, 8.8).aliqIBS).toBe(17.7)
+    expect(calcularTributos(0, 0, 0, REF_IBS, REF_CBS).carga).toBe(0)
+    expect(calcularTributos(NaN, 0, 0, REF_IBS, REF_CBS).base).toBe(0)
+    expect(calcularTributos(1000, NaN, NaN, REF_IBS, REF_CBS).aliqIBS).toBe(REF_IBS)
   })
 })
 
@@ -204,6 +209,17 @@ describe('observacoesLegais', () => {
       OBS_ARTIGOS.art135.titulo,
       OBS_ARTIGOS.art128.titulo,
     ])
+  })
+
+  it('semPalpiteCapitulo: com enquadramento oficial, capítulo não vira fundamento (só art. 128)', () => {
+    // Mesmo NCM/capítulo do teste acima, mas com enquadramento específico
+    // (ex.: 200/200038, fundamento oficial art. 138): arts. 137/135 somem.
+    expect(
+      observacoesLegais('02011000', 60, 60, { semPalpiteCapitulo: true }).map((o) => o.titulo),
+    ).toEqual([OBS_ARTIGOS.art128.titulo])
+    expect(
+      observacoesLegais('16010000', 60, 60, { semPalpiteCapitulo: true }).map((o) => o.titulo),
+    ).toEqual([OBS_ARTIGOS.art128.titulo])
   })
 
   it('30 → Art. 127 (profissões regulamentadas)', () => {

@@ -171,7 +171,7 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
                 Bem-vindo! Vamos deixar tudo pronto em menos de 1 minuto. 👋
               </p>
               <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-                <strong>🔒 100% local, sem nuvem.</strong> Empresas, produtos, SPED, XMLs e
+                <strong>🔒 100% local, sem nuvem.</strong> Empresas, produtos, XMLs e
                 classificações ficam <strong>somente neste computador</strong> (banco local + pasta
                 de dados). A Aurum <strong>não recebe nem tem acesso</strong> à sua base. Internet
                 só é usada se você pedir: buscar CNPJ, ler a lei oficial ou baixar atualizações.
@@ -185,8 +185,8 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
                 </ol>
               </div>
               <p className="text-[11px] text-slate-400">
-                Classificador fiscal da Reforma Tributária: NCM/NBS, CST de IBS/CBS, cClassTrib,
-                SPED e XML — base EC 132/2023 · LC 214/2025 · Decreto 12.955/2026 · Res. CGIBS
+                Classificador fiscal da Reforma Tributária: NCM/NBS, CST de IBS/CBS, cClassTrib
+                e XML — base EC 132/2023 · LC 214/2025 · Decreto 12.955/2026 · Res. CGIBS
                 6/2026.
               </p>
             </div>

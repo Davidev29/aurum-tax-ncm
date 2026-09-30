@@ -24,9 +24,7 @@ const NAV: { secao?: string; itens: { id: ViewId; icone: NomeIcone; rotulo: stri
     itens: [
       { id: 'calculadora', icone: 'calculadora', rotulo: 'Calculadora' },
       { id: 'consulta', icone: 'lupa', rotulo: 'Consulta NCM' },
-      { id: 'classificar', icone: 'documento', rotulo: 'Classificação' },
       { id: 'lote', icone: 'pasta', rotulo: 'Classificação em lote' },
-      { id: 'sped', icone: 'documento', rotulo: 'SPED Fiscal' },
       { id: 'nfe', icone: 'nota', rotulo: 'Notas Fiscais (XML)' },
     ],
   },
@@ -207,6 +205,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     if (!bridge) return
     bridge.onMenu((acao) => {
       if (acao === 'abrir') abrirModal('config')
+      if (acao === 'atualizar') abrirModal('config')
       if (acao === 'exportar') dispararExportacao(useUi.getState().view)
       if (acao === 'tema') alternarTema()
     })

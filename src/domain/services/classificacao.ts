@@ -168,6 +168,7 @@ export function montarRegraGeral(
     reducaoBcCst: false,
     monofasica: false,
     creditoPresumido: false,
+    diferimento: false,
     anexo: null,
     urlLegislacao: null,
     documentos: cstDet.docs ?? {},
@@ -217,6 +218,37 @@ export function classificacaoNcmInvalido(ncm: string): Classificacao {
   }
 }
 
+/* ---------------------------------- interpretação única da entrada (NCM) -- */
+
+/**
+ * Interpretação ÚNICA do que o usuário digitou como NCM.
+ *
+ * Garantia "um motor": Consulta, Lote, XML e SPED classificam o mesmo
+ * `codigo` de 8 dígitos pelo mesmo resolvedor — divergências passadas vinham
+ * de cada tela normalizar a entrada à sua maneira (umas truncavam >8
+ * dígitos em silêncio, outras recusavam). A política de cada tela (aceitar
+ * ou não o truncado) continua própria, mas o `codigo` classificado e o
+ * motivo (`kind`) vêm sempre daqui.
+ */
+export type EntradaNcmKind = 'ok' | 'truncado' | 'invalido'
+
+export interface EntradaNcm {
+  kind: EntradaNcmKind
+  /** 8 dígitos quando `ok` ou `truncado`; dígitos crus quando `invalido`. */
+  codigo: string
+  /** Total de dígitos digitados (para o aviso de truncamento). */
+  digitos: number
+}
+
+export function interpretarEntradaNcm(v: unknown): EntradaNcm {
+  const digitos = norm(v)
+  if (digitos.length === 8) return { kind: 'ok', codigo: digitos, digitos: 8 }
+  if (digitos.length > 8) {
+    return { kind: 'truncado', codigo: digitos.slice(0, 8), digitos: digitos.length }
+  }
+  return { kind: 'invalido', codigo: digitos, digitos: digitos.length }
+}
+
 /* -------------------------------------------------------------------------- */
 
 function montarReferencia(
@@ -231,6 +263,7 @@ function montarReferencia(
     reducaoBcCst: simNao(ref.reducaoBC) ?? (cctDet?.indRedutorBC != null ? cctDet.indRedutorBC === 1 : null),
     monofasica: simNao(ref.monofasica) ?? (cctDet?.indMono != null ? cctDet.indMono === 1 : null),
     creditoPresumido: simNao(ref.creditoPresumido) ?? (cctDet?.indCredPres != null ? cctDet.indCredPres === 1 : null),
+    diferimento: typeof ref.diferimento === 'boolean' ? ref.diferimento : null,
     anexo: ref.anexo ?? null,
     urlLegislacao: ref.urlLegislacao ?? null,
     documentos: (unirDocs(ref.docs, cstDet?.docs) ?? {}) as Partial<DocumentosHabilitados>,

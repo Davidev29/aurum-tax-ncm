@@ -37,7 +37,7 @@ const opcoesComuns = {
   charset: 'utf8',
   sourcemap: true,
   minify: false,
-  external: ['electron'],
+  external: ['electron', 'electron-updater'],
 }
 
 async function compilar() {

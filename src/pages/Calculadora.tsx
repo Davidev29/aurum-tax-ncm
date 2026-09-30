@@ -16,12 +16,12 @@ import { useEffect, useRef, useState } from 'react'
 import { REF_DEFAULT, REF_FONTE, SUGGEST_LIMITS } from '@/domain/constants'
 import type { NomenclaturaNcm } from '@/domain/entities'
 import {
-  MASK,
   fmtCarga,
   fmtMoeda,
   fmtNcm,
   fmtNum,
   fmtPct,
+  formatarMoedaInput,
   norm,
   parseMoeda,
   parseQtd,
@@ -38,7 +38,7 @@ import {
 import { useProdutos, type ProdutoLinha } from '@/store/produtos'
 import { confirmar } from '@/store/dialogo'
 import { toast } from '@/store/ui'
-import { Btn, Painel, Texto, Vazio } from '@/ui/kit'
+import { Btn, IconeBadge, Painel, Texto } from '@/ui/kit'
 
 /* ------------------------------------------------------------- alíquotas --- */
 
@@ -56,25 +56,39 @@ function CampoTaxa({ tributo }: { tributo: 'IBS' | 'CBS' }) {
   }, [valor])
 
   const numero = (t: string): number => Number(t.replace(',', '.')) || 0
+  const aplicar = (t: string) => {
+    setTexto(t)
+    setRate(tributo, numero(t))
+  }
 
   return (
-    <label className="block">
+    <div className="calc-kpi">
       <span className="field-label">{tributo} (%)</span>
-      <Texto
-        type="number"
-        step="0.01"
+      <div className="flex items-baseline gap-0.5">
+        <Texto
+          type="number"
+          step="0.01"
+          min={0}
+          max={100}
+          mono
+          className="num-input min-w-0 flex-1 border-0 bg-transparent p-0 text-2xl font-black focus:shadow-none"
+          value={texto}
+          aria-label={`Alíquota de referência ${tributo} em porcento`}
+          onChange={(e) => aplicar(e.target.value.replace(/[^\d.,]/g, ''))}
+        />
+        <span aria-hidden="true" className="shrink-0 font-mono text-sm font-bold text-slate-400">%</span>
+      </div>
+      <input
+        type="range"
         min={0}
-        max={100}
-        mono
-        className="num-input"
-        value={texto}
-        onChange={(e) => {
-          const t = e.target.value.replace(/[^\d.,]/g, '')
-          setTexto(t)
-          setRate(tributo, numero(t))
-        }}
+        max={30}
+        step={0.05}
+        value={Math.min(30, numero(texto))}
+        onChange={(e) => aplicar(e.target.value)}
+        className="calc-range mt-1"
+        aria-label={`Ajuste fino ${tributo}`}
       />
-    </label>
+    </div>
   )
 }
 
@@ -88,7 +102,7 @@ function ItemLinha({ item, indice }: { item: ItemCalc; indice: number }) {
 
   const [qtd, setQtd] = useState(() => fmtNum(item.quantidade))
   const [valor, setValor] = useState(() =>
-    MASK.moeda(String(Math.round((item.valorUnitario || 0) * 100))),
+    item.valorUnitario ? formatarMoedaInput(item.valorUnitario) : '',
   )
 
   // Só ressincroniza quando o store mudou por fora (ex.: "Salvar no produto").
@@ -99,7 +113,9 @@ function ItemLinha({ item, indice }: { item: ItemCalc; indice: number }) {
     setValor((atual) =>
       parseMoeda(atual) === item.valorUnitario
         ? atual
-        : MASK.moeda(String(Math.round((item.valorUnitario || 0) * 100))),
+        : item.valorUnitario
+          ? formatarMoedaInput(item.valorUnitario)
+          : '',
     )
   }, [item.valorUnitario])
 
@@ -115,67 +131,79 @@ function ItemLinha({ item, indice }: { item: ItemCalc; indice: number }) {
   const base = baseDoItem(item)
   const aliqZerada = c.aliqIBS < 0.005 && c.aliqCBS < 0.005
   const temReducao = (Number(item.redIBS) || 0) > 0 || (Number(item.redCBS) || 0) > 0
+  const tom = item.regraGeral ? 'calc-item--geral' : aliqZerada ? 'calc-item--zero' : 'calc-item--cheia'
+  const totalTributos = c.total
+  const pctIBS = totalTributos > 0 ? (c.vIBS / totalTributos) * 100 : 50
 
   return (
-    <div className="panel card-hover p-4">
+    <div className={`panel calc-item ${tom} p-4 pl-5`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="pill bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              #{indice + 1}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="grid h-6 w-6 place-items-center rounded-full bg-brand-700 font-mono text-[10px] font-black text-white dark:bg-aurum-500 dark:text-brand-950">
+              {indice + 1}
             </span>
-            <span className="font-mono text-xs font-bold text-brand-700 dark:text-aurum-200">
+            <span className="font-mono text-sm font-black tracking-tight text-brand-700 dark:text-aurum-200">
               {fmtNcm(item.ncm) || item.ncm}
             </span>
             {item.regraGeral ? (
               <span className="pill bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-                regra geral
+                regra geral · cheia
               </span>
             ) : aliqZerada ? (
               <span className="pill bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
                 Alíquota zero
               </span>
-            ) : null}
+            ) : (
+              <span
+                className="pill bg-brand-100 text-brand-700 dark:bg-aurum-500/15 dark:text-aurum-200"
+                title={temReducao ? 'Redução de alíquota IBS / CBS aplicada sobre a referência' : 'Sem redução — alíquota cheia de referência'}
+              >
+                {temReducao ? `Redução: −${fmtPct(item.redIBS)} / −${fmtPct(item.redCBS)}` : 'Redução: —'}
+              </span>
+            )}
           </div>
-          <div className="mt-1 truncate text-sm font-semibold">{item.nome || '(sem nome)'}</div>
-          <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+          <div className="mt-1 truncate text-sm font-bold">{item.nome || '(sem nome)'}</div>
+          <div className="mt-0.5 font-mono text-[11px] text-slate-500 dark:text-slate-400">
             CST {item.cst} · {item.cClassTrib}
-            {temReducao ? ` · −${fmtPct(item.redIBS)} / −${fmtPct(item.redCBS)}` : ' · alíquota cheia'}
           </div>
         </div>
         <button
           type="button"
-          className="grid h-8 w-8 place-items-center rounded-lg text-red-500 transition hover:bg-red-50 dark:hover:bg-red-950/40"
-          title="Remover"
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+          title="Remover item"
+          aria-label={`Remover ${item.nome || `item ${indice + 1}`}`}
           onClick={() => remover(item.uid)}
         >
-          🗑
+          ✕
         </button>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="field-label">Qtd</span>
+      <div className="mt-3 grid grid-cols-2 gap-2.5">
+        <label className="block rounded-xl border border-[var(--line)] bg-slate-50/70 px-3 py-2 dark:bg-slate-950/40">
+          <span className="field-label !mb-1">Qtd</span>
           <Texto
             mono
             mask="qtd"
-            className="field-sm num-input"
+            className="border-0 bg-transparent p-0 font-bold num-input"
             inputMode="decimal"
             value={qtd}
+            aria-label="Quantidade do item"
             onChange={(e) => {
               setQtd(e.target.value)
               aplicar('quantidade', e.target.value)
             }}
           />
         </label>
-        <label className="block">
-          <span className="field-label">Valor unit.</span>
+        <label className="block rounded-xl border border-[var(--line)] bg-slate-50/70 px-3 py-2 dark:bg-slate-950/40">
+          <span className="field-label !mb-1">Valor unit. R$</span>
           <Texto
             mono
             mask="moeda"
-            className="field-sm num-input"
+            className="border-0 bg-transparent p-0 font-bold num-input"
             inputMode="decimal"
             value={valor}
+            aria-label="Valor unitário do item"
             onChange={(e) => {
               setValor(e.target.value)
               aplicar('valorUnitario', e.target.value)
@@ -184,24 +212,31 @@ function ItemLinha({ item, indice }: { item: ItemCalc; indice: number }) {
         </label>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-[11px] dark:bg-slate-950/40">
-        <span className="text-slate-500">
-          Op. <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">{fmtMoeda(base)}</span>
-        </span>
-        {temReducao ? (
-          <span className="text-slate-500">
-            Alíq.{' '}
-            <span className="font-mono font-semibold text-slate-700 dark:text-slate-200" title="Alíquota de referência já com a redução aplicada; BC = valor cheio da operação">
-              {`${c.aliqIBS.toFixed(2).replace('.', ',')}% / ${c.aliqCBS.toFixed(2).replace('.', ',')}%`}
-            </span>
+      <div className="mt-2.5 rounded-xl bg-slate-50 px-3 py-2.5 dark:bg-slate-950/40">
+        <div className="calc-bar" aria-hidden="true">
+          <span className="calc-bar-ibs" style={{ width: `${pctIBS}%` }} />
+          <span className="calc-bar-cbs" style={{ width: `${100 - pctIBS}%` }} />
+        </div>
+        <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
+          <span className="text-[11px] text-slate-500">
+            Base <strong className="font-mono text-slate-700 dark:text-slate-200">{fmtMoeda(base)}</strong>
+            {temReducao ? (
+              <span className="ml-2 font-mono" title="Alíquota efetiva já com redução; BC = valor cheio">
+                IBS {fmtCarga(c.aliqIBS)} · CBS {fmtCarga(c.aliqCBS)}
+              </span>
+            ) : null}
           </span>
-        ) : null}
-        <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
-          {fmtMoeda(c.total)}
-        </span>
-      </div>
-      <div className="mt-1 text-right font-mono text-[10px] text-slate-400">
-        IBS {fmtMoeda(c.vIBS)} · CBS {fmtMoeda(c.vCBS)} · carga {fmtCarga(c.carga)}
+          <span className="font-mono text-base font-black text-emerald-700 dark:text-emerald-400">
+            {fmtMoeda(c.total)}
+          </span>
+        </div>
+        <div className="mt-0.5 flex flex-wrap justify-between gap-x-3 gap-y-1 font-mono text-[10px] text-slate-400">
+          <span className="inline-flex flex-wrap gap-x-2">
+            <span>Valor do IBS: {fmtMoeda(c.vIBS)}</span>
+            <span>Valor da CBS: {fmtMoeda(c.vCBS)}</span>
+          </span>
+          <span>carga {fmtCarga(c.carga)}</span>
+        </div>
       </div>
     </div>
   )
@@ -315,8 +350,8 @@ function BuscaCalculadora({
                     <span className="mt-0.5 block text-[10px] text-slate-500">
                       CST {p.cstReforma} ·{' '}
                       {(Number(p.redIBS) || 0) > 0 || (Number(p.redCBS) || 0) > 0
-                        ? `red. ${fmtPct(p.redIBS)} / ${fmtPct(p.redCBS)}`
-                        : 'alíquota cheia'}
+                        ? `Redução: ${fmtPct(p.redIBS)} / ${fmtPct(p.redCBS)}`
+                        : 'Redução: sem redução'}
                     </span>
                   </span>
                 </button>
@@ -369,6 +404,8 @@ export function Calculadora() {
   const adicionarProduto = useCalculadora((s) => s.adicionarProduto)
   const limpar = useCalculadora((s) => s.limpar)
   const salvarNoProdutos = useCalculadora((s) => s.salvarNoProdutos)
+  const revalidarItens = useCalculadora((s) => s.revalidarItens)
+  const [revalidando, setRevalidando] = useState(false)
 
   const [modalAberto, setModalAberto] = useState(false)
   const [ncmInicial, setNcmInicial] = useState('')
@@ -376,6 +413,9 @@ export function Calculadora() {
   const r = resumoDaCalculadora(itens, rateIBS, rateCBS)
   const pctCarga = fmtCarga(r.carga)
   const temReducao = itens.some((it) => (Number(it.redIBS) || 0) > 0 || (Number(it.redCBS) || 0) > 0)
+  // A coluna de resumo (hero + alíquotas) só existe após o primeiro
+  // "Adicionar à calculadora" — antes disso a grade tem 1 coluna.
+  const temItens = itens.length > 0
 
   const abrirCustom = (codigo: string) => {
     setNcmInicial(codigo)
@@ -404,20 +444,32 @@ export function Calculadora() {
   }, [])
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+    <div className={`grid grid-cols-1 gap-6 transition-all duration-500 ease-out ${temItens ? 'lg:grid-cols-[minmax(0,1fr)_390px]' : ''}`}>
       <div className="min-w-0 space-y-6">
         <Painel className="overflow-hidden">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
-            <div className="min-w-0">
-              <h2 className="flex items-center gap-2 text-base font-bold">
-                <span className="text-lg">🧮</span> Calculadora Tributária
+          <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] p-5">
+            <IconeBadge nome="calculadora" tom="brand" tamanho="lg" />
+            <div className="min-w-0 flex-1">
+              <h2 className="text-base font-black tracking-tight">
+                Calculadora Tributária
               </h2>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                Adicione produtos salvos e simule IBS/CBS.
+                Simule IBS/CBS com reduções congeladas por item · LC 214/2025
               </p>
             </div>
-            <span className="pill bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+            <span className="pill bg-brand-100 text-brand-700 dark:bg-aurum-500/15 dark:text-aurum-200">
               LC 214/2025
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-4 border-b border-[var(--line)] bg-slate-50/60 px-5 py-3 dark:bg-slate-950/40">
+            {['Buscar', 'Ajustar', 'Conferir'].map((passo, i) => (
+              <span key={passo} className="calc-step text-slate-500">
+                <span className="calc-step-dot">{i + 1}</span> {passo}
+                {i < 2 ? <span className="ml-2 text-slate-300">›</span> : null}
+              </span>
+            ))}
+            <span className="ml-auto font-mono text-[11px] text-slate-400">
+              {r.itens ? `${r.itens} ${r.itens === 1 ? 'item' : 'itens'}` : 'vazia'}
             </span>
           </div>
 
@@ -434,77 +486,100 @@ export function Calculadora() {
               {itens.length ? (
                 itens.map((it, i) => <ItemLinha key={it.uid} item={it} indice={i} />)
               ) : (
-                <Vazio
-                  icone="🧮"
-                  titulo="Nenhum item adicionado"
-                  texto="Use a busca acima para adicionar produtos cadastrados ou itens manuais por NCM."
-                />
+                <div className="grid place-items-center rounded-2xl border border-dashed border-[var(--line)] bg-slate-50/50 px-6 py-10 text-center dark:bg-slate-950/30">
+                  <IconeBadge nome="calculadora" tom="brand" tamanho="lg" />
+                  <div className="mt-3 text-sm font-bold">Monte sua simulação em 3 passos</div>
+                  <div className="mt-1 max-w-md text-xs leading-relaxed text-slate-500">
+                    1 · Busque um produto salvo ou informe um NCM manual.
+                    2 · Ajuste quantidade e valor unitário.
+                    3 · Adicione à calculadora — o resumo (Valor do IBS / Valor da CBS) aparece aqui ao lado.
+                  </div>
+                </div>
               )}
             </div>
           </div>
         </Painel>
       </div>
 
-      <aside className="space-y-4 lg:sticky lg:top-4 lg:h-fit">
-        <Painel className="overflow-hidden">
-          <div className="border-b border-slate-100 bg-gradient-to-r from-brand-50 to-white px-5 py-4 dark:border-slate-800 dark:from-brand-950/40 dark:to-slate-900">
-            <h3 className="flex items-center gap-2 text-sm font-bold">
-              <span>📊</span> Resumo do cálculo
-            </h3>
-            <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-              {r.itens
-                ? `${r.itens} ${r.itens === 1 ? 'item' : 'itens'} · Carga efetiva ${pctCarga}`
-                : '—'}
-            </p>
+      {temItens ? (
+      <aside className="calc-aside-enter space-y-4 lg:sticky lg:top-4 lg:h-fit" aria-live="polite">
+        <div className="calc-hero overflow-hidden rounded-2xl">
+          <div className="px-5 pb-4 pt-5">
+            <div className="flex items-center justify-between">
+              <span className="calc-hero-rotulo">Total geral · operação + tributos</span>
+              <span className="rounded-full bg-white/15 px-2 py-0.5 font-mono text-[10px] font-bold text-white">
+                {r.itens ? `${r.itens} ${r.itens === 1 ? 'item' : 'itens'}` : '—'}
+              </span>
+            </div>
+            <div className="calc-hero-valor mt-1 text-4xl text-white" aria-live="polite">
+              {fmtMoeda(r.total)}
+            </div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-white/75">
+              <span>Tributos {fmtMoeda(r.tributos)}</span>
+              <span className="rounded-full bg-aurum-400/25 px-2 py-0.5 font-mono font-bold text-aurum-200">
+                carga {pctCarga}
+              </span>
+            </div>
+            <div className="calc-bar mt-3 !bg-white/20" aria-hidden="true">
+              <span className="calc-bar-ibs !bg-gradient-to-r !from-white/90 !to-white/60" style={{ width: `${r.tributos > 0 ? (r.ibs / r.tributos) * 100 : 50}%` }} />
+              <span className="calc-bar-cbs" style={{ width: `${r.tributos > 0 ? (r.cbs / r.tributos) * 100 : 50}%` }} />
+            </div>
+            <div className="mt-1.5 flex justify-between gap-2 font-mono text-[10px] text-white/65">
+              <span>■ Valor do IBS: {fmtMoeda(r.ibs)}</span>
+              <span>■ Valor da CBS: {fmtMoeda(r.cbs)}</span>
+            </div>
           </div>
 
-          <div className="space-y-2 p-5 text-sm">
-            <LinhaResumo rotulo="Operação (BC)" valor={fmtMoeda(r.base)} />
+          <div className="space-y-2 bg-white px-5 py-4 text-sm text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            <LinhaResumo rotulo="Base das operações (BC)" valor={fmtMoeda(r.base)} />
             {temReducao ? (
               <p className="-mt-1 text-[10px] text-slate-400">
-                BC = valor cheio · alíquotas já com redução.
+                BC = valor cheio · alíquotas já com redução por item.
               </p>
             ) : null}
-            <LinhaResumo rotulo="IBS" valor={fmtMoeda(r.ibs)} destaque />
-            <LinhaResumo rotulo="CBS" valor={fmtMoeda(r.cbs)} destaque />
-            <div className="flex items-center justify-between border-t border-dashed border-slate-200 pt-3 dark:border-slate-800">
-              <span className="text-xs font-bold uppercase tracking-wide">Total tributos</span>
-              <span className="font-mono font-bold text-emerald-700 dark:text-emerald-400">
-                {fmtMoeda(r.tributos)}
-              </span>
-            </div>
-            <div className="rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 p-3 text-white shadow-pop">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] uppercase tracking-wide opacity-90">Total geral</span>
-                <span className="font-mono text-lg font-black">{fmtMoeda(r.total)}</span>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[10px] opacity-90">
-                <span>Carga efetiva</span>
-                <span className="font-mono">{pctCarga}</span>
-              </div>
-            </div>
+            <LinhaResumo rotulo="Valor do IBS" valor={fmtMoeda(r.ibs)} destaque />
+            <LinhaResumo rotulo="Valor da CBS" valor={fmtMoeda(r.cbs)} destaque />
           </div>
 
-          <div className="flex flex-wrap gap-2 border-t border-slate-100 p-3 dark:border-slate-800">
+          <div className="flex flex-wrap gap-2 bg-white px-4 pb-4 dark:bg-slate-900">
             <Btn className="flex-1" onClick={confirmarLimpar}>
-              🗑 Limpar
+              Limpar
             </Btn>
-            <Btn variante="primary" className="flex-1" onClick={() => void salvarNoProdutos()}>
-              💾 Salvar no produto
+            <Btn
+              className="flex-1"
+              disabled={revalidando}
+              title="Re-resolve cada item no motor único (preserva sua escolha quando ainda válida)"
+              onClick={() => {
+                if (!itens.length || revalidando) return
+                setRevalidando(true)
+                void revalidarItens()
+                  .then((n) =>
+                    toast(
+                      n ? `🔄 ${n} item(ns) atualizado(s) pela regra vigente.` : '✓ Itens conferem com a regra vigente.',
+                      n ? 'warn' : 'ok',
+                    ),
+                  )
+                  .finally(() => setRevalidando(false))
+              }}
+            >
+              {revalidando ? '⋯' : '🔄 Revalidar'}
+            </Btn>
+            <Btn variante="primary" className="flex-[2]" onClick={() => void salvarNoProdutos()}>
+              Salvar no produto
             </Btn>
           </div>
-        </Painel>
+        </div>
 
         <Painel>
-          <div className="border-b border-slate-100 px-5 py-3 dark:border-slate-800">
-            <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
-              <span>⚙</span> Alíquotas de referência
-              <span className="ml-auto text-[10px] font-normal normal-case text-slate-400">
-                editável
+          <div className="border-b border-[var(--line)] px-5 py-3">
+            <h3 className="calc-step text-slate-500">
+              <span className="calc-step-dot">%</span> Alíquotas de referência
+              <span className="ml-auto font-sans text-[10px] font-normal normal-case text-slate-400">
+                arraste ou digite
               </span>
             </h3>
           </div>
-          <div className="grid grid-cols-2 gap-3 p-5">
+          <div className="grid grid-cols-2 gap-3 p-4">
             <CampoTaxa tributo="IBS" />
             <CampoTaxa tributo="CBS" />
           </div>
@@ -516,11 +591,13 @@ export function Calculadora() {
           </p>
         </Painel>
 
-        <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300">
-          <span className="font-bold">💡 Alíquota já com redução.</span> Red. 100% ⇒ alíquota zero.
-          BC = valor cheio da operação. Carga = tributos ÷ operação.
+        <div className="rounded-2xl border border-[var(--line)] bg-slate-50/70 p-4 text-[11px] leading-relaxed text-slate-600 dark:bg-slate-950/40 dark:text-slate-300">
+          <div className="calc-step mb-1.5 text-slate-500"><span className="calc-step-dot">i</span> Como ler este cálculo</div>
+          <span className="font-bold">Alíquota já com redução.</span> Red. 100% ⇒ alíquota zero.
+          BC = valor cheio da operação. Carga = tributos ÷ operação. Barra do hero: azul = IBS, dourado = CBS.
         </div>
       </aside>
+      ) : null}
 
       <ModalCalcCustom
         aberto={modalAberto}

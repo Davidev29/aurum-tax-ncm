@@ -1,14 +1,16 @@
 /**
- * Diferimento — Anexo IX (art. 138) e CST 510/515.
+ * Diferimento — decisão EXCLUSIVA por bases oficiais (CST 510/515,
+ * `cstDetalhes.indDiferimento`, `referencia.diferimento`).
  *
- * Trava o pedido do usuário: produto do Anexo IX SEMPRE exibe o aviso de
- * produto diferido (quando recolhe, anexos e hipóteses), no mesmo padrão
- * dos demais textos informativos.
+ * Anexo IX com CST 200 (cClassTrib 200038 — 957 NCMs da base) NÃO é
+ * diferido: é tributação com redução de 60% + diferimento CONDICIONAL
+ * à operação (art. 138, §2º). Só CST 515/510 é diferimento efetivo.
  */
 import { describe, expect, it } from 'vitest'
 import {
   ehAnexoIX,
   ehDiferimento,
+  ehDiferimentoCondicionalAnexoIX,
   observacoesDiferimento,
 } from '@/domain/services/calculo'
 import type { Classificacao } from '@/domain/entities'
@@ -41,26 +43,76 @@ function fake(extra: Partial<Classificacao> = {}): Classificacao {
 }
 
 describe('diferimento Anexo IX', () => {
-  it('detecta Anexo IX por anexo 9, cClassTrib 200038/515001 ou descrição', () => {
+  it('detecta Anexo IX por anexo 9 ou cClassTrib 200038/515001 (nunca por descrição)', () => {
     expect(ehAnexoIX(fake())).toBe(true)
     expect(ehAnexoIX(fake({ cClassTrib: '515001', resumo: { descricaoCClassTrib: '', percentualReducaoIBS: 60, percentualReducaoCBS: 60, anexo: null, urlLegislacao: null, documentosHabilitados: null } }))).toBe(true)
     expect(ehAnexoIX(fake({ cst: '000', cClassTrib: '000001', resumo: { descricaoCClassTrib: 'integral', percentualReducaoIBS: 0, percentualReducaoCBS: 0, anexo: null, urlLegislacao: null, documentosHabilitados: null }, baseLegal: '' }))).toBe(false)
+    // Descrição citando "Anexo IX" sem anexo oficial NÃO identifica Anexo IX
+    expect(
+      ehAnexoIX(
+        fake({
+          cst: '000',
+          cClassTrib: '000001',
+          resumo: { descricaoCClassTrib: 'qualquer coisa Anexo IX', percentualReducaoIBS: 0, percentualReducaoCBS: 0, anexo: null, urlLegislacao: null, documentosHabilitados: null },
+          baseLegal: 'texto Anexo IX',
+        }),
+      ),
+    ).toBe(false)
   })
 
-  it('Anexo IX sempre é diferimento, mesmo com CST 200', () => {
-    expect(ehDiferimento(fake())).toBe(true)
+  it('Anexo IX com CST 200 NÃO é diferimento efetivo (é condicional)', () => {
+    expect(ehDiferimento(fake())).toBe(false)
+    expect(ehDiferimentoCondicionalAnexoIX(fake())).toBe(true)
     expect(ehDiferimento(fake({ cst: '510', cClassTrib: '510001' }))).toBe(true)
+    expect(ehDiferimento(fake({ cst: '515', cClassTrib: '515001' }))).toBe(true)
     expect(ehDiferimento(fake({ cst: '000', cClassTrib: '000001', resumo: { descricaoCClassTrib: 'integral', percentualReducaoIBS: 0, percentualReducaoCBS: 0, anexo: null, urlLegislacao: null, documentosHabilitados: null }, baseLegal: '' }))).toBe(false)
   })
 
-  it('emite aviso elegante com hipóteses, recolhimento e anexos', () => {
+  it('diferimento via flags oficiais (indDiferimento, referencia.diferimento)', () => {
+    expect(
+      ehDiferimento(
+        fake({
+          cst: '200',
+          cClassTrib: '200001',
+          cstDetalhes: { codigo: '200', descricao: 'x', indIBSCBS: true, indIBSCBSMono: false, indReducao: false, indDiferimento: true, indTransferenciaCredito: true, docs: {} } as Classificacao['cstDetalhes'],
+          resumo: { descricaoCClassTrib: 'x', percentualReducaoIBS: 0, percentualReducaoCBS: 0, anexo: null, urlLegislacao: null, documentosHabilitados: null },
+        }),
+      ),
+    ).toBe(true)
+    expect(
+      ehDiferimento(
+        fake({
+          cst: '200',
+          cClassTrib: '200001',
+          referencia: { lcRef: 'x', reducaoAliquota: false, reducaoBcCst: false, monofasica: false, creditoPresumido: false, diferimento: true, anexo: null, urlLegislacao: null, documentos: {} },
+          resumo: { descricaoCClassTrib: 'x', percentualReducaoIBS: 0, percentualReducaoCBS: 0, anexo: null, urlLegislacao: null, documentosHabilitados: null },
+        }),
+      ),
+    ).toBe(true)
+  })
+
+  it('Anexo IX CST 200 emite aviso CONDICIONAL âmbar (não "diferido")', () => {
     const [o] = observacoesDiferimento(fake())
-    expect(o.titulo).toContain('Anexo IX')
+    expect(o.titulo).toContain('condicional')
+    expect(o.cor).toBe('amber')
+    expect(o.texto).toContain('NÃO é automaticamente diferido')
+    expect(o.texto).toContain('§2º')
+    expect(o.link).toContain('#art138')
+  })
+
+  it('diferimento efetivo Anexo IX (CST 515) emite aviso violeta "diferido"', () => {
+    const [o] = observacoesDiferimento(
+      fake({
+        cst: '515',
+        cClassTrib: '515001',
+        referencia: { lcRef: 'x', reducaoAliquota: false, reducaoBcCst: false, monofasica: false, creditoPresumido: false, diferimento: true, anexo: '9', urlLegislacao: null, documentos: {} },
+      }),
+    )
+    expect(o.titulo).toContain('diferido')
     expect(o.cor).toBe('violet')
     expect(o.texto).toContain('DIFERIDO')
     expect(o.texto).toContain('§2º')
     expect(o.texto).toContain('art. 168')
-    expect(o.texto).toContain('Anexo IX')
     expect(o.link).toContain('#art138')
   })
 
@@ -70,7 +122,7 @@ describe('diferimento Anexo IX', () => {
     expect(o.link).toContain('#art28')
   })
 
-  it('retorna vazio quando não há diferimento', () => {
+  it('retorna vazio quando não há diferimento nem hipótese condicional', () => {
     expect(observacoesDiferimento(null)).toEqual([])
     expect(
       observacoesDiferimento(

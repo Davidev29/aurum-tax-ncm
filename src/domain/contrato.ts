@@ -73,7 +73,7 @@ export function validarContratante(c: Contratante): string | null {
 /** Texto resumido exibido no modal de primeira execução. */
 export const TERMO_RESUMO: string[] = [
   'Licença de uso do Aurum Tax NCM, software desktop da Aurum Bit Labs & Studios LTDA, nos limites da versão adquirida.',
-  'O software roda 100% na sua máquina. NÃO armazenamos seus dados em nuvem: empresas, produtos, SPED, XMLs e classificações ficam somente no seu computador (banco local + pasta de dados do usuário). A Aurum não recebe nem tem acesso à sua base.',
+  'O software roda 100% na sua máquina. NÃO armazenamos seus dados em nuvem: empresas, produtos, XMLs e classificações ficam somente no seu computador (banco local + pasta de dados do usuário). A Aurum não recebe nem tem acesso à sua base.',
   'Internet é usada apenas para funções opcionais (consulta de CNPJ via BrasilAPI, leitura de normas oficiais Planalto/CGIBS, portal CFF e verificação de atualizações) — sua base nunca é enviada à Aurum.',
   'Você é responsável por seus dados, backups, conferência fiscal (LC 214/2025, Decreto 12.955/2026, Res. CGIBS 6/2026) e pela segurança da máquina.',
   'O software é ferramenta de apoio e não substitui o julgamento profissional nem garante resultado perante o Fisco.',

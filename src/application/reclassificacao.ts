@@ -18,7 +18,7 @@
  */
 import { REF_DEFAULT } from '@/domain/constants'
 import type { ClassificacaoSnapshot } from '@/domain/entities'
-import { anexoDeReducao, calcularTributos, observacoesFiscais } from '@/domain/services/calculo'
+import { anexoReal, calcularTributos, observacoesFiscais, round2 } from '@/domain/services/calculo'
 import { norm } from '@/domain/services/format'
 import { resolverClassificacoes } from '@/infrastructure/base/classificacao-repo'
 import { db } from '@/infrastructure/db/schema'
@@ -109,7 +109,7 @@ export async function propagarClassificacaoNcm(codigoInput: unknown): Promise<Re
           cbs: calc.vCBS,
           totalTributos: calc.total,
           carga: calc.carga,
-          anexo: anexoDeReducao(redIBS, redCBS),
+          anexo: anexoReal(cl.resumo?.anexo ?? (cl as { referencia?: { anexo?: unknown } }).referencia?.anexo, redIBS, redCBS),
           nomenclatura: r.nomenclatura,
           observacoes: observacoesFiscais(cod, cl, r.nomenclatura),
         }
@@ -117,15 +117,15 @@ export async function propagarClassificacaoNcm(codigoInput: unknown): Promise<Re
       let totalIBS = 0
       let totalCBS = 0
       for (const it of refeitos) {
-        totalIBS += Number(it.ibs) || 0
-        totalCBS += Number(it.cbs) || 0
+        totalIBS = round2(totalIBS + (Number(it.ibs) || 0))
+        totalCBS = round2(totalCBS + (Number(it.cbs) || 0))
       }
       sujas.push({
         ...n,
         itensAnalisados: refeitos,
         totalIBS,
         totalCBS,
-        totalTributos: totalIBS + totalCBS,
+        totalTributos: round2(totalIBS + totalCBS),
       })
       itens += tocados
     }

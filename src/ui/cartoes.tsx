@@ -71,9 +71,9 @@ export function DocsHabilitados({ docs }: { docs: unknown }) {
   )
 }
 
-/** Selo de reclassificação manual — responsabilidade do usuário, isenta o sistema. */
+/** Selo de reclassificação manual — feita pelo usuário, não pelo sistema. */
 export function PillManual() {
-  return <Pill cor="amber">✋ Manual · usuário</Pill>
+  return <Pill cor="amber">👤 Classificado por você</Pill>
 }
 
 /**
@@ -149,10 +149,10 @@ export function AvisoManual({
     <div
       className={`rounded-xl border border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 ${compact ? 'p-2 text-[11px]' : 'p-3 text-xs'}`}
     >
-      <div className="font-bold">✋ Classificação manual — responsabilidade do usuário</div>
+      <div className="font-bold">👤 Classificação feita por você (manual) — responsabilidade sua, não do sistema</div>
       <div className="mt-1 leading-relaxed">
-        Esta classificação foi definida manualmente e <strong>isenta o sistema</strong> de
-        responsabilidade sobre o enquadramento.
+        Este enquadramento foi definido manualmente por você e o sistema apenas o aplicou —{' '}
+        <strong>não foi o sistema que classificou</strong>.
         {fonteDescricao ? (
           <>
             {' '}Fonte informada: <strong>{fonteDescricao}</strong>.
@@ -220,8 +220,9 @@ export function ListaObservacoes({ itens }: { itens: Observacao[] }) {
 }
 
 /**
- * Aviso de diferimento (Anexo IX incluso) — mesmo padrão dos demais textos
- * informativos. Retorna `null` quando a classificação não é diferida.
+ * Aviso de diferimento — diferimento efetivo (violeta) ou Anexo IX
+ * condicional (âmbar, "verificar a operação"). Retorna `null` quando a
+ * classificação não é diferida nem condicionalmente diferível.
  * Reutilizado em Produtos, SPED, NF-e e Lote.
  */
 export function AvisoDiferimento({ cl }: { cl: Classificacao }) {
@@ -288,19 +289,22 @@ export function SimuladorRapido({ redIBS, redCBS }: { redIBS: number; redCBS: nu
 
   const base = parseMoeda(texto)
   const c = calcularTributos(base, redIBS, redCBS, rateIBS, rateCBS)
-  const carga = base > 0 ? c.carga : rateIBS + rateCBS
+  const carga = c.base > 0 ? c.carga : rateIBS + rateCBS
   const pct2 = (n: number) => n.toFixed(2).replace('.', ',')
   const temReducao = (Number(redIBS) || 0) > 0 || (Number(redCBS) || 0) > 0
-  const zerada = temReducao && base > 0 && c.aliqIBS < 0.005 && c.aliqCBS < 0.005
+  const zerada = temReducao && c.base > 0 && c.aliqIBS < 0.005 && c.aliqCBS < 0.005
   const aliqIguais = Math.abs(c.aliqIBS - c.aliqCBS) < 0.005
+  const totalTributos = c.total
+  const totalGeral = c.base + c.total
+  const pctIBS = totalTributos > 0 ? (c.vIBS / totalTributos) * 100 : 50
+  const ativo = c.base > 0
 
   return (
-    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-950/40">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="text-base">🧮</span>
-        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Simulador
-        </h4>
+    <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--line)]">
+      <div className="flex items-center gap-2 bg-gradient-to-r from-brand-50/90 to-white px-4 py-2.5 dark:from-brand-950/40 dark:to-slate-900">
+        <span className="calc-step">
+          <span className="calc-step-dot">R$</span> Simulador rápido
+        </span>
         {zerada ? (
           <span className="pill ml-auto bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
             Alíquota zero
@@ -309,9 +313,13 @@ export function SimuladorRapido({ redIBS, redCBS }: { redIBS: number; redCBS: nu
           <span className="ml-auto font-mono text-[10px] text-slate-500" title="Alíquota de referência já com a redução aplicada; BC = valor cheio da operação">
             Alíq. {aliqIguais ? `${pct2(c.aliqIBS)}%` : `${pct2(c.aliqIBS)}% / ${pct2(c.aliqCBS)}%`}
           </span>
-        ) : null}
+        ) : (
+          <span className="ml-auto font-mono text-[10px] text-slate-400" title="Sem redução — alíquota cheia de referência">
+            Alíq. cheia {pct2(rateIBS + rateCBS)}%
+          </span>
+        )}
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <label className="block">
           <span className="field-label">Valor da operação (R$)</span>
           <Texto
@@ -319,36 +327,56 @@ export function SimuladorRapido({ redIBS, redCBS }: { redIBS: number; redCBS: nu
             inputMode="decimal"
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
-            placeholder="R$ 0,00"
-            className="field-sm num-input field-mono"
+            placeholder="R$ 1.000,00"
+            className="field-lg num-input field-mono"
+            aria-label="Valor da operação para simular"
           />
+          <span className="mt-1.5 block text-[10px] leading-relaxed text-slate-400">
+            {ativo
+              ? `Base ${fmtMoeda(c.base)} · carga ${pct2(carga)}% sobre a operação`
+              : 'Digite um valor — o cálculo é instantâneo, sem salvar nada.'}
+          </span>
         </label>
-        <div className="space-y-1 rounded-lg bg-white p-3 shadow-sm dark:bg-slate-900">
-          <LinhaSim rotulo="IBS" taxa={pct2(c.aliqIBS)} valor={fmtMoeda(c.vIBS)} />
-          <LinhaSim rotulo="CBS" taxa={pct2(c.aliqCBS)} valor={fmtMoeda(c.vCBS)} />
-          <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2 text-xs font-bold dark:border-slate-700">
-            <span>Total</span>
-            <span className="font-mono text-emerald-700 dark:text-emerald-400">
-              {fmtMoeda(c.total)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-[10px] text-slate-500">
-            <span>Carga efetiva</span>
-            <span className="font-mono">{pct2(carga)}%</span>
-          </div>
+        <div className={`rounded-xl p-3 transition-colors ${ativo ? 'calc-hero' : 'bg-slate-50 dark:bg-slate-950/40 border border-dashed border-slate-300 dark:border-slate-700'}`}>
+          {!ativo ? (
+            <div className="grid h-full min-h-[5.5rem] place-items-center text-center text-[11px] text-slate-400">
+              <span>◌ Aguardando valor<br />para estimar IBS/CBS</span>
+            </div>
+          ) : (
+            <>
+              <div className="calc-bar" aria-hidden="true">
+                <span className="calc-bar-ibs" style={{ width: `${pctIBS}%` }} />
+                <span className="calc-bar-cbs" style={{ width: `${100 - pctIBS}%` }} />
+              </div>
+              <div className="mt-2 space-y-1">
+                <LinhaSim rotulo="Valor do IBS" taxa={pct2(c.aliqIBS)} valor={fmtMoeda(c.vIBS)} claro />
+                <LinhaSim rotulo="Valor da CBS" taxa={pct2(c.aliqCBS)} valor={fmtMoeda(c.vCBS)} claro />
+              </div>
+              <div className="mt-2 flex items-end justify-between border-t border-white/20 pt-2">
+                <span className="calc-hero-rotulo">Total operação + tributos</span>
+                <span className="calc-hero-valor text-xl text-white">
+                  {fmtMoeda(totalGeral)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-white/70">
+                <span>Tributos {fmtMoeda(totalTributos)} · Carga efetiva</span>
+                <span className="font-mono font-bold">{pct2(carga)}%</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-function LinhaSim({ rotulo, taxa, valor }: { rotulo: string; taxa: string; valor: string }) {
+function LinhaSim({ rotulo, taxa, valor, claro }: { rotulo: string; taxa: string; valor: string; claro?: boolean }) {
   return (
     <div className="flex items-center justify-between text-[11px]">
-      <span className="text-slate-600 dark:text-slate-400">
-        {rotulo} <span className="text-slate-400">({taxa}%)</span>
+      <span className={claro ? 'text-white/75' : 'text-slate-600 dark:text-slate-400'}>
+        {rotulo} <span className={claro ? 'text-white/50' : 'text-slate-400'}>({taxa}%)</span>
       </span>
-      <span className="font-mono font-bold text-brand-700 dark:text-aurum-200">{valor}</span>
+      <span className={`font-mono font-bold ${claro ? 'text-white' : 'text-brand-700 dark:text-aurum-200'}`}>{valor}</span>
     </div>
   )
 }
@@ -376,6 +404,7 @@ export function CartaoClassificacao({
   bloqueios,
   onSalvar,
   onAddCalc,
+  onReclassificar,
 }: {
   cl: Classificacao
   indice: number
@@ -387,6 +416,8 @@ export function CartaoClassificacao({
   bloqueios?: BloqueioSistema[] | null
   onSalvar?: () => void
   onAddCalc?: () => void
+  /** Abre a edição da reclassificação manual (só faz sentido no cartão manual). */
+  onReclassificar?: () => void
 }) {
   const r = cl.resumo
   const cct = cl.cstClassTribDetalhes
@@ -398,13 +429,17 @@ export function CartaoClassificacao({
   const redacao = cct?.lcRedacao
   const ehManual = cl.manual != null
   const temVigenciaCct = Boolean(cct?.inicioVigencia || cct?.fimVigencia)
-  // Textos informativos: diferimento SEMPRE primeiro (Anexo IX incluso).
+  // Textos informativos: diferimento efetivo (violeta) ou condicional
+  // Anexo IX (âmbar) SEMPRE primeiro.
   // Tipo uniforme/fixo substitui a fundamentação por faixa (o artigo da faixa
-  // seria o do regime padrão — errado para CST 010/011). Prouni/misto precisa
-  // das duas reduções (art. 308 só aparece com redCBS).
+  // seria o do regime padrão — errado para CST 010/011).
+  // BLINDAGEM: com enquadramento oficial específico, nenhum artigo inferido
+  // por faixa é exibido — a fundamentação é a da base oficial (cabeçalho +
+  // base legal + avisos específicos). Só a regra geral usa a faixa.
+  // Prouni/misto precisa das duas reduções (art. 308 só aparece com redCBS).
   const obsDiferimento = observacoesDiferimento(cl)
   const obsTipo = observacaoTipoAliquota(cct?.tipoAliquota)
-  const obsLegais = observacoesLegais(cl.codigo, redIBS, redCBS)
+  const obsLegais = cl.regraGeral ? observacoesLegais(cl.codigo, redIBS, redCBS) : []
   const obsRev = observacaoRevogacao(cl.revogado)
   const observacoes = [...(obsRev ? [obsRev] : []), ...obsDiferimento, ...(obsTipo ? [obsTipo] : obsLegais)]
 
@@ -477,7 +512,7 @@ export function CartaoClassificacao({
 
       {!compact ? <SimuladorRapido redIBS={redIBS} redCBS={redCBS} /> : null}
 
-      {onSalvar || onAddCalc ? (
+      {onSalvar || onAddCalc || onReclassificar ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {onSalvar ? (
             <Btn variante="primary" tam="sm" onClick={onSalvar}>
@@ -487,6 +522,11 @@ export function CartaoClassificacao({
           {onAddCalc ? (
             <Btn tam="sm" onClick={onAddCalc}>
               🧮 Adicionar à calculadora
+            </Btn>
+          ) : null}
+          {onReclassificar ? (
+            <Btn tam="sm" onClick={onReclassificar}>
+              ✋ Editar reclassificação
             </Btn>
           ) : null}
         </div>

@@ -45,9 +45,9 @@ export const fmtInt = (v: unknown): string =>
 export const fmtBRL = (v: unknown): string => {
   const n = Number(v) || 0
   const neg = n < 0
-  const abs = Math.abs(n)
-  const inteiro = Math.floor(abs)
-  const cent = Math.round((abs - inteiro) * 100)
+  const totalCent = Math.round(Math.abs(n) * 100)
+  const inteiro = Math.floor(totalCent / 100)
+  const cent = totalCent % 100
   const milhar = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(inteiro)
   return `${neg ? '-' : ''}R$ ${milhar},${String(cent).padStart(2, '0')}`
 }
@@ -92,21 +92,82 @@ export const MASK = {
     return partes[0] + (partes.length > 1 ? `,${partes[1].slice(0, 3)}` : '')
   },
   moeda: (v: unknown): string => {
-    const d = String(v).replace(/\D/g, '').slice(0, 15)
-    if (!d) return ''
-    return `R$ ${(Number(d) / 100).toLocaleString('pt-BR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`
+    const original = String(v ?? '')
+    if (!original.trim()) return ''
+    const neg = /^\s*-/.test(original)
+    const semSinal = original.replace(/-/g, '')
+    // Mantém só dígitos, ponto e vírgula (remove "R$", espaços e letras).
+    const limpo = semSinal.replace(/[^0-9.,]/g, '')
+    if (!limpo) return ''
+    // A primeira vírgula é o separador decimal; o resto é lixo de digitação.
+    const idx = limpo.indexOf(',')
+    let intRaw: string
+    let decRaw: string | null
+    if (idx >= 0) {
+      intRaw = limpo.slice(0, idx).replace(/\D/g, '')
+      decRaw = limpo
+        .slice(idx + 1)
+        .replace(/\D/g, '')
+        .slice(0, 2)
+    } else {
+      intRaw = limpo.replace(/\D/g, '')
+      decRaw = null
+    }
+    intRaw = intRaw.replace(/^0+(?=\d)/, '')
+    if (!intRaw) intRaw = '0'
+    // Milhar sem Number() para não perder precisão em valores grandes.
+    const intFmt = intRaw.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+    const prefixo = `${neg ? '-' : ''}R$ `
+    return decRaw === null ? `${prefixo}${intFmt}` : `${prefixo}${intFmt},${decRaw}`
   },
 } as const
 
 export type MaskKey = keyof typeof MASK
 
-/** `"R$ 1.234,56"` → `1234.56`. */
+/**
+ * Formata um valor numérico para exibição inicial em campo monetário:
+ * `50` → `"R$ 50,00"`, `1234.56` → `"R$ 1.234,56"`.
+ * Campos vazios/zerados devem decidir fora (ex.: `v ? formatar : ''`).
+ */
+export const formatarMoedaInput = (v: unknown): string => {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return ''
+  return `R$ ${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+/**
+ * `"R$ 1.234,56"` → `1234.56` · `"50"` → `50` · `"50,5"` → `50.5`.
+ *
+ * Formato brasileiro: com vírgula, pontos são milhar; sem vírgula,
+ * `"5.000"` (padrão milhar) vira `5000` e `"50.5"` (ponto decimal
+ * avulso/colado) vira `50.5` por tolerância.
+ */
 export const parseMoeda = (v: unknown): number => {
-  const d = String(v ?? '').replace(/\D/g, '')
-  return d ? Number(d) / 100 : 0
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0
+  let s = String(v ?? '').trim()
+  if (!s) return 0
+  s = s.replace(/R\$/gi, '').trim()
+  if (!s || s === '-' || s === ',' || s === '.') return 0
+  if (s.includes(',')) {
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else {
+    const t = s.replace(/[^0-9.\-]/g, '')
+    if (!t || t === '-') return 0
+    if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
+      s = t.replace(/\./g, '')
+    } else {
+      const partes = t.split('.')
+      if (partes.length > 2) {
+        const dec = partes.pop()
+        s = `${partes.join('')}.${dec}`
+      } else {
+        s = t
+      }
+    }
+  }
+  s = s.replace(/[^0-9.\-]/g, '')
+  const n = Number(s)
+  return Number.isFinite(n) ? n : 0
 }
 
 /** `"1.234,56"` → `1234.56` (formato brasileiro, SPEC §10.4). */

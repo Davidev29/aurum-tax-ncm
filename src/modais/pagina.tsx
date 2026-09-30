@@ -10,12 +10,12 @@ import type { Classificacao } from '@/domain/entities'
 import { calcularTributos } from '@/domain/services/calculo'
 import { resolverClassificacoes } from '@/infrastructure/base/classificacao-repo'
 import {
-  MASK,
   fmtCarga,
   fmtMoeda,
   fmtNcm,
   fmtNum,
   fmtPct,
+  formatarMoedaInput,
   norm,
   parseMoeda,
   parseQtd,
@@ -25,11 +25,10 @@ import { useCalculadora } from '@/store/calculadora'
 import { useProdutos } from '@/store/produtos'
 import { useSessao } from '@/store/sessao'
 import { confirmar as confirmarDialogo } from '@/store/dialogo'
-import { useSped } from '@/store/sped'
 import { toast, useUi, type FonteCalc } from '@/store/ui'
-import { Btn, Campo, Modal, Painel, Pill, Texto, TituloSecao } from '@/ui/kit'
+import type { PrefillSalvar } from '@/store/consulta'
+import { Btn, Campo, Modal, Pill, Texto, TituloSecao } from '@/ui/kit'
 import { SelectAux } from '@/ui/opcoes'
-import { ListaObservacoes, AvisoManual, AvisoNcmExtinto } from '@/ui/cartoes'
 
 /* ------------------------------------------------------- salvar classe ---- */
 
@@ -59,18 +58,23 @@ export function ModalSalvarClass({
   aberto,
   onFechar,
   classificacao,
+  inicial,
 }: {
   aberto: boolean
   onFechar: () => void
   classificacao: Classificacao | null
+  /** Pré-preenchimento (edição vinda da tela Produtos). */
+  inicial?: PrefillSalvar | null
 }) {
   const [form, setForm] = useState<FormSalvarClass>(FORM_INICIAL)
   const [salvando, setSalvando] = useState(false)
+  const editando = inicial?.editarId != null
 
-  // Abertura sempre parte de um formulário limpo (paridade com a v1).
+  // Abertura sempre parte de um formulário limpo — ou do pré-preenchimento
+  // da edição (paridade com a v1).
   useEffect(() => {
-    if (aberto) setForm(FORM_INICIAL)
-  }, [aberto])
+    if (aberto) setForm({ ...FORM_INICIAL, ...(inicial ?? {}) })
+  }, [aberto, inicial])
 
   if (!classificacao) return null
 
@@ -106,7 +110,9 @@ export function ModalSalvarClass({
 
     setSalvando(true)
     try {
-      let rSalvar = await salvarProduto(entrada)
+      // Em edição (`editarId`) atualiza o registro original; no cadastro faz
+      // upsert por SKU com confirmação de sobrescrita.
+      let rSalvar = await salvarProduto(entrada, editando ? { editarId: inicial?.editarId ?? null } : undefined)
       if (!rSalvar.ok && rSalvar.motivo.includes('Já existe o SKU')) {
         const sobrescrever = await confirmarDialogo('Sobrescrever produto?', rSalvar.motivo, {
           icone: '⚠',
@@ -121,7 +127,7 @@ export function ModalSalvarClass({
         return
       }
       await useProdutos.getState().carregar()
-      toast('Produto salvo com a classificação da Reforma.', 'ok')
+      toast(editando ? 'Produto atualizado.' : 'Produto salvo com a classificação da Reforma.', 'ok')
       onFechar()
     } catch (e) {
       toast(`Erro: ${e instanceof Error ? e.message : String(e)}`, 'err')
@@ -138,14 +144,18 @@ export function ModalSalvarClass({
     <Modal
       aberto={aberto}
       onFechar={onFechar}
-      titulo="💾 Salvar classificação"
-      subtitulo="A Reforma já está classificada. Informe os demais dados."
+      titulo={editando ? '✏️ Editar produto' : '💾 Salvar classificação'}
+      subtitulo={
+        editando
+          ? 'Ajuste os dados e confirme para atualizar o produto.'
+          : 'A Reforma já está classificada. Informe os demais dados.'
+      }
       largura="max-w-3xl"
       rodape={
         <>
           <Btn onClick={onFechar}>Cancelar</Btn>
           <Btn variante="primary" disabled={salvando} onClick={() => void confirmar()}>
-            💾 Salvar produto
+            {editando ? '💾 Salvar alterações' : '💾 Salvar produto'}
           </Btn>
         </>
       }
@@ -165,8 +175,8 @@ export function ModalSalvarClass({
             {[
               ['CST', cl.cst],
               ['cClassTrib', cl.cClassTrib],
-              ['Red. IBS', fmtPct(redIBS)],
-              ['Red. CBS', fmtPct(redCBS)],
+              ['Redução IBS', fmtPct(redIBS)],
+              ['Redução CBS', fmtPct(redCBS)],
             ].map(([rot, val]) => (
               <div key={rot} className="rounded-lg bg-white p-2 dark:bg-slate-900">
                 <div className="text-[9px] font-bold uppercase text-slate-500">{rot}</div>
@@ -439,30 +449,34 @@ export function ModalCalcCustom({
                       key={cl.id}
                       type="button"
                       onClick={() => setEscolhida(cl)}
-                      className={`mb-2 block w-full cursor-pointer rounded-lg border-2 p-2.5 text-left transition ${
+                      aria-pressed={sel}
+                      className={`block w-full cursor-pointer rounded-xl border-2 p-3 text-left transition ${
                         sel
-                          ? 'border-brand-500 bg-brand-50/70 dark:border-aurum-700 dark:bg-brand-900/30'
-                          : 'border-slate-200 bg-white hover:border-brand-300 dark:border-slate-700 dark:bg-slate-900'
+                          ? 'border-brand-500 bg-brand-50/70 shadow-card dark:border-aurum-500 dark:bg-brand-900/30'
+                          : 'border-[var(--line)] bg-white hover:border-brand-300 dark:bg-slate-900'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-mono text-xs font-bold">
+                      <div className="flex items-center gap-2">
+                        <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 font-mono text-[10px] font-black ${sel ? 'border-brand-600 bg-brand-600 text-white dark:border-aurum-400 dark:bg-aurum-400 dark:text-brand-950' : 'border-slate-300 text-transparent'}`}>
+                          ✓
+                        </span>
+                        <span className="font-mono text-xs font-black">
                           CST {cl.cst} · {cl.cClassTrib}
                         </span>
                         <span
-                          className="pill bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          className="pill ml-auto bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
                           title={`Redução de alíquota IBS/CBS aplicada sobre a referência (${fmtPct(rateIBS)} / ${fmtPct(rateCBS)})`}
                         >
-                          Red. {fmtPct(redIBS)} / {fmtPct(redCBS)}
+                          Redução: −{fmtPct(redIBS)} / −{fmtPct(redCBS)}
                         </span>
                       </div>
-                      <div className="mt-1 text-xs">
+                      <div className="mt-1.5 text-xs font-medium leading-snug">
                         {rr.descricaoCClassTrib || cl.baseLegal || '—'}
                       </div>
-                      <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-                        <span>Opção {i + 1}</span>
-                        <span className="font-mono font-semibold text-slate-500 dark:text-slate-400">
-                          Alíquota efetiva {fmtCarga(aliqIBS)} / {fmtCarga(aliqCBS)}
+                      <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-dashed border-slate-200 pt-1.5 text-[10px] text-slate-400 dark:border-slate-700">
+                        <span className="font-bold uppercase tracking-wide">Opção {i + 1}</span>
+                        <span className="font-mono font-bold text-brand-700 dark:text-aurum-200">
+                          Efetiva {fmtCarga(aliqIBS)} / {fmtCarga(aliqCBS)}
                         </span>
                       </div>
                     </button>
@@ -513,53 +527,63 @@ function PreviaCalculo({
   const base = (parseQtd(qtd) || 0) * parseMoeda(valor)
   const c = calcularTributos(base, redIBS, redCBS, rateIBS, rateCBS)
   const temReducao = (Number(redIBS) || 0) > 0 || (Number(redCBS) || 0) > 0
+  const totalTributos = c.total
+  const totalItem = c.base + c.total
+  const pctIBS = totalTributos > 0 ? (c.vIBS / totalTributos) * 100 : 50
+  const temValor = c.base > 0
 
   return (
-    <div className="rounded-xl border border-brand-200 bg-brand-50/50 p-3 dark:border-aurum-900 dark:bg-brand-950/20">
-      <div className="mb-2 flex items-center gap-2">
-        <span className="text-base">🧮</span>
-        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Prévia
-        </h4>
+    <div className="overflow-hidden rounded-2xl border border-[var(--line)]">
+      <div className="flex items-center gap-2 bg-gradient-to-r from-brand-50/90 to-white px-4 py-2.5 dark:from-brand-950/40 dark:to-slate-900">
+        <span className="calc-step text-slate-500"><span className="calc-step-dot">3</span> Prévia do item</span>
         {temReducao ? (
           <span className="ml-auto font-mono text-[10px] text-slate-500" title="Alíquota de referência já com a redução aplicada; BC = valor cheio da operação">
             Alíq. {fmtCarga(c.aliqIBS)} / {fmtCarga(c.aliqCBS)}
           </span>
-        ) : null}
+        ) : (
+          <span className="ml-auto font-mono text-[10px] text-slate-400">Alíq. cheia</span>
+        )}
       </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div>
-          <div className="text-[10px] font-bold uppercase text-slate-500">Operação</div>
-          <div className="font-mono text-sm font-bold">{fmtMoeda(c.base)}</div>
+      <div className="p-4">
+        <div className="calc-bar" aria-hidden="true">
+          <span className="calc-bar-ibs" style={{ width: `${pctIBS}%` }} />
+          <span className="calc-bar-cbs" style={{ width: `${100 - pctIBS}%` }} />
         </div>
-        <div>
-          <div className="text-[10px] font-bold uppercase text-slate-500">
-            IBS ({fmtCarga(c.aliqIBS)})
+        <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
+          <div className="calc-kpi">
+            <div className="text-[10px] font-bold uppercase text-slate-500">Operação</div>
+            <div className="font-mono text-sm font-black">{fmtMoeda(c.base)}</div>
+            <div className="font-mono text-[10px] text-slate-400">BC cheia</div>
           </div>
-          <div className="font-mono text-sm font-bold text-brand-700 dark:text-aurum-200">
-            {fmtMoeda(c.vIBS)}
+          <div className="calc-kpi">
+            <div className="text-[10px] font-bold uppercase text-slate-500">
+              Valor do IBS · {fmtCarga(c.aliqIBS)}
+            </div>
+            <div className="font-mono text-sm font-black text-brand-700 dark:text-aurum-200">
+              {fmtMoeda(c.vIBS)}
+            </div>
+            <div className="font-mono text-[10px] text-slate-400">azul na barra</div>
           </div>
-        </div>
-        <div>
-          <div className="text-[10px] font-bold uppercase text-slate-500">
-            CBS ({fmtCarga(c.aliqCBS)})
+          <div className="calc-kpi">
+            <div className="text-[10px] font-bold uppercase text-slate-500">
+              Valor da CBS · {fmtCarga(c.aliqCBS)}
+            </div>
+            <div className="font-mono text-sm font-black text-brand-700 dark:text-aurum-200">
+              {fmtMoeda(c.vCBS)}
+            </div>
+            <div className="font-mono text-[10px] text-slate-400">dourado na barra</div>
           </div>
-          <div className="font-mono text-sm font-bold text-brand-700 dark:text-aurum-200">
-            {fmtMoeda(c.vCBS)}
-          </div>
-        </div>
-        <div>
-          <div className="text-[10px] font-bold uppercase text-slate-500">Total</div>
-          <div className="font-mono text-sm font-bold text-emerald-700 dark:text-emerald-400">
-            {fmtMoeda(c.total)}
-          </div>
-          <div className="font-mono text-[10px] text-slate-500">
-            carga {base > 0 ? fmtCarga(c.carga) : fmtCarga(rateIBS + rateCBS)}
+          <div className="calc-hero rounded-xl p-3">
+            <div className="calc-hero-rotulo">Total item · operação + tributos</div>
+            <div className="calc-hero-valor text-lg text-white">{fmtMoeda(totalItem)}</div>
+            <div className="font-mono text-[10px] text-white/70">
+              tributos {fmtMoeda(totalTributos)} · carga {temValor ? fmtCarga(c.carga) : fmtCarga(rateIBS + rateCBS)}
+            </div>
           </div>
         </div>
       </div>
       {regraGeral ? (
-        <div className="mt-2 text-[11px] text-slate-600 dark:text-slate-400">
+        <div className="border-t border-[var(--line)] bg-amber-50/60 px-4 py-2 text-[11px] text-slate-600 dark:bg-amber-950/20 dark:text-slate-400">
           Regra geral: sem redução — BC cheia, alíquota cheia (
           {fmtCarga(rateIBS)} / {fmtCarga(rateCBS)}).
         </div>
@@ -647,6 +671,8 @@ function dadosCalc(fonte: FonteCalc): DadosCalc {
  * pesquisa, quem clica em "Adicionar à calculadora" ganha um modal com a
  * quantidade, o valor unitário e a prévia do IBS/CBS daquele item — o
  * cálculo acontece no contexto do produto que motivou o clique.
+ * Ao confirmar, o item é adicionado e o usuário é levado à Calculadora
+ * para conferência imediata (sem isso, parecia que nada tinha acontecido).
  *
  * Registrado como modal global: qualquer tela abre com
  * `useUi.getState().abrirCalc(fonte)`.
@@ -670,7 +696,7 @@ export function ModalCalculadora() {
     setUltima(fonte)
     const p = fonte.tipo === 'produto' ? fonte.produto : null
     setQtd(p?.quantidade ? fmtNum(p.quantidade) : '1,000')
-    setValor(p?.valorUnitario ? MASK.moeda(String(Math.round(p.valorUnitario * 100))) : '')
+    setValor(p?.valorUnitario ? formatarMoedaInput(p.valorUnitario) : '')
   }, [fonte])
 
   const fechar = () => useUi.getState().abrirCalc(null)
@@ -688,7 +714,9 @@ export function ModalCalculadora() {
       adicionarClassificacao(visivel.classificacao, { quantidade, valorUnitario })
       toast('Item adicionado à calculadora.', 'ok')
     }
-    fechar()
+    // Gestão da interação: confirmar leva à Calculadora para conferência
+    // imediata do item (antes o modal só fechava e parecia que nada aconteceu).
+    trocarView('calculadora')
   }
 
   return (
@@ -698,7 +726,7 @@ export function ModalCalculadora() {
       titulo="🧮 Adicionar à calculadora"
       subtitulo={
         dados
-          ? `NCM ${fmtNcm(dados.ncm)} · defina quantidade e valor antes de confirmar`
+          ? `NCM ${fmtNcm(dados.ncm)} · confirme para adicionar e ver na Calculadora`
           : 'Defina quantidade e valor antes de confirmar'
       }
       largura="max-w-2xl"
@@ -736,8 +764,8 @@ export function ModalCalculadora() {
               {[
                 ['CST', dados.cst || '—'],
                 ['cClassTrib', dados.cClassTrib || '—'],
-                ['Red. IBS', fmtPct(dados.redIBS)],
-                ['Red. CBS', fmtPct(dados.redCBS)],
+                ['Redução IBS', fmtPct(dados.redIBS)],
+                ['Redução CBS', fmtPct(dados.redCBS)],
               ].map(([rot, val]) => (
                 <div key={rot} className="rounded-lg bg-white p-2 dark:bg-slate-900">
                   <div className="text-[9px] font-bold uppercase text-slate-500">{rot}</div>
@@ -787,211 +815,9 @@ export function ModalCalculadora() {
 
           <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
             O item entra na lista da Calculadora com as reduções de alíquota congeladas na
-            adição — reimportar a base não altera esta simulação.
+            adição — reimportar a base não altera esta simulação. Ao confirmar, você é
+            levado à Calculadora para conferir o item.
           </p>
-        </div>
-      ) : null}
-    </Modal>
-  )
-}
-
-/* ------------------------------------------------------- detalhe SPED ------ */
-
-export function ModalDetalheSped() {
-  const item = useSped((s) => s.detalheAberto)
-  const fechar = useSped((s) => s.fecharDetalhe)
-  const salvarProdutoSped = useSped((s) => s.salvarProduto)
-  const [processando, setProcessando] = useState(false)
-
-  const ehResumo = item ? '_isResumo' in item : false
-  const c = item?.classificacao
-  const r = c?.resumo
-  const cstDet = c?.cstDetalhes
-  const observacoes = item?.observacoes ?? []
-  const nomenExtinto =
-    item && !ehResumo ? (item as { nomenclatura?: import('@/domain/entities').NomenclaturaNcm | null }).nomenclatura ?? null : null
-
-  const confirmar = async () => {
-    if (!item) return
-    if (ehResumo) {
-      toast('Análise resumida não permite salvar produtos individuais (falta NCM).', 'warn')
-      return
-    }
-    setProcessando(true)
-    try {
-      await salvarProdutoSped(item)
-    } finally {
-      setProcessando(false)
-    }
-  }
-
-  return (
-    <Modal
-      aberto={Boolean(item)}
-      onFechar={fechar}
-      titulo={item ? `Código: ${item.codItem}` : ''}
-      subtitulo={item ? item.descricaoProduto : undefined}
-      largura="max-w-4xl"
-      rodape={
-        <>
-          <Btn onClick={fechar}>Fechar</Btn>
-          {!ehResumo ? (
-            <Btn variante="primary" disabled={processando} onClick={() => void confirmar()}>
-              💾 Salvar produto
-            </Btn>
-          ) : null}
-        </>
-      }
-    >
-      {item && c ? (
-        <div className="space-y-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Pill cor="brand">Código: {item.codItem}</Pill>
-            <Pill cor="emerald">SAÍDA</Pill>
-            {item.tipoDoc ? <Pill>Doc {item.tipoDoc}</Pill> : null}
-            <Pill>Nota: {item.numDoc}</Pill>
-            <Pill>Data: {item.data}</Pill>
-          </div>
-
-          <div>
-            <h3 className="text-lg font-bold">{item.descricaoProduto}</h3>
-            <div className="mt-1 font-mono text-sm text-brand-700 dark:text-aurum-200">
-              {fmtNcm(item.ncm)}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/40">
-              <div className="text-[10px] font-bold uppercase text-slate-500">Quantidade</div>
-              <div className="font-mono text-lg font-bold">{fmtNum(item.qtd)}</div>
-              <div className="text-[10px] text-slate-500">{item.unid}</div>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/40">
-              <div className="text-[10px] font-bold uppercase text-slate-500">Valor Total</div>
-              <div className="font-mono text-lg font-bold">{fmtMoeda(item.vlItem)}</div>
-              <div className="text-[10px] text-slate-500">Base de cálculo</div>
-            </div>
-            <div className="rounded-xl bg-brand-50 p-3 dark:bg-brand-950/30">
-              <div className="text-[10px] font-bold uppercase text-brand-600 dark:text-aurum-200">
-                IBS Estimado
-              </div>
-              <div className="font-mono text-lg font-bold text-brand-700 dark:text-aurum-200">
-                {fmtMoeda(item.ibs)}
-              </div>
-              <div className="text-[10px] text-slate-500">Redução: {fmtPct(item.redIBS)}</div>
-            </div>
-            <div className="rounded-xl bg-brand-50 p-3 dark:bg-brand-950/30">
-              <div className="text-[10px] font-bold uppercase text-brand-600 dark:text-aurum-200">
-                CBS Estimado
-              </div>
-              <div className="font-mono text-lg font-bold text-brand-700 dark:text-aurum-200">
-                {fmtMoeda(item.cbs)}
-              </div>
-              <div className="text-[10px] text-slate-500">Redução: {fmtPct(item.redCBS)}</div>
-            </div>
-          </div>
-
-          {/*
-            ICMS do regime anterior: no SPED o item traz CST/CFOP, base,
-            alíquota e valor — informações que a Reforma não substitui e que
-            sustentam o crédito de entrada. Só renderiza quando há destaque.
-          */}
-          {item.cstIcms || item.vlIcms || item.vlBcIcms ? (
-            <Painel className="border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-950/30">
-              <h4 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                <span>🧾</span> ICMS (regime anterior)
-              </h4>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-                <div>
-                  <div className="text-[10px] font-bold uppercase text-slate-500">CST ICMS</div>
-                  <div className="font-mono text-sm font-bold">{item.cstIcms || '—'}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase text-slate-500">CFOP</div>
-                  <div className="font-mono text-sm font-bold">{item.cfop || '—'}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase text-slate-500">Base de cálculo</div>
-                  <div className="font-mono text-sm font-bold">{fmtMoeda(item.vlBcIcms)}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase text-slate-500">Alíquota</div>
-                  <div className="font-mono text-sm font-bold">{fmtPct(item.aliqIcms)}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase text-slate-500">Valor ICMS</div>
-                  <div className="font-mono text-sm font-bold text-slate-700 dark:text-slate-200">
-                    {fmtMoeda(item.vlIcms)}
-                  </div>
-                </div>
-              </div>
-            </Painel>
-          ) : null}
-
-          {item.cstPis || item.cstCofins ? (
-            <Painel className="border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-800 dark:bg-amber-950/20">
-              <h4 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                <span>📊</span> Tributação PIS/COFINS (pré-reforma)
-              </h4>
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                <div>
-                  <div className="text-[10px] font-bold uppercase text-slate-500">CST PIS</div>
-                  <div className="font-mono text-sm font-bold">{item.cstPis || '—'}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase text-slate-500">Valor PIS</div>
-                  <div className="font-mono text-sm font-bold text-red-600 dark:text-red-400">
-                    {fmtMoeda(item.vlPis ?? 0)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase text-slate-500">CST COFINS</div>
-                  <div className="font-mono text-sm font-bold">{item.cstCofins || '—'}</div>
-                </div>
-                <div>
-                  <div className="text-[10px] font-bold uppercase text-slate-500">Valor COFINS</div>
-                  <div className="font-mono text-sm font-bold text-red-600 dark:text-red-400">
-                    {fmtMoeda(item.vlCofins ?? 0)}
-                  </div>
-                </div>
-              </div>
-            </Painel>
-          ) : null}
-
-          <Painel className="border border-brand-200 bg-brand-50/50 p-4 dark:border-aurum-900 dark:bg-brand-950/20">
-            <h4 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-brand-600 dark:text-aurum-200">
-              <span>⚡</span> Classificação Tributária da Reforma
-            </h4>
-            {('manual' in (item as object) && (item as { manual?: boolean }).manual) || c.manual ? (
-              <div className="mb-3">
-                <AvisoManual compact fonteDescricao={c.manual?.fonteDescricao} fonteUrl={c.manual?.fonteUrl} />
-              </div>
-            ) : null}
-            {nomenExtinto?.dataFim ? (
-              <div className="mb-3">
-                <AvisoNcmExtinto nomenclatura={nomenExtinto} />
-              </div>
-            ) : null}
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div>
-                <div className="text-[10px] font-bold uppercase text-slate-500">CST</div>
-                <div className="font-mono text-sm font-bold">{c.cst || '—'}</div>
-                <div className="text-[10px] text-slate-500">{cstDet?.descricao ?? ''}</div>
-              </div>
-              <div>
-                <div className="text-[10px] font-bold uppercase text-slate-500">cClassTrib</div>
-                <div className="font-mono text-sm font-bold">{c.cClassTrib || '—'}</div>
-              </div>
-              <div className="col-span-2">
-                <div className="text-[10px] font-bold uppercase text-slate-500">Classificação</div>
-                <div className="text-xs font-semibold">
-                  {r?.descricaoCClassTrib || c.baseLegal || '—'}
-                </div>
-              </div>
-            </div>
-          </Painel>
-
-          <ListaObservacoes itens={observacoes} />
         </div>
       ) : null}
     </Modal>

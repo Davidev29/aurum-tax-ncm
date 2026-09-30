@@ -5,6 +5,8 @@
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
+import { BarraAnimada, Entrada, Expansivel, Item, Lista, Secao } from '@/ui/motion'
 import {
   ArcElement,
   BarElement,
@@ -18,8 +20,8 @@ import {
   Tooltip,
 } from 'chart.js'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
-import { ROWS_LIMIT } from '@/domain/constants'
 import { EMITENTE_PADRAO } from '@/domain/entities'
+import { rotuloAnexoOficial } from '@/domain/constants/tributarios'
 import { fmtCarga, fmtCnpj, fmtMoeda, fmtNcm, fmtNum } from '@/domain/services/format'
 import { totaisNotas } from '@/application/notas-xml'
 import {
@@ -75,8 +77,27 @@ export function NfeXml() {
   if (!ativa) return <SemEmpresa />
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 pb-4">
-      <PainelImportacao />
+    <div className="mx-auto w-full max-w-7xl space-y-6 pb-6">
+      <Entrada>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.14em] text-brand-600 dark:text-aurum-200">
+              Notas fiscais · XML
+            </p>
+            <h1 className="mt-1 text-xl font-black tracking-tight sm:text-2xl">
+              Importação e análise da Reforma
+            </h1>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              Importe os XMLs, acompanhe a apuração de IBS/CBS e explore fornecedores,
+              produtos e notas — tudo vinculado à empresa ativa.
+            </p>
+          </div>
+          <Pill cor="brand">LC 214/2025 · IBS + CBS</Pill>
+        </div>
+      </Entrada>
+      <Entrada atraso={0.06}>
+        <PainelImportacao />
+      </Entrada>
       <ResumoImportacao />
       <PainelHistorico />
     </div>
@@ -117,18 +138,18 @@ function PainelImportacao() {
   }
 
   return (
-    <Painel>
-      <div className="border-b border-slate-100 p-5 dark:border-slate-800">
+    <Painel className="overflow-hidden">
+      <div className="border-b border-[var(--line)] bg-gradient-to-r from-brand-50/80 to-white px-5 py-4 dark:from-brand-950/30 dark:to-slate-900">
         <h2 className="flex items-center gap-2.5 text-base font-bold">
           <IconeBadge nome="nota" tom="brand" /> Importar XML (NF-e / NFC-e)
         </h2>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        <p className="mt-1 pl-11 text-xs text-slate-500 dark:text-slate-400">
           Os arquivos são guardados no computador e as notas ficam vinculadas à empresa ativa.
           Chaves já importadas são ignoradas sem duplicar.
         </p>
       </div>
       <div className="space-y-4 p-5">
-        <div
+        <motion.div
           role="button"
           tabIndex={0}
           onClick={() => !processando && inputRef.current?.click()}
@@ -145,9 +166,12 @@ function PainelImportacao() {
             setSobre(false)
             enviar(e.dataTransfer.files)
           }}
-          className={`group cursor-pointer rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-all ${
+          animate={sobre ? { scale: 1.01 } : { scale: 1 }}
+          whileTap={processando ? undefined : { scale: 0.99 }}
+          transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+          className={`group cursor-pointer rounded-2xl border-2 border-dashed px-6 py-9 text-center transition-colors ${
             sobre
-              ? 'border-brand-500 bg-brand-50/70'
+              ? 'border-brand-500 bg-brand-50/70 shadow-card'
               : 'border-slate-300 bg-slate-50 hover:border-brand-500 hover:bg-brand-50/50 dark:border-slate-700 dark:bg-slate-950/40'
           } ${processando ? 'pointer-events-none opacity-50' : ''}`}
         >
@@ -162,16 +186,20 @@ function PainelImportacao() {
               e.target.value = ''
             }}
           />
-          <div className="mx-auto grid place-items-center transition-transform group-hover:scale-110">
+          <motion.div
+            className="mx-auto grid place-items-center"
+            animate={sobre ? { scale: 1.15, y: -2 } : { scale: 1, y: 0 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+          >
             <IconeBadge nome="nota" tom="brand" tamanho="lg" />
-          </div>
+          </motion.div>
           <p className="mt-3 text-sm font-semibold">
             Arraste os XMLs <span className="text-brand-600 dark:text-aurum-200">ou clique para escolher</span>
           </p>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
             Aceita vários arquivos .xml de uma vez (NF-e mod. 55 e NFC-e mod. 65)
           </p>
-        </div>
+        </motion.div>
 
         {processando ? (
           <div className="space-y-1.5">
@@ -199,37 +227,58 @@ function CampoTaxaNfe({ tributo }: { tributo: 'IBS' | 'CBS' }) {
   const valor = useNfe((s) => (tributo === 'IBS' ? s.refIBS : s.refCBS))
   const setRef = useNfe((s) => s.setRef)
   const [texto, setTexto] = useState(() => String(valor))
+  const aplicar = (t: string) => {
+    setTexto(t)
+    setRef(tributo, Number(t.replace(',', '.')) || 0)
+  }
 
   return (
-    <label className="block w-28">
-      <span className="field-label">{tributo} (%)</span>
-      <Texto
-        type="number"
-        step="0.01"
+    <div className="calc-kpi min-w-32 flex-1 sm:max-w-44">
+      <span className="field-label">{tributo} ref. (%)</span>
+      <div className="flex items-baseline gap-1">
+        <input
+          type="number"
+          step="0.01"
+          min={0}
+          max={100}
+          value={texto}
+          onChange={(e) => aplicar(e.target.value.replace(/[^\d.,]/g, ''))}
+          aria-label={`Alíquota de referência ${tributo}`}
+          className="w-full bg-transparent p-0 font-mono text-xl font-black outline-none"
+        />
+        <span className="font-mono text-xs font-bold text-slate-400">%</span>
+      </div>
+      <input
+        type="range"
         min={0}
-        max={100}
-        mono
-        className="num-input"
-        value={texto}
-        onChange={(e) => {
-          const t = e.target.value.replace(/[^\d.,]/g, '')
-          setTexto(t)
-          setRef(tributo, Number(t.replace(',', '.')) || 0)
-        }}
+        max={30}
+        step={0.05}
+        value={Math.min(30, Number(texto.replace(',', '.')) || 0)}
+        onChange={(e) => aplicar(e.target.value)}
+        className="calc-range"
+        aria-label={`Ajuste fino ${tributo}`}
       />
-    </label>
+    </div>
   )
 }
 
 function ResumoImportacao() {
   const resumo = useNfe((s) => s.ultimoResumo)
-  if (!resumo) return null
   return (
-    <div className={`rounded-2xl border p-4 text-xs leading-relaxed ${
-      resumo.erros.length
-        ? 'border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/30'
-        : 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30'
-    }`}>
+    <AnimatePresence initial={false}>
+      {resumo ? (
+        <motion.div
+          key={`${resumo.novas}-${resumo.duplicadas}-${resumo.quarentena}-${resumo.erros.length}`}
+          initial={{ opacity: 0, y: -10, scale: 0.99 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -8, scale: 0.99 }}
+          transition={{ duration: 0.3, ease: [0.22, 0.9, 0.3, 1] }}
+          className={`rounded-2xl border p-4 text-xs leading-relaxed ${
+            resumo.erros.length
+              ? 'border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/30'
+              : 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30'
+          }`}
+        >
       <div className="font-bold">
         📥 {resumo.novas} nota(s) importada(s)
         {resumo.duplicadas ? ` · ${resumo.duplicadas} duplicada(s) ignorada(s)` : ''}
@@ -244,7 +293,9 @@ function ResumoImportacao() {
           ))}
         </ul>
       ) : null}
-    </div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
   )
 }
 
@@ -413,40 +464,54 @@ function PainelHistorico() {
   const primeiraCarga = carregandoHistorico && !notas.length
 
   return (
-    <div className="relative space-y-8" aria-busy={carregandoHistorico}>
+    <div className="relative space-y-6" aria-busy={carregandoHistorico}>
       <ModalCarregamentoNotas visivel={carregandoHistorico} primeiraCarga={primeiraCarga} />
       {primeiraCarga ? (
         <EsqueletoHistorico />
       ) : (
-      <div className={`xml-stack ${carregandoHistorico ? 'pointer-events-none select-none opacity-60 saturate-50' : ''}`}>
-      <div className="grid grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-6">
-        <CartaoStat rotulo="Notas" valor={tot.qtd} />
-        <CartaoStat rotulo="Entradas" valor={tot.entradas} />
-        <CartaoStat rotulo="Saídas" valor={tot.saidas} />
-        <CartaoStat rotulo="Base total" valor={fmtMoeda(tot.base)} />
-        <CartaoStat rotulo="IBS + CBS" valor={fmtMoeda(tot.trib)} cor="text-brand-700 dark:text-aurum-200" />
-        <CartaoStat rotulo="Carga média" valor={fmtCarga(tot.carga)} />
-      </div>
+      <div className={`xml-stack xml-stack--harmonica ${carregandoHistorico ? 'pointer-events-none select-none opacity-60 saturate-50' : ''}`}>
+      <Lista className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6" intervalo={0.05}>
+        <Item><CartaoStat rotulo="Notas" valor={tot.qtd} /></Item>
+        <Item><CartaoStat rotulo="Entradas" valor={tot.entradas} /></Item>
+        <Item><CartaoStat rotulo="Saídas" valor={tot.saidas} /></Item>
+        <Item><CartaoStat rotulo="Base total" valor={fmtMoeda(tot.base)} /></Item>
+        <Item><CartaoStat rotulo="IBS + CBS" valor={fmtMoeda(tot.trib)} cor="text-brand-700 dark:text-aurum-200" /></Item>
+        <Item><CartaoStat rotulo="Carga média" valor={fmtCarga(tot.carga)} /></Item>
+      </Lista>
 
-      <ApuracaoReforma apuracao={apuracao} />
+      <Secao id="xml-filtros">
+        <Filtros />
+      </Secao>
+      <Secao id="xml-notas">
+        <TabelaNotas notas={notas} onVerDanfe={setDanfeNota} />
+      </Secao>
 
-      <GraficosNfe notas={notas} />
+      <Secao>
+        <ApuracaoReforma apuracao={apuracao} />
+      </Secao>
 
-      <IndicadoresXml notas={notas} />
+      <Secao>
+        <GraficosNfe notas={notas} />
+      </Secao>
 
-      <ComparativoMensal notas={notas} />
+      <Secao>
+        <IndicadoresXml notas={notas} />
+      </Secao>
 
-      <RegimeAntigoVsNovo notas={notas} />
+      <Secao>
+        <ComparativoMensal notas={notas} />
+      </Secao>
 
-      <DistribuicaoReforma notas={notas} />
+      <Secao>
+        <RegimeAntigoVsNovo notas={notas} />
+      </Secao>
+
+      <Secao>
+        <DistribuicaoReforma notas={notas} />
+      </Secao>
 
       {notas.length ? (
-        /*
-          Seção de ações do lote: Painel próprio com cabeçalho + descrição à
-          esquerda e botões alinhados à direita (uma linha no desktop, quebra
-          limpa no mobile). Antes eram três botões soltos na página — sem
-          hierarquia visual e desalinhados em telas estreitas.
-        */
+        <Secao>
         <Painel className="overflow-hidden p-0">
           <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
             <div className="min-w-0">
@@ -454,7 +519,7 @@ function PainelHistorico() {
                 <IconeBadge nome="caixa" tom="brand" />
                 Cadastro de produtos
               </h3>
-              <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              <p className="mt-1 pl-9 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
                 Vincula os itens das <strong>{notas.length} nota(s) filtrada(s)</strong> ao cadastro (NCM, CFOP,
                 CST ICMS, PIS e COFINS), cria os que faltam e atualiza preço/quantidade.
                 Exporte antes se quiser conferir a lista.
@@ -475,27 +540,34 @@ function PainelHistorico() {
             </div>
           </div>
         </Painel>
+        </Secao>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 lg:h-[320px] lg:grid-cols-3 lg:items-stretch">
+      <Secao>
+      <div className="grid grid-cols-1 gap-4 lg:h-[340px] lg:grid-cols-3 lg:items-stretch">
         <Calendario />
         <div className="lg:col-span-2 lg:min-h-0">
           <RankingFornecedores selecionado={fornecedorAberto} onSelecionar={setFornecedorAberto} />
         </div>
       </div>
+      </Secao>
 
-      <TopProdutosNfe notas={notas} />
+      <Secao>
+        <TopProdutosNfe notas={notas} />
+      </Secao>
 
-      <TopNcmCfop notas={notas} />
+      <Secao>
+        <TopNcmCfop notas={notas} />
+      </Secao>
 
-      <QualidadeXml notas={notas} />
+      <Secao>
+        <QualidadeXml notas={notas} />
+      </Secao>
 
       {fornecedorAberto ? (
         <NotasFornecedor cnpj={fornecedorAberto} onFechar={fecharFornecedor} onVerDanfe={setDanfeNota} />
       ) : null}
 
-      <Filtros />
-      <TabelaNotas notas={notas} onVerDanfe={setDanfeNota} />
       <ModalDetalheNfe onVerDanfe={setDanfeNota} />
       {danfeNota ? <DanfeModal nota={danfeNota} onFechar={() => setDanfeNota(null)} /> : null}
       </div>
@@ -544,23 +616,63 @@ function PainelHistorico() {
  */
 function ApuracaoReforma({ apuracao: a }: { apuracao: ApuracaoIbsCbs }) {
   const temMovimento = a.resultado !== 'sem-movimento'
+  const cobertura = a.debitoTotal > 0 ? Math.min(100, (a.creditoTotal / a.debitoTotal) * 100) : 0
+  const vereditoTom =
+    a.resultado === 'a-pagar' ? 'red' : a.resultado === 'saldo-credor' ? 'emerald' : 'slate'
   return (
     <Painel className="overflow-hidden p-0">
-      <div className="border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
-        <h3 className="flex items-center gap-2 text-sm font-bold">
-          <IconeBadge nome="calculadora" tom="brand" />
-          Apuração IBS / CBS
-        </h3>
-        <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
-          Débitos das saídas − créditos das entradas · {a.qtdSaidas} saída(s) e{' '}
-          {a.qtdEntradasApropriaveis + a.qtdEntradasBloqueadas + a.qtdEntradasNaoConfirmadas} entrada(s) no filtro
-        </p>
+      <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] bg-gradient-to-r from-brand-50/80 to-white px-5 py-4 dark:from-brand-950/30 dark:to-slate-900">
+        <IconeBadge nome="calculadora" tom="brand" tamanho="lg" />
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-black tracking-tight">
+            Apuração IBS / CBS
+          </h3>
+          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+            Débitos das saídas − créditos das entradas · {a.qtdSaidas} saída(s) e{' '}
+            {a.qtdEntradasApropriaveis + a.qtdEntradasBloqueadas + a.qtdEntradasNaoConfirmadas} entrada(s) no filtro
+          </p>
+        </div>
+        <span className={`pill ${vereditoTom === 'red' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' : vereditoTom === 'emerald' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+          {a.resultado === 'a-pagar' ? 'A PAGAR' : a.resultado === 'saldo-credor' ? 'SALDO CREDOR' : a.resultado === 'zerado' ? 'ZERADO' : 'SEM MOVIMENTO'}
+        </span>
       </div>
-      <div className="p-5">
+      <div className="space-y-4 p-5">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          <div className="calc-kpi border-l-4 !border-l-red-400">
+            <div className="text-[10px] font-bold uppercase text-slate-500">Débitos · saídas</div>
+            <div className="font-mono text-lg font-black">{fmtMoeda(a.debitoTotal)}</div>
+            <div className="font-mono text-[10px] text-slate-400">IBS {fmtMoeda(a.debitoIBS)} + CBS {fmtMoeda(a.debitoCBS)}</div>
+            <div className="mt-0.5 text-[10px] text-slate-400">{a.qtdSaidas} nota(s) · base {fmtMoeda(a.baseSaidas)}</div>
+          </div>
+          <div className="calc-kpi border-l-4 !border-l-emerald-500">
+            <div className="text-[10px] font-bold uppercase text-slate-500">Créditos · entradas</div>
+            <div className="font-mono text-lg font-black text-emerald-700 dark:text-emerald-400">{fmtMoeda(a.creditoTotal)}</div>
+            <div className="font-mono text-[10px] text-slate-400">IBS {fmtMoeda(a.creditoIBS)} + CBS {fmtMoeda(a.creditoCBS)}</div>
+            <div className="mt-0.5 text-[10px] text-slate-400">{a.qtdEntradasApropriaveis} nota(s) · base {fmtMoeda(a.baseEntradas)}</div>
+          </div>
+          <div className="calc-hero rounded-xl p-3">
+            <div className="calc-hero-rotulo">Saldo apurado</div>
+            <div className="calc-hero-valor text-2xl text-white">{fmtMoeda(a.saldoTotal)}</div>
+            <div className="font-mono text-[10px] text-white/70">IBS {fmtMoeda(a.saldoIBS)} · CBS {fmtMoeda(a.saldoCBS)}</div>
+          </div>
+        </div>
+
+        {temMovimento ? (
+          <div>
+            <div className="flex justify-between font-mono text-[10px] text-slate-400">
+              <span>Créditos cobrem {cobertura.toFixed(0)}% dos débitos</span>
+              <span>{fmtMoeda(a.creditoTotal)} / {fmtMoeda(a.debitoTotal)}</span>
+            </div>
+            <div className="calc-bar mt-1" aria-hidden="true">
+              <span className="bg-gradient-to-r from-emerald-600 to-teal-400" style={{ width: `${cobertura}%` }} />
+              <span className="calc-bar-ibs opacity-40" style={{ width: `${100 - cobertura}%` }} />
+            </div>
+          </div>
+        ) : null}
         <table className="tbl w-full">
           <thead>
             <tr>
-              <th>Apuração (estimativa LC 214/2025)</th>
+              <th>Detalhamento LC 214/2025</th>
               <th className="th-r">IBS</th>
               <th className="th-r">CBS</th>
               <th className="th-r">Total</th>
@@ -598,29 +710,31 @@ function ApuracaoReforma({ apuracao: a }: { apuracao: ApuracaoIbsCbs }) {
           </tbody>
         </table>
 
-        <div className="mt-3">
+        <div className="mt-1">
           {a.resultado === 'a-pagar' ? (
-            <div className="flex items-center gap-2.5 rounded-2xl border border-red-200 bg-gradient-to-r from-red-50 to-white p-3.5 dark:border-red-900 dark:from-red-950/40 dark:to-slate-900">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-red-100 text-lg dark:bg-red-950">💰</span>
-              <div>
-                <div className="text-sm font-black text-red-700 dark:text-red-300">
-                  Imposto a pagar: {fmtMoeda(a.valorAPagar)}
+            <div className="calc-hero flex items-center gap-3 rounded-2xl !border-red-400/50 p-4">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/15 text-xl">▣</span>
+              <div className="min-w-0 flex-1">
+                <div className="calc-hero-rotulo">Imposto a pagar</div>
+                <div className="calc-hero-valor text-2xl text-white">
+                  {fmtMoeda(a.valorAPagar)}
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                <div className="text-[11px] text-white/70">
                   IBS {fmtMoeda(Math.max(0, a.saldoIBS))} + CBS {fmtMoeda(Math.max(0, a.saldoCBS))}
                   {a.saldoIBS < 0 || a.saldoCBS < 0 ? ' (tributo com saldo credor abatido no total)' : ''}
                 </div>
               </div>
             </div>
           ) : a.resultado === 'saldo-credor' ? (
-            <div className="flex items-center gap-2.5 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-3.5 dark:border-emerald-900 dark:from-emerald-950/40 dark:to-slate-900">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-100 text-lg dark:bg-emerald-950">↩</span>
+            <div className="flex items-center gap-3 rounded-2xl border border-emerald-300 bg-gradient-to-r from-emerald-600 to-teal-600 p-4 text-white">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white/15 text-xl">↩</span>
               <div>
-                <div className="text-sm font-black text-emerald-700 dark:text-emerald-300">
-                  Saldo credor: {fmtMoeda(a.saldoCredor)}
+                <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-100">Saldo credor</div>
+                <div className="font-mono text-2xl font-black">
+                  {fmtMoeda(a.saldoCredor)}
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Créditos superaram os débitos — valor disponível para restituição ou compensação.
+                <div className="text-[11px] text-emerald-50/90">
+                  Créditos superaram os débitos — disponível para restituição ou compensação.
                 </div>
               </div>
             </div>
@@ -757,7 +871,7 @@ function RankingFornecedores({
           IBS + CBS das entradas · clique para ver as notas
         </p>
       </div>
-      <div className="max-h-[300px] min-h-0 space-y-2 overflow-y-auto p-3 lg:max-h-none lg:flex-1">
+      <div className="scroll-elegante max-h-[300px] min-h-0 space-y-2 overflow-y-auto p-3 lg:max-h-none lg:flex-1">
         {!ranking.length ? (
           <p className="py-4 text-center text-[11px] text-slate-500">
             Sem entradas no período para ranquear fornecedores.
@@ -793,9 +907,9 @@ function RankingFornecedores({
                 </span>
               </div>
               <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-brand-600 to-emerald-500 transition-all"
-                  style={{ width: `${max > 0 ? Math.max(4, (r.creditoTotal / max) * 100) : 0}%` }}
+                <BarraAnimada
+                  pct={max > 0 ? (r.creditoTotal / max) * 100 : 0}
+                  className="h-full rounded-full bg-gradient-to-r from-brand-600 to-emerald-500"
                 />
               </div>
               <div className="mt-0.5 flex items-center justify-between font-mono text-[10px] text-slate-400">
@@ -827,7 +941,7 @@ function TopProdutosNfe({ notas }: { notas: NotaXml[] }) {
       const mapa = new Map<string, {
         codigo: string; nome: string; ncm: string; cfop: string;
         qtd: number; base: number; ibs: number; cbs: number; trib: number;
-        cst: string; cClassTrib: string;
+        cst: string; cClassTrib: string; manual: boolean;
       }>()
       for (const n of notas) {
         if (n.direcao !== fluxo) continue
@@ -841,13 +955,17 @@ function TopProdutosNfe({ notas }: { notas: NotaXml[] }) {
             qtd: 0, base: 0, ibs: 0, cbs: 0, trib: 0,
             cst: it.classificacao.cst || '—',
             cClassTrib: it.classificacao.cClassTrib || '—',
+            manual: false,
           }
           atual.qtd += Number(it.qtd) || 0
           atual.base += Number(it.vlTotal) || 0
           atual.ibs += Number(it.ibs) || 0
           atual.cbs += Number(it.cbs) || 0
           atual.trib += Number(it.totalTributos) || 0
-          // Enquadramento do sistema (base da estimativa acima) — o CST do
+          // BLINDAGEM: se qualquer item agregado veio de escolha do usuário,
+          // o selo abaixo deixa de afirmar "Pela legislação".
+          atual.manual = atual.manual || it.manual || it.classificacao.manual != null
+          // Enquadramento pela legislação (base da estimativa acima) — o CST do
           // XML é o do emitente e aparece no detalhe da nota, não aqui.
           atual.cst = it.classificacao.cst || atual.cst
           atual.cClassTrib = it.classificacao.cClassTrib || atual.cClassTrib
@@ -861,7 +979,7 @@ function TopProdutosNfe({ notas }: { notas: NotaXml[] }) {
 
   if (!notas.length) return null
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <QuadroTopProdutos
         titulo="Mais comprados"
         subtitulo="Entradas do período · top 5 por valor"
@@ -890,7 +1008,7 @@ function QuadroTopProdutos({
   titulo: string
   subtitulo: string
   tom: 'emerald' | 'brand'
-  lista: { codigo: string; nome: string; ncm: string; cfop: string; qtd: number; base: number; ibs: number; cbs: number; trib: number; cst: string; cClassTrib: string }[]
+  lista: { codigo: string; nome: string; ncm: string; cfop: string; qtd: number; base: number; ibs: number; cbs: number; trib: number; cst: string; cClassTrib: string; manual: boolean }[]
   vazio: string
 }) {
   const max = lista.reduce((m, p) => Math.max(m, p.base), 0)
@@ -924,9 +1042,9 @@ function QuadroTopProdutos({
               <span className={`shrink-0 font-mono font-bold ${valor}`}>{fmtMoeda(p.base)}</span>
             </div>
             <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-              <div
-                className={`h-full rounded-full bg-gradient-to-r ${barra} transition-all`}
-                style={{ width: `${max > 0 ? Math.max(4, (p.base / max) * 100) : 0}%` }}
+              <BarraAnimada
+                pct={max > 0 ? (p.base / max) * 100 : 0}
+                className={`h-full rounded-full bg-gradient-to-r ${barra}`}
               />
             </div>
             <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px]">
@@ -938,7 +1056,11 @@ function QuadroTopProdutos({
               </span>
             </div>
             <div className="mt-1">
-              <Pill cor={tom === 'emerald' ? 'emerald' : 'brand'}>Sistema CST {p.cst} · {p.cClassTrib}</Pill>
+              {p.manual ? (
+                <Pill cor="amber">👤 Manual · CST {p.cst} · {p.cClassTrib}</Pill>
+              ) : (
+                <Pill cor={tom === 'emerald' ? 'emerald' : 'brand'}>Pela legislação CST {p.cst} · {p.cClassTrib}</Pill>
+              )}
             </div>
           </div>
         ))}
@@ -1061,161 +1183,274 @@ function Filtros() {
   const limparFiltros = useNfe((s) => s.limparFiltros)
   const fornecedores = useNfe((s) => s.fornecedores)
   const cstIcmsOpcoes = useNfe((s) => s.cstIcmsOpcoes)
+  const notas = useNfe((s) => s.notas)
   const [reformaAberto, setReformaAberto] = useState(false)
   const ativosReforma = [filtros.cClassTrib, filtros.cstReforma, filtros.reducao].filter((v) =>
     v.trim(),
   ).length
+  const ativosTotal = [
+    filtros.texto, filtros.fornecedor, filtros.cfop, filtros.cstIcms,
+    filtros.cClassTrib, filtros.cstReforma, filtros.reducao,
+  ].filter((v) => v.trim()).length + (filtros.direcao !== 'todas' ? 1 : 0)
+
+  const periodo = (dias: number) => {
+    const hoje = new Date()
+    // ISO local (sem o deslocamento UTC do `toISOString`).
+    const l = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const f = l(hoje)
+    const ini = new Date(hoje)
+    ini.setDate(ini.getDate() - (dias - 1))
+    setFiltros({ inicio: l(ini), fim: f })
+  }
 
   return (
-    <Painel className="space-y-3 p-5">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        <label className="block lg:col-span-2">
-          <span className="field-label">Produto / código / NCM</span>
-          <Texto
-            value={filtros.texto}
-            onChange={(e) => setFiltros({ texto: e.target.value })}
-            placeholder="Ex.: queijo, SKU-001, 0201…"
-          />
-        </label>
-        <label className="block lg:col-span-2">
-          <span className="field-label">Fornecedor (emitente)</span>
-          <select
-            className="field"
-            value={filtros.fornecedor}
-            onChange={(e) => setFiltros({ fornecedor: e.target.value })}
+    <Painel className="overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5 dark:border-slate-800">
+        <h3 className="flex items-center gap-2 text-sm font-bold">
+          <IconeBadge nome="lupa" tom="brand" tamanho="sm" />
+          Filtros das notas
+          <span className="rounded-full bg-brand-50 px-2 py-0.5 font-mono text-[11px] font-black text-brand-700 dark:bg-brand-950/50 dark:text-aurum-200">
+            {notas.length}
+          </span>
+          {ativosTotal > 0 ? (
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+              {ativosTotal} ativo(s)
+            </span>
+          ) : null}
+        </h3>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Btn tam="sm" onClick={() => periodo(7)} title="Últimos 7 dias">7d</Btn>
+          <Btn tam="sm" onClick={() => periodo(30)} title="Últimos 30 dias">30d</Btn>
+          <motion.span
+            key={ativosReforma}
+            initial={{ scale: 0.85, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 22 }}
           >
-            <option value="">Todos</option>
-            {fornecedores.map((f) => (
-              <option key={f.cnpj} value={f.cnpj}>{f.nome}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="field-label">Direção</span>
-          <select
-            className="field"
-            value={filtros.direcao}
-            onChange={(e) => setFiltros({ direcao: e.target.value as FiltrosNfe['direcao'] })}
-          >
-            <option value="todas">Todas</option>
-            <option value="entrada">Entradas</option>
-            <option value="saida">Saídas</option>
-            <option value="quarentena">Quarentena</option>
-          </select>
-        </label>
-        <label className="block">
-          <span className="field-label">CFOP</span>
-          <Texto
-            value={filtros.cfop}
-            onChange={(e) => setFiltros({ cfop: e.target.value.replace(/\D/g, '').slice(0, 4) })}
-            placeholder="5102"
-            mono
-          />
-        </label>
-        <label className="block">
-          <span className="field-label">CST ICMS</span>
-          <select
-            className="field font-mono"
-            value={filtros.cstIcms}
-            onChange={(e) => setFiltros({ cstIcms: e.target.value })}
-            disabled={!cstIcmsOpcoes.length}
-            title={
-              cstIcmsOpcoes.length
-                ? 'CST (regime normal) ou CSOSN (Simples) existente nas notas importadas'
-                : 'Sem CST nas notas importadas'
-            }
-          >
-            <option value="">{cstIcmsOpcoes.length ? 'Todos' : '—'}</option>
-            {cstIcmsOpcoes.map((cst) => (
-              <option key={cst} value={cst}>{cst}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="field-label">De</span>
-          <Texto type="date" value={filtros.inicio} onChange={(e) => setFiltros({ inicio: e.target.value })} />
-        </label>
-        <label className="block">
-          <span className="field-label">Até</span>
-          <Texto type="date" value={filtros.fim} onChange={(e) => setFiltros({ fim: e.target.value })} />
-        </label>
-        <div className="flex items-end gap-2 lg:col-span-3">
-          <Btn onClick={() => limparFiltros()}>✕ Limpar</Btn>
-          <Btn
-            variante={reformaAberto || ativosReforma > 0 ? 'primary' : 'ghost'}
-            onClick={() => setReformaAberto((v) => !v)}
-            title="Filtros específicos da Reforma: cClassTrib, CST e redução por item"
-          >
-            🎛 Reforma{ativosReforma > 0 ? ` (${ativosReforma})` : ''} {reformaAberto ? '▾' : '▸'}
-          </Btn>
+            <Btn tam="sm" onClick={() => limparFiltros()} title="Volta aos últimos 30 dias">✕ Limpar</Btn>
+          </motion.span>
         </div>
       </div>
-      {reformaAberto ? (
-        <div className="grid grid-cols-1 gap-3 rounded-xl border border-brand-200/60 bg-brand-50/40 p-4 md:grid-cols-3 dark:border-aurum-900 dark:bg-brand-950/20">
-          <label className="block">
-            <span className="field-label">cClassTrib</span>
-            <Texto
-              value={filtros.cClassTrib}
-              onChange={(e) => setFiltros({ cClassTrib: e.target.value.replace(/\D/g, '').slice(0, 6) })}
-              placeholder="000001…"
-              mono
-            />
+      <div className="space-y-2.5 p-4">
+        {/* Linha 1 — o essencial pedido: período, tipo, CFOP, CST, produto */}
+        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 lg:grid-cols-12">
+          <label className="block lg:col-span-2">
+            <span className="field-label">Período · de</span>
+            <Texto type="date" value={filtros.inicio} onChange={(e) => setFiltros({ inicio: e.target.value })} />
           </label>
-          <label className="block">
-            <span className="field-label">CST Reforma</span>
-            <Texto
-              value={filtros.cstReforma}
-              onChange={(e) =>
-                setFiltros({ cstReforma: e.target.value.replace(/[^0-9a-zA-Z]/g, '').toUpperCase().slice(0, 3) })
-              }
-              placeholder="000…"
-              mono
-            />
+          <label className="block lg:col-span-2">
+            <span className="field-label">Período · até</span>
+            <Texto type="date" value={filtros.fim} onChange={(e) => setFiltros({ fim: e.target.value })} />
           </label>
-          <label className="block">
-            <span className="field-label">Redução / benefício</span>
+          <label className="block lg:col-span-2">
+            <span className="field-label">Tipo de nota</span>
             <select
               className="field"
-              value={filtros.reducao}
-              onChange={(e) => setFiltros({ reducao: e.target.value })}
+              value={filtros.direcao}
+              onChange={(e) => setFiltros({ direcao: e.target.value as FiltrosNfe['direcao'] })}
             >
-              <option value="">Todas</option>
-              <option value="isento">💠 Crédito integral (sem redução)</option>
-              <option value="0">Alíquota zero</option>
-              <option value="60">Redução 60%</option>
-              <option value="30">Redução 30%</option>
+              <option value="todas">Todas</option>
+              <option value="entrada">⤵ Entradas</option>
+              <option value="saida">⤴ Saídas</option>
+              <option value="quarentena">⚠ Quarentena</option>
+            </select>
+          </label>
+          <label className="block lg:col-span-2">
+            <span className="field-label">CFOP</span>
+            <Texto
+              value={filtros.cfop}
+              onChange={(e) => setFiltros({ cfop: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+              placeholder="5102"
+              mono
+            />
+          </label>
+          <label className="block lg:col-span-2">
+            <span className="field-label">CST / CSOSN</span>
+            <select
+              className="field font-mono"
+              value={filtros.cstIcms}
+              onChange={(e) => setFiltros({ cstIcms: e.target.value })}
+              disabled={!cstIcmsOpcoes.length}
+              title={
+                cstIcmsOpcoes.length
+                  ? 'CST (regime normal) ou CSOSN (Simples) existente nas notas importadas'
+                  : 'Sem CST nas notas importadas'
+              }
+            >
+              <option value="">{cstIcmsOpcoes.length ? 'Todos' : '—'}</option>
+              {cstIcmsOpcoes.map((cst) => (
+                <option key={cst} value={cst}>{cst}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block lg:col-span-2">
+            <span className="field-label">Fornecedor</span>
+            <select
+              className="field"
+              value={filtros.fornecedor}
+              onChange={(e) => setFiltros({ fornecedor: e.target.value })}
+            >
+              <option value="">Todos</option>
+              {fornecedores.map((f) => (
+                <option key={f.cnpj} value={f.cnpj}>{f.nome}</option>
+              ))}
             </select>
           </label>
         </div>
-      ) : null}
+        {/* Linha 2 — produto em destaque + Reforma */}
+        <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-12">
+          <label className="block lg:col-span-9">
+            <span className="field-label">Produto · código · NCM</span>
+            <Texto
+              value={filtros.texto}
+              onChange={(e) => setFiltros({ texto: e.target.value })}
+              placeholder="Ex.: queijo, SKU-001, 0201…"
+            />
+          </label>
+          <div className="flex items-end lg:col-span-3">
+            <Btn
+              className="w-full"
+              variante={reformaAberto || ativosReforma > 0 ? 'primary' : 'ghost'}
+              onClick={() => setReformaAberto((v) => !v)}
+              title="Filtros específicos da Reforma: cClassTrib, CST e redução por item"
+              aria-expanded={reformaAberto}
+            >
+              <motion.span
+                className="inline-block"
+                animate={{ rotate: reformaAberto ? 90 : 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                ▸
+              </motion.span>
+              {' '}🎛 Reforma{ativosReforma > 0 ? ` (${ativosReforma})` : ''}
+            </Btn>
+          </div>
+        </div>
+        <Expansivel aberto={reformaAberto}>
+          <div className="grid grid-cols-1 gap-2.5 rounded-xl border border-brand-200/60 bg-brand-50/40 p-3 md:grid-cols-3 dark:border-aurum-900 dark:bg-brand-950/20">
+            <label className="block">
+              <span className="field-label">cClassTrib</span>
+              <Texto
+                value={filtros.cClassTrib}
+                onChange={(e) => setFiltros({ cClassTrib: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                placeholder="000001…"
+                mono
+              />
+            </label>
+            <label className="block">
+              <span className="field-label">CST Reforma</span>
+              <Texto
+                value={filtros.cstReforma}
+                onChange={(e) =>
+                  setFiltros({ cstReforma: e.target.value.replace(/[^0-9a-zA-Z]/g, '').toUpperCase().slice(0, 3) })
+                }
+                placeholder="000…"
+                mono
+              />
+            </label>
+            <label className="block">
+              <span className="field-label">Redução / benefício</span>
+              <select
+                className="field"
+                value={filtros.reducao}
+                onChange={(e) => setFiltros({ reducao: e.target.value })}
+              >
+                <option value="">Todas</option>
+                <option value="isento">💠 Crédito integral (sem redução)</option>
+                <option value="0">Alíquota zero</option>
+                <option value="60">Redução 60%</option>
+                <option value="30">Redução 30%</option>
+              </select>
+            </label>
+          </div>
+        </Expansivel>
+      </div>
     </Painel>
   )
 }
 
 /* ---------------------------------------------------------------- tabela --- */
 
+/**
+ * Tabela de notas compacta + paginada.
+ *
+ * - Bloco menor: linhas densas (`tbl-compacta`), container `max-h-[360px]`
+ *   com scroll interno, sem ocupar a tela inteira.
+ * - Paginação: 15 por página, com Primeira/Anterior/numérica/Próxima/Última
+ *   + seletor de tamanho (10/15/30/50). Volta à página 1 a cada filtro novo.
+ */
+const TAMANHOS_PAGINA = [10, 15, 30, 50] as const
+
 function TabelaNotas({ notas, onVerDanfe }: { notas: NotaXml[]; onVerDanfe: (n: NotaXml) => void }) {
   const abrirNota = useNfe((s) => s.abrirNota)
   const excluir = useNfe((s) => s.excluir)
+  const [pagina, setPagina] = useState(1)
+  const [porPagina, setPorPagina] = useState<number>(15)
+  const listaId = useMemo(() => notas.map((n) => n.id ?? n.chave).join('|'), [notas])
+
+  // Novo filtro / nova importação → volta à primeira página.
+  useEffect(() => {
+    setPagina(1)
+  }, [listaId, porPagina])
+
+  const totalPaginas = Math.max(1, Math.ceil(notas.length / porPagina))
+  const paginaSegura = Math.min(pagina, totalPaginas)
+  const ini = (paginaSegura - 1) * porPagina
+  const exibidas = notas.slice(ini, ini + porPagina)
+
+  const irPara = (p: number) => setPagina(Math.min(Math.max(1, p), totalPaginas))
+
+  // Janela numérica compacta: 1 … atual-1 atual atual+1 … última
+  const janela = useMemo(() => {
+    const set = new Set<number>([1, totalPaginas, paginaSegura - 1, paginaSegura, paginaSegura + 1])
+    return [...set].filter((p) => p >= 1 && p <= totalPaginas).sort((a, b) => a - b)
+  }, [paginaSegura, totalPaginas])
 
   if (!notas.length) {
     return (
-      <Painel className="p-8 text-center text-sm text-slate-500">
-        Nenhuma nota encontrada. Importe XMLs ou ajuste os filtros.
+      <Painel className="p-6 text-center text-sm text-slate-500">
+        Nenhuma nota encontrada no período. Importe XMLs ou ajuste os filtros acima.
       </Painel>
     )
   }
 
   return (
     <Painel className="overflow-hidden">
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 dark:border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5 dark:border-slate-800">
         <h3 className="flex items-center gap-2 text-sm font-bold">
-          <span>🧾</span> Notas ({notas.length})
+          <IconeBadge nome="nota" tom="brand" tamanho="sm" />
+          Notas
+          <span className="rounded-full bg-brand-50 px-2 py-0.5 font-mono text-[11px] font-black text-brand-700 dark:bg-brand-950/50 dark:text-aurum-200">
+            {notas.length}
+          </span>
         </h3>
-        <span className="text-[10px] text-slate-500">👁 ver itens e tributos · 🧾 abre a DANFE</span>
+        <div className="flex items-center gap-2 text-[11px] text-slate-500">
+          <label className="flex items-center gap-1.5">
+            <span>Por pág.</span>
+            <select
+              className="field !w-auto !rounded-lg !px-2 !py-1 text-[11px]"
+              value={porPagina}
+              onChange={(e) => setPorPagina(Number(e.target.value))}
+            >
+              {TAMANHOS_PAGINA.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </label>
+          <span className="hidden sm:inline">👁 itens · 🧾 DANFE</span>
+        </div>
       </div>
-      <div className="max-h-[60vh] overflow-auto">
-        <table className="tbl w-full">
+      <div className="max-h-[360px] overflow-auto scroll-elegante">
+        <table className="tbl tbl-notas tbl-compacta w-full table-fixed">
+          <colgroup>
+            <col className="w-[13%]" />
+            <col className="w-[11%]" />
+            <col className="w-[30%]" />
+            <col className="w-[13%]" />
+            <col className="w-[12%]" />
+            <col className="w-[12%]" />
+            <col className="w-[9%]" />
+          </colgroup>
           <thead>
             <tr>
               <th>Número</th>
@@ -1228,26 +1463,34 @@ function TabelaNotas({ notas, onVerDanfe }: { notas: NotaXml[]; onVerDanfe: (n: 
             </tr>
           </thead>
           <tbody>
-            {notas.slice(0, ROWS_LIMIT).map((n) => {
+            {exibidas.map((n) => {
               const regime = regimeDoEmitente(n.emitCrt, n.itensAnalisados)
               return (
-              <tr key={n.id ?? n.chave} className="cursor-pointer" onClick={() => abrirNota(n)} title="👁 Ver itens e todos os tributos">
-                <td className="font-mono font-bold">{n.numero || n.chave.slice(-8)}</td>
-                <td className="font-mono text-[11px]">{fmtData(n.dataEmissao)}</td>
-                <td className="max-w-[260px]" title={`${n.emitNome} · ${fmtCnpj(n.emitCnpj)}${regime !== 'desconhecido' && regime !== 'normal' ? ` · ${REGIME_LABELS[regime]}` : ''} · ${n.itensAnalisados.length} item(ns)`}>
+              <motion.tr
+                key={n.id ?? n.chave}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.15 }}
+                className="cursor-pointer"
+                onClick={() => abrirNota(n)}
+                title="👁 Ver itens e todos os tributos"
+              >
+                <td className="truncate font-mono font-bold">{n.numero || n.chave.slice(-8)}</td>
+                <td className="whitespace-nowrap font-mono text-[11px]">{fmtData(n.dataEmissao)}</td>
+                <td className="min-w-0" title={`${n.emitNome} · ${fmtCnpj(n.emitCnpj)}${regime !== 'desconhecido' && regime !== 'normal' ? ` · ${REGIME_LABELS[regime]}` : ''} · ${n.itensAnalisados.length} item(ns)`}>
                   <span className="block truncate">{n.emitNome || fmtCnpj(n.emitCnpj)}</span>
                   <span className="mt-0.5 flex items-center gap-1.5">
                     {regime === 'simples' || regime === 'mei' ? (
                       <span className="inline-block"><Pill cor="amber">{REGIME_LABELS[regime]}</Pill></span>
                     ) : null}
-                    <span className="text-[10px] text-slate-400">{n.itensAnalisados.length} item(ns)</span>
+                    <span className="shrink-0 text-[10px] text-slate-400">{n.itensAnalisados.length} item(ns)</span>
                   </span>
                 </td>
                 <td><Pill cor={COR_DIRECAO[n.direcao]}>{ROTULO_DIRECAO[n.direcao]}</Pill></td>
-                <td className="text-right font-mono">{fmtMoeda(n.valorTotal)}</td>
+                <td className="truncate text-right font-mono">{fmtMoeda(n.valorTotal)}</td>
                 <td
-                  className="text-right font-mono font-bold text-emerald-700 dark:text-emerald-400"
-                  title={`Estimativa do sistema: IBS ${fmtMoeda(n.totalIBS)} + CBS ${fmtMoeda(n.totalCBS)}`}
+                  className="truncate text-right font-mono font-bold text-emerald-700 dark:text-emerald-400"
+                  title={`Pela legislação: IBS ${fmtMoeda(n.totalIBS)} + CBS ${fmtMoeda(n.totalCBS)}`}
                 >
                   {fmtMoeda(n.totalTributos)}
                 </td>
@@ -1275,17 +1518,44 @@ function TabelaNotas({ notas, onVerDanfe }: { notas: NotaXml[]; onVerDanfe: (n: 
                     </button>
                   </span>
                 </td>
-              </tr>
+              </motion.tr>
               )
             })}
           </tbody>
         </table>
       </div>
-      {notas.length > ROWS_LIMIT ? (
-        <div className="border-t border-slate-100 p-3 text-center text-[11px] text-slate-500 dark:border-slate-800">
-          Mostrando {ROWS_LIMIT} de {notas.length} notas · PDF e CSV exportam a lista completa.
-        </div>
-      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-2.5 text-[11px] text-slate-500 dark:border-slate-800">
+        <span>
+          {notas.length ? `${ini + 1}–${Math.min(ini + porPagina, notas.length)} de ${notas.length}` : '0 notas'}
+          {' · PDF e CSV exportam a lista completa'}
+        </span>
+        <nav className="flex items-center gap-1" aria-label="Paginação das notas">
+          <Btn tam="sm" onClick={() => irPara(1)} disabled={paginaSegura <= 1} title="Primeira página">⏮</Btn>
+          <Btn tam="sm" onClick={() => irPara(paginaSegura - 1)} disabled={paginaSegura <= 1} title="Página anterior">‹</Btn>
+          {janela.map((p, i) => {
+            const anterior = janela[i - 1]
+            return (
+              <span key={p} className="flex items-center gap-1">
+                {anterior != null && p - anterior > 1 ? <span className="px-0.5 text-slate-300">…</span> : null}
+                <button
+                  type="button"
+                  onClick={() => irPara(p)}
+                  aria-current={p === paginaSegura ? 'page' : undefined}
+                  className={`min-w-7 rounded-lg px-2 py-1 font-mono font-bold transition ${
+                    p === paginaSegura
+                      ? 'bg-brand-600 text-white shadow-pop'
+                      : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {p}
+                </button>
+              </span>
+            )
+          })}
+          <Btn tam="sm" onClick={() => irPara(paginaSegura + 1)} disabled={paginaSegura >= totalPaginas} title="Próxima página">›</Btn>
+          <Btn tam="sm" onClick={() => irPara(totalPaginas)} disabled={paginaSegura >= totalPaginas} title="Última página">⏭</Btn>
+        </nav>
+      </div>
     </Painel>
   )
 }
@@ -1302,6 +1572,8 @@ function ModalDetalheNfe({ onVerDanfe }: { onVerDanfe: (n: NotaXml) => void }) {
   // 👁 Item selecionado — modal compacto com todos os tributos (irmão, nunca aninhado no DOM do detalhe).
   const [itemDetalhe, setItemDetalhe] = useState<ResultadoItemNfe | null>(null)
   const [reaplicando, setReaplicando] = useState(false)
+  // Itens com enquadramento feito pelo usuário (manual) — legenda explícita no corpo do modal.
+  const qtdManual = nota?.itensAnalisados.filter((it) => it.manual || it.classificacao.manual != null).length ?? 0
 
   return (
     <>
@@ -1310,7 +1582,7 @@ function ModalDetalheNfe({ onVerDanfe }: { onVerDanfe: (n: NotaXml) => void }) {
       onFechar={() => { setItemDetalhe(null); fecharNota() }}
       titulo={nota ? `Nota ${nota.numero || nota.chave.slice(-8)} · ${ROTULO_DIRECAO[nota.direcao]}` : ''}
       subtitulo={nota ? `${nota.emitNome || nota.emitCnpj} · emissão ${fmtData(nota.dataEmissao)} · ${nota.itensAnalisados.length} item(ns)` : ''}
-      largura="max-w-3xl"
+      largura="max-w-5xl"
       rodape={
         nota ? (
           <span className="flex flex-wrap items-center gap-2">
@@ -1341,8 +1613,8 @@ function ModalDetalheNfe({ onVerDanfe }: { onVerDanfe: (n: NotaXml) => void }) {
       }
     >
       {nota ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 text-xs md:grid-cols-4">
+        <div className="min-w-0 space-y-4">
+          <div className="grid min-w-0 grid-cols-2 gap-2 text-xs md:grid-cols-4">
             <Info rotulo="Chave" valor={nota.chave} mono />
             <Info rotulo="Série / Modelo" valor={`${nota.serie || '—'} / ${nota.modelo}`} />
             <Info rotulo="Destinatário" valor={nota.destNome || (nota.destDoc ? fmtCnpj(nota.destDoc) : '—')} />
@@ -1351,25 +1623,50 @@ function ModalDetalheNfe({ onVerDanfe }: { onVerDanfe: (n: NotaXml) => void }) {
           <BlocoCreditoIbsCbs nota={nota} />
           <ConfrontoCredito nota={nota} />
           <AlertaRegime nota={nota} />
-          <div>
-            <div className="mb-2 flex items-center justify-between">
+          {qtdManual > 0 ? (
+            <div className="flex items-start gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <span aria-hidden className="text-sm">👤</span>
+              <div>
+                <span className="font-black">
+                  {qtdManual} de {nota.itensAnalisados.length} item(ns) com classificação feita por você
+                </span>
+                <span>
+                  {' '}— o sistema apenas aplicou a sua escolha. A responsabilidade pelo enquadramento é{' '}
+                  <strong>sua, não do sistema</strong>. Abra o 👁 do item para ver a fonte informada.
+                </span>
+              </div>
+            </div>
+          ) : null}
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">
                 Itens ({nota.itensAnalisados.length})
               </h4>
-              <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-bold text-brand-700">Botão Tributos abre todos os tributos do item</span>
+              <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-bold text-brand-700">👁 abre todos os tributos do item</span>
             </div>
-          <div className="max-h-[36vh] overflow-auto rounded-2xl border border-slate-200/80 shadow-sm dark:border-slate-700/60">
-            <table className="tbl w-full">
+          {/* Somente scroll vertical: a tabela é fixa em 100% da largura do modal (sem scroll horizontal). */}
+          <div className="max-h-[38vh] overflow-x-hidden overflow-y-auto rounded-2xl border border-slate-200/80 shadow-sm dark:border-slate-700/60">
+            <table className="tbl w-full table-fixed">
+              <colgroup>
+                <col className="w-[12%]" />
+                <col className="w-[25%]" />
+                <col className="w-[8%]" />
+                <col className="w-[14%]" />
+                <col className="w-[11%]" />
+                <col className="w-[12%]" />
+                <col className="w-[11%]" />
+                <col className="w-[7%]" />
+              </colgroup>
               <thead>
                 <tr>
-                  <th>Código</th>
-                  <th>Produto</th>
-                  <th className="th-r">Qtd</th>
-                  <th className="th-r">Valor</th>
-                  <th>No XML</th>
-                  <th>Sistema</th>
-                  <th className="th-r">Total est.</th>
-                  <th className="th-r">Detalhe</th>
+                  <th className="!whitespace-normal">Código</th>
+                  <th className="!whitespace-normal">Produto</th>
+                  <th className="th-r !whitespace-normal">Qtd</th>
+                  <th className="th-r !whitespace-normal">Valor</th>
+                  <th className="!whitespace-normal">No XML</th>
+                  <th className="!whitespace-normal">Pela legislação</th>
+                  <th className="th-r !whitespace-normal">Total est.</th>
+                  <th className="th-r !whitespace-normal">👁</th>
                 </tr>
               </thead>
               <tbody>
@@ -1384,12 +1681,15 @@ function ModalDetalheNfe({ onVerDanfe }: { onVerDanfe: (n: NotaXml) => void }) {
             </table>
           </div>
           </div>
-          <p className="text-[11px] leading-relaxed text-slate-400">
-            Colunas <strong>No XML</strong> (tributação destacada pelo emitente) ×{' '}
-            <strong>Sistema</strong> (pela legislação: base oficial › manual › regra geral).
-            Regime anterior (CST/CSOSN, ICMS, PIS, COFINS) fica no botão Tributos — o detalhe
-            também permite salvar o item no cadastro.
-          </p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+            <span><strong>No XML</strong> = destacado pelo emitente</span>
+            <span><strong>Pela legislação</strong> = base oficial › regra geral</span>
+            <span className="inline-flex items-center gap-1">
+              <span className="rounded bg-amber-100 px-1 py-0.5 font-mono text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">👤 você</span>
+              = classificação feita por você (manual) — responsabilidade sua, não do sistema
+            </span>
+            <span><strong className="font-mono text-brand-700 dark:text-aurum-200">⇄ comparar</strong> = leitura diferente da nota · <strong className="font-mono text-emerald-600">✓</strong> = mesma leitura</span>
+          </div>
         </div>
       ) : null}
     </Modal>
@@ -1400,27 +1700,27 @@ function ModalDetalheNfe({ onVerDanfe }: { onVerDanfe: (n: NotaXml) => void }) {
 
 /**
  * Linha do item com as duas tributações lado a lado: **No XML** (o que o
- * emitente destacou no grupo IBSCBS) × **Sistema** (o que diz a legislação:
- * base oficial › manual › regra geral). Divergência ganha o selo `≠ XML`.
+ * emitente destacou no grupo IBSCBS) × **Pela legislação** (o que diz a legislação:
+ * base oficial › manual › regra geral). Leitura diferente ganha o selo `⇄`.
  */
 function LinhaItemNfe({ item: it, onDetalhe }: { item: ResultadoItemNfe; onDetalhe: () => void }) {
   const credXml = creditoIbsCbsDoItem(it)
   const div = divergenciaXmlSistema(it)
   const manual = it.manual || it.classificacao.manual != null
   return (
-    <tr className="cursor-pointer transition-colors hover:bg-brand-50/50" onClick={onDetalhe} title="Ver o confronto completo XML × sistema">
-      <td className="font-mono font-bold">{it.codProd}</td>
-      <td className="max-w-[220px]" title={`${it.descricao} · NCM ${fmtNcm(it.ncm)} · CFOP ${it.cfop || '—'}`}>
-        <span className="block truncate">{it.descricao}</span>
-        <span className="block font-mono text-[10px] text-slate-400">
+    <tr className="cursor-pointer transition-colors hover:bg-brand-50/50" onClick={onDetalhe} title="Ver o confronto completo XML × legislação">
+      <td className="min-w-0 break-all font-mono text-[11px] font-bold">{it.codProd}</td>
+      <td className="min-w-0" title={`${it.descricao} · NCM ${fmtNcm(it.ncm)} · CFOP ${it.cfop || '—'}`}>
+        <span className="block truncate text-xs">{it.descricao}</span>
+        <span className="block truncate font-mono text-[10px] text-slate-400">
           {fmtNcm(it.ncm)} · CFOP {it.cfop || '—'}
         </span>
       </td>
-      <td className="text-right">{fmtNum(it.qtd)}</td>
-      <td className="text-right font-mono">{fmtMoeda(it.vlTotal)}</td>
-      <td title={div.temXml ? `XML: CST ${it.cstIbsCbs || '—'} · cClassTrib ${it.cClassTribIbsCbs || '—'} · IBS ${fmtMoeda(credXml.vIbs)} + CBS ${fmtMoeda(credXml.vCbs)}` : 'Sem grupo IBSCBS neste item'}>
+      <td className="whitespace-normal break-words text-right text-xs">{fmtNum(it.qtd)}</td>
+      <td className="whitespace-normal break-words text-right font-mono text-xs">{fmtMoeda(it.vlTotal)}</td>
+      <td className="min-w-0" title={div.temXml ? `XML: CST ${it.cstIbsCbs || '—'} · cClassTrib ${it.cClassTribIbsCbs || '—'} · IBS ${fmtMoeda(credXml.vIbs)} + CBS ${fmtMoeda(credXml.vCbs)}` : 'Sem grupo IBSCBS neste item'}>
         {div.temXml ? (
-          <span className="font-mono text-[11px] font-bold text-slate-600 dark:text-slate-300">
+          <span className="block whitespace-normal break-words font-mono text-[11px] font-bold text-slate-600 dark:text-slate-300">
             {it.cstIbsCbs || '—'} · {it.cClassTribIbsCbs || '—'}
             <span className="block text-[10px] font-normal text-slate-400">
               {credXml.temCredito ? fmtMoeda(credXml.vTotal) : 's/ valores'}
@@ -1430,30 +1730,30 @@ function LinhaItemNfe({ item: it, onDetalhe }: { item: ResultadoItemNfe; onDetal
           <span className="text-slate-300 dark:text-slate-600">—</span>
         )}
       </td>
-      <td title={`Sistema: CST ${it.classificacao.cst || '—'} · cClassTrib ${it.classificacao.cClassTrib || '—'}${manual ? ' · Manual do usuário (isenta o sistema)' : it.regraGeral ? ' · Regra geral' : ' · Base oficial'}`}>
-        <span className="font-mono text-[11px] font-bold text-brand-700 dark:text-aurum-200">
+      <td className="min-w-0" title={manual ? 'Classificação feita por você (manual) — responsabilidade sua, não do sistema' : it.regraGeral ? 'Pela legislação · regra geral (alíquota cheia)' : 'Pela legislação · base oficial'}>
+        <span className="block whitespace-normal break-words font-mono text-[11px] font-bold text-brand-700 dark:text-aurum-200">
           {it.classificacao.cst} · {it.classificacao.cClassTrib}
         </span>
         <span className="mt-0.5 flex flex-wrap items-center gap-1">
           {manual ? (
-            <span className="rounded bg-amber-100 px-1 py-0.5 font-mono text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300" title="Classificação manual do usuário — isenta o sistema">
-              ✋
+            <span className="rounded bg-amber-100 px-1 py-0.5 font-mono text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300" title="Classificação feita por você (manual) — responsabilidade sua, não do sistema">
+              👤 você
             </span>
           ) : null}
           {div.diverge ? (
-            <span className="rounded bg-red-100 px-1 py-0.5 font-mono text-[10px] font-black text-red-700 dark:bg-red-950/50 dark:text-red-300" title="Enquadramento/valores diferentes do XML — abra o detalhe para confrontar">
-              ≠ XML
+            <span className="rounded bg-brand-100 px-1 py-0.5 font-mono text-[10px] font-bold text-brand-700 dark:bg-brand-950/50 dark:text-aurum-200" title="Leitura diferente da nota — abra o detalhe para comparar Na nota × Pela legislação">
+              ⇄ comparar
             </span>
           ) : div.temXml ? (
             <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400" title="Confere com o XML">✓</span>
           ) : null}
         </span>
       </td>
-      <td className="text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">
+      <td className="whitespace-normal break-words text-right font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400">
         {fmtMoeda(it.totalTributos)}
       </td>
       <td className="text-right" onClick={(e) => e.stopPropagation()}>
-        <Olho onClick={onDetalhe} titulo="Ver o confronto completo XML × sistema" />
+        <Olho somenteIcone onClick={onDetalhe} titulo="Ver o confronto completo XML × legislação" />
       </td>
     </tr>
   )
@@ -1574,16 +1874,45 @@ const CREDITO_POR_ANEXO: Record<string, { rotulo: string; cor: string; brilho: s
   misto: { rotulo: 'Redução IBS ≠ CBS', cor: '#8b5cf6', brilho: '#c4b5fd' },
 }
 
-/** Selo do crédito com ponto na cor do anexo (claro e escuro). */
+/** Selo do crédito com ponto na cor do anexo (claro e escuro).
+ *
+ * BLINDAGEM: faixas derivadas (`isento`, `0`, `60`…) mantêm os rótulos de
+ * redução (descrevem o % oficial, sem fingir anexo). Anexo OFICIAL
+ * (`9`, `1`, `90111`…) usa o rótulo oficial neutro — nunca cai no
+ * `isento: Crédito integral` (falso para item com redução). Qualquer outro
+ * valor (nota mista, sem itens) vira selo neutro, nunca afirmação.
+ */
 function PillCreditoAnexo({ anexo }: { anexo: string }) {
-  const conf = CREDITO_POR_ANEXO[anexo] ?? CREDITO_POR_ANEXO.isento
+  if (anexo in CREDITO_POR_ANEXO) {
+    const conf = CREDITO_POR_ANEXO[anexo]
+    return (
+      <span
+        className="pill"
+        style={{ background: `${conf.cor}1a`, color: conf.cor, border: `1px solid ${conf.cor}66` }}
+      >
+        <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: conf.cor }} />
+        {conf.rotulo}
+      </span>
+    )
+  }
+  if (anexo && anexo !== 'variados') {
+    return (
+      <span
+        className="pill"
+        style={{ background: '#64748b1a', color: '#64748b', border: '1px solid #64748b66' }}
+      >
+        <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: '#64748b' }} />
+        {rotuloAnexoOficial(anexo)}
+      </span>
+    )
+  }
   return (
     <span
       className="pill"
-      style={{ background: `${conf.cor}1a`, color: conf.cor, border: `1px solid ${conf.cor}66` }}
+      style={{ background: '#64748b1a', color: '#64748b', border: '1px solid #64748b66' }}
     >
-      <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: conf.cor }} />
-      {conf.rotulo}
+      <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: '#64748b' }} />
+      Enquadramentos variados
     </span>
   )
 }
@@ -1591,7 +1920,7 @@ function PillCreditoAnexo({ anexo }: { anexo: string }) {
 /**
  * Faixa de confronto: à esquerda o **crédito IBS/CBS que veio no XML**
  * (destaque da Reforma), no meio o ICMS do regime anterior (auxiliar) e à
- * direita a **tributação que o sistema encontrou** (estimativa por NCM,
+ * direita a **tributação que a legislação indica** (estimativa por NCM,
  * com borda cintilante na cor do anexo).
  */
 function ConfrontoCredito({ nota }: { nota: NotaXml }) {
@@ -1599,8 +1928,12 @@ function ConfrontoCredito({ nota }: { nota: NotaXml }) {
   const credReforma = creditoIbsCbsDaNota(nota.itensAnalisados, nota)
   const regime = regimeDoEmitente(nota.emitCrt, nota.itensAnalisados)
   const semTransferencia = !transfereCreditoIbsCbs(regime)
-  const anexoEst = nota.itensAnalisados[0]?.anexo ?? 'isento'
-  const confEst = CREDITO_POR_ANEXO[anexoEst] ?? CREDITO_POR_ANEXO.isento
+  // BLINDAGEM: o selo/cor da nota usa o anexo do 1º item SOMENTE quando todos
+  // os itens têm o mesmo anexo; nota mista ou vazia vira 'variados' (selo
+  // neutro) — nunca o 1º item pela nota inteira, nunca `isento` presumido.
+  const anexosNota = [...new Set(nota.itensAnalisados.map((it) => it.anexo))]
+  const anexoEst = nota.itensAnalisados.length === 0 || anexosNota.length !== 1 ? 'variados' : anexosNota[0]
+  const confEst = CREDITO_POR_ANEXO[anexoEst] ?? { cor: '#64748b', brilho: '#cbd5e1' }
   const comXml = nota.itensAnalisados.filter((it) => divergenciaXmlSistema(it).temXml)
   const divergentes = nota.itensAnalisados.filter((it) => divergenciaXmlSistema(it).diverge)
   return (
@@ -1608,14 +1941,14 @@ function ConfrontoCredito({ nota }: { nota: NotaXml }) {
     {comXml.length ? (
       <div className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-[11px] font-bold ${
         divergentes.length
-          ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
+          ? 'border-brand-200 bg-brand-50/70 text-brand-800 dark:border-brand-900 dark:bg-brand-950/30 dark:text-brand-200'
           : 'border-emerald-200 bg-emerald-50/70 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200'
       }`}>
-        <span>{divergentes.length ? '⚠' : '✓'}</span>
+        <span aria-hidden>{divergentes.length ? '⇄' : '✓'}</span>
         <span>
           {divergentes.length
-            ? `${divergentes.length} de ${comXml.length} item(ns) com IBS/CBS no XML ${divergentes.length === 1 ? 'diverge' : 'divergem'} do sistema — compare as colunas "No XML" × "Sistema" abaixo.`
-            : `Todos os ${comXml.length} item(ns) com IBS/CBS no XML ${comXml.length === 1 ? 'confere' : 'conferem'} com o sistema.`}
+            ? `${divergentes.length} de ${comXml.length} item(ns) com leitura diferente da nota — compare as colunas "No XML" × "Pela legislação" abaixo.`
+            : `Todos os ${comXml.length} item(ns) com IBS/CBS no XML têm a mesma leitura da legislação.`}
         </span>
       </div>
     ) : null}
@@ -1671,7 +2004,7 @@ function ConfrontoCredito({ nota }: { nota: NotaXml }) {
         style={{ '--cor-borda': confEst.cor, '--cor-brilho': confEst.brilho } as CSSProperties}
       >
         <div className="text-[10px] font-black uppercase tracking-wide text-brand-600 dark:text-aurum-200">
-          🧮 Estimativa do sistema
+          🧮 Pela legislação
         </div>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="font-mono text-lg font-black text-brand-700 dark:text-brand-300">
@@ -1698,9 +2031,9 @@ function ConfrontoCredito({ nota }: { nota: NotaXml }) {
 
 function Info({ rotulo, valor, mono, forte }: { rotulo: string; valor: string; mono?: boolean; forte?: boolean }) {
   return (
-    <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/40">
+    <div className="min-w-0 rounded-xl bg-slate-50 p-3 dark:bg-slate-950/40">
       <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{rotulo}</div>
-      <div className={`mt-0.5 break-words text-xs ${mono ? 'font-mono' : ''} ${forte ? 'font-black' : 'font-semibold'}`}>
+      <div className={`mt-0.5 break-words [overflow-wrap:anywhere] text-xs ${mono ? 'font-mono' : ''} ${forte ? 'font-black' : 'font-semibold'}`}>
         {valor}
       </div>
     </div>
@@ -1755,7 +2088,7 @@ function GraficosNfe({ notas }: { notas: NotaXml[] }) {
   const totalBases = dados.baseEntradas + dados.baseSaidas
 
   return (
-    <div className="grid grid-cols-1 items-stretch gap-8 lg:grid-cols-3">
+    <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
       <Painel className="overflow-hidden p-0">
         <div className="border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
           <h3 className="flex items-center gap-2 text-sm font-bold">
@@ -1929,7 +2262,7 @@ function GraficosNfe({ notas }: { notas: NotaXml[] }) {
 /**
  * Faixa de indicadores executivos do filtro atual: tickets médios por
  * direção, maior nota, cargas efetivas, NCMs distintos e conferência
- * XML × sistema. Leitura rápida antes dos gráficos comparativos.
+ * XML × legislação. Leitura rápida antes dos gráficos comparativos.
  */
 function IndicadoresXml({ notas }: { notas: NotaXml[] }) {
   const ind = useMemo(() => indicadoresXml(notas), [notas])
@@ -1940,7 +2273,7 @@ function IndicadoresXml({ notas }: { notas: NotaXml[] }) {
     { rotulo: 'Carga entradas', valor: fmtCarga(ind.cargaEntradas), sub: 'IBS+CBS / base entradas' },
     { rotulo: 'Carga saídas', valor: fmtCarga(ind.cargaSaidas), sub: 'IBS+CBS / base saídas' },
     { rotulo: 'NCMs · itens', valor: `${ind.ncmsDistintos} · ${ind.totalItens}`, sub: 'distintos · linhas de item' },
-    { rotulo: 'Conferência XML', valor: ind.qtdComXml ? `${ind.qtdComXml - ind.qtdDivergentes}/${ind.qtdComXml}` : '—', sub: ind.qtdDivergentes ? `${ind.qtdDivergentes} divergente(s) ≠ XML` : 'sem divergências' },
+    { rotulo: 'Conferência XML', valor: ind.qtdComXml ? `${ind.qtdComXml - ind.qtdDivergentes}/${ind.qtdComXml}` : '—', sub: ind.qtdDivergentes ? `${ind.qtdDivergentes} leitura(s) diferente(s)` : 'todas com a mesma leitura' },
   ]
   return (
     <Painel className="overflow-hidden p-0">
@@ -2132,7 +2465,7 @@ function RegimeAntigoVsNovo({ notas }: { notas: NotaXml[] }) {
             <div className="mt-0.5 text-[11px] text-slate-500">IBS {fmtMoeda(conf.ibs)} · CBS {fmtMoeda(conf.cbs)}</div>
           </div>
           <p className="px-1 text-[10px] leading-relaxed text-slate-400">
-            O antigo é o que o emitente destacou no XML; o novo é a estimativa do sistema (LC 214/2025). Use para
+            O antigo é o que o emitente destacou no XML; o novo é o cálculo pela legislação (LC 214/2025). Use para
             sentir o impacto da transição por competência.
           </p>
         </div>
@@ -2166,7 +2499,7 @@ function DistribuicaoReforma({ notas }: { notas: NotaXml[] }) {
   const totalAnexo = anexo.reduce((s, l) => s + l.trib, 0)
   const CORES = ['#10b981', '#8b5cf6', '#f59e0b', '#3b82f6', '#94a3b8', '#06b6d4']
   return (
-    <div className="grid grid-cols-1 items-stretch gap-8 lg:grid-cols-3">
+    <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
       <Painel className="overflow-hidden p-0">
         <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-emerald-950/30 dark:to-slate-900">
           <h3 className="flex items-center gap-2 text-sm font-bold">
@@ -2180,7 +2513,10 @@ function DistribuicaoReforma({ notas }: { notas: NotaXml[] }) {
             <>
               <Doughnut
                 data={{
-                  labels: anexo.map((l) => ROTULO_ANEXO[l.anexo] ?? l.anexo),
+                  // BLINDAGEM: faixas derivadas usam o rótulo de redução;
+                  // anexos oficiais (ex.: `9`) usam o rótulo oficial
+                  // (`Anexo IX — LC 214/2025`), nunca o valor cru.
+                  labels: anexo.map((l) => ROTULO_ANEXO[l.anexo] ?? rotuloAnexoOficial(l.anexo)),
                   datasets: [{ data: anexo.map((l) => l.trib), backgroundColor: CORES, hoverOffset: 10, borderWidth: 3, borderColor: '#ffffff', spacing: 2, borderRadius: 6 }],
                 }}
                 options={{
@@ -2292,7 +2628,10 @@ function TopNcmCfop({ notas }: { notas: NotaXml[] }) {
               <span className="shrink-0 font-mono font-bold text-brand-700 dark:text-aurum-200">{fmtMoeda(l.base)}</span>
             </div>
             <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-              <div className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400" style={{ width: `${max > 0 ? Math.max(4, (l.base / max) * 100) : 0}%` }} />
+              <BarraAnimada
+                pct={max > 0 ? (l.base / max) * 100 : 0}
+                className="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400"
+              />
             </div>
             <div className="mt-0.5 flex justify-between text-[10px] text-slate-400">
               <span className="font-mono">{l.qtd} item(ns)</span>
@@ -2307,7 +2646,7 @@ function TopNcmCfop({ notas }: { notas: NotaXml[] }) {
 
 /**
  * Qualidade dos XMLs: quanto já traz o grupo IBSCBS, taxa de conferência
- * com o sistema e quantos divergem — termômetro da prontidão para 2026.
+ * com a legislação e quantas leituras diferem — termômetro da prontidão para 2026.
  */
 function QualidadeXml({ notas }: { notas: NotaXml[] }) {
   const q = useMemo(() => resumoDivergencias(notas), [notas])
@@ -2322,7 +2661,7 @@ function QualidadeXml({ notas }: { notas: NotaXml[] }) {
         </h3>
         <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
           {q.comXml} de {q.totalItens} item(ns) com grupo IBSCBS ·{' '}
-          {q.taxaConferencia != null ? `${q.taxaConferencia.toFixed(1).replace('.', ',')}% conferem com o sistema` : 'nenhum XML com IBS/CBS ainda'}
+          {q.taxaConferencia != null ? `${q.taxaConferencia.toFixed(1).replace('.', ',')}% conferem com a legislação` : 'nenhum XML com IBS/CBS ainda'}
         </p>
       </div>
       <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
@@ -2338,15 +2677,15 @@ function QualidadeXml({ notas }: { notas: NotaXml[] }) {
           <div className="font-mono text-xl font-black text-emerald-700 dark:text-emerald-300">{q.conferem}</div>
           <div className="text-[10px] font-bold uppercase text-emerald-600">Conferem ✓</div>
         </div>
-        <div className={`rounded-xl p-3 text-center ${q.divergentes ? 'bg-red-50 dark:bg-red-950/30' : 'bg-slate-50 dark:bg-slate-950/40'}`}>
-          <div className={`font-mono text-xl font-black ${q.divergentes ? 'text-red-700 dark:text-red-300' : ''}`}>{q.divergentes}</div>
-          <div className="text-[10px] font-bold uppercase text-slate-500">Divergem ≠</div>
+        <div className={`rounded-xl p-3 text-center ${q.divergentes ? 'bg-brand-50 dark:bg-brand-950/30' : 'bg-slate-50 dark:bg-slate-950/40'}`}>
+          <div className={`font-mono text-xl font-black ${q.divergentes ? 'text-brand-700 dark:text-aurum-200' : ''}`}>{q.divergentes}</div>
+          <div className="text-[10px] font-bold uppercase text-slate-500">A comparar ⇄</div>
         </div>
       </div>
       {q.divergentes > 0 ? (
         <p className="px-5 pb-4 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-          Abra a nota e confira as colunas <strong>No XML × Sistema</strong> — divergência costuma ser CST/cClassTrib
-          do emitente diferente da base oficial ou valores estimados com outra referência.
+          Abra a nota e confira as colunas <strong>No XML × Pela legislação</strong> — geralmente é o CST/cClassTrib
+          do emitente diferente da base oficial ou valores calculados com outra alíquota-base de referência.
         </p>
       ) : null}
     </Painel>
@@ -2502,7 +2841,7 @@ function DanfeModal({ nota, onFechar }: { nota: NotaXml; onFechar: () => void })
                   <th className="px-3 py-2.5 text-right font-extrabold">Qtd</th>
                   <th className="px-3 py-2.5 text-right font-extrabold">V. total</th>
                   <th className="px-3 py-2.5 text-right font-extrabold">XML · IBS + CBS</th>
-                  <th className="px-3 py-2.5 text-right font-extrabold">Sistema · est.</th>
+                  <th className="px-3 py-2.5 text-right font-extrabold">Legislação · est.</th>
                   <th className="px-3 py-2.5 text-right font-extrabold">Detalhe</th>
                 </tr>
               </thead>
@@ -2529,7 +2868,7 @@ function DanfeModal({ nota, onFechar }: { nota: NotaXml; onFechar: () => void })
                       <td className="whitespace-nowrap px-3 py-2.5 text-right text-slate-600">{fmtNum(it.qtd)} {it.unid}</td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-bold">{fmtMoeda(it.vlTotal)}</td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-bold text-emerald-700" title={it.cstIbsCbs || it.cClassTribIbsCbs ? `XML: CST ${it.cstIbsCbs || '—'} · ${it.cClassTribIbsCbs || '—'}` : 'Sem grupo IBSCBS neste item'}>{ibsCbs > 0 ? fmtMoeda(ibsCbs) : <span className="text-slate-300">—</span>}</td>
-                      <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-bold text-brand-700" title={`Sistema: CST ${it.classificacao.cst} · ${it.classificacao.cClassTrib}${it.manual || it.classificacao.manual ? ' · manual' : ''}`}>{fmtMoeda(it.totalTributos)}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-bold text-brand-700" title={`Pela legislação: CST ${it.classificacao.cst} · ${it.classificacao.cClassTrib}${it.manual || it.classificacao.manual ? ' · manual' : ''}`}>{fmtMoeda(it.totalTributos)}</td>
                       <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                         <Olho onClick={() => setItemDetalhe(it)} titulo="Ver ICMS · PIS · COFINS e demais tributos" />
                       </td>
@@ -2552,7 +2891,7 @@ function DanfeModal({ nota, onFechar }: { nota: NotaXml; onFechar: () => void })
 
         <div className="border-t border-slate-100 bg-slate-50/70 px-5 py-3.5 text-[10px] leading-relaxed text-slate-500">
           Visualização gerada a partir do XML importado (LC 214/2025 · NT 2025.002) para conferência — o documento
-          fiscal válido é o XML da chave acima. Estimativa do sistema:
+          fiscal válido é o XML da chave acima. Cálculo pela legislação:
           IBS {fmtMoeda(nota.totalIBS)} + CBS {fmtMoeda(nota.totalCBS)} (refs {nota.refIBS}% / {nota.refCBS}%).
           ICMS {fmtMoeda(totaisAnteriores.icms)} · PIS + COFINS {fmtMoeda(totaisAnteriores.pisCofins)} no botão Tributos de cada item.
         </div>

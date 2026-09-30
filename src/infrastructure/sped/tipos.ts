@@ -41,6 +41,8 @@ export interface ItemSped {
   codItem: string
   descricaoProduto: string
   ncm: string
+  /** CEST (0200 campos[13]) — informativo, não altera a Reforma. */
+  cest?: string
   qtd: number
   unid: string
   vlItem: number
@@ -101,6 +103,14 @@ export interface ResultadoItem extends ItemSped {
   regraGeral: boolean
   /** `true` quando a classificação veio de reclassificação manual do usuário. */
   manual?: boolean
+  /** `true` quando o NCM chegou com >8 dígitos e foi truncado (NBS/EX). */
+  ncmTruncado?: boolean
+  /** NCM original como veio no SPED, antes da normalização. */
+  ncmOriginal?: string
+  /** `true` quando o NCM é inválido após normalização. */
+  ncmInvalido?: boolean
+  /** Quantas classificações oficiais existem para este NCM. */
+  opcoesClassificacao?: number
   redIBS: number
   redCBS: number
   ibs: number

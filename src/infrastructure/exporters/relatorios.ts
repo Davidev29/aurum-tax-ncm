@@ -19,9 +19,9 @@
  * - rodapé com "Página X de Y" resolvido pelo motor;
  * - colunas de identificador (NCM, CST, CFOP) em fonte monoespaçada.
  */
-import { calcularTributos } from '../../domain/services/calculo'
-import { REF_DEFAULT } from '../../domain/constants'
-import { fmtCarga, fmtCnpj, fmtMoeda, fmtNcm, fmtNum, fmtPct, hexToRgb } from '../../domain/services/format'
+import { anexoOficial, calcularTributos, round2 } from '../../domain/services/calculo'
+import { rotuloAnexoOficial } from '../../domain/constants/tributarios'
+import { fmtCarga, fmtMoeda, fmtNcm, fmtNum, fmtPct, hexToRgb } from '../../domain/services/format'
 import type { TDocumentDefinitions, Content } from 'pdfmake/interfaces'
 import { ehResumo } from '../sped/tipos'
 import type { ResultadoItem, ResultadoResumo, ResultadoSped } from '../sped/tipos'
@@ -177,7 +177,9 @@ export function csvSped(resultados: ResultadoSped): string {
     r.codItem, r.descricaoProduto, fmtNcm(r.ncm), r.cstIcms, r.cfop, r.qtd,
     Number(r.vlItem).toFixed(2), r.classificacao.cst, r.classificacao.cClassTrib,
     r.redIBS, r.redCBS, r.ibs.toFixed(2), r.cbs.toFixed(2),
-    r.totalTributos.toFixed(2), r.anexo,
+    // BLINDAGEM: coluna "Anexo" só com o oficial (`Número do Anexo` da base);
+    // sem cobertura oficial, vazio — nunca faixa derivada (`60`, `isento`).
+    r.totalTributos.toFixed(2), anexoOficial(r.classificacao) ?? '',
   ])
   return montarCSV([head, ...linhas], true)
 }
@@ -192,11 +194,11 @@ export function totaisSped(resultados: ResultadoSped) {
   let ibs = 0
   let cbs = 0
   for (const r of resultados) {
-    base += Number('_isResumo' in r ? r.totalOperacao : r.vlItem) || 0
-    ibs += r.ibs
-    cbs += r.cbs
+    base = round2(base + (Number('_isResumo' in r ? r.totalOperacao : r.vlItem) || 0))
+    ibs = round2(ibs + r.ibs)
+    cbs = round2(cbs + r.cbs)
   }
-  const trib = ibs + cbs
+  const trib = round2(ibs + cbs)
   return { base, ibs, cbs, trib, carga: base > 0 ? (trib / base) * 100 : 0 }
 }
 
@@ -460,13 +462,16 @@ export interface RelatorioProdutosParams {
   produtos: Produto[]
   empresa: Empresa | null
   emitente: Emitente
+  /** Alíquotas de referência dinâmicas (reativas a mudanças de regras vigentes). */
+  refIBS: number
+  refCBS: number
 }
 
 /**
  * Relatório de classificação dos produtos cadastrados (recria o `exportarPDF`
  * da v1 em pdfMake, com a mesma estrutura de colunas).
  */
-export async function exportarProdutosPDF({ produtos, empresa, emitente }: RelatorioProdutosParams): Promise<void> {
+export async function exportarProdutosPDF({ produtos, empresa, emitente, refIBS, refCBS }: RelatorioProdutosParams): Promise<void> {
   const cor = rgbHex(emitente.cor || '#0f215c')
   const data = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 
@@ -480,13 +485,13 @@ export async function exportarProdutosPDF({ produtos, empresa, emitente }: Relat
   let valorTotal = 0
   for (const p of produtos) {
     const c = p.classificacaoSnapshot ?? ({} as Produto['classificacaoSnapshot'])
-    const base = Number(p.quantidade ?? 0) * Number(p.valorUnitario ?? 0)
-    valorTotal += base
-    const r = calcularTributos(base, Number(c.pRedIBS ?? 0), Number(c.pRedCBS ?? 0), REF_DEFAULT.IBS, REF_DEFAULT.CBS)
-    ibsTotal += r.vIBS
-    cbsTotal += r.vCBS
+    const base = round2(Number(p.quantidade ?? 0) * Number(p.valorUnitario ?? 0))
+    valorTotal = round2(valorTotal + base)
+    const r = calcularTributos(base, Number(c.pRedIBS ?? 0), Number(c.pRedCBS ?? 0), refIBS, refCBS)
+    ibsTotal = round2(ibsTotal + r.vIBS)
+    cbsTotal = round2(cbsTotal + r.vCBS)
   }
-  const tribTotal = ibsTotal + cbsTotal
+  const tribTotal = round2(ibsTotal + cbsTotal)
   const carga = valorTotal > 0 ? (tribTotal / valorTotal) * 100 : 0
 
   const cols: ColunaRel[] = [
@@ -700,11 +705,27 @@ function graficosSpedPdf(resultados: ResultadoSped): NonNullable<Content>[] {
   }
 
   const itens = resultados as ResultadoItem[]
-  const chaves = ['0', '80', '70', '60', '50', '40', '30', 'misto', 'isento']
-  const porAnexo = chaves.map((a) => ({
-    anexo: a,
-    valor: itens.filter((r) => r.anexo === a).reduce((s, r) => s + (Number(r.vlItem) || 0), 0),
-  }))
+  // BLINDAGEM: agrupa por anexo OFICIAL quando houver (`Anexo IX`, …); itens
+  // sem cobertura oficial caem na faixa de redução derivada, rotulada como
+  // tal — anexos oficiais nunca somem nem viram faixa, e faixas nunca se
+  // passam por anexo oficial.
+  const grupos = new Map<string, { chave: string; rotulo: string; valor: number; cor: string }>()
+  for (const r of itens) {
+    const of = anexoOficial(r.classificacao)
+    const chave = of != null ? `oficial:${of}` : `faixa:${r.anexo}`
+    let g = grupos.get(chave)
+    if (!g) {
+      g = {
+        chave,
+        rotulo: of != null ? rotuloAnexoOficial(of) : `${ROTULOS_GRAFICO_PDF[r.anexo] ?? r.anexo} (faixa)`,
+        valor: 0,
+        cor: CORES_GRAFICO_PDF[r.anexo] ?? '#64748b',
+      }
+      grupos.set(chave, g)
+    }
+    g.valor += Number(r.vlItem) || 0
+  }
+  const porAnexo = [...grupos.values()]
   const maxAnexo = porAnexo.reduce((m, g) => Math.max(m, g.valor), 0)
   const top = [...itens]
     .sort((a, b) => b.totalTributos - a.totalTributos)
@@ -713,7 +734,7 @@ function graficosSpedPdf(resultados: ResultadoSped): NonNullable<Content>[] {
 
   return [
     {
-      text: 'Distribuição por anexo (base de cálculo)',
+      text: 'Distribuição por anexo oficial e faixa de redução (base de cálculo)',
       fontSize: 8.5,
       bold: true,
       color: '#1f3d37',
@@ -723,8 +744,8 @@ function graficosSpedPdf(resultados: ResultadoSped): NonNullable<Content>[] {
       table: {
         widths: ['26%', '52%', '22%'],
         body: porAnexo.map((g) => [
-          { text: ROTULOS_GRAFICO_PDF[g.anexo] ?? g.anexo, fontSize: 7, color: '#334155' },
-          barraPdf(g.valor, maxAnexo, CORES_GRAFICO_PDF[g.anexo] ?? '#94a3b8'),
+          { text: g.rotulo, fontSize: 7, color: '#334155' },
+          barraPdf(g.valor, maxAnexo, g.cor),
           { text: fmtMoeda(g.valor), fontSize: 7, bold: true, alignment: 'right' as const },
         ]),
       },
@@ -1050,11 +1071,204 @@ export interface RelatorioNfeParams {
   periodo: string
 }
 
+/* ------------------------------------------- novas seções (reforma v2) --- */
+
+/** Agrega itens das entradas por fornecedor Simples/MEI. */
+function fornecedoresSimples(notas: NotaXml[]): { nome: string; cnpj: string; qtdNotas: number; total: number }[] {
+  const mapa = new Map<string, { nome: string; cnpj: string; qtdNotas: number; total: number }>()
+  for (const n of notas) {
+    if (n.direcao !== 'entrada') continue
+    const regime = regimeDoEmitente(n.emitCrt, n.itensAnalisados)
+    if (regime !== 'simples' && regime !== 'mei') continue
+    const chave = n.emitCnpj
+    const atual = mapa.get(chave) ?? { nome: n.emitNome, cnpj: n.emitCnpj, qtdNotas: 0, total: 0 }
+    atual.qtdNotas++
+    atual.total += Number(n.valorTotal) || 0
+    mapa.set(chave, atual)
+  }
+  return [...mapa.values()].sort((a, b) => b.total - a.total)
+}
+
+/** Agrega itens por NCM com classificação da Reforma + rastreabilidade. */
+function distribuicaoNcm(notas: NotaXml[]): {
+  ncm: string
+  produto: string
+  cst: string
+  cClassTrib: string
+  anexo: string
+  redIBS: number
+  redCBS: number
+  base: number
+  ibs: number
+  cbs: number
+  totalTributos: number
+  qtdItens: number
+  manuais: number
+  regraGeral: number
+  truncados: number
+  invalidos: number
+  ambiguos: number
+  baseLegal: string
+}[] {
+  const mapa = new Map<string, {
+    ncm: string
+    produto: string
+    cst: string
+    cClassTrib: string
+    anexo: string
+    redIBS: number
+    redCBS: number
+    base: number
+    ibs: number
+    cbs: number
+    totalTributos: number
+    qtdItens: number
+    manuais: number
+    regraGeral: number
+    truncados: number
+    invalidos: number
+    ambiguos: number
+    baseLegal: string
+  }>()
+  for (const n of notas) {
+    for (const it of n.itensAnalisados) {
+      const chave = it.ncm
+      const atual = mapa.get(chave) ?? {
+        ncm: it.ncm,
+        produto: it.descricao || it.codProd,
+        cst: it.classificacao.cst || '—',
+        cClassTrib: it.classificacao.cClassTrib || '—',
+        // BLINDAGEM: só o anexo oficial; sem cobertura, '—' (nunca `60`/`isento`).
+        anexo: anexoOficial(it.classificacao) ?? '—',
+        redIBS: it.redIBS,
+        redCBS: it.redCBS,
+        base: 0,
+        ibs: 0,
+        cbs: 0,
+        totalTributos: 0,
+        qtdItens: 0,
+        manuais: 0,
+        regraGeral: 0,
+        truncados: 0,
+        invalidos: 0,
+        ambiguos: 0,
+        baseLegal: it.classificacao.baseLegal || '',
+      }
+      atual.base += Number(it.vlTotal) || 0
+      atual.ibs += Number(it.ibs) || 0
+      atual.cbs += Number(it.cbs) || 0
+      atual.totalTributos += Number(it.totalTributos) || 0
+      atual.qtdItens += 1
+      if (it.manual) atual.manuais += 1
+      if (it.regraGeral) atual.regraGeral += 1
+      if ((it as { ncmTruncado?: boolean }).ncmTruncado) atual.truncados += 1
+      if ((it as { ncmInvalido?: boolean }).ncmInvalido) atual.invalidos += 1
+      if (Number((it as { opcoesClassificacao?: number }).opcoesClassificacao ?? 1) > 1) atual.ambiguos += 1
+      // Preserva a 1ª base legal não vazia do grupo (auditoria).
+      if (!atual.baseLegal && it.classificacao.baseLegal) atual.baseLegal = it.classificacao.baseLegal
+      mapa.set(chave, atual)
+    }
+  }
+  return [...mapa.values()].sort((a, b) => b.base - a.base)
+}
+
+/** Agrega itens por produto (código) separado por fluxo. */
+function produtosPorFluxo(notas: NotaXml[], fluxo: 'entrada' | 'saida'): {
+  codigo: string
+  nome: string
+  ncm: string
+  qtd: number
+  base: number
+  ibs: number
+  cbs: number
+  trib: number
+}[] {
+  const mapa = new Map<string, { codigo: string; nome: string; ncm: string; qtd: number; base: number; ibs: number; cbs: number; trib: number }>()
+  for (const n of notas) {
+    if (n.direcao !== fluxo) continue
+    for (const it of n.itensAnalisados) {
+      const chave = `${it.codProd}‖${it.ncm}`
+      const atual = mapa.get(chave) ?? { codigo: it.codProd, nome: it.descricao || it.codProd, ncm: it.ncm, qtd: 0, base: 0, ibs: 0, cbs: 0, trib: 0 }
+      atual.qtd += Number(it.qtd) || 0
+      atual.base += Number(it.vlTotal) || 0
+      atual.ibs += Number(it.ibs) || 0
+      atual.cbs += Number(it.cbs) || 0
+      atual.trib += Number(it.totalTributos) || 0
+      mapa.set(chave, atual)
+    }
+  }
+  return [...mapa.values()].sort((a, b) => b.base - a.base)
+}
+
+/* ------------------------------------- tabela editorial (só NFe) --- */
+
+interface ColunaEditorial {
+  titulo: string
+  larg: number
+  alin?: 'left' | 'right' | 'center'
+  mono?: boolean
+  forte?: boolean
+}
+
 /**
- * Relatório das notas de XML em **retrato A4, nível editorial**: timbre só na
- * primeira folha, sumário executivo, apuração com quantidades avaliadas,
- * ranking de fornecedores e produtos analisados (entradas × saídas lado a
- * lado). Paleta fixa slate + esmeralda; textos padronizados.
+ * Tabela leve, de respiro editorial: cabeçalho em versalete cinza sem
+ * preenchimento, só filetes horizontais, sem zebra, células com folga.
+ * Usada só no relatório de XML para não passar sensação de densidade.
+ */
+function tabelaEditorial(opts: { cols: ColunaEditorial[]; rows: Cell[][] }) {
+  const peso = opts.cols.reduce((s, c) => s + c.larg, 0)
+  const widths = opts.cols.map((c) => `${((c.larg / peso) * 100).toFixed(3)}%`)
+
+  const cabecalho = opts.cols.map((c) => ({
+    text: c.titulo.toUpperCase(),
+    color: '#8a94a6',
+    bold: true,
+    fontSize: 6.5,
+    alignment: (c.alin ?? 'left') as 'left' | 'right' | 'center',
+    margin: [0, 0, 0, 5] as [number, number, number, number],
+  }))
+
+  const corpo = opts.rows.map((linha) =>
+    linha.map((v, j) => {
+      const col = opts.cols[j]
+      const s = v === null || v === undefined || v === '' ? '—' : String(v)
+      return {
+        text: s,
+        fontSize: 8,
+        bold: col.forte ?? false,
+        color: '#1e293b',
+        ...(col.mono ? { font: 'Courier' as const } : {}),
+        alignment: (col.alin ?? 'left') as 'left' | 'right' | 'center',
+        margin: [0, 3, 0, 3] as [number, number, number, number],
+        border: [false, false, false, false] as [boolean, boolean, boolean, boolean],
+      }
+    }),
+  )
+
+  return {
+    table: { headerRows: 1, widths, body: [cabecalho, ...corpo] as never[][], dontBreakRows: true },
+    layout: {
+      hLineColor: () => '#e6eaee',
+      vLineWidth: () => 0,
+      hLineWidth: (i: number, node: { table: { body: unknown[] } }) =>
+        i === 0 || i === 1 || i === node.table.body.length ? 0.7 : 0.3,
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
+    },
+    margin: [0, 2, 0, 10] as [number, number, number, number],
+  }
+}
+
+/**
+ * Relatório das notas de XML em **retrato A4, nível editorial**: uma ideia
+ * por seção, tabelas leves com poucas colunas, respiro entre blocos.
+ *
+ * ## v3 editorial — menos é mais
+ * 1. Comprou de Simples? (resposta direta, top 5, 3 colunas)
+ * 2. Produtos que mais comprou/vendeu (top 5, 4 colunas)
+ * 3. Fornecedor que mais deu crédito (top 5, 4 colunas)
+ * 4. Tributação por NCM (top 6, 5 colunas, classificação combinada)
+ * 5. Apuração resumida (4 linhas)
  */
 export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> {
   const { notas, ranking, emitente, empresaNome, periodo } = params
@@ -1062,14 +1276,10 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
   const data = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
   const ap = apurarIbsCbs(notas)
 
-  const qtdEntradas = ap.qtdEntradasApropriaveis + ap.qtdEntradasBloqueadas + ap.qtdEntradasNaoConfirmadas
   const baseTotal = ap.baseEntradas + ap.baseSaidas
   const tribEstimado = notas.reduce((s, n) => s + (Number(n.totalTributos) || 0), 0)
-  const destTotal = notas.reduce((s, n) => s + creditoIbsCbsDaNota(n.itensAnalisados, n).totalDestacado, 0)
   const carga = baseTotal > 0 ? (tribEstimado / baseTotal) * 100 : 0
-  const maxBar = Math.max(ap.creditoTotal, ap.debitoTotal, 1)
-  const maxForn = ranking.slice(0, 8).reduce((m, r) => Math.max(m, r.creditoTotal), 1)
-  const totalCredRank = ranking.reduce((s, r) => s + r.creditoTotal, 0)
+  const cargaSaldo = ap.baseSaidas > 0 ? (ap.saldoTotal / ap.baseSaidas) * 100 : 0
 
   const vereditoTexto =
     ap.resultado === 'a-pagar'
@@ -1082,172 +1292,176 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
   const vereditoCor = ap.resultado === 'a-pagar' ? '#dc2626' : ap.resultado === 'saldo-credor' ? '#047857' : '#475569'
   const vereditoFundo = ap.resultado === 'a-pagar' ? '#fef2f2' : ap.resultado === 'saldo-credor' ? '#ecfdf5' : '#f8fafc'
 
-  // Paleta editorial fixa — slate + esmeralda. A cor do emissor aparece só no
-  // selo do timbre; divisões e tabelas usam sempre os mesmos tons.
+  // Paleta editorial fixa — slate + esmeralda.
   const TINTA = '#0f172a'
   const SUAVE = '#64748b'
   const LINHA = '#e2e8f0'
-  const FUNDO = '#f8fafc'
   const ESMERALDA = '#047857'
-  const AZUL = '#1d4ed8'
+  const ALERTA = '#d97706'
 
-  // Referências de alíquota usadas nas notas (nota metodológica).
-  const refs = [...new Set(notas.map((n) => `${n.refIBS}% / ${n.refCBS}%`))].slice(0, 4)
+  // -- dados agregados --------------------------------------------------------
+  const simples = fornecedoresSimples(notas)
+  const totalSimples = simples.reduce((s, f) => s + f.total, 0)
+  const qtdNotasSimples = simples.reduce((s, f) => s + f.qtdNotas, 0)
+  const totalNotasEntrada = ap.qtdEntradasApropriaveis + ap.qtdEntradasBloqueadas + ap.qtdEntradasNaoConfirmadas
+  const pctSimples = totalNotasEntrada > 0
+    ? ((qtdNotasSimples / totalNotasEntrada) * 100).toFixed(1).replace('.', ',')
+    : '0'
 
-  // Produtos analisados — agregados por código a partir dos itens das notas,
-  // separados por fluxo. Top por valor para caber em quadros lado a lado.
-  interface ProdutoAgregado { codigo: string; nome: string; qtd: number; base: number; trib: number }
-  const agregar = (fluxo: 'entrada' | 'saida'): { top: ProdutoAgregado[]; qtdItens: number; base: number; trib: number } => {
-    const mapa = new Map<string, ProdutoAgregado>()
-    for (const n of notas) {
-      if (n.direcao !== fluxo) continue
-      for (const it of n.itensAnalisados) {
-        const chave = `${it.codProd}‖${it.ncm}`
-        const atual = mapa.get(chave) ?? { codigo: it.codProd, nome: it.descricao || it.codProd, qtd: 0, base: 0, trib: 0 }
-        atual.qtd += Number(it.qtd) || 0
-        atual.base += Number(it.vlTotal) || 0
-        atual.trib += Number(it.totalTributos) || 0
-        mapa.set(chave, atual)
-      }
-    }
-    const todos = [...mapa.values()].sort((a, b) => b.base - a.base)
-    return {
-      top: todos.slice(0, 7),
-      qtdItens: todos.length,
-      base: todos.reduce((s, p) => s + p.base, 0),
-      trib: todos.reduce((s, p) => s + p.trib, 0),
+  // Poucas linhas por tabela: top 5-6, para a página respirar (com cobertura da cauda).
+  const ncmTodos = distribuicaoNcm(notas)
+  const ncmDist = ncmTodos.slice(0, 6)
+  const ncmOcultos = ncmTodos.length - ncmDist.length
+  const ncmBaseOculta = ncmTodos.slice(6).reduce((s, n) => s + n.base, 0)
+
+  const prodEntradas = produtosPorFluxo(notas, 'entrada')
+  const prodSaidas = produtosPorFluxo(notas, 'saida')
+  const todosProdutos = [...prodEntradas.map(p => ({ ...p, dir: 'Compra' as const })), ...prodSaidas.map(p => ({ ...p, dir: 'Venda' as const }))]
+    .sort((a, b) => b.base - a.base)
+  const topProdutos = todosProdutos.slice(0, 5)
+  const prodOcultos = todosProdutos.length - topProdutos.length
+  const prodBaseOculta = todosProdutos.slice(5).reduce((s, p) => s + p.base, 0)
+
+  const topForn = ranking.slice(0, 5)
+  const fornOcultos = Math.max(0, ranking.length - topForn.length)
+
+  // Rastreabilidade fiscal: o que foi escolha do usuário vs sistema.
+  let qtdItensManual = 0
+  let qtdItensRegraGeral = 0
+  let qtdItensTruncados = 0
+  let qtdItensInvalidos = 0
+  let qtdItensAmbiguos = 0
+  for (const n of notas) {
+    for (const it of n.itensAnalisados) {
+      const r = it as { manual?: boolean; ncmTruncado?: boolean; ncmInvalido?: boolean; opcoesClassificacao?: number }
+      if (r.manual) qtdItensManual++
+      if (it.regraGeral) qtdItensRegraGeral++
+      if (r.ncmTruncado) qtdItensTruncados++
+      if (r.ncmInvalido) qtdItensInvalidos++
+      if (Number(r.opcoesClassificacao ?? 1) > 1) qtdItensAmbiguos++
     }
   }
-  const prodEntradas = agregar('entrada')
-  const prodSaidas = agregar('saida')
 
-  /** Cartão de KPI do sumário executivo. */
+  /** Cartão de KPI do sumário executivo — fundo branco, filete superior. */
   const cartaoKpi = (rotulo: string, valor: string, detalhe: string) => ({
     stack: [
-      { text: rotulo.toUpperCase(), fontSize: 6.5, bold: true, color: '#64748b', margin: [0, 0, 0, 2] as [number, number, number, number] },
-      { text: valor, fontSize: 12, bold: true, color: '#0f172a' },
-      { text: detalhe, fontSize: 6.8, color: '#64748b', margin: [0, 2, 0, 0] as [number, number, number, number] },
+      { canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 120, y2: 0, lineWidth: 2, lineColor: ESMERALDA }], margin: [0, 0, 0, 8] as [number, number, number, number] },
+      { text: rotulo.toUpperCase(), fontSize: 7, bold: true, color: '#8a94a6', margin: [0, 0, 0, 4] as [number, number, number, number] },
+      { text: valor, fontSize: 15, bold: true, color: '#0f172a' },
+      { text: detalhe, fontSize: 7.5, color: '#64748b', margin: [0, 4, 0, 0] as [number, number, number, number] },
     ],
-    fillColor: '#f8fafc',
-    margin: [7, 7, 7, 7] as [number, number, number, number],
+    margin: [10, 6, 10, 6] as [number, number, number, number],
   })
 
   const tituloSecao = (num: string, titulo: string, sub?: string): NonNullable<Content>[] => [
     {
       stack: [
-        { text: `SEÇÃO ${num}`, fontSize: 7, bold: true, color: ESMERALDA, margin: [0, 0, 0, 1] as [number, number, number, number] },
-        { text: titulo, fontSize: 12, bold: true, color: TINTA },
-        ...(sub ? [{ text: sub, fontSize: 7.5, color: SUAVE, margin: [0, 1, 0, 0] as [number, number, number, number] }] : []),
-        { canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: ESMERALDA }], margin: [0, 5, 0, 0] as [number, number, number, number] },
+        { text: `${num} — ${titulo}`, fontSize: 13, bold: true, color: TINTA, margin: [0, 0, 0, 2] as [number, number, number, number] },
+        ...(sub ? [{ text: sub, fontSize: 8, color: SUAVE, margin: [0, 0, 0, 0] as [number, number, number, number] }] : []),
+        { canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 499, y2: 0, lineWidth: 0.5, lineColor: LINHA }], margin: [0, 8, 0, 0] as [number, number, number, number] },
       ],
-      margin: [0, 14, 0, 6] as [number, number, number, number],
+      margin: [0, 14, 0, 8] as [number, number, number, number],
     },
   ]
 
-  // -- tabelas ---------------------------------------------------------------
-  const colsFluxo: ColunaRel[] = [
-    { titulo: 'Fluxo', larg: 34 },
-    { titulo: 'Notas avaliadas', larg: 16, alin: 'right', forte: true },
-    { titulo: 'Base (R$)', larg: 17, alin: 'right' },
-    { titulo: 'IBS (R$)', larg: 16, alin: 'right' },
-    { titulo: 'CBS (R$)', larg: 16, alin: 'right' },
-    { titulo: 'Total (R$)', larg: 17, alin: 'right', forte: true },
-  ]
-  const rowsFluxo: Cell[][] = [
-    ['Crédito — Entradas avaliadas', qtdEntradas, fmtMoeda(ap.baseEntradas), fmtMoeda(ap.creditoIBS + ap.bloqueadoIBS + ap.naoConfirmadoIBS), fmtMoeda(ap.creditoCBS + ap.bloqueadoCBS + ap.naoConfirmadoCBS), fmtMoeda(ap.creditoTotal + ap.bloqueadoTotal + ap.naoConfirmadoTotal)],
-    ['Débito — Saídas avaliadas', ap.qtdSaidas, fmtMoeda(ap.baseSaidas), fmtMoeda(ap.debitoIBS), fmtMoeda(ap.debitoCBS), fmtMoeda(ap.debitoTotal)],
-  ]
-
-  const colsApuracao: ColunaRel[] = [
-    { titulo: 'Apuração IBS/CBS (estimativa LC 214/2025)', larg: 42 },
-    { titulo: 'Base', larg: 17, alin: 'right' },
-    { titulo: 'IBS', larg: 17, alin: 'right' },
-    { titulo: 'CBS', larg: 17, alin: 'right' },
-    { titulo: 'Total', larg: 17, alin: 'right', forte: true },
+  // -- tabelas editoriais (poucas colunas) --------------------------------------
+  const colsApuracao: ColunaEditorial[] = [
+    { titulo: '', larg: 46 },
+    { titulo: 'IBS', larg: 18, alin: 'right' },
+    { titulo: 'CBS', larg: 18, alin: 'right' },
+    { titulo: 'Total', larg: 18, alin: 'right', forte: true },
   ]
   const rowsApuracao: Cell[][] = [
-    [`Débitos — Saídas (${ap.qtdSaidas} nota(s) avaliada(s))`, fmtMoeda(ap.baseSaidas), fmtMoeda(ap.debitoIBS), fmtMoeda(ap.debitoCBS), fmtMoeda(ap.debitoTotal)],
-    [`(−) Créditos apropriáveis — Entradas regime normal (${ap.qtdEntradasApropriaveis} nota(s))`, fmtMoeda(ap.baseEntradas), fmtMoeda(ap.creditoIBS), fmtMoeda(ap.creditoCBS), fmtMoeda(ap.creditoTotal)],
-    ['(=) Saldo apurado', '—', fmtMoeda(ap.saldoIBS), fmtMoeda(ap.saldoCBS), fmtMoeda(ap.saldoTotal)],
-  ]
-  const rowsForaSaldo: Cell[][] = [
+    [`Saídas · ${ap.qtdSaidas} notas`, fmtMoeda(ap.debitoIBS), fmtMoeda(ap.debitoCBS), fmtMoeda(ap.debitoTotal)],
+    [`Entradas regime normal · ${ap.qtdEntradasApropriaveis} notas`, fmtMoeda(ap.creditoIBS), fmtMoeda(ap.creditoCBS), fmtMoeda(ap.creditoTotal)],
+    ['Saldo apurado', fmtMoeda(ap.saldoIBS), fmtMoeda(ap.saldoCBS), fmtMoeda(ap.saldoTotal)],
+    ['Carga sobre saldo (saldo ÷ base saídas)', '—', '—', ap.baseSaidas > 0 ? fmtCarga(cargaSaldo) : '—'],
     ...(ap.qtdEntradasBloqueadas > 0
-      ? [[`Bloqueados — Simples/MEI (${ap.qtdEntradasBloqueadas} nota(s), fora do saldo)`, '—', fmtMoeda(ap.bloqueadoIBS), fmtMoeda(ap.bloqueadoCBS), fmtMoeda(ap.bloqueadoTotal)] as Cell[]]
+      ? [[`Simples/MEI bloqueado · ${ap.qtdEntradasBloqueadas} notas`, fmtMoeda(ap.bloqueadoIBS), fmtMoeda(ap.bloqueadoCBS), fmtMoeda(ap.bloqueadoTotal)] as Cell[]]
       : []),
-    ...(ap.qtdEntradasNaoConfirmadas > 0
-      ? [[`Não confirmados — regime desconhecido (${ap.qtdEntradasNaoConfirmadas} nota(s), fora do saldo)`, '—', fmtMoeda(ap.naoConfirmadoIBS), fmtMoeda(ap.naoConfirmadoCBS), fmtMoeda(ap.naoConfirmadoTotal)] as Cell[]]
-      : []),
-    ...(ap.qtdQuarentena > 0 ? [[`Quarentena — direção indefinida (${ap.qtdQuarentena} nota(s), excluída)`, '—', '—', '—', '—'] as Cell[]] : []),
   ]
 
-  const topForn = ranking.slice(0, 8)
-  const colsRank: ColunaRel[] = [
-    { titulo: 'Fornecedor (maior crédito)', larg: 38 },
+  const colsRank: ColunaEditorial[] = [
+    { titulo: 'Fornecedor', larg: 40 },
     { titulo: 'Notas', larg: 10, alin: 'right' },
-    { titulo: 'Base entradas', larg: 17, alin: 'right' },
-    { titulo: 'Crédito total', larg: 17, alin: 'right', forte: true },
-    { titulo: '% do crédito', larg: 11, alin: 'right' },
+    { titulo: 'Base', larg: 18, alin: 'right' },
+    { titulo: 'IBS / CBS', larg: 18, alin: 'right' },
+    { titulo: 'Crédito', larg: 14, alin: 'right', forte: true },
   ]
   const rowsRank: Cell[][] = topForn.map((r) => [
-    `${r.nome}${r.simples ? ' (Simples · sem crédito)' : ''} · ${fmtCnpj(r.cnpj)}`.slice(0, 58),
+    `${r.nome}${r.simples ? ' [Simples]' : ''}`.slice(0, 40),
     r.qtdNotas,
     fmtMoeda(r.totalEntradas),
-    fmtMoeda(r.creditoTotal),
-    totalCredRank > 0 ? `${((r.creditoTotal / totalCredRank) * 100).toFixed(1).replace('.', ',')}%` : '—',
+    r.simples ? '—' : `${fmtMoeda(r.creditoIBS)} / ${fmtMoeda(r.creditoCBS)}`,
+    r.simples ? 'sem crédito' : fmtMoeda(r.creditoTotal),
   ])
 
-  const colsProduto: ColunaRel[] = [
-    { titulo: 'Produto', larg: 44 },
-    { titulo: 'Qtd', larg: 14, alin: 'right' },
-    { titulo: 'Base', larg: 21, alin: 'right' },
-    { titulo: 'IBS+CBS', larg: 21, alin: 'right', forte: true },
+  const colsProduto: ColunaEditorial[] = [
+    { titulo: 'Produto', larg: 38 },
+    { titulo: 'Fluxo', larg: 11, alin: 'center' },
+    { titulo: 'Qtd', larg: 11, alin: 'right', mono: true },
+    { titulo: 'Base', larg: 18, alin: 'right' },
+    { titulo: 'Tributos', larg: 14, alin: 'right', forte: true },
+    { titulo: 'Carga', larg: 8, alin: 'right', mono: true },
   ]
-  const linhasProduto = (lista: ProdutoAgregado[]): Cell[][] =>
-    lista.map((p) => [
-      `${p.nome.slice(0, 30)} · ${p.codigo}`.slice(0, 42),
-      fmtNum(p.qtd),
-      fmtMoeda(p.base),
-      fmtMoeda(p.trib),
-    ])
-  /** Quadro lateral de produtos (entradas em esmeralda, saídas em azul). */
-  const quadroProdutos = (
-    rotulo: string,
-    resumo: string,
-    dados: { top: ProdutoAgregado[]; qtdItens: number; base: number; trib: number },
-    destaque: string,
-  ): NonNullable<Content> => ({
-    stack: [
-      {
-        table: {
-          widths: ['100%'],
-          body: [
-            [
-              {
-                stack: [
-                  { text: rotulo, fontSize: 8, bold: true, color: '#ffffff', alignment: 'center' as const },
-                  { text: resumo, fontSize: 6.5, color: '#ffffff', alignment: 'center' as const, margin: [0, 1, 0, 0] as [number, number, number, number] },
-                ],
-                fillColor: destaque,
-                margin: [6, 6, 6, 6] as [number, number, number, number],
-              },
-            ],
-          ],
-        },
-        layout: 'noBorders' as const,
-        margin: [0, 0, 0, 3] as [number, number, number, number],
-      },
-      ...(dados.top.length
-        ? [tabelaRelatorio({ cols: colsProduto, rows: linhasProduto(dados.top), total: ['TOTAL DO FLUXO', `${dados.qtdItens} item(ns)`, fmtMoeda(dados.base), fmtMoeda(dados.trib)], corCabecalho: TINTA })]
-        : [{ text: 'Sem produtos neste fluxo no filtro aplicado.', fontSize: 7.5, italics: true, color: SUAVE, margin: [0, 4, 0, 4] as [number, number, number, number] }]),
-    ],
-  })
+  const rowsProduto: Cell[][] = topProdutos.map((p) => [
+    `${p.nome.slice(0, 30)}`.slice(0, 32),
+    p.dir,
+    fmtNum(p.qtd),
+    fmtMoeda(p.base),
+    fmtMoeda(p.trib),
+    p.base > 0 ? fmtCarga((p.trib / p.base) * 100) : '—',
+  ])
+
+  const colsNcm: ColunaEditorial[] = [
+    { titulo: 'NCM', larg: 13, mono: true, alin: 'left', forte: true },
+    { titulo: 'Tributação · Reforma', larg: 32 },
+    { titulo: 'Redução', larg: 13, alin: 'center' },
+    { titulo: 'Origem', larg: 12, alin: 'center' },
+    { titulo: 'Base', larg: 15, alin: 'right' },
+    { titulo: 'Tributos', larg: 15, alin: 'right', forte: true },
+  ]
+  const reformaTxt = (cst: string, cClass: string, anexo: string): string => {
+    const trib = [cst !== '—' ? `CST ${cst}` : null, cClass !== '—' ? cClass : null].filter(Boolean).join(' · ')
+    const anx = anexo !== '—' && anexo !== '' ? ` · An. ${anexo}` : ''
+    return `${trib}${anx}` || '—'
+  }
+  const reducaoTxt = (ibs: number, cbs: number): string => {
+    if (!ibs && !cbs) return 'cheia'
+    if (ibs === cbs) return `−${fmtPct(ibs)}`
+    return `−${fmtPct(ibs)} / −${fmtPct(cbs)}`
+  }
+  const origemTxt = (n: { manuais: number; qtdItens: number; regraGeral: number }): string => {
+    if (n.manuais > 0) return 'Manual*'
+    if (n.regraGeral >= n.qtdItens && n.qtdItens > 0) return 'Regra geral'
+    return 'Sistema'
+  }
+  const rowsNcm: Cell[][] = ncmDist.map((n) => [
+    fmtNcm(n.ncm),
+    reformaTxt(n.cst, n.cClassTrib, n.anexo),
+    reducaoTxt(n.redIBS, n.redCBS),
+    origemTxt(n),
+    fmtMoeda(n.base),
+    fmtMoeda(n.ibs + n.cbs),
+  ])
+
+  const colsSimples: ColunaEditorial[] = [
+    { titulo: 'Fornecedor', larg: 52 },
+    { titulo: 'Notas', larg: 14, alin: 'right' },
+    { titulo: 'Sem crédito', larg: 34, alin: 'right', forte: true },
+  ]
+  const rowsSimples: Cell[][] = simples.slice(0, 5).map((f) => [
+    f.nome.slice(0, 42),
+    f.qtdNotas,
+    fmtMoeda(f.total),
+  ])
 
   const infoTimbre = linhasEmitente(emitente).map((l) => l[0]).filter(Boolean)
   const doc: TDocumentDefinitions = {
     pageSize: 'A4',
     pageOrientation: 'portrait',
-    pageMargins: [40, 55, 40, 55],
-    defaultStyle: { font: 'Roboto', fontSize: 8.5, color: '#1e293b', lineHeight: 1.35 },
+    pageMargins: [42, 48, 42, 50],
+    defaultStyle: { font: 'Roboto', fontSize: 9, color: '#1e293b', lineHeight: 1.35 },
     info: {
       title: `Apuração IBS/CBS — Notas Fiscais (XML) · ${empresaNome} · ${periodo}`,
       author: emitente.razaoSocial || 'Aurum Tax NCM',
@@ -1258,196 +1472,162 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
     header: ((pagina: number) => {
       if (pagina === 1) return null
       return {
-        margin: [40, 18, 40, 0] as [number, number, number, number],
+        margin: [42, 16, 42, 0] as [number, number, number, number],
         stack: [
           {
             columns: [
-              { text: 'APURAÇÃO IBS/CBS · NOTAS FISCAIS (XML)', fontSize: 7, bold: true, color: SUAVE },
-              { text: `${empresaNome} · ${periodo}`, fontSize: 7, color: SUAVE, alignment: 'right' as const },
+              { text: 'Apuração IBS/CBS · XML', fontSize: 7, color: '#8a94a6' },
+              { text: `${empresaNome} · ${periodo}`, fontSize: 7, color: '#8a94a6', alignment: 'right' as const },
             ],
           },
-          { canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: LINHA }], margin: [0, 5, 0, 0] as [number, number, number, number] },
+          { canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 499, y2: 0, lineWidth: 0.5, lineColor: LINHA }], margin: [0, 6, 0, 0] as [number, number, number, number] },
         ],
       }
     }) as TDocumentDefinitions['header'],
     footer: rodape(emitente) as TDocumentDefinitions['footer'],
     content: [
-      // -- timbre da primeira folha -------------------------------------------
-      { canvas: [{ type: 'rect' as const, x: 0, y: 0, w: 515, h: 5, color: ESMERALDA }], margin: [0, 0, 0, 10] as [number, number, number, number] },
+      // -- timbre da primeira folha (leve, sem barra chapada) ----------------------
       {
-        columnGap: 12,
+        columnGap: 14,
         columns: [
           { width: 'auto', stack: [logoDoEmitente(emitente, cor) as never] },
           {
             width: '*',
             stack: [
-              { text: emitente.razaoSocial || empresaNome, fontSize: 13, bold: true, color: TINTA },
-              ...(emitente.cnpj ? [{ text: `CNPJ ${emitente.cnpj}${emitente.ie ? `  ·  IE ${emitente.ie}` : ''}`, fontSize: 7.5, color: SUAVE, margin: [0, 2, 0, 0] as [number, number, number, number] }] : []),
-              ...infoTimbre.slice(1).map((linha) => ({ text: linha, fontSize: 7.2, color: SUAVE, margin: [0, 1, 0, 0] as [number, number, number, number] })),
+              { text: emitente.razaoSocial || empresaNome, fontSize: 12, bold: true, color: TINTA },
+              ...(emitente.cnpj ? [{ text: `CNPJ ${emitente.cnpj}`, fontSize: 7.5, color: SUAVE, margin: [0, 3, 0, 0] as [number, number, number, number] }] : []),
+              ...infoTimbre.slice(1, 2).map((linha) => ({ text: linha, fontSize: 7.5, color: SUAVE, margin: [0, 1, 0, 0] as [number, number, number, number] })),
             ],
           },
           {
             width: 'auto',
             alignment: 'right',
             stack: [
-              { text: 'DOCUMENTO TRIBUTÁRIO', fontSize: 7, bold: true, color: ESMERALDA },
-              { text: 'Apuração IBS/CBS', fontSize: 9, bold: true, color: TINTA, margin: [0, 1, 0, 0] as [number, number, number, number] },
-              { text: `Período ${periodo}`, fontSize: 7.2, color: SUAVE, margin: [0, 1, 0, 0] as [number, number, number, number] },
-              { text: `Gerado em ${data}`, fontSize: 7.2, color: SUAVE },
+              { text: `Período ${periodo}`, fontSize: 7.5, color: SUAVE, margin: [0, 12, 0, 0] as [number, number, number, number] },
+              { text: `Gerado em ${data}`, fontSize: 7.5, color: SUAVE },
             ],
           },
         ],
+        margin: [0, 0, 0, 4] as [number, number, number, number],
       },
-      { canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.7, lineColor: LINHA }], margin: [0, 10, 0, 10] as [number, number, number, number] },
-      // -- capa ---------------------------------------------------------------
-      { text: 'REFORMA TRIBUTÁRIA · LC 214/2025 · NT 2025.002', fontSize: 7.5, bold: true, color: ESMERALDA, margin: [0, 2, 0, 2] as [number, number, number, number] },
-      { text: 'Apuração IBS / CBS', fontSize: 24, bold: true, color: TINTA, margin: [0, 0, 0, 1] as [number, number, number, number] },
-      { text: 'Notas fiscais eletrônicas (XML) — créditos das entradas × débitos das saídas', fontSize: 9.5, color: '#475569' },
+      { canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 499, y2: 0, lineWidth: 0.5, lineColor: LINHA }], margin: [0, 8, 0, 18] as [number, number, number, number] },
+      // -- capa ------------------------------------------------------------------
+      { text: 'Reforma tributária · LC 214/2025', fontSize: 8, bold: true, color: ESMERALDA, margin: [0, 0, 0, 6] as [number, number, number, number] },
+      { text: 'Apuração IBS / CBS', fontSize: 28, bold: true, color: TINTA, margin: [0, 0, 0, 4] as [number, number, number, number] },
+      { text: 'Créditos das entradas × débitos das saídas', fontSize: 10.5, color: '#475569', margin: [0, 0, 0, 4] as [number, number, number, number] },
       {
-        text: `${empresaNome} · Período ${periodo} · Gerado em ${data} · ${notas.length} nota(s) no filtro`,
-        fontSize: 7.5, color: SUAVE, margin: [0, 4, 0, 8] as [number, number, number, number],
+        text: `${empresaNome} · ${notas.length} notas no filtro`,
+        fontSize: 8, color: SUAVE, margin: [0, 0, 0, 14] as [number, number, number, number],
       },
       {
         table: {
-          widths: ['*', '*', '*', '*'],
+          widths: ['*', '*', '*'],
           body: [
             [
-              cartaoKpi('Entradas avaliadas', String(qtdEntradas), `Base ${fmtMoeda(ap.baseEntradas)}`),
-              cartaoKpi('Saídas avaliadas', String(ap.qtdSaidas), `Base ${fmtMoeda(ap.baseSaidas)}`),
-              cartaoKpi('Crédito apropriável', fmtMoeda(ap.creditoTotal), `IBS ${fmtMoeda(ap.creditoIBS)} + CBS ${fmtMoeda(ap.creditoCBS)}`),
-              cartaoKpi('Débito das saídas', fmtMoeda(ap.debitoTotal), `IBS ${fmtMoeda(ap.debitoIBS)} + CBS ${fmtMoeda(ap.debitoCBS)}`),
+              cartaoKpi('Crédito apropriável', fmtMoeda(ap.creditoTotal), `${ap.qtdEntradasApropriaveis} entradas · IBS ${fmtMoeda(ap.creditoIBS)} + CBS ${fmtMoeda(ap.creditoCBS)}`),
+              cartaoKpi('Débito das saídas', fmtMoeda(ap.debitoTotal), `${ap.qtdSaidas} saídas · IBS ${fmtMoeda(ap.debitoIBS)} + CBS ${fmtMoeda(ap.debitoCBS)}`),
+              cartaoKpi('Carga estimada', fmtCarga(carga), `Base total ${fmtMoeda(baseTotal)} · Sobre saldo ${ap.baseSaidas > 0 ? fmtCarga(cargaSaldo) : '—'}`),
             ],
           ],
         },
         layout: 'noBorders' as const,
-        margin: [0, 0, 0, 4] as [number, number, number, number],
+        margin: [0, 0, 0, 10] as [number, number, number, number],
       },
       // -- veredito em destaque -------------------------------------------------
       {
         table: {
-          widths: [5, '*'],
+          widths: [3, '*'],
           body: [
             [
               { text: '', fillColor: vereditoCor, margin: [0, 0, 0, 0] as [number, number, number, number] },
               {
                 stack: [
-                  { text: vereditoTexto, fontSize: 10.5, bold: true, color: vereditoCor },
+                  { text: vereditoTexto, fontSize: 11, bold: true, color: vereditoCor },
                   {
-                    text: `Carga estimada ${fmtCarga(carga)} sobre base total de ${fmtMoeda(baseTotal)} · IBS/CBS destacados no XML: ${fmtMoeda(destTotal)} · Quarentena excluída: ${ap.qtdQuarentena} nota(s)`,
-                    fontSize: 7.2, color: '#475569', margin: [0, 2, 0, 0] as [number, number, number, number],
+                    text: ap.qtdQuarentena > 0 ? `${ap.qtdQuarentena} nota(s) em quarentena, fora da apuração.` : 'Quarentena excluída da apuração.',
+                    fontSize: 7.5, color: '#475569', margin: [0, 3, 0, 0] as [number, number, number, number],
                   },
                 ],
                 fillColor: vereditoFundo,
-                margin: [10, 8, 10, 8] as [number, number, number, number],
+                margin: [14, 12, 14, 12] as [number, number, number, number],
               },
             ],
           ],
         },
         layout: 'noBorders' as const,
-        margin: [0, 2, 0, 2] as [number, number, number, number],
+        margin: [0, 4, 0, 6] as [number, number, number, number],
       },
-      // -- 1. direção ------------------------------------------------------------
-      ...tituloSecao('01', 'Crédito por entrada × débito por saída', 'Quantidades avaliadas e valores estimados — a base da apuração.'),
-      tabelaRelatorio({ cols: colsFluxo, rows: rowsFluxo, corCabecalho: TINTA }),
-      {
-        table: {
-          widths: ['26%', '56%', '18%'],
-          body: [
-            [
-              { text: 'Crédito apropriável', fontSize: 7.5, color: '#334155' },
-              barraPdf(ap.creditoTotal, maxBar, '#047857', 200),
-              { text: fmtMoeda(ap.creditoTotal), fontSize: 7.5, bold: true, alignment: 'right' as const },
-            ],
-            [
-              { text: 'Débito das saídas', fontSize: 7.5, color: '#334155' },
-              barraPdf(ap.debitoTotal, maxBar, '#1d4ed8', 200),
-              { text: fmtMoeda(ap.debitoTotal), fontSize: 7.5, bold: true, alignment: 'right' as const },
-            ],
-          ],
-        },
-        layout: 'noBorders' as const,
-        margin: [0, 0, 0, 2] as [number, number, number, number],
-      },
-      // -- 2. apuração ------------------------------------------------------------
-      ...tituloSecao('02', 'Apuração IBS/CBS — débitos menos créditos', 'Entradas de regime normal abatem; Simples/MEI bloqueados e regime desconhecido ficam fora do saldo.'),
-      tabelaRelatorio({
-        cols: colsApuracao,
-        rows: [...rowsApuracao, ...rowsForaSaldo],
-        corCabecalho: TINTA,
-      }),
-      // -- 3. fornecedores ---------------------------------------------------------
-      ...(topForn.length
+      // -- 1. comprou de Simples? ---------------------------------------------------
+      ...(simples.length > 0
         ? [
-            ...tituloSecao('03', 'Fornecedores que mais geraram crédito', 'IBS + CBS estimados das entradas por emitente — ver as notas na tela do sistema.'),
-            tabelaRelatorio({ cols: colsRank, rows: rowsRank, corCabecalho: TINTA }),
+            ...tituloSecao('01', 'Comprou de Simples / MEI?', 'Sem crédito de IBS/CBS — fica fora da apuração.'),
             {
               table: {
-                widths: ['34%', '48%', '18%'],
-                body: topForn.slice(0, 5).map((r) => [
-                  { text: r.nome.slice(0, 30), fontSize: 7.2, color: '#334155' },
-                  barraPdf(r.creditoTotal, maxForn, r.simples ? '#94a3b8' : '#047857', 170),
-                  { text: fmtMoeda(r.creditoTotal), fontSize: 7.2, bold: true, alignment: 'right' as const },
-                ]),
+                widths: [3, '*'],
+                body: [
+                  [
+                    { text: '', fillColor: ALERTA, margin: [0, 0, 0, 0] as [number, number, number, number] },
+                    {
+                      stack: [
+                        { text: `${fmtMoeda(totalSimples)} em ${qtdNotasSimples} notas — sem crédito`, fontSize: 11, bold: true, color: ALERTA },
+                        { text: `${pctSimples}% das notas de entrada (valor acima = total da nota, inclui tributos antigos; a apuração usa a base IBS/CBS).`, fontSize: 8, color: '#475569', margin: [0, 2, 0, 0] as [number, number, number, number] },
+                      ],
+                      fillColor: '#fffbeb',
+                      margin: [14, 12, 14, 12] as [number, number, number, number],
+                    },
+                  ],
+                ],
               },
               layout: 'noBorders' as const,
-              margin: [0, 0, 0, 2] as [number, number, number, number],
+              margin: [0, 0, 0, 10] as [number, number, number, number],
             },
+            tabelaEditorial({ cols: colsSimples, rows: rowsSimples }),
+          ]
+        : [
+            ...tituloSecao('01', 'Comprou de Simples / MEI?', 'Sem crédito de IBS/CBS.'),
+            {
+              text: 'Nenhuma entrada do Simples/MEI — tudo gera crédito integral.',
+              fontSize: 8.5, color: '#047857', margin: [0, 2, 0, 10] as [number, number, number, number],
+            },
+          ]),
+      // -- 2. produtos que mais comprou/vendeu ---------------------------------------
+      ...tituloSecao('02', 'Produtos que mais comprou / vendeu', `Top 5 por valor de base${prodOcultos > 0 ? ` — mais ${prodOcultos} produto(s) (${fmtMoeda(prodBaseOculta)}) fora do top.` : '.'}`),
+      tabelaEditorial({ cols: colsProduto, rows: rowsProduto }),
+      // -- 3. fornecedor que mais deu crédito -----------------------------------------
+      ...(topForn.length
+        ? [
+            ...tituloSecao('03', 'Fornecedor que mais deu crédito', `Top 5 por crédito estimado${fornOcultos > 0 ? ` — mais ${fornOcultos} fora do top.` : '.'} [Simples] = sem transferência de crédito.`),
+            tabelaEditorial({ cols: colsRank, rows: rowsRank }),
           ]
         : []),
-      // -- 4. produtos analisados (quadros lado a lado) -------------------------------
-      ...tituloSecao('04', 'Produtos analisados — entradas × saídas', 'Itens dos XMLs agregados por produto (código), top 7 por valor em cada fluxo.'),
+      // -- 4. tributação por NCM (página própria, tabela mais larga) --------------------
+      ...(ncmDist.length
+        ? [
+            ...tituloSecao('04', 'Tributação por NCM', `Top 6 por base, com a classificação da Reforma${ncmOcultos > 0 ? ` — mais ${ncmOcultos} NCM(s) (${fmtMoeda(ncmBaseOculta)}) fora do top.` : '.'} *Manual = escolha do usuário (isenta o sistema).`),
+            tabelaEditorial({ cols: colsNcm, rows: rowsNcm }),
+          ]
+        : []),
+      // -- 5. apuração resumida ---------------------------------------------------------
+      ...tituloSecao('05', 'Apuração — resumo', 'Estimativa LC 214/2025.'),
+      tabelaEditorial({ cols: colsApuracao, rows: rowsApuracao }),
+      // -- 6. rastreabilidade e divergências ------------------------------------------
+      ...tituloSecao('06', 'Rastreabilidade — sistema × sua escolha', 'Transparência fiscal: o que é regra oficial e o que você decidiu.'),
       {
-        columnGap: 10,
-        columns: [
-          quadroProdutos(
-            'ENTRADAS · CRÉDITO',
-            `${prodEntradas.qtdItens} produto(s) · base ${fmtMoeda(prodEntradas.base)}`,
-            prodEntradas,
-            ESMERALDA,
-          ),
-          quadroProdutos(
-            'SAÍDAS · DÉBITO',
-            `${prodSaidas.qtdItens} produto(s) · base ${fmtMoeda(prodSaidas.base)}`,
-            prodSaidas,
-            AZUL,
-          ),
+        stack: [
+          { text: `Itens com classificação manual (sua escolha, isenta o sistema): ${qtdItensManual}`, fontSize: 8.5, color: qtdItensManual > 0 ? '#b45309' : SUAVE, margin: [0, 0, 0, 2] as [number, number, number, number] },
+          { text: `Itens na regra geral — sem vínculo específico (alíquota cheia): ${qtdItensRegraGeral}`, fontSize: 8.5, color: SUAVE, margin: [0, 0, 0, 2] as [number, number, number, number] },
+          { text: `Itens com NCM ambíguo (2+ enquadramentos, usada a 1ª opção como estimativa): ${qtdItensAmbiguos}`, fontSize: 8.5, color: qtdItensAmbiguos > 0 ? '#b45309' : SUAVE, margin: [0, 0, 0, 2] as [number, number, number, number] },
+          { text: `Itens com NCM truncado (NBS/EX, confira): ${qtdItensTruncados} · NCM inválido: ${qtdItensInvalidos}`, fontSize: 8.5, color: qtdItensTruncados + qtdItensInvalidos > 0 ? '#dc2626' : SUAVE, margin: [0, 0, 0, 2] as [number, number, number, number] },
+          { text: 'Carga estimada = tributos estimados ÷ base total (entradas + saídas). Carga sobre saldo = saldo apurado ÷ base das saídas (seção 05).', fontSize: 7.5, italics: true, color: '#94a3b8', margin: [0, 6, 0, 0] as [number, number, number, number] },
         ],
+        margin: [0, 2, 0, 10] as [number, number, number, number],
       },
       {
-        table: {
-          widths: [5, '*'],
-          body: [
-            [
-              { text: '', fillColor: ESMERALDA, margin: [0, 0, 0, 0] as [number, number, number, number] },
-              {
-                stack: [
-                  { text: 'Nota metodológica', fontSize: 8.5, bold: true, color: TINTA },
-                  {
-                    text: [
-                      'Estimativa por item: base × alíquotas de referência com reduções de CST/cClassTrib (LC 214/2025). ',
-                      refs.length ? `Referências nas notas: ${refs.join(' · ')}. ` : '',
-                      'Saída gera débito integral; entrada de regime normal gera crédito apropriável integral. ',
-                      'Simples/MEI é bloqueado (não transfere crédito); regime desconhecido fica como não confirmado; ',
-                      'quarentena é excluída.',
-                    ].join(''),
-                    fontSize: 7.2, color: '#475569', margin: [0, 2, 0, 0] as [number, number, number, number],
-                  },
-                ],
-                fillColor: FUNDO,
-                margin: [10, 8, 10, 8] as [number, number, number, number],
-              },
-            ],
-          ],
-        },
-        layout: 'noBorders' as const,
-        margin: [0, 6, 0, 4] as [number, number, number, number],
-      },
-      {
-        text: 'Documento gerado automaticamente a partir dos XMLs importados — confira na EFD. O documento fiscal válido é o XML com sua chave de acesso. Estimativas calculadas sobre o filtro aplicado em tela.',
-        fontSize: 7, italics: true, color: '#94a3b8', margin: [0, 6, 0, 0] as [number, number, number, number],
+        text: 'Estimativa por item (base × alíquota de referência, com reduções da Reforma). Confira na EFD — o documento fiscal válido é o XML.',
+        fontSize: 7, italics: true, color: '#94a3b8', margin: [0, 10, 0, 0] as [number, number, number, number],
       },
     ],
   }
 
-  await gerarPdf(doc, `NFe_Apuracao_${hojeISO()}.pdf`)
+  await gerarPdf(doc, `NFe_Apuracao_${empresaNome.replace(/\W+/g, '_') || 'empresa'}_${hojeISO()}.pdf`)
 }

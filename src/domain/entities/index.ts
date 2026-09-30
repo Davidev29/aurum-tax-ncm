@@ -152,12 +152,12 @@ export interface Empresa {
   cnpj: string
   fantasia: string
   criadoEm: string
-  /** Inscrição estadual — vem do SPED (0000), XML (emit/IE) ou edição manual. */
+  /** Inscrição estadual — vem do XML (emit/IE) ou edição manual. */
   ie?: string
-  /** Inscrição municipal — vem do SPED (0000) ou XML (emit/IM). */
+  /** Inscrição municipal — vem do XML (emit/IM) ou edição manual. */
   im?: string
   /**
-   * Regime tributário — detectado via CRT/CSOSN dos XMLs/SPED. `undefined`
+   * Regime tributário — detectado via CRT/CSOSN dos XMLs. `undefined`
    * = ainda desconhecido (a UI não afirma nada nesse caso).
    */
   regimeTributario?: 'simples' | 'mei' | 'normal'
@@ -237,6 +237,25 @@ export interface ReclassificacaoManual {
   atualizadoEm: string
 }
 
+/** Entrada append-only do log imutável. Nunca atualizada nem deletada pela UI. */
+export interface AuditLog {
+  id?: number
+  quando: string
+  tabela: string
+  chave: string
+  operacao: 'criar' | 'atualizar' | 'excluir'
+  autor: string
+  antes: Record<string, unknown> | null
+  depois: Record<string, unknown> | null
+}
+
+/** CEST (7 dígitos) — informativo, não altera a Reforma. */
+export interface TabelaCest {
+  codigo: string
+  descricao: string
+  ncm?: string
+}
+
 export interface Produto {
   id?: number
   empresaId: number | null
@@ -281,6 +300,13 @@ export interface ReferenciaTributaria {
   reducaoBcCst: boolean | string | null
   monofasica: boolean | string | null
   creditoPresumido: boolean | string | null
+  /**
+   * Flag oficial `Diferimento` da base `classificacao-tributaria.json`
+   * (tabela de referência CST × cClassTrib). É a fonte primária para
+   * decidir diferimento, junto com CST 510/515 e `cstDetalhes.indDiferimento`.
+   * `null` = base sem informação (pseudo-objetos de snapshot).
+   */
+  diferimento: boolean | null
   anexo: string | null
   urlLegislacao: string | null
   documentos: Partial<DocumentosHabilitados>

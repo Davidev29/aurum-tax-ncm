@@ -9,6 +9,7 @@
 import { create } from 'zustand'
 import { REF_DEFAULT } from '@/domain/constants'
 import { clamp } from '@/domain/services/format'
+import { obterAliquotasRefDinamica } from '@/domain/services/referencia-service'
 import type { Empresa } from '@/domain/entities'
 import {
   contarPorDia,
@@ -27,7 +28,7 @@ import type {
   NotaXml,
   ResumoImportacaoXml,
 } from '@/infrastructure/nfe/tipos'
-import { FILTROS_NFE_VAZIOS } from '@/infrastructure/nfe/tipos'
+import { filtrosIniciaisNfe } from '@/infrastructure/nfe/tipos'
 import { useProdutos } from './produtos'
 import { useSessao } from './sessao'
 import { registrarLimpeza, toast } from './ui'
@@ -89,7 +90,7 @@ export const useNfe = create<NfeState>((set, get) => ({
   fornecedores: [],
   ranking: [],
   cstIcmsOpcoes: [],
-  filtros: { ...FILTROS_NFE_VAZIOS },
+  filtros: filtrosIniciaisNfe(),
   mesAno: agora().ano,
   mesMes: agora().mes,
   notaAberta: null,
@@ -181,7 +182,7 @@ export const useNfe = create<NfeState>((set, get) => ({
   },
 
   limparFiltros: () => {
-    set({ filtros: { ...FILTROS_NFE_VAZIOS } })
+    set({ filtros: filtrosIniciaisNfe() })
     void get().carregar()
   },
 
@@ -313,13 +314,19 @@ export const useNfe = create<NfeState>((set, get) => ({
 }))
 
 /**
- * Ao sair da tela: filtros, nota aberta e resumo da última importação voltam
- * ao padrão. O recarregamento acontece no montagem da página (`carregar`).
+ * Ao sair da tela: filtros voltam ao padrão (últimos 30 dias), nota aberta e
+ * resumo da última importação voltam ao padrão. O recarregamento acontece na
+ * montagem da página (`carregar`).
  */
 registrarLimpeza('nfe', () =>
   useNfe.setState({
-    filtros: { ...FILTROS_NFE_VAZIOS },
+    filtros: filtrosIniciaisNfe(),
     notaAberta: null,
     ultimoResumo: null,
   }),
 )
+
+// Carrega alíquotas dinâmicas do banco na inicialização (reativo a mudanças de regras vigentes)
+void obterAliquotasRefDinamica().then((ref) => {
+  useNfe.setState({ refIBS: ref.refIBS, refCBS: ref.refCBS })
+})

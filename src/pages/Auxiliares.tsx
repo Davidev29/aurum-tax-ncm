@@ -1,7 +1,7 @@
 /**
  * Tela **Tabelas auxiliares** (SPEC §9).
  *
- * Sete listas editáveis renderizadas a partir de `AUX_META` (Clean Code: a UI
+ * Oito listas editáveis + auditoria, renderizadas a partir de `AUX_META` (Clean Code: a UI
  * é genérica — colunas, rótulos e formulário vêm dos metadados).
  *
  * Paginação:
@@ -31,7 +31,7 @@ import { Btn, Painel, Texto, Vazio, useDebounce } from '@/ui/kit'
 const VAZIO: RegistroAux[] = []
 
 /** Tabelas com ordenação lexicográfica por código (paridade com a v1). */
-const ORDENAVEIS: ReadonlySet<TipoAux> = new Set<TipoAux>(['cfop', 'csticms', 'cstpiscofins'])
+const ORDENAVEIS: ReadonlySet<TipoAux> = new Set<TipoAux>(['cfop', 'csticms', 'cstpiscofins', 'cest'])
 
 interface DescricaoTabela {
   tipo: TipoAux
@@ -91,6 +91,13 @@ const TABELAS: DescricaoTabela[] = [
     placeholder: 'Filtrar código ou descrição…',
     rotuloNovo: 'Novo CST PIS/COFINS',
   },
+  {
+    tipo: 'cest',
+    icone: '🏷',
+    titulo: 'CEST — Código Especificador (informativo)',
+    placeholder: 'Filtrar código, descrição ou NCM…',
+    rotuloNovo: 'Novo CEST',
+  },
 ]
 
 export function Auxiliares() {
@@ -112,6 +119,8 @@ export function Auxiliares() {
       {TABELAS.map((t) => (
         <PainelTabela key={t.tipo} {...t} />
       ))}
+
+      <PainelAuditoria />
     </div>
   )
 }
@@ -559,5 +568,135 @@ function LinhaNcm({ r }: { r: RegistroAux }) {
         <AcoesAux tipo="ncmnomen" chave={String(r.codigo ?? '')} />
       </td>
     </tr>
+  )
+}
+
+/* ---------------------------------------------------------- auditoria ----- */
+
+/** Log imutável de auditoria (append-only, somente leitura). */
+function PainelAuditoria() {
+  const [linhas, setLinhas] = useState<RegistroAux[]>([])
+  const [filtro, setFiltro] = useState('')
+  const [pagina, setPagina] = useState(1)
+  const [total, setTotal] = useState(0)
+
+  useEffect(() => {
+    let vivo = true
+    void (async () => {
+      try {
+        const { db } = await import('@/infrastructure/db/schema')
+        const n = await db.table('audit_log').count().catch(() => 0)
+        if (!vivo) return
+        setTotal(n)
+        const ultimos = await db.table('audit_log').orderBy('id').reverse().limit(200).toArray().catch(() => [])
+        if (!vivo) return
+        setLinhas((ultimos as RegistroAux[]).reverse())
+      } catch {
+        if (vivo) setLinhas([])
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [])
+
+  const f = filtro.trim().toLowerCase()
+  const filtradas = f
+    ? linhas.filter((r) =>
+        `${String(r.quando ?? '')} ${String(r.tabela ?? '')} ${String(r.chave ?? '')} ${String(r.operacao ?? '')} ${String(r.autor ?? '')}`.toLowerCase().includes(f),
+      )
+    : linhas
+  const totalPaginas = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE))
+  const paginaSegura = Math.min(Math.max(1, pagina), totalPaginas)
+  const visiveis = filtradas.slice((paginaSegura - 1) * PAGE_SIZE, paginaSegura * PAGE_SIZE)
+
+  const resumo = (v: unknown): string => {
+    if (v == null) return '—'
+    const s = typeof v === 'string' ? v : JSON.stringify(v)
+    return s.length > 120 ? `${s.slice(0, 120)}…` : s
+  }
+
+  return (
+    <Painel>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
+        <h2 className="flex items-center gap-2 text-base font-bold">
+          <span className="text-lg">🧾</span> Auditoria — log imutável
+        </h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            {total} evento(s) · últimos 200 · append-only
+          </span>
+          <Texto
+            type="search"
+            className="field-sm w-64"
+            placeholder="Filtrar tabela, chave, operação…"
+            value={filtro}
+            onChange={(e) => {
+              setFiltro(e.target.value)
+              setPagina(1)
+            }}
+          />
+        </div>
+      </div>
+      <div className="p-5">
+        <p className="mb-3 text-[11px] text-slate-500 dark:text-slate-400">
+          Quem mudou o quê e quando. Este log nunca é editado nem apagado pela interface — nem o restore o limpa, só acrescenta.
+        </p>
+        {!visiveis.length ? (
+          <Vazio icone="🧾" titulo="Nenhum evento de auditoria" texto="Edite uma tabela auxiliar ou faça uma reclassificação manual para gerar o primeiro evento." />
+        ) : (
+          <>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+              <table className="tbl w-full">
+                <thead>
+                  <tr>
+                    <th>Quando</th>
+                    <th>Tabela</th>
+                    <th>Chave</th>
+                    <th>Operação</th>
+                    <th>Antes → Depois</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visiveis.map((r, i) => (
+                    <tr key={`${String(r.quando ?? i)}-${i}`}>
+                      <td className="whitespace-nowrap font-mono text-[11px]">
+                        {String(r.quando ?? '—').slice(0, 19).replace('T', ' ')}
+                      </td>
+                      <td className="font-mono text-[11px]">{String(r.tabela ?? '—')}</td>
+                      <td className="font-mono text-[11px]">{String(r.chave ?? '—')}</td>
+                      <td>
+                        <span
+                          className={
+                            r.operacao === 'excluir'
+                              ? 'pill bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300'
+                              : r.operacao === 'criar'
+                                ? 'pill bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                : 'pill bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                          }
+                        >
+                          {String(r.operacao ?? '—')}
+                        </span>
+                      </td>
+                      <td className="max-w-md truncate font-mono text-[10px] text-slate-500" title={resumo(r.depois)}>
+                        {resumo(r.antes)} → {resumo(r.depois)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Paginacao
+              pagina={paginaSegura}
+              totalPaginas={totalPaginas}
+              inicio={(paginaSegura - 1) * PAGE_SIZE + 1}
+              fim={Math.min(paginaSegura * PAGE_SIZE, filtradas.length)}
+              total={filtradas.length}
+              aoMudar={setPagina}
+            />
+          </>
+        )}
+      </div>
+    </Painel>
   )
 }

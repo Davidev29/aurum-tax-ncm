@@ -17,6 +17,7 @@
 import { norm, uid } from '@/domain/services/format'
 import type { StoreName } from '@/domain/constants'
 import { db } from '@/infrastructure/db/schema'
+import { registrarAuditoria } from './auditoria'
 
 export type KeyPath = 'codigo' | 'id' | 'chave'
 
@@ -114,7 +115,11 @@ export async function salvarRegistroAux(e: EntradaRegistroAux): Promise<Resultad
   }
 
   try {
+    const antes = editando
+      ? await db.table(e.store).get(e.chaveOriginal as string | number).catch(() => null)
+      : await db.table(e.store).get(chave as string | number).catch(() => null)
     await db.table(e.store).put(dados as never)
+    await registrarAuditoria(e.store, String(chave), antes ? 'atualizar' : 'criar', antes, dados)
     return { ok: true, status: editando ? 'atualizado' : 'criado', registro: dados }
   } catch (erro) {
     return { ok: false, motivo: `Erro ao gravar: ${(erro as Error).message}` }
@@ -122,7 +127,9 @@ export async function salvarRegistroAux(e: EntradaRegistroAux): Promise<Resultad
 }
 
 export async function excluirRegistroAux(store: StoreName, chave: string | number): Promise<void> {
+  const antes = await db.table(store).get(chave).catch(() => null)
   await db.table(store).delete(chave)
+  await registrarAuditoria(store, String(chave), 'excluir', antes, null)
 }
 
 /* --------------------------------------------------------------- semente -- */

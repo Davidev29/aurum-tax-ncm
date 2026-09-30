@@ -3,21 +3,27 @@
  *
  * As reduções de cada item são **congeladas na adição** (SPEC D10): reimportar
  * a base não altera simulações em andamento.
+ * Ao sair da tela, os itens são descartados (`registrarLimpeza`): toda
+ * entrada parte limpa — exceto quando chega via "Adicionar à calculadora",
+ * que popula o item recém-confirmado.
  */
 import { create } from 'zustand'
 import { REF_DEFAULT } from '@/domain/constants'
+import { obterAliquotasRefDinamica } from '@/domain/services/referencia-service'
 import type { Classificacao, Produto, ResultadoCalculo } from '@/domain/entities'
-import { calcularTributos } from '@/domain/services/calculo'
+import { calcularTributos, round2 } from '@/domain/services/calculo'
 import { clamp, fmtNcm, parseMoeda, parseQtd, uid } from '@/domain/services/format'
 import {
   atualizarValoresProduto,
   buscarProduto,
   classificacaoDeItemManual,
   produtoParaCalculadora,
+  reresolverClassificacao,
   salvarProduto,
 } from '@/application/produtos'
 import { useSessao } from './sessao'
 import { confirmar, perguntar } from './dialogo'
+import { registrarLimpeza } from './ui'
 import { toast } from './ui'
 
 export type OrigemItem = 'produto' | 'classificacao' | 'manual'
@@ -67,6 +73,13 @@ interface CalcState {
   remover: (itemUid: string) => void
   limpar: () => void
   setRate: (tributo: 'IBS' | 'CBS', valor: number) => void
+  /** Recarrega as alíquotas de referência do banco (reativo a mudanças de regras vigentes). */
+  recarregarTaxas: () => Promise<void>
+  /**
+   * Re-resolve todos os itens no motor único, preservando a escolha quando
+   * ainda válida. Devolve quantos itens mudaram (base alterada desde a adição).
+   */
+  revalidarItens: () => Promise<number>
   /** Grava/atualiza os produtos ligados aos itens (R7.9–R7.13). */
   salvarNoProdutos: () => Promise<void>
 }
@@ -142,6 +155,49 @@ export const useCalculadora = create<CalcState>((set, get) => ({
     set(tributo === 'IBS' ? { rateIBS: v } : { rateCBS: v })
   },
 
+  /** Recarrega as alíquotas de referência do banco (reativo a mudanças de regras vigentes). */
+  recarregarTaxas: async () => {
+    const ref = await obterAliquotasRefDinamica()
+    set({ rateIBS: ref.refIBS, rateCBS: ref.refCBS })
+  },
+
+  revalidarItens: async () => {
+    const { itens } = get()
+    if (!itens.length) return 0
+    const novos: ItemCalc[] = []
+    let ajustados = 0
+    for (const it of itens) {
+      const viva = await reresolverClassificacao(it.ncm, { cst: it.cst, cClassTrib: it.cClassTrib })
+      if (!viva) {
+        novos.push(it)
+        continue
+      }
+      const redIBS = Number(viva.resumo.percentualReducaoIBS ?? 0)
+      const redCBS = Number(viva.resumo.percentualReducaoCBS ?? 0)
+      if (
+        viva.cst !== it.cst ||
+        viva.cClassTrib !== it.cClassTrib ||
+        redIBS !== it.redIBS ||
+        redCBS !== it.redCBS ||
+        viva.regraGeral !== it.regraGeral
+      ) {
+        ajustados++
+      }
+      novos.push({
+        ...it,
+        cst: viva.cst,
+        cClassTrib: viva.cClassTrib,
+        descClass: viva.resumo.descricaoCClassTrib || viva.baseLegal || it.descClass,
+        redIBS,
+        redCBS,
+        regraGeral: viva.regraGeral,
+        baseLegal: viva.baseLegal || it.baseLegal,
+      })
+    }
+    set({ itens: novos })
+    return ajustados
+  },
+
   salvarNoProdutos: async () => {
     const { itens } = get()
     if (!itens.length) {
@@ -161,7 +217,9 @@ export const useCalculadora = create<CalcState>((set, get) => ({
       atualizados++
     }
 
-    // 2) Itens manuais → cadastrados como produtos (R7.12).
+    // 2) Itens manuais → cadastrados como produtos (R7.12). A classificação
+    // é re-resolvida no motor único antes de gravar: o item da calculadora
+    // congela as reduções na adição, e a base pode ter mudado desde então.
     const semProd = itens.filter((i) => !i.produtoId)
     if (semProd.length) {
       const continuar = await confirmar(
@@ -173,6 +231,7 @@ export const useCalculadora = create<CalcState>((set, get) => ({
         toast(`${atualizados} atualizado(s)`, 'ok')
         return
       }
+      let revalidados = 0
       for (const it of semProd) {
         const r = await perguntar(
           'Cadastrar item manual',
@@ -198,10 +257,14 @@ export const useCalculadora = create<CalcState>((set, get) => ({
             valorUnitario: it.valorUnitario,
             classificacao: classificacaoDeItemManual(it),
           },
-          { forcar: true },
+          { forcar: true, reresolver: true },
         )
-        if (gravado.ok) criados++
+        if (gravado.ok) {
+          criados++
+          if (gravado.revalidada) revalidados++
+        }
       }
+      if (revalidados) toast(`🔄 ${revalidados} item(ns) gravado(s) pela regra vigente (era outra na simulação).`, 'warn')
     }
     toast(
       `${atualizados} atualizado(s)${criados ? ` · ${criados} criado(s)` : ''}.`,
@@ -210,11 +273,20 @@ export const useCalculadora = create<CalcState>((set, get) => ({
   },
 }))
 
+// Ao sair da tela, a simulação é descartada: toda entrada na Calculadora
+// parte limpa (só as alíquotas de referência, globais, são preservadas).
+registrarLimpeza('calculadora', () => useCalculadora.getState().limpar())
+
+// Carrega alíquotas dinâmicas do banco na inicialização (reativo a mudanças de regras vigentes)
+void obterAliquotasRefDinamica().then((ref) => {
+  useCalculadora.setState({ rateIBS: ref.refIBS, rateCBS: ref.refCBS })
+})
+
 /* --------------------------------------------------------------- cálculo --- */
 
-/** Base do item: `qtd × valor unitário`. */
+/** Base do item: `qtd × valor unitário`, arredondada para centavos. */
 export const baseDoItem = (it: ItemCalc): number =>
-  (Number(it.quantidade) || 0) * (Number(it.valorUnitario) || 0)
+  round2((Number(it.quantidade) || 0) * (Number(it.valorUnitario) || 0))
 
 export function calculoDoItem(it: ItemCalc, rateIBS: number, rateCBS: number): ResultadoCalculo {
   return calcularTributos(baseDoItem(it), it.redIBS, it.redCBS, rateIBS, rateCBS)
@@ -232,13 +304,14 @@ export function resumoDaCalculadora(
   let cbs = 0
   for (const it of itens) {
     const c = calculoDoItem(it, rateIBS, rateCBS)
-    base += c.base
-    bcIBS += c.bcIBS
-    bcCBS += c.bcCBS
-    ibs += c.vIBS
-    cbs += c.vCBS
+    base = round2(base + c.base)
+    bcIBS = round2(bcIBS + c.bcIBS)
+    bcCBS = round2(bcCBS + c.bcCBS)
+    ibs = round2(ibs + c.vIBS)
+    cbs = round2(cbs + c.vCBS)
   }
-  const tributos = ibs + cbs
+  const tributos = round2(ibs + cbs)
+  const total = round2(base + tributos)
   return {
     itens: itens.length,
     base,
@@ -247,7 +320,7 @@ export function resumoDaCalculadora(
     ibs,
     cbs,
     tributos,
-    total: base + tributos,
+    total,
     carga: base > 0 ? (tributos / base) * 100 : 0,
   }
 }

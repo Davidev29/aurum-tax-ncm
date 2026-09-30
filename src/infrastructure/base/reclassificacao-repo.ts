@@ -8,6 +8,7 @@ import type {
 import { montarClassificacaoManual, type ContextoClassificacao } from '@/domain/services/classificacao'
 import { norm } from '@/domain/services/format'
 import { db } from '../db/schema'
+import { registrarAuditoria } from '@/application/auditoria'
 
 /** Busca a reclassificação manual de um NCM (ou `null`). */
 export async function buscarReclassificacaoManual(codigo: unknown): Promise<ReclassificacaoManual | null> {
@@ -64,12 +65,35 @@ function validarEntrada(e: EntradaReclassificacao): string | null {
   return null
 }
 
+/** Validação fiscal da combinação CST × cClassTrib contra a base vigente. */
+export async function validarCombinacaoFiscal(
+  cst: string,
+  cClassTrib: string,
+): Promise<string | null> {
+  const c = String(cst).trim()
+  const cc = String(cClassTrib).trim()
+  if (!c || !cc) return 'Escolha a CST e a cClassTrib.'
+  try {
+    const [cstRow, cctRow] = await Promise.all([
+      db.cst.get(c).catch(() => null),
+      db.cstClassTrib.get(`${c}|${cc}`).catch(() => null),
+    ])
+    if (!cstRow) return `CST ${c} não existe na base vigente — confira a LC 214/2025.`
+    if (!cctRow) return `Combinação ${c} × ${cc} não existe na base vigente — escolha uma opção da lista oficial.`
+  } catch {
+    return null
+  }
+  return null
+}
+
 /** Salva (upsert por NCM) a reclassificação manual. */
 export async function salvarReclassificacaoManual(
   e: EntradaReclassificacao,
 ): Promise<{ ok: true; manual: ReclassificacaoManual } | { ok: false; motivo: string }> {
   const erro = validarEntrada(e)
   if (erro) return { ok: false, motivo: erro }
+  const fiscal = await validarCombinacaoFiscal(e.cst, e.cClassTrib)
+  if (fiscal) return { ok: false, motivo: fiscal }
   const agora = new Date().toISOString()
   const ncm = norm(e.ncm)
   const anterior = await buscarReclassificacaoManual(ncm)
@@ -84,6 +108,7 @@ export async function salvarReclassificacaoManual(
     atualizadoEm: agora,
   }
   await db.reclassificacoesManuais.put(manual)
+  await registrarAuditoria('reclassificacoesManuais', ncm, anterior ? 'atualizar' : 'criar', anterior, manual)
   return { ok: true, manual }
 }
 
@@ -91,7 +116,9 @@ export async function salvarReclassificacaoManual(
 export async function removerReclassificacaoManual(codigo: unknown): Promise<void> {
   const c = norm(codigo)
   if (c.length !== 8) return
+  const antes = await buscarReclassificacaoManual(c)
   await db.reclassificacoesManuais.delete(c)
+  await registrarAuditoria('reclassificacoesManuais', c, 'excluir', antes, null)
 }
 
 /** Opção de classificação existente no sistema (auxílio do modal). */

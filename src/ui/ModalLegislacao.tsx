@@ -10,6 +10,10 @@
  * - **Página original** (`iframe` com `#artNNN` + reforço de âncora pós-load):
  *   fallback quando a leitura interna falha ou para documentos sem texto.
  *
+ * O menu **Legislação** abre o modal em modo `integra` (sem artigo citado):
+ * os rótulos falam em "leitura integral / início do documento" e o PDF e a
+ * impressão cobrem o início do documento em vez de um trecho.
+ *
  * Ações: **Baixar PDF** (ficha do trecho via pdfMake), **Imprimir** (ficha via
  * `iframe` oculto — funciona no navegador e no Electron, sem abrir janelas),
  * Recarregar e Abrir em nova aba.
@@ -36,6 +40,12 @@ export interface DestinoLegislacao {
   titulo?: string | null
   /** Trecho citado no sistema — exibido com marca-texto verde no modal. */
   texto?: string | null
+  /**
+   * Leitura **integral** pelo menu Legislação (sem artigo citado): os rótulos
+   * do modal falam em "leitura integral / início do documento" em vez de
+   * "trecho citado".
+   */
+  integra?: boolean
 }
 
 /** Tempo máximo de espera pelo documento antes do fallback (ms). */
@@ -72,8 +82,10 @@ export function ModalLegislacao({
   const visivel = destino ?? ultimo
   const titulo = visivel?.titulo?.trim() || 'Legislação'
   const artigo = extrairArtigo(visivel?.url)
+  const integra = (visivel?.integra ?? false) && !artigo
   const elegivelTexto = podeLerNoSistema(visivel?.url)
   const trechoPdf = textoExtraido?.trim() || visivel?.texto?.trim() || ''
+  const rotuloTrecho = artigo ?? (integra ? 'leitura integral' : 'trecho citado')
 
   // Novo destino → estado limpo; tenta a leitura interna quando elegível.
   const urlAtual = destino?.url ?? null
@@ -199,7 +211,7 @@ export function ModalLegislacao({
   const ficha = (): { tituloFicha: string; corpo: string } | null => {
     if (!visivel || !trechoPdf) return null
     return {
-      tituloFicha: `${titulo} — ${artigo ?? 'trecho citado'}`,
+      tituloFicha: `${titulo} — ${artigo ?? (integra ? 'início do documento' : 'trecho citado')}`,
       corpo: trechoPdf,
     }
   }
@@ -217,10 +229,12 @@ export function ModalLegislacao({
       await baixar(
         {
           content: [
-            { text: 'Aurum Tax NCM — Trecho de legislação', style: 'cab' },
+            { text: integra ? 'Aurum Tax NCM — Legislação' : 'Aurum Tax NCM — Trecho de legislação', style: 'cab' },
             { text: titulo, style: 'titulo' },
             {
-              text: `Trecho citado: ${artigo ?? rotuloDestino(visivel.url)}`,
+              text: integra
+                ? `Documento: ${rotuloDestino(visivel.url)}`
+                : `Trecho citado: ${artigo ?? rotuloDestino(visivel.url)}`,
               style: 'artigo',
             },
             { text: `Fonte oficial: ${tirarHash(visivel.url)}`, style: 'fonte' },
@@ -261,7 +275,7 @@ export function ModalLegislacao({
       `<div style="font-family:Arial,sans-serif;max-width:720px;margin:0 auto;color:#111">` +
         `<div style="font-size:11px;color:#64748b;font-weight:bold">Aurum Tax NCM — Trecho de legislação</div>` +
         `<h1 style="font-size:18px;margin:4px 0">${titulo.replace(/</g, '&lt;')}</h1>` +
-        `<div style="display:inline-block;background:#6ee7b7;font-weight:bold;font-size:12px;padding:2px 10px;border-radius:6px;margin:4px 0">ARTIGO: ${(artigo ?? 'trecho citado').toUpperCase()}</div>` +
+        `<div style="display:inline-block;background:#6ee7b7;font-weight:bold;font-size:12px;padding:2px 10px;border-radius:6px;margin:4px 0">ARTIGO: ${(artigo ?? rotuloTrecho).toUpperCase()}</div>` +
         `<div style="font-size:11px;color:#475569">Fonte oficial: ${tirarHash(visivel.url)} · Consultado em ${data}</div>` +
         `<hr style="margin:12px 0">` +
         `<div style="font-size:12.5px;line-height:1.7">${trechoParaImpressao(f.corpo)}</div>` +
@@ -305,7 +319,7 @@ export function ModalLegislacao({
           <div className="rounded-xl border-2 border-emerald-400 bg-emerald-50 p-3 dark:border-emerald-600 dark:bg-emerald-950/40">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded bg-emerald-400 px-2 py-0.5 font-mono text-xs font-black uppercase tracking-wide text-emerald-950">
-                ✳ {artigo ?? 'trecho citado'}
+                ✳ {rotuloTrecho}
               </span>
               <span className="text-xs font-bold text-emerald-900 dark:text-emerald-100">
                 <mark className="rounded bg-emerald-300/80 px-1 text-inherit">{titulo}</mark>
@@ -346,10 +360,10 @@ export function ModalLegislacao({
               </>
             ) : null}
             <span className="mx-1 hidden h-5 w-px bg-slate-200 sm:inline dark:bg-slate-700" />
-            <Btn tam="sm" disabled={!trechoPdf || gerando} onClick={() => void baixarPdf()} title="Baixar a ficha do trecho citado em PDF">
+            <Btn tam="sm" disabled={!trechoPdf || gerando} onClick={() => void baixarPdf()} title={integra ? 'Baixar o início do documento em PDF' : 'Baixar a ficha do trecho citado em PDF'}>
               ⬇ {gerando ? 'Gerando…' : 'Baixar PDF'}
             </Btn>
-            <Btn tam="sm" disabled={!trechoPdf} onClick={imprimir} title="Imprimir a ficha do trecho citado">
+            <Btn tam="sm" disabled={!trechoPdf} onClick={imprimir} title={integra ? 'Imprimir o início do documento' : 'Imprimir a ficha do trecho citado'}>
               🖨 Imprimir
             </Btn>
           </div>
@@ -366,7 +380,7 @@ export function ModalLegislacao({
                   Carregando legislação…
                 </div>
                 <div className="max-w-sm text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                  Localizando {artigo ?? 'o trecho citado'} no documento oficial, sem sair do
+                  Localizando {artigo ?? (integra ? 'o documento' : 'o trecho citado')} no documento oficial, sem sair do
                   sistema. A LC 214/2025 é extensa e pode levar alguns segundos.
                 </div>
               </div>
@@ -396,15 +410,25 @@ export function ModalLegislacao({
                 </div>
               ) : (
                 <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                  O documento abaixo abre <strong>direto no trecho citado</strong>
-                  {artigo ? (
+                  {integra ? (
                     <>
-                      {' '}(<strong>{artigo}</strong>)
+                      O documento abaixo abre <strong>na íntegra dentro do sistema</strong>{' '}
+                      ({rotuloDestino(visivel.url)}). Aguarde o carregamento — a LC 214/2025 é
+                      um documento extenso.
                     </>
                   ) : (
-                    <> ({rotuloDestino(visivel.url)})</>
+                    <>
+                      O documento abaixo abre <strong>direto no trecho citado</strong>
+                      {artigo ? (
+                        <>
+                          {' '}(<strong>{artigo}</strong>)
+                        </>
+                      ) : (
+                        <> ({rotuloDestino(visivel.url)})</>
+                      )}
+                      . Aguarde o carregamento — a LC 214/2025 é um documento extenso.
+                    </>
                   )}
-                  . Aguarde o carregamento — a LC 214/2025 é um documento extenso.
                 </p>
               )}
               {iframeFalhou ? (
@@ -437,7 +461,7 @@ export function ModalLegislacao({
                         Carregando legislação…
                       </div>
                       <div className="max-w-sm text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                        Localizando {artigo ?? 'o trecho citado'} no documento oficial.
+                        Localizando {artigo ?? (integra ? 'o documento' : 'o trecho citado')} no documento oficial.
                       </div>
                     </div>
                   </div>

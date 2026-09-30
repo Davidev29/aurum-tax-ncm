@@ -495,6 +495,39 @@
     }
   }
 
+  /* Ritmo harmônico: espaçamento único + respiro consistente entre seções. */
+  .xml-stack--harmonica {
+    gap: 1.25rem;
+  }
+  @media (min-width: 640px) {
+    .xml-stack--harmonica {
+      gap: 1.5rem;
+    }
+  }
+
+  /* Tabela de notas — layout fixo: colunas nunca "dançam" entre páginas. */
+  .tbl-notas thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .tbl-notas tbody td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Versão compacta: bloco menor, linhas densas. */
+  .tbl-compacta {
+    font-size: 0.75rem;
+  }
+  .tbl-compacta thead th {
+    padding: 0.45rem 0.6rem;
+    font-size: 0.6rem;
+  }
+  .tbl-compacta tbody td {
+    padding: 0.4rem 0.6rem;
+    vertical-align: middle;
+  }
+
   /* --- campos ------------------------------------------------------------ */
   .field {
     width: 100%;
@@ -802,6 +835,45 @@
     }
   }
 
+  /*
+   * Borda fluida: moldura de 2px com gradiente animado percorrendo todo o
+   * perímetro (sensação de fluxo contínuo). Uso: envolver o conteúdo —
+   * a `div` externa leva `.borda-fluida` e a interna o fundo sólido com
+   * raio ligeiramente menor. Tons via `--cor-fluxo-{1,2,3}` (style).
+   * `.borda-fluida-viva` acelera o fluxo e soma brilho (ex.: durante
+   * verificação/download de atualização).
+   */
+  .borda-fluida {
+    border-radius: 1rem;
+    padding: 2px;
+    background: linear-gradient(
+      120deg,
+      var(--cor-fluxo-1, #22d3ee),
+      var(--cor-fluxo-2, #818cf8),
+      var(--cor-fluxo-3, #e879f9),
+      var(--cor-fluxo-1, #22d3ee)
+    );
+    background-size: 300% 300%;
+    animation: fluxo-borda 7s ease infinite;
+  }
+  .borda-fluida-viva {
+    animation-duration: 2.4s;
+    box-shadow:
+      0 0 28px -8px var(--cor-fluxo-2, #818cf8),
+      0 0 10px -4px var(--cor-fluxo-3, #e879f9);
+  }
+  @keyframes fluxo-borda {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
   .tipo-badge {
     font-size: 0.625rem;
     font-weight: 800;
@@ -1061,7 +1133,8 @@
     .modal-backdrop,
     .modal-box,
     .borda-cintilante,
-    .borda-cintilante::before {
+    .borda-cintilante::before,
+    .borda-fluida {
       animation: none;
     }
   }
@@ -1172,15 +1245,6 @@
     background: color-mix(in oklab, var(--color-aurum-500) 7%, transparent);
   }
 
-  .sped-summary-card {
-    transition:
-      transform 0.15s ease,
-      box-shadow 0.2s ease;
-  }
-  .sped-summary-card:hover {
-    box-shadow: 0 8px 24px -12px rgb(16 28 46 / 0.18);
-  }
-
   .num-input {
     font-variant-numeric: tabular-nums;
   }
@@ -1257,5 +1321,125 @@
     background: rgb(6 95 70 / 0.45);
     border-left-color: #34d399;
     color: #d1fae5;
+  }
+
+  /* --- calculadoras: sistema visual unificado (estudo de mercado 2026) --------
+     Benchmarks: ContaAzul, Arquivei, Calculadora do Cidadão (Bacen),
+     Nubank/Inter (hero + sticky summary), Stripe Dashboard (KPI + barras
+     proporcionais), Splitwise/Mobills (passo 1-2-3 + empty-state ilustrado).
+     Padrões aplicados:
+     P1 hero numérico único (1 número reina, resto é secundário);
+     P2 barra proporcional IBS×CBS (leitura parte-todo sem gráfico pesado);
+     P3 passos 1·2·3 + resumo fixo (sticky) — reduz abandono em simuladores;
+     P4 tabular-nums + foco ouro (WCAG AA) + dark-first nos totais. */
+  .calc-hero {
+    background: linear-gradient(135deg, #16233a 0%, #2b3f63 60%, #3e587e 100%);
+    border: 1px solid rgb(190 148 51 / 0.55);
+    box-shadow:
+      inset 0 1px 0 rgb(234 215 158 / 0.18),
+      0 16px 40px -18px rgb(22 35 58 / 0.7);
+    color: #f7f3e8;
+  }
+  .calc-hero .calc-hero-rotulo {
+    font-size: 0.625rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #ead79e;
+  }
+  .calc-hero .calc-hero-valor {
+    font-family: var(--font-mono);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .calc-bar {
+    display: flex;
+    height: 0.5rem;
+    overflow: hidden;
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--line) 70%, transparent);
+  }
+  .calc-bar > span {
+    display: block;
+    height: 100%;
+    transition: width 0.35s cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+  .calc-bar-ibs {
+    background: linear-gradient(90deg, #2b3f63, #6e84a6);
+  }
+  .calc-bar-cbs {
+    background: linear-gradient(90deg, #be9433, #ead79e);
+  }
+  .dark .calc-bar-ibs {
+    background: linear-gradient(90deg, #6e84a6, #9dadc9);
+  }
+  .calc-kpi {
+    border-radius: 0.8rem;
+    border: 1px solid color-mix(in oklab, var(--line) 75%, transparent);
+    background: color-mix(in oklab, var(--surface-2) 88%, transparent);
+    padding: 0.6rem 0.75rem;
+  }
+  .calc-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.625rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .calc-step-dot {
+    display: grid;
+    place-items: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 9999px;
+    font-size: 0.625rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, #16233a, #3e587e);
+    color: #ead79e;
+    border: 1px solid rgb(190 148 51 / 0.6);
+  }
+  .calc-item {
+    position: relative;
+    overflow: hidden;
+  }
+  .calc-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--calc-accent, var(--color-brand-500));
+  }
+  .calc-item--zero::before {
+    background: linear-gradient(180deg, #10b981, #6ee7b7);
+  }
+  .calc-item--geral::before {
+    background: linear-gradient(180deg, #d97706, #fbbf24);
+  }
+  .calc-item--cheia::before {
+    background: linear-gradient(180deg, #2b3f63, #9dadc9);
+  }
+  input[type='range'].calc-range {
+    width: 100%;
+    accent-color: var(--color-aurum-600);
+    height: 1.25rem;
+    cursor: pointer;
+  }
+  .dark input[type='range'].calc-range {
+    accent-color: var(--color-aurum-300);
+  }
+  /* Entrada suave da coluna de resumo: só montada após o primeiro
+     "Adicionar à calculadora" (fade + deslize lateral). */
+  .calc-aside-enter {
+    animation: slide-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .calc-aside-enter {
+      animation: none;
+    }
   }
 }

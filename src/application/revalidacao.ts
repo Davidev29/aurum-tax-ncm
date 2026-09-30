@@ -14,7 +14,7 @@
  * - Best-effort por etapa: falha numa store não aborta as demais.
  */
 import { REF_DEFAULT } from '@/domain/constants'
-import { calcularTributos, anexoDeReducao, observacoesFiscais } from '@/domain/services/calculo'
+import { calcularTributos, anexoReal, observacoesFiscais, round2 } from '@/domain/services/calculo'
 import { norm } from '@/domain/services/format'
 import { resolverClassificacoes } from '@/infrastructure/base/classificacao-repo'
 import type { Classificacao, NomenclaturaNcm, Produto } from '@/domain/entities'
@@ -131,7 +131,7 @@ export async function revalidarBaseGravada(
           cbs: calc.vCBS,
           totalTributos: calc.total,
           carga: calc.carga,
-          anexo: anexoDeReducao(redIBS, redCBS),
+          anexo: anexoReal(r.cl.resumo?.anexo ?? (r.cl as { referencia?: { anexo?: unknown } }).referencia?.anexo, redIBS, redCBS),
           nomenclatura: r.nomenclatura,
           observacoes: observacoesFiscais(norm(it.ncm), r.cl, r.nomenclatura),
         })
@@ -140,10 +140,10 @@ export async function revalidarBaseGravada(
       let totalIBS = 0
       let totalCBS = 0
       for (const it of refeitos) {
-        totalIBS += Number(it.ibs) || 0
-        totalCBS += Number(it.cbs) || 0
+        totalIBS = round2(totalIBS + (Number(it.ibs) || 0))
+        totalCBS = round2(totalCBS + (Number(it.cbs) || 0))
       }
-      sujas.push({ ...n, itensAnalisados: refeitos, totalIBS, totalCBS, totalTributos: totalIBS + totalCBS })
+      sujas.push({ ...n, itensAnalisados: refeitos, totalIBS, totalCBS, totalTributos: round2(totalIBS + totalCBS) })
     }
     if (sujas.length) {
       await db.nfeNotas.bulkPut(sujas)

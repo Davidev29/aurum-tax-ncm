@@ -1,6 +1,5 @@
-import { anexoDeReducao, calcularTributos, observacoesFiscais } from '@/domain/services/calculo'
-import { classificacaoNcmInvalido } from '@/domain/services/classificacao'
-import { norm } from '@/domain/services/format'
+import { calcularTributos, anexoReal, observacoesFiscais, round2 } from '@/domain/services/calculo'
+import { classificacaoNcmInvalido, interpretarEntradaNcm } from '@/domain/services/classificacao'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
 import {
   buscarNomenclatura,
@@ -17,6 +16,13 @@ export interface AliquotasRefNfe {
 /**
  * Análise dos itens da nota (mesmo motor do SPED, SPEC R4.4–R4.7).
  * Caches por execução evitam repetir consultas por NCM repetido.
+ *
+ * Alíquotas de referência: vêm do parâmetro `ref` (nota/sessão, editável e
+ * exibido na UI). A base oficial NÃO guarda "alíquota cheia por NCM" — os
+ * campos `vinculo.aliquotaIBS/CBS` são frações sub-1% da planilha de origem
+ * e JAMAIS podem alimentar `refIBS/refCBS` (zerariam o imposto). Por isso
+ * não há lookup por NCM aqui: reduções vêm da classificação oficial por
+ * NCM; a referência cheia é o parâmetro global declarado.
  */
 export async function analisarItensNfe(
   itens: ItemNotaXml[],
@@ -30,9 +36,13 @@ export async function analisarItensNfe(
 
   for (let i = 0; i < itens.length; i++) {
     const item = itens[i]
-    const digitos = norm(item.ncm)
-    const cod = digitos.length > 8 ? digitos.slice(0, 8) : digitos
-    const valido = cod.length === 8
+    // Entrada pelo intérprete único: >8 dígitos (possível NBS/EX) reduz aos
+    // 8 do NCM com aviso — mesma regra do SPED, mesmo motor em seguida.
+    const ncmOriginal = String(item.ncm ?? '')
+    const entrada = interpretarEntradaNcm(item.ncm)
+    const ncmTruncado = entrada.kind === 'truncado'
+    const cod = entrada.codigo
+    const valido = entrada.kind !== 'invalido'
 
     let lista: Classificacao[] = []
     let regraGeralDaBase = false
@@ -55,6 +65,8 @@ export async function analisarItensNfe(
     let manual = false
 
     if (lista.length > 0) {
+      // Múltiplas classificações: mantém lista[0] como estimativa, mas
+      // sinaliza ambiguidade via opcoesClassificacao para UI/relatório.
       classificacao = lista[0]
       regraGeral = regraGeralDaBase
       manual = manualDoNcm || lista[0].manual != null
@@ -71,14 +83,27 @@ export async function analisarItensNfe(
       regraGeral = true
     }
 
+    // Reduções vêm SEMPRE da classificação vigente (fonte fiscal única).
+    // A base oficial não guarda "alíquota cheia por NCM": a referência cheia
+    // é o parâmetro da nota/sessão (ver docstring de analisarItensNfe).
     const redIBS = Number(classificacao.resumo.percentualReducaoIBS) || 0
     const redCBS = Number(classificacao.resumo.percentualReducaoCBS) || 0
+
     const base = Number(item.vlTotal) || 0
-    const calc = calcularTributos(base, redIBS, redCBS, ref.refIBS, ref.refCBS)
+    // Referência cheia = parâmetro da nota/sessão (declarado na UI e nos
+    // relatórios como "refs X% / Y%"). Nunca por NCM: a base oficial não tem
+    // alíquota cheia por NCM (ver docstring acima). Nunca zera por falta de base.
+    const refIBS = Number(ref.refIBS) || 0
+    const refCBS = Number(ref.refCBS) || 0
+    const calc = calcularTributos(base, redIBS, redCBS, refIBS, refCBS)
 
     resultados.push({
       ...item,
       ncm: cod,
+      ncmOriginal,
+      ncmTruncado,
+      ncmInvalido: !valido,
+      opcoesClassificacao: lista.length,
       classificacao,
       regraGeral,
       manual,
@@ -88,9 +113,20 @@ export async function analisarItensNfe(
       cbs: calc.vCBS,
       totalTributos: calc.total,
       carga: calc.carga,
-      anexo: anexoDeReducao(redIBS, redCBS),
+      anexo: anexoReal(classificacao.resumo?.anexo ?? (classificacao as { referencia?: { anexo?: unknown } }).referencia?.anexo, redIBS, redCBS),
       nomenclatura: cacheNomen.get(cod) ?? null,
-      observacoes: observacoesFiscais(cod, classificacao, cacheNomen.get(cod) ?? null),
+      observacoes: [
+        ...(ncmTruncado
+          ? [{ titulo: 'NCM truncado — conferir', texto: `Original "${ncmOriginal}" tinha ${entrada.digitos} dígitos (possível NBS/EX). Usado ${cod}. Confira o enquadramento.`, cor: 'amber' as const }]
+          : []),
+        ...(!valido
+          ? [{ titulo: 'NCM inválido', texto: `Original "${ncmOriginal}" não tem 8 dígitos. Tributação integral aplicada como estimativa — corrija o cadastro.`, cor: 'red' as const }]
+          : []),
+        ...(lista.length > 1
+          ? [{ titulo: 'Múltiplas classificações', texto: `Este NCM tem ${lista.length} enquadramentos oficiais. Foi usada a 1ª opção como estimativa — escolha a correta na Consulta/Lote.`, cor: 'amber' as const }]
+          : []),
+        ...observacoesFiscais(cod, classificacao, cacheNomen.get(cod) ?? null),
+      ],
     })
 
     onProgress?.(i + 1, itens.length)
@@ -105,11 +141,11 @@ export function totaisItensNfe(resultados: ResultadoItemNfe[]) {
   let totalIBS = 0
   let totalCBS = 0
   for (const r of resultados) {
-    totalBase += Number(r.vlTotal) || 0
-    totalIBS += r.ibs
-    totalCBS += r.cbs
+    totalBase = round2(totalBase + (Number(r.vlTotal) || 0))
+    totalIBS = round2(totalIBS + r.ibs)
+    totalCBS = round2(totalCBS + r.cbs)
   }
-  const totalTributos = totalIBS + totalCBS
+  const totalTributos = round2(totalIBS + totalCBS)
   return {
     totalBase,
     totalIBS,

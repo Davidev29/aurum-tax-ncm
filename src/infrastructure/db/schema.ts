@@ -5,12 +5,14 @@ import {
   STORES,
 } from '@/domain/constants'
 import type {
+  AuditLog,
   ClassificacaoProdutoSistema,
   Empresa,
   NomenclaturaNcm,
   Produto,
   ReclassificacaoManual,
   TabelaAuxiliarSimples,
+  TabelaCest,
   TabelaCst,
   TabelaCstClassTrib,
   VinculoNbs,
@@ -186,6 +188,12 @@ export class AurumDatabase extends Dexie {
   /** Classificação de Produtos por DFe (CFF — permitido × negado por sistema). */
   classificacaoProduto!: Table<ClassificacaoProdutoSistema, string>
 
+  /** Log imutável de auditoria (append-only, nunca atualizado pela UI). */
+  auditLog!: Table<AuditLog, number>
+
+  /** CEST — tabela informativa (7 dígitos, opcional por produto). */
+  cest!: Table<TabelaCest, string>
+
   constructor() {
     super(DB_NAME)
     // v6: schema anterior (sem `classificacaoProduto`). Mantido para a
@@ -225,6 +233,8 @@ export class AurumDatabase extends Dexie {
         [STORES.NFENOTAS]: '++id, empresaId, dataEmissao, direcao, emitCnpj, chave, &[empresaId+chave]',
         [STORES.RECLASS]: 'ncm',
         [STORES.CLASSPROD]: 'id, sistema, cClassTrib',
+        [STORES.AUDIT]: '++id, quando, tabela, chave, autor',
+        [STORES.CEST]: 'codigo, ncm',
       })
   }
 }
@@ -252,7 +262,7 @@ export async function bulkPut<T, K>(
 export async function contarTodos(): Promise<Record<string, number>> {
   const [
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
-    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto,
+    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest,
   ] = await Promise.all([
     db.ncm.count(),
     db.nbs.count(),
@@ -268,9 +278,11 @@ export async function contarTodos(): Promise<Record<string, number>> {
     db.nfeNotas.count(),
     db.reclassificacoesManuais.count(),
     db.classificacaoProduto.count(),
+    db.auditLog.count().catch(() => 0),
+    db.cest.count().catch(() => 0),
   ])
   return {
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
-    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto,
+    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest,
   }
 }

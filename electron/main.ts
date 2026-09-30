@@ -24,17 +24,26 @@ import {
 import { existsSync, promises as fsp } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { autoUpdater } from 'electron-updater'
 
 /** URL do servidor Vite, definida pelo script `dev:electron` (cross-env). */
 const URL_DEV = process.env.VITE_DEV_SERVER_URL ?? ''
 
-/** Hosts oficiais autorizados para leitura interna de legislação. */
+/**
+ * Hosts oficiais autorizados para leitura interna de legislação.
+ * (A tabela NCM/Siscomex foi removida: as bases agora viajam embutidas em
+ * `dist/base` e são atualizadas junto com o programa via electron-updater.)
+ */
 const HOSTS_LEGISLACAO = new Set([
   'www.planalto.gov.br',
   'planalto.gov.br',
+  'www4.planalto.gov.br',
   'www.cgibs.gov.br',
   'cgibs.gov.br',
 ])
+
+/** Todos os hosts autorizados no canal `rede:buscar-texto`. */
+const HOSTS_REDE = new Set([...HOSTS_LEGISLACAO])
 
 /** Modo de desenvolvimento: existe servidor Vite ativo? */
 const EM_DESENVOLVIMENTO = URL_DEV.length > 0
@@ -163,13 +172,13 @@ function registrarIpc(): void {
   })
 
   /**
-   * `rede:buscar-texto` — baixa o HTML de uma norma oficial para leitura
-   * **dentro do sistema** (modal de legislação).
+   * `rede:buscar-texto` — baixa HTML de norma oficial **dentro do sistema**
+   * (modal de legislação).
    *
-   * O renderer sofre restrição de CORS e o Planalto bloqueia `iframe` com
-   * `X-Frame-Options`; aqui no processo principal o `fetch` do Node não tem
-   * restrição de origem. Trava de segurança: só HTTPS, só hosts oficiais,
-   * sem fragmento, teto de 15 MB e timeout de 30 s.
+   * O renderer sofre restrição de CORS (o Planalto bloqueia `iframe` com
+   * `X-Frame-Options`); aqui no processo principal o `fetch` do Node não tem
+   * restrição de origem. Travas de segurança: só HTTPS, só hosts oficiais
+   * (Planalto/CGIBS), sem fragmento, teto de 15 MB e timeout de 90 s.
    */
   ipcMain.handle('rede:buscar-texto', async (_evento, urlAlvo: string) => {
     if (typeof urlAlvo !== 'string' || !urlAlvo.trim()) {
@@ -182,23 +191,33 @@ function registrarIpc(): void {
       throw new Error('URL inválida para leitura da legislação.')
     }
     if (u.protocol !== 'https:') throw new Error('Somente URLs HTTPS são permitidas.')
-    if (!HOSTS_LEGISLACAO.has(u.hostname.toLowerCase())) {
+    const host = u.hostname.toLowerCase()
+    if (!HOSTS_REDE.has(host)) {
       throw new Error(`Host não autorizado para leitura interna: "${u.hostname}".`)
     }
     u.hash = ''
     let resposta: Response
     try {
       resposta = await fetch(u.toString(), {
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(90000),
         headers: {
           'User-Agent': 'AurumTaxNCM/1.0 (leitura de legislacao)',
-          Accept: 'text/html,application/xhtml+xml,*/*',
+          Accept: 'text/html,application/xhtml+xml,application/json,*/*',
         },
       })
     } catch (erro) {
       throw new Error(`Falha de rede ao buscar a norma: ${mensagemDeErro(erro)}`)
     }
-    if (!resposta.ok) throw new Error(`Documento indisponível (HTTP ${resposta.status}).`)
+    if (!resposta.ok) {
+      const ra = resposta.headers.get('retry-after')
+      // `status`/`retryAfter` extras nem sempre atravessam o IPC — o valor
+      // vai também na mensagem para o renderer reconstruir o ErroHttpSiscomex.
+      const detalheRa = ra ? `, Retry-After: ${String(ra).split(',')[0].trim()}` : ''
+      const erro = new Error(`Documento indisponível (HTTP ${resposta.status}${detalheRa}).`)
+      ;(erro as unknown as Record<string, unknown>).status = resposta.status
+      if (ra) (erro as unknown as Record<string, unknown>).retryAfter = ra
+      throw erro
+    }
     const bruto = Buffer.from(await resposta.arrayBuffer())
     if (bruto.length > 15_000_000) {
       throw new Error('Documento grande demais para leitura dentro do sistema.')
@@ -333,6 +352,109 @@ function registrarIpc(): void {
       }
     }
   })
+
+  /** `atualizacao:versao` — versão instalada + plataforma (para a aba Atualização). */
+  ipcMain.handle('atualizacao:versao', () => ({
+    versao: app.getVersion(),
+    empacotado: app.isPackaged,
+  }))
+
+  /** `atualizacao:verificar` — consulta o GitHub Releases (só no app instalado). */
+  ipcMain.handle('atualizacao:verificar', async () => {
+    if (!app.isPackaged) {
+      return { disponivel: false, mensagem: 'Verificação disponível apenas no app instalado.' }
+    }
+    try {
+      const r = await autoUpdater.checkForUpdates()
+      const info = r?.updateInfo
+      return {
+        disponivel: autoUpdater.currentVersion.compare(info?.version ?? '') < 0,
+        versao: info?.version ?? null,
+        notas: notasVersao(info?.releaseNotes),
+      }
+    } catch (erro) {
+      throw new Error(`Não foi possível verificar atualizações: ${mensagemDeErro(erro)}`)
+    }
+  })
+
+  /** `atualizacao:baixar` — baixa a versão encontrada em background. */
+  ipcMain.handle('atualizacao:baixar', async () => {
+    if (!app.isPackaged) throw new Error('Download disponível apenas no app instalado.')
+    try {
+      await autoUpdater.downloadUpdate()
+      return { ok: true }
+    } catch (erro) {
+      throw new Error(`Não foi possível baixar a atualização: ${mensagemDeErro(erro)}`)
+    }
+  })
+
+  /** `atualizacao:instalar` — fecha o app e aplica a versão baixada. */
+  ipcMain.handle('atualizacao:instalar', () => {
+    if (!app.isPackaged) throw new Error('Instalação disponível apenas no app instalado.')
+    autoUpdater.quitAndInstall(false, true)
+    return { ok: true }
+  })
+}
+
+/** Extrai texto das notas de release (string | array de releases). */
+function notasVersao(notas: unknown): string | null {
+  if (!notas) return null
+  if (typeof notas === 'string') return notas.slice(0, 2000) || null
+  if (Array.isArray(notas)) {
+    const texto = notas
+      .map((r) => (typeof r === 'string' ? r : (r as { note?: unknown })?.note))
+      .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+      .join('\n\n')
+    return texto.slice(0, 2000) || null
+  }
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// Auto-atualização do programa (electron-updater + GitHub Releases)
+// ---------------------------------------------------------------------------
+
+/**
+ * As bases tributárias (NCM, CST, cClassTrib, nomenclatura) viajam embutidas
+ * em `dist/base` — é aqui, na atualização do programa, que elas são renovadas.
+ * Verificação automática 30 s após abrir + a cada 6 h; eventos seguem para o
+ * renderer pelo canal `atualizacao:evento`.
+ */
+function configurarAtualizador(): void {
+  if (!app.isPackaged) return
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = true
+
+  const enviar = (tipo: string, dados?: Record<string, unknown>) => {
+    janelaPrincipal?.webContents.send('atualizacao:evento', { tipo, ...(dados ?? {}) })
+  }
+
+  autoUpdater.on('checking-for-update', () => enviar('verificando'))
+  autoUpdater.on('update-available', (info) =>
+    enviar('disponivel', { versao: info?.version ?? null, notas: notasVersao(info?.releaseNotes) }),
+  )
+  autoUpdater.on('update-not-available', () => enviar('em-dia'))
+  autoUpdater.on('download-progress', (p) =>
+    enviar('baixando', {
+      pct: Math.round(p?.percent ?? 0),
+      baixado: p?.transferred ?? 0,
+      total: p?.total ?? 0,
+    }),
+  )
+  autoUpdater.on('update-downloaded', (info) =>
+    enviar('baixada', { versao: info?.version ?? null }),
+  )
+  autoUpdater.on('error', (erro) => enviar('erro', { mensagem: mensagemDeErro(erro) }))
+
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(() => undefined)
+  }, 30_000)
+  setInterval(
+    () => {
+      autoUpdater.checkForUpdates().catch(() => undefined)
+    },
+    6 * 60 * 60 * 1000,
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -378,7 +500,7 @@ function resolverNoXml(caminhoRelativo: string): string {
 // ---------------------------------------------------------------------------
 
 /** Envia uma ação de menu para a janela do renderer (canal `menu:acao`). */
-function enviarAcaoMenu(acao: 'abrir' | 'exportar' | 'tema'): void {
+function enviarAcaoMenu(acao: 'abrir' | 'exportar' | 'tema' | 'atualizar'): void {
   const destino = BrowserWindow.getFocusedWindow() ?? janelaPrincipal
   destino?.webContents.send('menu:acao', { acao })
 }
@@ -448,6 +570,11 @@ function criarMenu(): void {
     {
       label: 'Ajuda',
       submenu: [
+        {
+          label: 'Verificar atualizações…',
+          click: () => enviarAcaoMenu('atualizar'),
+        },
+        { type: 'separator' },
         {
           label: 'Site da LC 214/2025',
           click: () => {
@@ -554,6 +681,7 @@ if (!instanciaUnica) {
       registrarIpc()
       criarMenu()
       await criarJanela()
+      configurarAtualizador()
     })
     .catch((erro) => {
       console.error(`Falha ao iniciar o Aurum Tax NCM: ${mensagemDeErro(erro)}`)

@@ -13,14 +13,14 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { EMITENTE_PADRAO } from '@/domain/entities'
-import { fmtMoeda, fmtNcm } from '@/domain/services/format'
+import { fmtMoeda, fmtNcm, fmtNum, formatarMoedaInput } from '@/domain/services/format'
+import { obterAliquotasRefDinamica } from '@/domain/services/referencia-service'
 import {
   exportarProdutosCSV,
   exportarProdutosJSON,
   exportarProdutosPDF,
 } from '@/infrastructure/exporters/relatorios'
 import { registrarExportador } from '@/infrastructure/pdf/menu-exportacao'
-import { useClassificar } from '@/store/classificar'
 import { useConsulta } from '@/store/consulta'
 import { produtosVisiveis, useProdutos, type ProdutoLinha } from '@/store/produtos'
 import { useSessao } from '@/store/sessao'
@@ -72,10 +72,13 @@ export function Produtos() {
   const exportarPdf = async () => {
     if (!cache.length) return toast('Nenhum produto para exportar.', 'warn')
     try {
+      const ref = await obterAliquotasRefDinamica()
       await exportarProdutosPDF({
         produtos: cache,
         empresa: ativa,
         emitente: emitente ?? EMITENTE_PADRAO,
+        refIBS: ref.refIBS,
+        refCBS: ref.refCBS,
       })
       toast('PDF gerado.', 'ok')
     } catch (e) {
@@ -128,8 +131,8 @@ export function Produtos() {
                 'Nenhum produto cadastrado',
                 <>
                   Comece pela aba <strong>Consulta NCM</strong>,{' '}
-                  <strong>Classificação individual</strong> ou{' '}
-                  <strong>Classificação em lote</strong>.
+                  <strong>Classificação em lote</strong> ou{' '}
+                  <strong>Notas Fiscais (XML)</strong>.
                 </>,
               )
             : !visiveis.length
@@ -189,9 +192,9 @@ export function Produtos() {
 function LinhaProduto({ p, semEmpresa, onDetalhe }: { p: ProdutoLinha; semEmpresa: boolean; onDetalhe: () => void }) {
   const trocarView = useUi((s) => s.trocarView)
   const abrirCalc = useUi((s) => s.abrirCalc)
-  const iniciarEdicao = useClassificar((s) => s.iniciarEdicao)
   const setCodigo = useConsulta((s) => s.setCodigo)
   const consultar = useConsulta((s) => s.consultar)
+  const setPrefillSalvar = useConsulta((s) => s.setPrefillSalvar)
   const excluir = useProdutos((s) => s.excluir)
 
   const ver = () => {
@@ -205,9 +208,27 @@ function LinhaProduto({ p, semEmpresa, onDetalhe }: { p: ProdutoLinha; semEmpres
   // arrastar o usuário para a tela da Calculadora.
   const paraCalculadora = () => abrirCalc({ tipo: 'produto', produto: p })
 
+  // Edição via Consulta: o produto viaja pré-preenchido, o usuário escolhe
+  // a classificação e salva com o mesmo SKU (atualiza o registro original).
   const editar = () => {
-    void iniciarEdicao(p)
-    trocarView('classificar')
+    setPrefillSalvar({
+      codigo: p.codigo,
+      nome: p.nome,
+      // Formatos BR das máscaras: qtd com vírgula, valor em moeda real
+      // (`"50"` → R$ 50,00 e cálculo 50 — nunca centavos).
+      qtd: p.quantidade ? fmtNum(p.quantidade) : '',
+      valor: p.valorUnitario ? formatarMoedaInput(p.valorUnitario) : '',
+      cfop: p.cfop ?? '',
+      cstIcms: p.cstIcms ?? '',
+      pis: p.pis ?? '',
+      cofins: p.cofins ?? '',
+      editarId: p.id ?? null,
+    })
+    const codigo = fmtNcm(p.ncm) || p.ncm
+    setCodigo(codigo)
+    void consultar(codigo)
+    trocarView('consulta')
+    toast('Escolha a classificação e salve com o mesmo SKU para atualizar.', '')
   }
 
   const remover = () => {

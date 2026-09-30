@@ -39,6 +39,10 @@ const NORMALIZADORES_TIPO: Record<TipoAux, ((d: RegistroAux) => void) | undefine
     if (d.codigo) d.codigo = norm(d.codigo).padStart(2, '0')
   },
   cstct: undefined,
+  cest: (d) => {
+    if (d.codigo) d.codigo = norm(d.codigo).padStart(7, '0').slice(0, 7)
+    if (d.ncm) d.ncm = norm(d.ncm).slice(0, 8)
+  },
 }
 
 export interface EdicaoAux {
@@ -195,14 +199,60 @@ export const useAuxiliares = create<AuxState>((set, get) => ({
     await get().carregar(ed.tipo)
     set({ edicao: null })
     toast(r.status === 'criado' ? 'Registro criado.' : 'Registro atualizado.', 'ok')
+    // Tabelas da Reforma afetam a classificação vigente: revalida produtos e
+    // notas gravadas para não exibir redução revogada como atual.
+    if (ed.tipo === 'ncm' || ed.tipo === 'cst' || ed.tipo === 'cstct' || ed.tipo === 'ncmnomen') {
+      try {
+        const { atualizarAliasesCalculo } = await import('@/domain/constants/aliases')
+        atualizarAliasesCalculo()
+        const { revalidarBaseGravada, resumirRevalidacao } = await import('@/application/revalidacao')
+        const t = await revalidarBaseGravada()
+        toast(`Base revalidada: ${resumirRevalidacao(t)}.`, 'ok')
+      } catch {
+        toast('Registro salvo. Revalidação pendente — reabra a base para atualizar.', 'warn')
+      }
+    }
     return true
   },
 
   excluir: async (tipo, chave) => {
     const meta = AUX_META[tipo]
+    // Guarda de integridade: não permite excluir registro em uso pela Reforma.
+    if (tipo === 'cst' || tipo === 'cstct' || tipo === 'ncm') {
+      try {
+        const chaveStr = String(chave)
+        let emUso = 0
+        if (tipo === 'ncm') emUso = await db.table('ncm').where('codigo').equals(chaveStr).count()
+        if (tipo === 'cst') {
+          emUso =
+            (await db.table('ncm').where('cst').equals(chaveStr).count()) +
+            (await db.table('cstClassTrib').where('cst').equals(chaveStr).count())
+        }
+        if (tipo === 'cstct') {
+          emUso = await db.table('ncm').where('cClassTrib').equals(chaveStr.split('|')[1] ?? chaveStr).count()
+        }
+        if (emUso > 0) {
+          toast(`Exclusão bloqueada: ${emUso} vínculo(s) usam este registro. Reclassifique antes de excluir.`, 'warn')
+          return
+        }
+      } catch {
+        /* segue para exclusão se a checagem falhar */
+      }
+    }
     await excluirRegistroAux(meta.store, chave)
     await get().carregar(tipo)
     toast('Registro excluído.', 'warn')
+    if (tipo === 'ncm' || tipo === 'cst' || tipo === 'cstct' || tipo === 'ncmnomen') {
+      try {
+        const { atualizarAliasesCalculo } = await import('@/domain/constants/aliases')
+        atualizarAliasesCalculo()
+        const { revalidarBaseGravada, resumirRevalidacao } = await import('@/application/revalidacao')
+        const t = await revalidarBaseGravada()
+        toast(`Base revalidada: ${resumirRevalidacao(t)}.`, 'ok')
+      } catch {
+        /* revalidação opcional */
+      }
+    }
   },
 }))
 

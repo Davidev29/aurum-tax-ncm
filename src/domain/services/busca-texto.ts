@@ -25,10 +25,8 @@ export function normalizarBusca(v: unknown): string {
 export function tokenizarBusca(v: unknown): string[] {
   const norm = normalizarBusca(v)
   if (!norm) return []
-  const tokens = norm.split(' ')
-  // Mantém tokens de 1 letra só quando são o único termo (ex.: "a" não ajuda).
-  const uteis = tokens.filter((t) => t.length >= 2)
-  return uteis.length ? [...new Set(uteis)] : tokens
+  const tokens = norm.split(' ').filter((t) => t.length >= 2)
+  return [...new Set(tokens)]
 }
 
 /** Prefixos hierárquicos de um código NCM (2 → 4 → 6 → 8 dígitos). */

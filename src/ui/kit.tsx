@@ -80,12 +80,12 @@ export interface CampoTextoProps extends InputHTMLAttributes<HTMLInputElement> {
  * Input com máscara aplicada em `input` — compensa o cursor (`delta`), como
  * fazia o listener global da v1 (SPEC R10.5).
  */
-export function Texto({ mask, mono, grande, erro, className = '', ...props }: CampoTextoProps) {
+export function Texto({ mask, mono, grande, erro, className = '', onChange, ...props }: CampoTextoProps) {
   const ref = useRef<HTMLInputElement>(null)
 
   const aoMudar = (e: ChangeEvent<HTMLInputElement>) => {
     if (!mask) {
-      props.onChange?.(e)
+      onChange?.(e)
       return
     }
     const alvo = e.target
@@ -100,7 +100,7 @@ export function Texto({ mask, mono, grande, erro, className = '', ...props }: Ca
       const nova = Math.max(0, pos + delta)
       window.requestAnimationFrame(() => alvo.setSelectionRange(nova, nova))
     }
-    props.onChange?.(e)
+    onChange?.(e)
   }
 
   return (
@@ -271,7 +271,7 @@ export function IconeBadge({
  *
  * Duas famílias distintas (nunca misturar):
  * - Derivado (`0`, `80`…`30`, `misto`, `isento`): faixa calculada da redução,
- *   usada no SPED/NF-e/Lote — rótulo em `ANEXO_LABELS`.
+ *   usada no NF-e/Lote — rótulo em `ANEXO_LABELS`.
  * - Oficial (`1`…`15`, `9xxxx`): `Número do Anexo` da base CFF, exibido nos
  *   cartões de consulta — rótulo em `rotuloAnexoOficial` (antes caía no
  *   fallback "Sem redução", falso para ex.: Anexo I com alíquota zero).

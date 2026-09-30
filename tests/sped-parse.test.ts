@@ -91,7 +91,7 @@ describe('parseIcmsIpi', () => {
     ].join('\n')
     const r = parseIcmsIpi(conteudo)
     expect(r.produtos).toHaveLength(2)
-    expect(r.produtos[0]).toEqual({ codigo: 'P1', descricao: 'Produto Um', ncm: '02011000' })
+    expect(r.produtos[0]).toEqual({ codigo: 'P1', descricao: 'Produto Um', ncm: '02011000', cest: '' })
     expect(r.stats.registros0200).toBe(2) // conta ocorrências **únicas** (paridade com a v1)
   })
 

@@ -15,10 +15,16 @@ import {
   totaisSped,
 } from '@/infrastructure/exporters/relatorios'
 import { classificacaoNcmInvalido } from '@/domain/services/classificacao'
+import { REF_DEFAULT } from '@/domain/constants'
 import type { Produto } from '@/domain/entities'
 import type { ResultadoItem, ResultadoResumo } from '@/infrastructure/sped/tipos'
 
 const BOM = '\uFEFF'
+
+// Usa as alíquotas de referência padrão do sistema (dinâmicas conforme regras vigentes)
+const REF_IBS = REF_DEFAULT.IBS
+const REF_CBS = REF_DEFAULT.CBS
+const CARGA_PADRAO = REF_IBS + REF_CBS
 
 function produto(alt: Partial<Produto> = {}): Produto {
   return {
@@ -78,10 +84,10 @@ function resultadoItem(alt: Partial<ResultadoItem> = {}): ResultadoItem {
     regraGeral: false,
     redIBS: 0,
     redCBS: 0,
-    ibs: 44.25,
-    cbs: 22,
-    totalTributos: 66.25,
-    carga: 26.5,
+    ibs: 250 * REF_IBS / 100,
+    cbs: 250 * REF_CBS / 100,
+    totalTributos: 250 * (REF_IBS + REF_CBS) / 100,
+    carga: CARGA_PADRAO,
     anexo: 'isento',
     observacoes: [],
     ...alt,
@@ -101,10 +107,10 @@ function resultadoResumo(alt: Partial<ResultadoResumo> = {}): ResultadoResumo {
     regraGeral: true,
     redIBS: 0,
     redCBS: 0,
-    ibs: 177,
-    cbs: 88,
-    totalTributos: 265,
-    carga: 26.5,
+    ibs: 1000 * REF_IBS / 100,
+    cbs: 1000 * REF_CBS / 100,
+    totalTributos: 1000 * (REF_IBS + REF_CBS) / 100,
+    carga: CARGA_PADRAO,
     anexo: 'isento',
     observacoes: [],
     _isResumo: true,
@@ -194,14 +200,37 @@ describe('csvSped', () => {
     const linhas = csv.replace(BOM, '').split('\r\n')
     expect(linhas).toHaveLength(2)
     expect(linhas[0]).toBe('"Código";"Produto";"NCM";"CST";"CFOP";"Qtd";"Valor";"CST Reforma";"cClassTrib";"Red. IBS (%)";"Red. CBS (%)";"IBS";"CBS";"Total Tributos";"Anexo"')
-    expect(linhas[1]).toBe('"P1";"Produto Um";"0201.10.00";"000";"5102";"2";"250.00";"000";"000001";"0";"0";"44.25";"22.00";"66.25";"isento"')
+    expect(linhas[1]).toBe(`"P1";"Produto Um";"0201.10.00";"000";"5102";"2";"250.00";"000";"000001";"0";"0";"${(250 * REF_IBS / 100).toFixed(2)}";"${(250 * REF_CBS / 100).toFixed(2)}";"${(250 * (REF_IBS + REF_CBS) / 100).toFixed(2)}";""`)
+  })
+
+  it('blindagem: coluna Anexo só com o oficial; sem cobertura oficial, vazio (nunca "isento"/"60")', () => {
+    // Fixture acima: classificacaoNcmInvalido (anexo oficial null) + item.anexo
+    // legado 'isento' → CSV sai vazio, sem afirmar faixa derivada.
+    expect(csvSped([resultadoItem()]).split('\r\n')[1]).toMatch(/;""$/)
+    // Com anexo oficial na classificação, o valor oficial aparece cru.
+    const oficial = resultadoItem({
+      classificacao: {
+        ...classificacaoNcmInvalido('02011000'),
+        cst: '200',
+        cClassTrib: '200038',
+        resumo: {
+          descricaoCClassTrib: 'Anexo IX',
+          percentualReducaoIBS: 60,
+          percentualReducaoCBS: 60,
+          anexo: '9',
+          urlLegislacao: null,
+          documentosHabilitados: null,
+        },
+      },
+    })
+    expect(csvSped([oficial]).split('\r\n')[1]).toMatch(/;"9"$/)
   })
 
   it('modo resumo usa o cabeçalho de CST/CFOP', () => {
     const csv = csvSped([resultadoResumo()])
     const linhas = csv.replace(BOM, '').split('\r\n')
     expect(linhas[0]).toBe('"CST ICMS";"CFOP";"Notas";"Valor Operação";"BC ICMS";"ICMS";"IBS";"CBS";"Total Tributos"')
-    expect(linhas[1]).toBe('"000";"5102";"3";"1000.00";"1000.00";"180.00";"177.00";"88.00";"265.00"')
+    expect(linhas[1]).toBe(`"000";"5102";"3";"1000.00";"1000.00";"180.00";"${(1000 * REF_IBS / 100).toFixed(2)}";"${(1000 * REF_CBS / 100).toFixed(2)}";"${(1000 * (REF_IBS + REF_CBS) / 100).toFixed(2)}"`)
   })
 
   it('escapa aspas dentro das células', () => {

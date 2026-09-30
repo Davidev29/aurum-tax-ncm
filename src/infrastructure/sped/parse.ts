@@ -116,7 +116,7 @@ const camposPisA170 = (campos: string[]) => ({
 /* Passo 1 — cadastro 0200 (comum aos dois layouts)                             */
 /* -------------------------------------------------------------------------- */
 
-type Produtos0200 = Map<string, { codigo: string; descricao: string; ncm: string }>
+type Produtos0200 = Map<string, { codigo: string; descricao: string; ncm: string; cest?: string }>
 
 const lerCadastro0200 = (
   linhas: string[],
@@ -138,6 +138,7 @@ const lerCadastro0200 = (
       codigo: codItem,
       descricao: String(campos[3] ?? '').trim(),
       ncm: digitos.length > 8 ? digitos.slice(0, 8) : digitos,
+      cest: String(campos[13] ?? '').trim().replace(/\D/g, '').slice(0, 7) || '',
     })
   }
   return produtos
@@ -303,6 +304,7 @@ export function parseIcmsIpi(conteudo: string): SpedParseado {
           codItem,
           descricaoProduto: prod ? prod.descricao : String(campos[4] ?? '').trim() || codItem,
           ncm: prod ? prod.ncm : '',
+          cest: prod?.cest ?? '',
           qtd: spedToNumber(campos[5]),
           unid: String(campos[6] ?? '').trim(),
           vlItem: spedToNumber(campos[7]),
@@ -486,6 +488,7 @@ export function parseContribuicoes(conteudo: string): SpedParseado {
         codItem,
         descricaoProduto: prod ? prod.descricao : descCompl || codItem,
         ncm: prod ? prod.ncm : '',
+        cest: prod?.cest ?? '',
         qtd: item.qtd,
         unid: item.unid,
         vlItem: item.vlItem,

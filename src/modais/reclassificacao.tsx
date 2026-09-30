@@ -1,19 +1,17 @@
 /**
  * Modal **Reclassificar manualmente** (page-owned, como `ModalSalvarClass`).
  *
- * Aberto **somente** quando o NCM não tem classificação específica (regra geral).
- * O usuário escolhe uma das classificações existentes no sistema (auxílio),
- * informa descrição + fonte + link da legislação, e a escolha passa a valer
- * para o NCM em consulta, XML, SPED e lote — sempre sinalizada como manual
- * (responsabilidade do usuário, isentando o sistema).
+ * Aberto a partir do cartão de regra geral (NCM sem classificação específica)
+ * ou do cartão manual (editar/remover a vigente). O usuário escolhe uma das
+ * classificações existentes no sistema (auxílio), informa descrição + fonte +
+ * link da legislação, e a escolha passa a valer para o NCM em TODAS as telas
+ * (consulta, XML, SPED, lote, produtos, calculadora) — acima da base oficial,
+ * sempre sinalizada como manual (responsabilidade do usuário, isentando o sistema).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { NomenclaturaNcm } from '@/domain/entities'
-import { REF_DEFAULT } from '@/domain/constants'
-import { anexoDeReducao, calcularTributos, observacoesFiscais } from '@/domain/services/calculo'
 import { fmtNcm, fmtPct, norm } from '@/domain/services/format'
 import { propagarClassificacaoNcm } from '@/application/reclassificacao'
-import { resolverClassificacoes } from '@/infrastructure/base/classificacao-repo'
 import {
   buscarReclassificacaoManual,
   listarClassificacoesExistentes,
@@ -53,51 +51,6 @@ function textoOpcao(o: OpcaoClassificacaoExistente): string {
   return normalizarBusca(
     `${o.cst} ${o.cClassTrib} ${o.nome} ${o.descricao} ${o.lcRef ?? ''} ${reds} ${anexo}`,
   )
-}
-
-/**
- * Remenda a análise SPED aberta em memória (store transitório, sem banco):
- * troca a classificação dos itens do NCM pela vigente e recalcula IBS/CBS
- * com as alíquotas de referência da própria tela de SPED.
- */
-async function remendarSpedAberto(codigoInput: string): Promise<void> {
-  const cod = norm(codigoInput)
-  if (cod.length !== 8) return
-  const { useSped } = await import('@/store/sped')
-  const st = useSped.getState()
-  if (st.modo !== 'itens' || !st.dados.length) return
-  if (!st.dados.some((r) => !('_isResumo' in r) && norm(r.ncm) === cod)) return
-  const r = await resolverClassificacoes(cod)
-  const cl = r.lista[0]
-  if (!cl) return
-  const redIBS = Number(cl.resumo?.percentualReducaoIBS) || 0
-  const redCBS = Number(cl.resumo?.percentualReducaoCBS) || 0
-  const manualFlag = cl.manual != null || r.manual
-  const refIBS = Number(st.refIBS) || REF_DEFAULT.IBS
-  const refCBS = Number(st.refCBS) || REF_DEFAULT.CBS
-  const obs = observacoesFiscais(cod, cl, r.nomenclatura)
-  const dados = st.dados.map((row) => {
-    if ('_isResumo' in row || norm(row.ncm) !== cod) return row
-    const base = Number(row.vlItem) || 0
-    const calc = calcularTributos(base, redIBS, redCBS, refIBS, refCBS)
-    return {
-      ...row,
-      ncm: cod,
-      classificacao: cl,
-      regraGeral: r.regraGeral,
-      manual: manualFlag,
-      redIBS,
-      redCBS,
-      ibs: calc.vIBS,
-      cbs: calc.vCBS,
-      totalTributos: calc.total,
-      carga: calc.carga,
-      anexo: anexoDeReducao(redIBS, redCBS),
-      observacoes: obs,
-      nomenclatura: r.nomenclatura,
-    }
-  })
-  useSped.setState({ dados: dados as typeof st.dados })
 }
 
 export function ModalReclassificacao({
@@ -240,8 +193,7 @@ export function ModalReclassificacao({
 
   /**
    * Reaplica a classificação vigente no que já foi gravado com este NCM
-   * (produtos + itens de XML) e remenda a análise SPED aberta em memória.
-   * Retorna o texto de impacto para o toast.
+   * (produtos + itens de XML). Retorna o texto de impacto para o toast.
    */
   const propagar = async (): Promise<string> => {
     const prop = await propagarClassificacaoNcm(codigo)
@@ -261,7 +213,6 @@ export function ModalReclassificacao({
         useNfe.setState({ notaAberta: fresca })
       }
     } catch { /* sem notas — nada a recarregar */ }
-    await remendarSpedAberto(codigo).catch(() => undefined)
     const partes = []
     if (prop.produtos) partes.push(`${prop.produtos} produto(s)`)
     if (prop.itens) partes.push(`${prop.itens} item(ns) em ${prop.notas} nota(s)`)
@@ -300,7 +251,7 @@ export function ModalReclassificacao({
     try {
       await removerReclassificacaoManual(codigo)
       const impacto = await propagar()
-      toast(`Reclassificação manual removida — voltou à regra geral${impacto}`, 'warn')
+      toast(`Reclassificação manual removida — voltou à classificação oficial${impacto}`, 'warn')
       onSalvo()
       onFechar()
     } catch (e) {
@@ -315,7 +266,7 @@ export function ModalReclassificacao({
       aberto={aberto}
       onFechar={onFechar}
       titulo="✋ Reclassificar manualmente"
-      subtitulo={`NCM ${fmtNcm(codigo)} · somente porque não há classificação específica na base oficial`}
+      subtitulo={`NCM ${fmtNcm(codigo)} · sua escolha vale em todas as telas, acima da base oficial`}
       largura="max-w-3xl"
       rodape={
         <>

@@ -23,10 +23,10 @@ describe('normalizarBusca / tokenizarBusca', () => {
     expect(tokenizarBusca('  Queijo   MOZARELA ')).toEqual(['queijo', 'mozarela'])
   })
 
-  it('remove duplicadas e exige ao menos 2 termos úteis', () => {
+  it('remove duplicadas e ignora termos curtos', () => {
     expect(tokenizarBusca('carne carne bovina')).toEqual(['carne', 'bovina'])
     expect(tokenizarBusca('')).toEqual([])
-    expect(tokenizarBusca('a')).toEqual(['a'])
+    expect(tokenizarBusca('a')).toEqual([])
   })
 })
 

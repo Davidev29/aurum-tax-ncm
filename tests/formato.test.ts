@@ -11,6 +11,7 @@ import {
   fmtCnpj,
   fmtInt,
   fmtNcm,
+  formatarMoedaInput,
   hexToRgb,
   norm,
   normalizeHeader,
@@ -18,6 +19,10 @@ import {
   parseQtd,
   uid,
 } from '@/domain/services/format'
+import { REF_DEFAULT } from '@/domain/constants'
+
+// Usa as alíquotas de referência padrão do sistema (dinâmicas conforme regras vigentes)
+const CARGA_PADRAO = REF_DEFAULT.IBS + REF_DEFAULT.CBS
 
 describe('norm / fmtNcm', () => {
   it('mantém apenas dígitos', () => {
@@ -79,18 +84,26 @@ describe('MASK', () => {
     expect(MASK.qtd('abc')).toBe('')
   })
 
-  it('moeda deriva dos centavos digitados', () => {
+  it('moeda formata o valor real digitado (nunca centavos)', () => {
     expect(MASK.moeda('')).toBe('')
-    expect(MASK.moeda('1')).toBe('R$ 0,01')
-    expect(MASK.moeda('123456')).toBe('R$ 1.234,56')
-    expect(MASK.moeda('12a3')).toBe('R$ 1,23')
+    expect(MASK.moeda('1')).toBe('R$ 1')
+    expect(MASK.moeda('50')).toBe('R$ 50')
+    expect(MASK.moeda('5000')).toBe('R$ 5.000')
+    expect(MASK.moeda('50,5')).toBe('R$ 50,5')
+    expect(MASK.moeda('123456,78')).toBe('R$ 123.456,78')
+    expect(MASK.moeda('R$ 1.234,56')).toBe('R$ 1.234,56')
+    expect(MASK.moeda('12a3')).toBe('R$ 123')
   })
 })
 
 describe('parseMoeda / parseQtd', () => {
-  it('parseMoeda ignora tudo que não é dígito', () => {
+  it('parseMoeda entende o valor real em formato brasileiro', () => {
     expect(parseMoeda('R$ 1.234,56')).toBe(1234.56)
     expect(parseMoeda('R$ 0,00')).toBe(0)
+    expect(parseMoeda('50')).toBe(50)
+    expect(parseMoeda('R$ 50')).toBe(50)
+    expect(parseMoeda('R$ 50,5')).toBe(50.5)
+    expect(parseMoeda('R$ 5.000')).toBe(5000)
     expect(parseMoeda('')).toBe(0)
     expect(parseMoeda(null)).toBe(0)
   })
@@ -102,6 +115,12 @@ describe('parseMoeda / parseQtd', () => {
     expect(parseQtd('')).toBe(0)
     // Sem vírgula, o ponto também é removido (paridade com a v1).
     expect(parseQtd('12.5')).toBe(125)
+  })
+
+  it('formatarMoedaInput exibe valor inicial com 2 casas', () => {
+    expect(formatarMoedaInput(50)).toBe('R$ 50,00')
+    expect(formatarMoedaInput(1234.56)).toBe('R$ 1.234,56')
+    expect(formatarMoedaInput(0.5)).toBe('R$ 0,50')
   })
 })
 
@@ -145,7 +164,7 @@ describe('utilitários', () => {
 
   it('fmtInt / fmtCarga', () => {
     expect(fmtInt(1234)).toBe('1.234')
-    expect(fmtCarga(26.5)).toBe('26,50%')
+    expect(fmtCarga(CARGA_PADRAO)).toBe(`${CARGA_PADRAO.toFixed(2).replace('.', ',')}%`)
     expect(fmtCarga(NaN)).toBe('0,00%')
   })
 

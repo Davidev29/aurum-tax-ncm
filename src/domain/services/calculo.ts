@@ -14,18 +14,33 @@ import { observacaoExtincaoNcm } from './classificacao'
 import { observacaoRevogacao } from './revogacao'
 
 /**
+ * Arredondamento fiscal para centavos (R$).
+ * Todo valor monetário do sistema passa por aqui: cada tributo é
+ * arredondado de forma independente e os totais são a soma dos
+ * valores já arredondados. Isso garante que `IBS + CBS === Total`
+ * em qualquer tela, relatório ou exportação — sem resíduos de float
+ * (ex.: `0.1 + 0.05 = 0.15000000000000002`) e sem divergência de
+ * 1 centavo entre parcelas exibidas e total exibido.
+ */
+export const round2 = (v: unknown): number => Math.round((Number(v) || 0) * 100) / 100
+
+/**
  * Cálculo tributário (LC 214/2025 — redução de ALÍQUOTA).
  *
  * Mecânica legal: a base de cálculo é o valor cheio da operação
  * (`qtd × valor`) e a redução incide sobre a alíquota de referência:
  * - `aliqIBS = refIBS × (1 − redIBS/100)` (zerada se red ≥ 100);
  * - `aliqCBS = refCBS × (1 − redCBS/100)` (zerada se red ≥ 100);
- * - `vIBS = base × aliqIBS/100`, `vCBS = base × aliqCBS/100`.
+ * - `vIBS = round2(base × aliqIBS/100)`, `vCBS = round2(base × aliqCBS/100)`.
  * - `bcIBS/bcCBS` = base cheia (mantidos por compatibilidade de exibição
  *   e soma de relatórios; NÃO há redução de base aqui — `pRed` da base
  *   oficial é sempre redução de alíquota).
  * - Reduções são clampadas em 0–100 (red 100% ⇒ alíquota zero, sem tributo,
  *   com a BC preservada).
+ * - `base` é arredondada para centavos; `total = vIBS + vCBS` (soma de
+ *   parcelas já arredondadas, com novo `round2` contra resíduo binário);
+ *   `carga = total / base × 100` sobre os valores arredondados — é a carga
+ *   efetivamente pagável, não a soma nominal das referências.
  */
 export function calcularTributos(
   valorBase: number,
@@ -34,7 +49,7 @@ export function calcularTributos(
   refIBS: number,
   refCBS: number,
 ): ResultadoCalculo {
-  const base = Number(valorBase) || 0
+  const base = round2(valorBase)
   const rIBS = Math.min(100, Math.max(0, Number(redIBS) || 0))
   const rCBS = Math.min(100, Math.max(0, Number(redCBS) || 0))
   const refI = Number(refIBS) || 0
@@ -43,9 +58,9 @@ export function calcularTributos(
   const aliqCBS = refC * (1 - rCBS / 100)
   const bcIBS = base
   const bcCBS = base
-  const vIBS = base * (aliqIBS / 100)
-  const vCBS = base * (aliqCBS / 100)
-  const total = vIBS + vCBS
+  const vIBS = round2(base * (aliqIBS / 100))
+  const vCBS = round2(base * (aliqCBS / 100))
+  const total = round2(vIBS + vCBS)
   return {
     base,
     valorOperacao: base,
@@ -77,6 +92,46 @@ const mesmoPct = (a: number, b: number): boolean => Math.abs(a - b) < 0.005
  *   inflar a redução;
  * - `0` → `'isento'`.
  */
+/**
+ * Anexo REAL — prioriza o `anexo` oficial da base (join 3NF:
+ * `resumo.anexo ?? referencia.anexo`), usa o piso derivado só como fallback.
+ *
+ * - oficial `1..15` / `9xxxx` (ex. '1', '9', '90111', '93081') → retornado cru
+ *   (rótulo via `rotuloAnexoOficial`; `9xxxx` nunca vira artigo inferido);
+ * - oficial já-derivado '0'|'30'..'80'|'misto'|'isento' → retornado como está;
+ * - `null`/`''` → fallback `anexoDeReducao(redIBS, redCBS)` (piso).
+ */
+export function anexoReal(
+  anexoOficial: unknown,
+  redIBS: number,
+  redCBS: number = redIBS,
+): string {
+  const oficial = String(anexoOficial ?? '').trim()
+  if (oficial) return oficial
+  return anexoDeReducao(redIBS, redCBS)
+}
+
+/**
+ * Anexo OFICIAL da classificação (`Número do Anexo` da base:
+ * `resumo.anexo ?? referencia.anexo`) ou `null` quando ausente.
+ *
+ * BLINDAGEM: nunca deriva por % de redução. Todo lugar que rotula o campo
+ * como "Anexo" (telas, CSV, PDF) deve usar este helper — sem cobertura
+ * oficial, sem afirmação (`null` vira `—`/vazio, nunca `60`/`isento`).
+ */
+export function anexoOficial(
+  cl:
+    | {
+      resumo?: { anexo?: unknown } | null
+      referencia?: { anexo?: unknown } | null
+    }
+    | null
+    | undefined,
+): string | null {
+  const a = String(cl?.resumo?.anexo ?? cl?.referencia?.anexo ?? '').trim()
+  return a ? a : null
+}
+
 export function anexoDeReducao(
   redIBS: number,
   redCBS: number = redIBS,
@@ -122,16 +177,38 @@ export function badgeReducao(valor: unknown): { rotulo: string; cor: CorPill } {
  * - `100/100` — alíquota zero;
  * - `IBS ≠ CBS` — mensagem assimétrica (ex.: Prouni 60/100, art. 308);
  * - `60` — grupo **acumulativo**: art. 137 (se capítulo *in natura*),
- *   art. 135 (se capítulo dos 17 do art. 135) e **sempre** o art. 128;
+ *   art. 135 (se capítulo dos 17 do art. 135) e **sempre** o art. 128 —
+ *   SALVO com `semPalpiteCapitulo: true`, quando os palpites por capítulo
+ *   (137/135) são suprimidos e resta só o art. 128;
  * - `80 / 70 / 50 / 40 / 30` — artigo próprio da faixa (158 / 261 / 275…);
  * - demais valores positivos — texto genérico com o percentual real;
  * - `0` — regra geral (tributação integral).
+ *
+ * `semPalpiteCapitulo` (usado quando há enquadramento oficial específico):
+ * ser de um capítulo *in natura* ou de alimentos NÃO prova que o produto é
+ * *in natura* (art. 137) ou alimento para consumo humano (art. 135) — isso
+ * depende do produto concreto, não do NCM. Afirmar esses artigos a partir do
+ * capítulo é o mesmo vício do diferimento automático: o NCM sozinho não
+ * basta. Com enquadramento oficial (ex.: 200/200038, cujo fundamento é o
+ * art. 138), os palpites por capítulo induzem ao erro e são suprimidos;
+ * resta o art. 128, que é a regra geral dos 60%.
+ *
+ * USO RESTRITO (blindagem): os chamadores produtivos (`observacoesFiscais`,
+ * cartões) só emitem esta função para a regra geral. Com enquadramento
+ * específico, nenhum artigo inferido por faixa é exibido — a fundamentação
+ * é exclusivamente a da base oficial. A função permanece pura e testada
+ * para o fallback + reexport `observacoesDe`.
  *
  * Paridade: `art133` (medicamentos) e `art139` (produções culturais) continuam
  * definidos em `OBS_ARTIGOS` mas **não são emitidos** — o motor cobre medicamentos
  * e demais setores pelo `art128`, exatamente como a v1 (SPEC R2.20 / §12).
  */
-export function observacoesLegais(ncm: string, redIBS: number, redCBS: number = redIBS): Observacao[] {
+export function observacoesLegais(
+  ncm: string,
+  redIBS: number,
+  redCBS: number = redIBS,
+  opts?: { semPalpiteCapitulo?: boolean },
+): Observacao[] {
   const cod = norm(ncm)
   const cap = cod.slice(0, 2)
   const a = Number(redIBS) || 0
@@ -200,8 +277,10 @@ export function observacoesLegais(ncm: string, redIBS: number, redCBS: number = 
 
   if (Math.abs(red - 60) < 0.005) {
     const obs: Observacao[] = []
-    if (CAPITULOS_IN_NATURA.has(cap)) obs.push(comArtigo('art137'))
-    if (CAPITULOS_ART_135.has(cap)) obs.push(comArtigo('art135'))
+    if (!opts?.semPalpiteCapitulo) {
+      if (CAPITULOS_IN_NATURA.has(cap)) obs.push(comArtigo('art137'))
+      if (CAPITULOS_ART_135.has(cap)) obs.push(comArtigo('art135'))
+    }
     obs.push(comArtigo('art128'))
     return obs
   }
@@ -285,10 +364,19 @@ export function observacaoTipoAliquota(tipo: unknown): Observacao | null {
  * Lista consolidada de observações de um item classificado, na ordem de
  * criticidade: extinção do NCM → revogação do enquadramento → diferimento →
  * tipo de alíquota (uniforme/fixa substitui a fundamentação por faixa, cujo
- * artigo seria o do regime padrão) → fundamentação por faixa de redução.
+ * artigo seria o do regime padrão).
  *
- * Usada por SPED, NF-e e Lote. Os cartões usam a mesma regra via
- * `observacoesFiscais` indireta (ver `cartoes.tsx`).
+ * BLINDAGEM — fundamentação por faixa de redução (`observacoesLegais`) só é
+ * emitida para a regra geral (fallback honesto, sem enquadramento). Com
+ * enquadramento oficial específico (vínculo da base ou manual do usuário),
+ * o sistema NÃO afirma artigo inferido por % de redução (arts. 128/127/158/
+ * 261/275…, 308, "Alíquota Zero"): a fundamentação é a da base oficial
+ * (cabeçalho da classificação + base legal + avisos específicos). Sem
+ * cobertura oficial, sem afirmação — mesmo padrão dos selos por DFe
+ * (`SelosPorSistema`: sistemas sem dados não afirmam nada).
+ *
+ * Usada por NF-e, SPED, Lote e revalidação. Os cartões usam a mesma regra
+ * (ver `cartoes.tsx`).
  */
 export function observacoesFiscais(
   codigo: string,
@@ -306,9 +394,11 @@ export function observacoesFiscais(
     obs.push(tipo)
     return obs
   }
-  const redIBS = Number(cl.resumo?.percentualReducaoIBS) || 0
-  const redCBS = Number(cl.resumo?.percentualReducaoCBS) || 0
-  obs.push(...observacoesLegais(codigo, redIBS, redCBS))
+  if (cl.regraGeral) {
+    const redIBS = Number(cl.resumo?.percentualReducaoIBS) || 0
+    const redCBS = Number(cl.resumo?.percentualReducaoCBS) || 0
+    obs.push(...observacoesLegais(codigo, redIBS, redCBS))
+  }
   return obs
 }
 
@@ -356,104 +446,153 @@ function anexoNorm(anexo: unknown): string {
 /**
  * É produto do **Anexo IX** (insumos agropecuários e aquícolas, art. 138)?
  *
- * Detecta por qualquer um dos sinais (a base varia por importação):
- * - `resumo.anexo` / `referencia.anexo` igual a 9/IX;
- * - `cClassTrib` 200038 (fornecimento c/ redução 60%) ou 515001 (diferimento);
- * - descrição da classificação citando "Anexo IX".
+ * Fontes EXCLUSIVAMENTE oficiais (nunca descrição livre do produto/NCM,
+ * que serve apenas como suporte ao usuário):
+ * - `resumo.anexo` / `referencia.anexo` igual a 9/IX (campo `Número do Anexo`
+ *   da base `classificacao-tributaria.json`);
+ * - `cClassTrib` nos cClassTribs do Anexo IX na base oficial
+ *   (`200038` = fornecimento com redução 60%; `515001` = diferimento).
+ *
+ * Ser do Anexo IX NÃO significa ser diferido: o diferimento do art. 138,
+ * §2º é condicional à operação (ver `ehDiferimento`).
  */
 export function ehAnexoIX(cl: Classificacao | null | undefined): boolean {
   if (!cl) return false
   const anexo = anexoNorm(cl.resumo?.anexo ?? cl.referencia?.anexo)
   if (anexo === '9') return true
   if (CCTS_ANEXO_IX.has(String(cl.cClassTrib ?? '').trim())) return true
-  const desc = `${cl.resumo?.descricaoCClassTrib ?? ''} ${cl.baseLegal ?? ''} ${cl.cstClassTribDetalhes?.descricao ?? ''} ${cl.cstClassTribDetalhes?.nome ?? ''}`.toUpperCase()
-  return desc.includes('ANEXO IX')
+  return false
 }
 
 /**
- * É operação **sujeita a diferimento**?
+ * É operação **efetivamente diferida** (recolhimento adiado nesta etapa)?
  *
- * - Anexo IX (sempre: art. 138, §2º prevê diferimento para esses insumos);
- * - CST 510/515 ou `cstDetalhes.indDiferimento` (ex.: energia elétrica, art. 28).
+ * Fontes EXCLUSIVAMENTE oficiais, em ordem:
+ * 1. CST de diferimento (`510` = diferimento puro, `515` = diferimento
+ *    com redução — tabela auxiliar CST da Reforma);
+ * 2. `cstDetalhes.indDiferimento` (flag `ind_gDif` da tabela CST oficial);
+ * 3. `referencia.diferimento` (flag `Diferimento` da tabela de referência
+ *    oficial CST × cClassTrib).
+ *
+ * Deliberadamente NÃO usa: anexo IX sozinho (Anexo IX com CST 200 é
+ * tributação com redução 60%, só vira diferimento com CST 515 quando a
+ * operação se enquadra no art. 138, §2º), nem varredura de texto em
+ * descrições (descrição é suporte ao usuário, não base tributária).
  */
 export function ehDiferimento(cl: Classificacao | null | undefined): boolean {
   if (!cl) return false
-  if (ehAnexoIX(cl)) return true
   if (CSTS_DIFERIMENTO.has(String(cl.cst ?? '').trim())) return true
   if (cl.cstDetalhes?.indDiferimento) return true
+  if (cl.referencia?.diferimento === true) return true
   return false
+}
+
+/**
+ * É produto do Anexo IX **sem** diferimento efetivo (caso típico:
+ * CST 200 / cClassTrib 200038 — tributação com redução de 60%)?
+ * O diferimento aqui é CONDICIONAL: depende da operação concreta
+ * (art. 138, §2º — fornecimento entre contribuintes do regime regular,
+ * produtor rural qualificado, importação). O NCM sozinho não basta para
+ * afirmar diferimento — é preciso ver que produto/operação é.
+ */
+export function ehDiferimentoCondicionalAnexoIX(cl: Classificacao | null | undefined): boolean {
+  if (!cl) return false
+  if (ehDiferimento(cl)) return false
+  return ehAnexoIX(cl)
 }
 
 function ehEnergiaEletrica(cl: Classificacao): boolean {
   if (String(cl.cClassTrib ?? '').trim() === '510001') return true
   if (String(cl.cst ?? '').trim() === '510') return true
-  const desc = `${cl.resumo?.descricaoCClassTrib ?? ''} ${cl.baseLegal ?? ''}`.toUpperCase()
-  return desc.includes('ENERGIA EL') && !ehAnexoIX(cl)
+  return false
 }
 
 /**
- * Observação elegante de **diferimento** — mesmo padrão visual das demais
+ * Observações de **diferimento** — mesmo padrão visual das demais
  * (`ListaObservacoes`).
  *
- * - **Anexo IX**: explica o que é o diferimento, as 4 hipóteses do
- *   art. 138, §2º (fornecimento/importação × regime regular/produtor rural),
- *   quando o recolhimento é encerrado e por quem (§§5º–9º), além da
- *   redução de 60% e do registro no MAPA (§1º).
+ * - **Diferimento efetivo — Anexo IX** (CST 515): o recolhimento é DIFERIDO
+ *   nesta operação (art. 138, §§2º e 5º–9º), com redução de 60%.
  * - **Energia elétrica** (CST 510): art. 22/28 — recolhimento só no
  *   fornecimento para consumo ou para não contribuinte do regime regular.
+ * - **Anexo IX sem diferimento efetivo** (ex.: CST 200/200038): NÃO é
+ *   diferido — é tributação com redução de 60%. O diferimento é condicional
+ *   à operação (art. 138, §2º); só há diferimento se a operação se enquadrar
+ *   nas hipóteses legais (aí o CST passa a ser 515). Mensagem em âmbar,
+ *   deliberadamente distinta do violeta "diferido".
  * - **Genérico**: CST 510/515 sem enquadramento específico.
  *
- * Retorna `[]` quando não há diferimento (o chamador só concatena).
+ * Retorna `[]` quando não há diferimento nem hipótese condicional.
  */
 export function observacoesDiferimento(cl: Classificacao | null | undefined): Observacao[] {
-  if (!cl || !ehDiferimento(cl)) return []
+  if (!cl) return []
 
-  if (ehEnergiaEletrica(cl)) {
+  if (ehDiferimento(cl)) {
+    if (ehEnergiaEletrica(cl)) {
+      return [
+        {
+          titulo: '⏳ Diferimento — Energia elétrica (art. 28)',
+          texto:
+            'Por se tratar de produto sujeito a diferimento, o recolhimento do IBS/CBS fica adiado para etapa posterior da cadeia. ' +
+            'Nas operações com energia elétrica ou direitos a ela relacionados (importação, geração, comercialização, distribuição e transmissão), ' +
+            'o recolhimento ocorre somente no fornecimento para consumo ou para contribuinte não sujeito ao regime regular (arts. 22 e 28 da LC 214/2025). ' +
+            'Enquanto a energia circula entre contribuintes do regime regular, o imposto não é recolhido — quem promove a operação de consumo recolhe.',
+          cor: 'violet',
+          link: `${LINK_LC214}#art28`,
+          rotuloLink: 'Consultar arts. 22 e 28 da LC 214/2025',
+        },
+      ]
+    }
+
+    if (ehAnexoIX(cl)) {
+      return [
+        {
+          titulo: '⏳ Produto diferido — Anexo IX (art. 138)',
+          texto:
+            'Operação com diferimento efetivo (CST 510/515 da base oficial): o recolhimento do IBS/CBS é DIFERIDO — ' +
+            'fica adiado para etapa posterior da cadeia. O fornecimento tem redução de 60% das alíquotas (art. 138, caput — exige registro no MAPA quando exigido, §1º). ' +
+            'Hipóteses com diferimento (§2º): (I) fornecimento por contribuinte do regime regular para (a) outro contribuinte do regime regular ou ' +
+            '(b) produtor rural não contribuinte que use o insumo em bem vendido a adquirente com direito aos créditos presumidos do art. 168; ' +
+            '(II) importação por (a) contribuinte do regime regular ou (b) esse mesmo produtor rural (na proporção do §3º). ' +
+            'Quando recolhe: o diferimento se encerra e quem promove a operação que encerra a fase recolhe (§6º) — ' +
+            'para destinatário do regime regular, ao sair do diferimento (operação não alcançada, isenta/não tributada/suspensa/alíquota zero ou sem documento fiscal, §5º, com dispensa de recolhimento se houver direito a crédito, §8º); ' +
+            'para produtor rural não contribuinte, mediante redução dos créditos presumidos do art. 168 (§9º).',
+          cor: 'violet',
+          link: LINK_ART138,
+          rotuloLink: 'Consultar art. 138 e Anexo IX da LC 214/2025',
+        },
+      ]
+    }
+
     return [
       {
-        titulo: '⏳ Diferimento — Energia elétrica (art. 28)',
+        titulo: '⏳ Operação sujeita a diferimento',
         texto:
-          'Por se tratar de produto sujeito a diferimento, o recolhimento do IBS/CBS fica adiado para etapa posterior da cadeia. ' +
-          'Nas operações com energia elétrica ou direitos a ela relacionados (importação, geração, comercialização, distribuição e transmissão), ' +
-          'o recolhimento ocorre somente no fornecimento para consumo ou para contribuinte não sujeito ao regime regular (arts. 22 e 28 da LC 214/2025). ' +
-          'Enquanto a energia circula entre contribuintes do regime regular, o imposto não é recolhido — quem promove a operação de consumo recolhe.',
+          'Operação com diferimento efetivo (CST 510/515 da base oficial): o recolhimento do IBS/CBS fica adiado — ' +
+          'não se recolhe nesta etapa — o imposto será recolhido por quem promover a operação que encerrar a fase do diferimento, observadas as hipóteses e o encerramento previstos na LC 214/2025 ' +
+          '(para o Anexo IX, ver art. 138, §§2º e 5º–9º; para energia elétrica, arts. 22 e 28).',
         cor: 'violet',
-        link: `${LINK_LC214}#art28`,
-        rotuloLink: 'Consultar arts. 22 e 28 da LC 214/2025',
+        link: LINK_ART138,
+        rotuloLink: 'Consultar diferimento na LC 214/2025',
       },
     ]
   }
 
-  if (ehAnexoIX(cl)) {
+  if (ehDiferimentoCondicionalAnexoIX(cl)) {
     return [
       {
-        titulo: '⏳ Produto diferido — Anexo IX (art. 138)',
+        titulo: '⚠ Anexo IX — diferimento condicional (verificar a operação)',
         texto:
-          'Por se tratar de produto do Anexo IX (insumos agropecuários e aquícolas), o recolhimento do IBS/CBS é DIFERIDO: ' +
-          'fica adiado para etapa posterior da cadeia. O fornecimento já tem redução de 60% das alíquotas (art. 138, caput — exige registro no MAPA quando exigido, §1º). ' +
-          'Hipóteses com diferimento (§2º): (I) fornecimento por contribuinte do regime regular para (a) outro contribuinte do regime regular ou ' +
-          '(b) produtor rural não contribuinte que use o insumo em bem vendido a adquirente com direito aos créditos presumidos do art. 168; ' +
-          '(II) importação por (a) contribuinte do regime regular ou (b) esse mesmo produtor rural (na proporção do §3º). ' +
-          'Quando recolhe: o diferimento se encerra e quem promove a operação que encerra a fase recolhe (§6º) — ' +
-          'para destinatário do regime regular, ao sair do diferimento (operação não alcançada, isenta/não tributada/suspensa/alíquota zero ou sem documento fiscal, §5º, com dispensa de recolhimento se houver direito a crédito, §8º); ' +
-          'para produtor rural não contribuinte, mediante redução dos créditos presumidos do art. 168 (§9º).',
-        cor: 'violet',
+          'Este NCM é insumo agropecuário/aquícola do Anexo IX com redução de 60% das alíquotas (CST 200 da base oficial) — NÃO é automaticamente diferido. ' +
+          'O diferimento do art. 138, §2º depende da operação concreta: só há diferimento no fornecimento entre contribuintes do regime regular, ' +
+          'para produtor rural qualificado ou na importação (na proporção do §3º). Se a sua operação se enquadrar, o CST passa a ser 515 (diferimento com redução); ' +
+          'caso contrário, tributa-se normalmente com a redução de 60%. Verifique que produto/operação é antes de escriturar como diferido.',
+        cor: 'amber',
         link: LINK_ART138,
         rotuloLink: 'Consultar art. 138 e Anexo IX da LC 214/2025',
       },
     ]
   }
 
-  return [
-    {
-      titulo: '⏳ Operação sujeita a diferimento',
-      texto:
-        'Por se tratar de produto diferido, o recolhimento do IBS/CBS fica adiado: não se recolhe nesta etapa — ' +
-        'o imposto será recolhido por quem promover a operação que encerrar a fase do diferimento, observadas as hipóteses e o encerramento previstos na LC 214/2025 ' +
-        '(para o Anexo IX, ver art. 138, §§2º e 5º–9º; para energia elétrica, arts. 22 e 28).',
-      cor: 'violet',
-      link: LINK_ART138,
-      rotuloLink: 'Consultar diferimento na LC 214/2025',
-    },
-  ]
+  return []
 }

@@ -13,6 +13,7 @@ import type {
 import { salvarProdutosEmLote, type ItemLoteGravavel } from './produtos'
 import { completarEmpresa } from './empresas'
 import { norm } from '@/domain/services/format'
+import { round2 } from '@/domain/services/calculo'
 import { regimeDoEmitente } from '@/infrastructure/nfe/regime'
 import type { NotaXmlBruta } from '@/infrastructure/nfe/tipos'
 
@@ -256,10 +257,10 @@ export async function rankingFornecedores(
     const regime = regimeDoEmitente(n.emitCrt, n.itensAnalisados)
     if (regime === 'simples' || regime === 'mei') atual.simples = true
     atual.qtdNotas++
-    atual.totalEntradas += Number(n.valorTotal) || 0
-    atual.creditoIBS += Number(n.totalIBS) || 0
-    atual.creditoCBS += Number(n.totalCBS) || 0
-    atual.creditoTotal += Number(n.totalTributos) || 0
+    atual.totalEntradas = round2(atual.totalEntradas + (Number(n.valorTotal) || 0))
+    atual.creditoIBS = round2(atual.creditoIBS + (Number(n.totalIBS) || 0))
+    atual.creditoCBS = round2(atual.creditoCBS + (Number(n.totalCBS) || 0))
+    atual.creditoTotal = round2(atual.creditoTotal + (Number(n.totalTributos) || 0))
   }
   return [...mapa.values()].sort((a, b) => b.creditoTotal - a.creditoTotal).slice(0, limite)
 }
@@ -273,14 +274,14 @@ export function totaisNotas(notas: NotaXml[]) {
   let saidas = 0
   let quarentena = 0
   for (const n of notas) {
-    base += Number(n.valorTotal) || 0
-    ibs += Number(n.totalIBS) || 0
-    cbs += Number(n.totalCBS) || 0
+    base = round2(base + (Number(n.valorTotal) || 0))
+    ibs = round2(ibs + (Number(n.totalIBS) || 0))
+    cbs = round2(cbs + (Number(n.totalCBS) || 0))
     if (n.direcao === 'entrada') entradas++
     else if (n.direcao === 'saida') saidas++
     else quarentena++
   }
-  const trib = ibs + cbs
+  const trib = round2(ibs + cbs)
   return { qtd: notas.length, entradas, saidas, quarentena, base, ibs, cbs, trib, carga: base > 0 ? (trib / base) * 100 : 0 }
 }
 

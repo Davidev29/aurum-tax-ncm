@@ -10,25 +10,27 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { fmtMoeda, fmtNcm, fmtNum, fmtPct } from '@/domain/services/format'
-import { observacoesDiferimento } from '@/domain/services/calculo'
+import { anexoOficial, observacoesDiferimento } from '@/domain/services/calculo'
+import { rotuloAnexoOficial } from '@/domain/constants/tributarios'
 import { Btn, Modal, Pill } from '@/ui/kit'
 import { AvisoManual, AvisoNcmExtinto, ListaObservacoes } from '@/ui/cartoes'
 import type { ProdutoLinha } from '@/store/produtos'
 import type { ResultadoItemNfe } from '@/infrastructure/nfe/tipos'
-import { creditoIbsCbsDoItem, divergenciaXmlSistema } from '@/infrastructure/nfe/credito'
+import { creditoIbsCbsDoItem } from '@/infrastructure/nfe/credito'
+import { FaixaConfrontoXml } from '@/ui/divergencia'
 import { salvarProdutosEmLote } from '@/application/produtos'
 import { useSessao } from '@/store/sessao'
 import { toast } from '@/store/ui'
 
 /**
- * Origem da classificação do sistema: de onde saiu o enquadramento exibido
- * em "Pela legislação". Manual (usuário) isenta o sistema; regra geral é o
+ * Origem do cálculo: de onde saiu o enquadramento exibido em
+ * "Pela legislação". Manual (usuário) isenta o sistema; regra geral é o
  * fallback; senão veio da base oficial (automática).
  */
 export function OrigemSistema({ item }: { item: ResultadoItemNfe }) {
-  if (item.manual || item.classificacao.manual) return <Pill cor="amber">✋ Manual do usuário</Pill>
-  if (item.regraGeral) return <Pill cor="slate">Regra geral</Pill>
-  return <Pill cor="brand">Automática · base oficial</Pill>
+  if (item.manual || item.classificacao.manual) return <Pill cor="amber">👤 Classificado por você (manual)</Pill>
+  if (item.regraGeral) return <Pill cor="slate">Pela legislação · regra geral</Pill>
+  return <Pill cor="brand">Pela legislação · base oficial</Pill>
 }
 
 /* ------------------------------------------------------------------ olho --- */
@@ -171,8 +173,8 @@ export function ModalProdutoDetalhe({
             <Grade cols="grid-cols-2 md:grid-cols-3">
               <Campo rotulo="CST Reforma" valor={produto.cstReforma || '—'} mono />
               <Campo rotulo="cClassTrib" valor={produto.cClassTrib || '—'} mono />
-              <Campo rotulo="Red. IBS" valor={fmtPct(produto.redIBS)} mono />
-              <Campo rotulo="Red. CBS" valor={fmtPct(produto.redCBS)} mono />
+              <Campo rotulo="Redução IBS" valor={fmtPct(produto.redIBS)} mono />
+              <Campo rotulo="Redução CBS" valor={fmtPct(produto.redCBS)} mono />
               <Campo rotulo="Qtd" valor={fmtNum(produto.quantidade)} mono />
               <Campo rotulo="Total" valor={fmtMoeda(produto.total)} mono forte />
             </Grade>
@@ -210,7 +212,8 @@ export function ModalProdutoDetalhe({
 
 /**
  * Aviso de diferimento no detalhe do produto — reconstrói uma classificação
- * mínima a partir do snapshot congelado (Anexo IX incluso).
+ * mínima a partir do snapshot congelado. Diferimento efetivo sai em violeta;
+ * Anexo IX com CST 200 sai em âmbar condicional ("verificar a operação").
  */function BlocoDiferimentoProduto({ produto }: { produto: ProdutoLinha }) {
   const snap = produto.classificacaoSnapshot
   const pseudo = {
@@ -319,7 +322,7 @@ export function ModalItemNfeDetalhe({
       titulo={item ? `${item.codProd} · ${item.descricao}` : ''}
       subtitulo={
         item
-          ? `NCM ${fmtNcm(item.ncm)} · CFOP ${item.cfop || '—'} · Sistema CST ${item.classificacao.cst || '—'} · ${item.classificacao.cClassTrib || '—'}`
+          ? `NCM ${fmtNcm(item.ncm)} · CFOP ${item.cfop || '—'} · Pela legislação CST ${item.classificacao.cst || '—'} · ${item.classificacao.cClassTrib || '—'}`
           : ''
       }
       largura="max-w-lg"
@@ -386,7 +389,7 @@ export function ModalItemNfeDetalhe({
             )}
           </Secao>
 
-          <Secao titulo="Pela legislação (sistema)" icone="💠">
+          <Secao titulo="Pela legislação" icone="💠">
             {(item.manual || item.classificacao.manual) && (
               <div className="mb-2">
                 <AvisoManual
@@ -398,17 +401,21 @@ export function ModalItemNfeDetalhe({
             )}
             <div className="mb-2 flex flex-wrap items-center gap-1.5">
               <OrigemSistema item={item} />
-              <span className="text-[11px] text-slate-500">
-                Red. {fmtPct(item.redIBS)} / {fmtPct(item.redCBS)}
+              <span className="text-[11px] text-slate-500" title="Redução de alíquota IBS / CBS">
+                Redução: {fmtPct(item.redIBS)} / {fmtPct(item.redCBS)}
               </span>
             </div>
             <Grade cols="grid-cols-2 md:grid-cols-3">
-              <Campo rotulo="CST sistema" valor={item.classificacao.cst || '—'} mono />
-              <Campo rotulo="cClassTrib sistema" valor={item.classificacao.cClassTrib || '—'} mono />
+              <Campo rotulo="CST (legislação)" valor={item.classificacao.cst || '—'} mono />
+              <Campo rotulo="cClassTrib (legislação)" valor={item.classificacao.cClassTrib || '—'} mono />
               <Campo rotulo="IBS estimado" valor={fmtMoeda(item.ibs)} mono />
               <Campo rotulo="CBS estimada" valor={fmtMoeda(item.cbs)} mono />
               <Campo rotulo="Total estimado" valor={fmtMoeda(item.totalTributos)} mono forte />
-              <Campo rotulo="Anexo" valor={item.anexo || '—'} mono />
+              <Campo
+                rotulo="Anexo (oficial)"
+                valor={anexoOficial(item.classificacao) ? rotuloAnexoOficial(anexoOficial(item.classificacao)) : '—'}
+                mono
+              />
             </Grade>
             {item.classificacao.baseLegal ? (
               <p className="mt-2 text-[11px] leading-relaxed text-slate-500" title={item.classificacao.baseLegal}>
@@ -428,43 +435,10 @@ export function ModalItemNfeDetalhe({
 }
 
 /**
- * Faixa de confronto XML × sistema no topo do detalhe do item — é aqui que
- * a diferença entre a tributação da nota e a da legislação fica explícita.
+ * Faixa de confronto XML × legislação no topo do detalhe do item — delega ao
+ * comparativo amigável **Na nota × Pela legislação** (`@/ui/divergencia`): duas
+ * leituras diferentes da mesma operação, nunca um erro.
  */
 function FaixaDivergencia({ item }: { item: ResultadoItemNfe }) {
-  const d = divergenciaXmlSistema(item)
-  if (!d.temXml) {
-    return (
-      <p className="rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-950/40">
-        Sem IBS/CBS destacado neste item — abaixo só a estimativa do sistema.
-      </p>
-    )
-  }
-  if (!d.diverge) {
-    return (
-      <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-[11px] font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
-        <span>✓</span>
-        <span>Igual ao XML — enquadramento do emitente confere com o do sistema.</span>
-      </div>
-    )
-  }
-  return (
-    <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-      <div className="font-black">⚠ Divergente do XML</div>
-      <div className="mt-0.5">
-        {d.divergeEnquadramento ? (
-          <span>
-            Emitente: CST {item.cstIbsCbs || '—'} · {item.cClassTribIbsCbs || '—'} — sistema: CST{' '}
-            {item.classificacao.cst} · {item.classificacao.cClassTrib}.{' '}
-          </span>
-        ) : null}
-        {d.divergeValores ? (
-          <span>
-            Valores: destacado {fmtMoeda((Number(item.vIbsItem) || 0) + (Number(item.vCbsItem) || 0))} ≠
-            estimado {fmtMoeda(item.totalTributos)}.
-          </span>
-        ) : null}
-      </div>
-    </div>
-  )
+  return <FaixaConfrontoXml item={item} />
 }

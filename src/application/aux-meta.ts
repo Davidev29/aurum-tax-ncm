@@ -10,7 +10,7 @@ import { DOCUMENTOS, type StoreName } from '@/domain/constants'
 import { fmtNcm, norm } from '@/domain/services/format'
 import type { MaskKey } from '@/domain/services/format'
 
-export type TipoAux = 'cst' | 'cstct' | 'ncmnomen' | 'ncm' | 'cfop' | 'csticms' | 'cstpiscofins'
+export type TipoAux = 'cst' | 'cstct' | 'ncmnomen' | 'ncm' | 'cfop' | 'csticms' | 'cstpiscofins' | 'cest'
 
 export type TipoCampoAux = 'text' | 'textarea' | 'number' | 'select' | 'boolean' | 'docs'
 
@@ -162,9 +162,24 @@ export const AUX_META: Record<TipoAux, MetaAux> = {
     texto: (r) => `${str(r.codigo)} ${str(r.descricao)}`.toLowerCase(),
     chave: (r) => str(r.codigo),
   },
+
+  cest: {
+    tipo: 'cest',
+    store: 'cest',
+    keyPath: 'codigo',
+    titulo: 'CEST',
+    singular: 'CEST',
+    campos: [
+      { nome: 'codigo', label: 'Código CEST (7 dígitos)', tipo: 'text', required: true, mono: true, maxLength: 7, readOnlyOnEdit: true },
+      { nome: 'descricao', label: 'Descrição', tipo: 'textarea', required: true, colSpan: 2 },
+      { nome: 'ncm', label: 'NCM vinculado (8 dígitos)', tipo: 'text', mask: 'ncm', mono: true },
+    ],
+    texto: (r) => `${str(r.codigo)} ${str(r.descricao)} ${str(r.ncm)}`.toLowerCase(),
+    chave: (r) => str(r.codigo),
+  },
 }
 
-export const TIPOS_AUX: TipoAux[] = ['cst', 'cstct', 'ncm', 'ncmnomen', 'cfop', 'csticms', 'cstpiscofins']
+export const TIPOS_AUX: TipoAux[] = ['cst', 'cstct', 'ncm', 'ncmnomen', 'cfop', 'csticms', 'cstpiscofins', 'cest']
 
 /** Formata uma célula de listagem conforme o tipo de tabela. */
 export function celulaAux(tipo: TipoAux, campo: string, valor: unknown): string {
@@ -195,6 +210,7 @@ export const COLUNAS_AUX: Record<TipoAux, string[]> = {
   cfop: ['codigo', 'tipo', 'descricao'],
   csticms: ['codigo', 'descricao'],
   cstpiscofins: ['codigo', 'descricao'],
+  cest: ['codigo', 'descricao', 'ncm'],
 }
 
 export const ROTULOS_COLUNA: Record<string, string> = {
@@ -214,6 +230,7 @@ export const ROTULOS_COLUNA: Record<string, string> = {
   tipo: 'Tipo',
   dataInicio: 'Início',
   ato: 'Ato',
+  ncm: 'NCM',
 }
 
 export const DOCUMENTOS_AUX = DOCUMENTOS

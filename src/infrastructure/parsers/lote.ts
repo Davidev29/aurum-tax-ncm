@@ -4,9 +4,13 @@
  *
  * ## Paridade com a v1
  * - `mapearColunas` usa exatamente as mesmas expressões regulares de cabeçalho;
- * - NCM é normalizado só com dígitos (`norm`) e precisa ter 8 posições;
- * - NCM válido sem vínculo cai na regra geral, com `regraGeral = true`;
+ * - NCM é interpretado pelo intérprete único (`interpretarEntradaNcm`) e só
+ *   8 dígitos exatos entram no motor (política do Lote, como na v1);
+ * - NCM válido sem vínculo cai na regra geral, com `regraGeral = true` — e o
+ *   cartão de regra geral aparece em `classificacoes`, como na Consulta;
  * - NCM inválido mantém `classificacoes = []` e `escolhida = null`.
+ * - o veredito (lista, regraGeral, manual) vem do resolvedor único
+ *   (`resolverClassificacoes`): o Lote nunca decide sozinho.
  *
  * ## Melhorias
  * - cabeçalhos de empresa e de produto ganharam sinônimos reais de planilhas
@@ -19,12 +23,9 @@
  */
 import * as XLSX from 'xlsx'
 import { fmtCnpj, norm, normalizeHeader } from '../../domain/services/format'
+import { interpretarEntradaNcm } from '../../domain/services/classificacao'
 import type { Classificacao, Empresa, NomenclaturaNcm } from '../../domain/entities'
-import {
-  buscarNomenclatura,
-  classificacaoRegraGeral,
-  resolverClassificacoes,
-} from '../base/classificacao-repo'
+import { resolverClassificacoes } from '../base/classificacao-repo'
 
 /* ------------------------------------------------------------ planilhas -- */
 
@@ -108,6 +109,7 @@ export interface MapaColunas {
   cstIcms?: number
   pis?: number
   cofins?: number
+  cest?: number
 }
 
 /**
@@ -124,6 +126,7 @@ const ALIASES: Record<Exclude<keyof MapaColunas, 'ncm'>, RegExp> = {
   cstIcms: /^(cst|csticms|csticmsnf|cstsituacao|situacaotributaria|situacaofiscal)$/,
   pis: /^(pis|cstpis|piscst|cstpiscofins)$/,
   cofins: /^(cofins|cstcofins|cofinscst|cstpiscofins2)$/,
+  cest: /^(cest|codigocest|cestcodigo|cestitem)$/,
 }
 
 /** Mapeia cabeçalhos → índices de coluna (paridade + sinônimos). */
@@ -138,6 +141,7 @@ export function mapearColunas(headers: unknown[]): MapaColunas {
     else if (/^(cst|csticms)$/.test(n)) map.cstIcms ??= i
     else if (/^(pis|cstpis|piscst)$/.test(n)) map.pis ??= i
     else if (/^(cofins|cstcofins|cofinscst)$/.test(n)) map.cofins ??= i
+    else if (/^(cest|codigocest|cestcodigo)$/.test(n)) map.cest ??= i
     else {
       // Sinônimos não cobertos pela v1.
       for (const [campo, re] of Object.entries(ALIASES) as [keyof MapaColunas, RegExp][]) {
@@ -162,6 +166,8 @@ export interface ItemLote {
   codigo: string
   nome: string
   ncm: string
+  /** CEST — informativo, não altera a Reforma. */
+  cest: string
   cfop: string
   cstIcms: string
   pis: string
@@ -211,16 +217,15 @@ export async function processarArquivoLote(
   }
 
   const dados = rows.slice(1).filter((r) => r.some((c) => String(c ?? '').trim() !== ''))
-  const cache = new Map<string, Classificacao[]>()
-  const cacheManual = new Map<string, boolean>()
-  const cacheVigente = new Map<string, Classificacao>()
-  const cacheRegra = new Map<string, Classificacao>()
-  const cacheNomen = new Map<string, NomenclaturaNcm | null>()
+  // Veredito do motor único por NCM (lista, regraGeral, manual, nomenclatura).
+  type Veredito = Awaited<ReturnType<typeof resolverClassificacoes>>
+  const cache = new Map<string, Veredito>()
 
   const itens: ItemLote[] = []
 
   for (let d = 0; d < dados.length; d++) {
     const row = dados[d]
+    const entrada = interpretarEntradaNcm(row[map.ncm])
     const cod = norm(row[map.ncm])
     const item: ItemLote = {
       indice: d + 2, // +1 cabeçalho, +1 base 1
@@ -231,48 +236,26 @@ export async function processarArquivoLote(
       cstIcms: cel(row, map.cstIcms),
       pis: cel(row, map.pis),
       cofins: cel(row, map.cofins),
+      cest: cel(row, map.cest).replace(/\D/g, '').slice(0, 7),
       classificacoes: [],
       escolhida: null,
       regraGeral: false,
     }
 
-    if (cod.length === 8) {
-      let lista = cache.get(cod)
-      if (lista === undefined) {
-        // Prioridade base > manual > regra geral (mesma do resolvedor).
-        const r = await resolverClassificacoes(cod)
-        const oficiais = r.vinculos.length ? r.lista : []
-        cache.set(cod, oficiais)
-        cacheManual.set(cod, r.manual)
-        cacheVigente.set(cod, r.lista[0] ?? null as unknown as Classificacao)
-        cacheNomen.set(cod, r.nomenclatura)
-        lista = oficiais
+    // Política do Lote: só 8 dígitos exatos entram no motor (o resto é
+    // `semNcm`, como na v1). O NCM classificado vem do intérprete único.
+    if (entrada.kind === 'ok') {
+      const chave = entrada.codigo
+      let veredito = cache.get(chave)
+      if (!veredito) {
+        veredito = await resolverClassificacoes(chave)
+        cache.set(chave, veredito)
       }
-      const ehManual = cacheManual.get(cod) ?? false
-      const vigente = cacheVigente.get(cod)
-      item.classificacoes = lista
-      item.manual = ehManual || lista.some((c) => c.manual != null)
-      item.nomenclatura = cacheNomen.get(cod) ?? null
-
-      if (lista.length) {
-        item.escolhida = lista[0]
-      } else if (vigente) {
-        // Sem vínculo oficial: manual do usuário ou regra geral.
-        item.escolhida = vigente
-        item.regraGeral = vigente.regraGeral && !ehManual
-        item.manual = ehManual || vigente.manual != null
-      } else {
-        let regra = cacheRegra.get(cod)
-        if (!regra) {
-          const nom = await buscarNomenclatura(cod)
-          cacheNomen.set(cod, nom)
-          regra = await classificacaoRegraGeral(cod, nom)
-          cacheRegra.set(cod, regra)
-        }
-        item.escolhida = regra
-        item.regraGeral = true
-        item.nomenclatura = cacheNomen.get(cod) ?? null
-      }
+      item.classificacoes = veredito.lista
+      item.escolhida = veredito.lista[0] ?? null
+      item.regraGeral = veredito.regraGeral
+      item.manual = veredito.manual || veredito.lista.some((c) => c.manual != null)
+      item.nomenclatura = veredito.nomenclatura
     }
 
     itens.push(item)

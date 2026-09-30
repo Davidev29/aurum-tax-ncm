@@ -1,8 +1,11 @@
 /**
- * Casos de uso da sincronização NCM (Portal Único Siscomex).
+ * @deprecated Atualização avulsa de NCM (Portal Único Siscomex) — DESATIVADA.
  *
- * Espelha o padrão do CFF: verificação automática em background na abertura
- * (24h), sincronização manual e importação do JSON baixado no portal.
+ * A sincronização falhava em ambiente corporativo (CORS/proxy/TLS/rate-limit)
+ * e foi removida da UI. As tabelas NCM viajam embutidas em `dist/base` e são
+ * renovadas pela atualização geral do programa (electron-updater).
+ *
+ * Arquivo mantido apenas como referência — sem chamadas ativas na aplicação.
  */
 import {
   deveSincronizarNcm,

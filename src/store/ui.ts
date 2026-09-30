@@ -18,9 +18,7 @@ import type { ProdutoLinha } from '@/store/produtos'
 export type ViewId =
   | 'calculadora'
   | 'consulta'
-  | 'classificar'
   | 'lote'
-  | 'sped'
   | 'nfe'
   | 'produtos'
   | 'auxiliares'
@@ -35,17 +33,9 @@ export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = 
     titulo: 'Consulta NCM',
     subtitulo: 'Busque por NCM e veja todas as classificações da Reforma',
   },
-  classificar: {
-    titulo: 'Classificação individual',
-    subtitulo: 'Cadastre um produto escolhendo a classificação tributária',
-  },
   lote: {
     titulo: 'Classificação em lote',
     subtitulo: 'Envie CSV ou Excel para classificar vários produtos',
-  },
-  sped: {
-    titulo: 'SPED Fiscal',
-    subtitulo: 'Importe o arquivo SPED e analise a tributação por produto',
   },
   nfe: {
     titulo: 'Notas Fiscais (XML)',
@@ -61,7 +51,7 @@ export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = 
   },
   legislacao: {
     titulo: 'Legislação',
-    subtitulo: 'LC 214/2025, Decreto 12.955/2026, Res. CGIBS 6/2026 e portal CFF',
+    subtitulo: 'Leia as normas dentro do sistema — base federal, decretos, RICMS-CE e portais',
   },
 }
 

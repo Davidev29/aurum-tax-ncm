@@ -50,17 +50,15 @@ export async function contextoRegraGeral(): Promise<ContextoClassificacao> {
   return { cstDetalhes, cstClassTribDetalhes, referencia: null }
 }
 
-/** R2.1 — `[]` imediatamente quando o NCM não tem 8 dígitos. */
+/** R2.1 — `[]` imediatamente quando o NCM não tem 8 dígitos.
+ *
+ * @deprecated Motor único: prefira `resolverClassificacoes` (aplica extinto,
+ * revogado e manual). Mantida como envoltória fina para não quebrar chamadas
+ * externas — delega ao resolvedor e devolve só a lista.
+ */
 export async function buscarClassificacoesDoNcm(codigo: unknown): Promise<Classificacao[]> {
-  const c = norm(codigo)
-  if (c.length !== 8) return []
-  const vinculos = await db.ncm.where('codigo').equals(c).toArray()
-  if (!vinculos.length) return []
-  const nomen = await buscarNomenclatura(c)
-  const ctxs = await Promise.all(vinculos.map(contextoDe))
-  return vinculos.map((v, i) =>
-    montarClassificacao(v, nomen ? { ...ctxs[i], nomenclatura: nomen } : ctxs[i]),
-  )
+  const r = await resolverClassificacoes(codigo)
+  return r.lista
 }
 
 /** R2.2 — `null` para código vazio; `undefined` viria do Dexie, então normalizamos. */
@@ -104,13 +102,42 @@ export interface ResultadoBuscaTexto extends NomenclaturaNcm {
 }
 
 /** Cache em memória da nomenclatura para a busca textual ser fluida. */
-let _cacheBuscaTexto: NomenclaturaNcm[] | null = null
+interface EntradaIndiceTexto {
+  item: NomenclaturaNcm
+  caminho: string[]
+  normPropria: string
+  normCaminho: string
+}
+let _indiceBuscaTexto: EntradaIndiceTexto[] | null = null
 let _cacheBuscaTextoTotal = -1
 
 /** Invalida o cache da busca textual (chamar após importar/apagar a base). */
 export function invalidarCacheBuscaTexto(): void {
-  _cacheBuscaTexto = null
+  _indiceBuscaTexto = null
   _cacheBuscaTextoTotal = -1
+}
+
+/** Carrega (uma vez) e pré-normaliza o índice de busca textual. */
+async function indiceBuscaTexto(): Promise<EntradaIndiceTexto[]> {
+  const total = await db.ncmNomenclatura.count()
+  if (_indiceBuscaTexto === null || _cacheBuscaTextoTotal !== total) {
+    const todas = await db.ncmNomenclatura.toArray()
+    const porCodigo = new Map(todas.map((n) => [n.codigo, n.descricao]))
+    const obter = (p: string) => porCodigo.get(p)
+    _indiceBuscaTexto = todas
+      .filter((n) => n.codigo.length === 8)
+      .map((item) => {
+        const caminho = comporCaminho(item.codigo, obter)
+        return {
+          item,
+          caminho,
+          normPropria: normalizarBusca(item.descricao),
+          normCaminho: normalizarBusca([...caminho, item.descricao].join(' ')),
+        }
+      })
+    _cacheBuscaTextoTotal = total
+  }
+  return _indiceBuscaTexto ?? []
 }
 
 /**
@@ -128,26 +155,16 @@ export async function buscarNomenclaturaPorTexto(
 ): Promise<ResultadoBuscaTexto[]> {
   const tokens = tokenizarBusca(termo)
   if (!tokens.length) return []
-  const total = await db.ncmNomenclatura.count()
-  if (_cacheBuscaTexto === null || _cacheBuscaTextoTotal !== total) {
-    _cacheBuscaTexto = await db.ncmNomenclatura.toArray()
-    _cacheBuscaTextoTotal = total
-  }
-  const todas = _cacheBuscaTexto ?? []
-  const porCodigo = new Map(todas.map((n) => [n.codigo, n.descricao]))
+  const indice = await indiceBuscaTexto()
 
   const candidatos: ResultadoBuscaTexto[] = []
-  for (const n of todas) {
-    if (n.codigo.length !== 8) continue
-    const caminho = comporCaminho(n.codigo, (p) => porCodigo.get(p))
-    const normPropria = normalizarBusca(n.descricao)
-    const normCaminho = normalizarBusca([...caminho, n.descricao].join(' '))
-    const score = pontuarCandidato(tokens, normPropria, normCaminho)
+  for (const e of indice) {
+    const score = pontuarCandidato(tokens, e.normPropria, e.normCaminho)
     if (score < 0) continue
     candidatos.push({
-      ...n,
-      caminho,
-      caminhoTexto: [...caminho, n.descricao].filter(Boolean).join(' › '),
+      ...e.item,
+      caminho: e.caminho,
+      caminhoTexto: [...e.caminho, e.item.descricao].filter(Boolean).join(' › '),
       totalClassificacoes: 0,
       score,
     })
@@ -188,20 +205,20 @@ export async function classificacaoRegraGeral(
 }
 
 /**
- * Fluxo 0 / 1 / N (SPEC §2.3) usado por consulta, formulário, lote e SPED.
+ * Fluxo 0 / 1 / N (SPEC §2.3) usado por consulta, lote e XML.
  * Retorna também a nomenclatura resolvida para reaproveitamento na UI.
  *
- * Prioridade (reclassificação manual):
- * 1. vínculos oficiais da base (sempre preferidos);
- * 2. reclassificação manual do usuário (só quando não há vínculo);
+ * Prioridade (motor único — vale igual em todas as telas):
+ * 1. reclassificação manual do usuário (quando existe, puxa a que ele criou,
+ *    acima da base oficial; responsabilidade dele, sinalizada na UI);
+ * 2. vínculos oficiais da base;
  * 3. regra geral (fallback universal).
  *
  * Rebaixamentos (nunca apresentam redução como vigente):
  * - NCM extinto (`dataFim` na nomenclatura) COM vínculo: o vínculo é
  *   histórico — lista vira regra geral com `extinto: true`.
  * - Vínculo com anexo/cct revogado: filtrado; se nada restar, regra geral
- *   com `revogado` (ato + motivo). A manual do usuário prevalece sobre ambos
- *   (responsabilidade dela, sinalizada na UI).
+ *   com `revogado` (ato + motivo). A manual do usuário prevalece sobre ambos.
  */
 export async function resolverClassificacoes(
   codigo: unknown,
@@ -221,14 +238,16 @@ export async function resolverClassificacoes(
   if (c.length !== 8) {
     return { vinculos: [], lista: [], nomenclatura, regraGeral: false, manual: false, extinto: false, revogado: null }
   }
+  // Manual do usuário vale acima de tudo: existindo, todas as telas puxam a
+  // que ele criou (responsabilidade dele, sinalizada na UI) — inclusive
+  // quando a base oficial tem vínculo ou o NCM está extinto/revogado.
+  const manualReg = await buscarReclassificacaoManual(c)
+  if (manualReg) {
+    const cl = await classificacaoManual(manualReg, nomenclatura)
+    return { vinculos, lista: [cl], nomenclatura, regraGeral: false, manual: true, extinto, revogado: null }
+  }
   // NCM extinto: o vínculo virou histórico, sem valor como tributação vigente.
-  // A manual do usuário prevalece (responsabilidade dela, sinalizada na UI).
   if (extinto) {
-    const manualReg = await buscarReclassificacaoManual(c)
-    if (manualReg) {
-      const cl = await classificacaoManual(manualReg, nomenclatura)
-      return { vinculos, lista: [cl], nomenclatura, regraGeral: false, manual: true, extinto, revogado: null }
-    }
     const rg = await classificacaoRegraGeral(c, nomenclatura)
     return { vinculos, lista: [rg], nomenclatura, regraGeral: true, manual: false, extinto, revogado: null }
   }
@@ -246,13 +265,11 @@ export async function resolverClassificacoes(
     }
     vivos = mantidos
   }
+  // Ordem determinística (CST, cClassTrib): a "1ª opção" (lista[0]) usada
+  // como estimativa por Lote/XML/SPED/revalidação é a mesma em todas as
+  // telas, independente da ordem de importação da base.
+  vivos.sort((a, b) => a.cst.localeCompare(b.cst) || a.cClassTrib.localeCompare(b.cClassTrib))
   if (!vivos.length) {
-    // Manual do usuário prevalece sobre ausência total de vínculo vivo.
-    const manualReg = await buscarReclassificacaoManual(c)
-    if (manualReg) {
-      const cl = await classificacaoManual(manualReg, nomenclatura)
-      return { vinculos, lista: [cl], nomenclatura, regraGeral: false, manual: true, extinto, revogado }
-    }
     const rg = await classificacaoRegraGeral(c, nomenclatura)
     if (revogado) rg.revogado = revogado
     return { vinculos, lista: [rg], nomenclatura, regraGeral: true, manual: false, extinto, revogado }

@@ -144,13 +144,16 @@ export function rotuloAnexoOficial(anexo: unknown): string {
 }
 
 /**
- * Diferimento — Anexo IX (insumos agropecuários e aquícolas) e CST 510/515.
+ * Diferimento — CST 510/515 e Anexo IX (insumos agropecuários e aquícolas).
  *
  * - `CCTS_ANEXO_IX`: cClassTribs que identificam o Anexo IX na base oficial
- *   (`200038` = fornecimento com redução 60% + diferimento do art. 138;
- *   `515001` = CST de diferimento com redução).
- * - `CSTS_DIFERIMENTO`: CSTs de diferimento (510 = diferimento puro,
- *   515 = diferimento com redução).
+ *   (`200038` = fornecimento com redução 60% — Anexo IX SEM diferimento
+ *   automático, diferimento só condicional via art. 138, §2º com CST 515;
+ *   `515001` = CST de diferimento com redução). Usado APENAS para
+ *   identificar Anexo IX (`ehAnexoIX`), NUNCA para decidir diferimento.
+ * - `CSTS_DIFERIMENTO`: CSTs de diferimento efetivo (510 = diferimento puro,
+ *   515 = diferimento com redução). É o sinal oficial de diferimento,
+ *   junto com `cstDetalhes.indDiferimento` e `referencia.diferimento`.
  */
 export const CCTS_ANEXO_IX: ReadonlySet<string> = new Set(['200038', '515001'])
 

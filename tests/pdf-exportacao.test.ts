@@ -265,7 +265,7 @@ const fornecedor: CreditoFornecedor = {
 describe('Exportação de PDF', { timeout: 60000 }, () => {
   it('gera o PDF de produtos com buffer válido', async () => {
     const { exportarProdutosPDF } = await import('@/infrastructure/exporters/relatorios')
-    await exportarProdutosPDF({ produtos: [produto], empresa, emitente })
+    await exportarProdutosPDF({ produtos: [produto], empresa, emitente, refIBS: 19, refCBS: 9 })
 
     const g = gerados.find((x) => x.nome.startsWith('classificacao_'))
     expect(g, 'PDF de produtos foi gerado').toBeDefined()
@@ -331,7 +331,7 @@ describe('Exportação de PDF', { timeout: 60000 }, () => {
   it('gera PDFs mesmo com listas vazias (não quebra)', async () => {
     const { exportarProdutosPDF, exportarNfePDF } = await import('@/infrastructure/exporters/relatorios')
 
-    await exportarProdutosPDF({ produtos: [], empresa, emitente })
+    await exportarProdutosPDF({ produtos: [], empresa, emitente, refIBS: 19, refCBS: 9 })
     await exportarNfePDF({
       notas: [],
       ranking: [],

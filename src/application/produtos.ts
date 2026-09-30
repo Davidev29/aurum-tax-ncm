@@ -14,6 +14,7 @@
 import { fmtNcm, norm, parseMoeda, parseQtd, uid } from '@/domain/services/format'
 import { REGRA_GERAL } from '@/domain/constants'
 import type { Classificacao, ClassificacaoSnapshot, Produto } from '@/domain/entities'
+import { resolverClassificacoes } from '@/infrastructure/base/classificacao-repo'
 import { db } from '@/infrastructure/db/schema'
 
 /* --------------------------------------------------------------- mappers -- */
@@ -55,7 +56,7 @@ export interface EntradaProduto {
 }
 
 export type ResultadoSalvar =
-  | { ok: true; status: 'criado' | 'atualizado'; produto: Produto }
+  | { ok: true; status: 'criado' | 'atualizado'; produto: Produto; revalidada: boolean }
   | { ok: false; motivo: string; existente?: Produto }
 
 /* ------------------------------------------------------------- consultas --- */
@@ -123,21 +124,57 @@ export function validarFormularioProduto(f: {
 }
 
 /**
+ * Re-resolve o NCM no motor único, preservando a escolha (CST × cClassTrib)
+ * quando ela continua válida; senão devolve a 1ª da lista vigente.
+ * É o que impede gravar tributação divergente da Consulta para o mesmo NCM
+ * (ex.: item da calculadora congelado antes de uma mudança de base).
+ * A manual do usuário é devolvida pelo próprio resolvedor — nunca substituída.
+ */
+export async function reresolverClassificacao(
+  ncm: string,
+  escolha: { cst: string; cClassTrib: string },
+): Promise<Classificacao | null> {
+  try {
+    const r = await resolverClassificacoes(ncm)
+    if (!r.lista.length) return null
+    return r.lista.find((c) => c.cst === escolha.cst && c.cClassTrib === escolha.cClassTrib) ?? r.lista[0]
+  } catch {
+    return null
+  }
+}
+
+/**
  * Salva um produto com **upsert por SKU**.
  *
  * @param editarId quando informado, atualiza esse registro (modo edição);
  * @param forcar   sobrescreve um SKU já existente sem pedir confirmação.
+ * @param reresolver quando `true`, a classificação é re-resolvida no motor
+ * antes de gravar (caminho da calculadora, cujos valores são congelados na
+ * adição). A escolha original é preservada se ainda válida; o retorno
+ * indica `revalidada: true` quando a vigente diferiu.
  */
 export async function salvarProduto(
   e: EntradaProduto,
-  opts: { editarId?: number | null; forcar?: boolean } = {},
+  opts: { editarId?: number | null; forcar?: boolean; reresolver?: boolean } = {},
 ): Promise<ResultadoSalvar> {
   const erro = validar(e)
   if (erro) return { ok: false, motivo: erro }
 
+  let cl = e.classificacao
+  let revalidada = false
+  if (opts.reresolver) {
+    const viva = await reresolverClassificacao(e.ncm, { cst: cl.cst, cClassTrib: cl.cClassTrib })
+    if (viva && (viva.cst !== cl.cst || viva.cClassTrib !== cl.cClassTrib || viva.regraGeral !== cl.regraGeral)) {
+      cl = viva
+      revalidada = true
+    } else if (viva) {
+      cl = viva
+    }
+  }
+
   const agora = new Date().toISOString()
   const ncm = norm(e.ncm)
-  const snapshot = snapshotDe(e.classificacao)
+  const snapshot = snapshotDe(cl)
 
   const base: Omit<Produto, 'id' | 'criadoEm'> = {
     empresaId: e.empresaId,
@@ -150,12 +187,12 @@ export async function salvarProduto(
     cofins: e.cofins ?? '',
     quantidade: Number(e.quantidade ?? 0),
     valorUnitario: Number(e.valorUnitario ?? 0),
-    cstReforma: e.classificacao.cst,
-    cClassTrib: e.classificacao.cClassTrib,
-    regraGeral: e.classificacao.regraGeral,
-    classificacaoManual: e.classificacao.manual != null,
+    cstReforma: cl.cst,
+    cClassTrib: cl.cClassTrib,
+    regraGeral: cl.regraGeral,
+    classificacaoManual: cl.manual != null,
     classificacaoSnapshot: snapshot,
-    baseLegal: e.classificacao.baseLegal,
+    baseLegal: cl.baseLegal,
     atualizadoEm: agora,
   }
 
@@ -164,7 +201,7 @@ export async function salvarProduto(
     if (!anterior) return { ok: false, motivo: 'Produto não encontrado para edição.' }
     const produto: Produto = { ...anterior, ...base, id: opts.editarId, criadoEm: anterior.criadoEm ?? agora }
     await db.produtos.put(produto)
-    return { ok: true, status: 'atualizado', produto }
+    return { ok: true, status: 'atualizado', produto, revalidada }
   }
 
   const existente = await produtoPorSku(e.empresaId, base.codigo)
@@ -174,13 +211,13 @@ export async function salvarProduto(
   if (existente) {
     const produto: Produto = { ...existente, ...base, id: existente.id, criadoEm: existente.criadoEm ?? agora }
     await db.produtos.put(produto)
-    return { ok: true, status: 'atualizado', produto }
+    return { ok: true, status: 'atualizado', produto, revalidada }
   }
 
   const produto: Produto = { ...base, criadoEm: agora }
   const id = await db.produtos.add(produto)
   produto.id = id
-  return { ok: true, status: 'criado', produto }
+  return { ok: true, status: 'criado', produto, revalidada }
 }
 
 export async function excluirProduto(id: number): Promise<void> {
@@ -406,7 +443,11 @@ export function produtoParaCalculadora(p: Produto) {
     descClass: c.classificacao || p.baseLegal || '—',
     redIBS: Number(c.pRedIBS ?? 0),
     redCBS: Number(c.pRedCBS ?? 0),
-    regraGeral: p.regraGeral || p.cstReforma === '000',
+    // A flag vem do motor no momento da gravação — nunca recomputada aqui.
+    // (A heurística antiga `cst === '000'` marcava como "regra geral" até
+    // vínculo oficial de tributação integral com CST 000, divergindo da
+    // tela Produtos para o mesmo NCM.)
+    regraGeral: p.regraGeral,
     quantidade: Number(p.quantidade) || 1,
     valorUnitario: Number(p.valorUnitario) || 0,
     baseLegal: p.baseLegal ?? '',

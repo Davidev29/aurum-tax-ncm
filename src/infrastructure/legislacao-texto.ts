@@ -14,6 +14,7 @@ import { bridge, type TextoRemoto } from './bridge'
 const HOSTS_TEXTO = new Set([
   'www.planalto.gov.br',
   'planalto.gov.br',
+  'www4.planalto.gov.br',
   'www.cgibs.gov.br',
   'cgibs.gov.br',
 ])

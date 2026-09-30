@@ -27,6 +27,29 @@ export interface TextoRemoto {
   texto: string
 }
 
+/** Versão instalada (para a aba Atualização nas Configurações). */
+export interface VersaoApp {
+  versao: string
+  empacotado: boolean
+}
+
+/** Resultado da verificação de atualizações (electron-updater). */
+export interface VerificacaoAtualizacao {
+  disponivel: boolean
+  versao?: string | null
+  mensagem?: string
+  notas?: string | null
+}
+
+/** Eventos do auto-updater repassados pelo processo principal. */
+export type EventoAtualizacao =
+  | { tipo: 'verificando' }
+  | { tipo: 'em-dia' }
+  | { tipo: 'disponivel'; versao?: string | null; notas?: string | null }
+  | { tipo: 'baixando'; pct: number; baixado?: number; total?: number }
+  | { tipo: 'baixada'; versao?: string | null }
+  | { tipo: 'erro'; mensagem: string }
+
 export interface AurumBridge {
   versao: string
   plataforma: string
@@ -36,8 +59,9 @@ export interface AurumBridge {
   escolherPasta(): Promise<string | null>
   salvarArquivo(op: BridgeSalvar): Promise<string | null>
   /**
-   * Baixa o HTML de uma norma oficial (canal `rede:buscar-texto`).
-   * Só existe no Electron — no navegador, cai no `fetch` direto (sujeito a CORS).
+   * Baixa texto remoto via processo principal (canal `rede:buscar-texto`,
+   * sem restrição de CORS): HTML de norma oficial. Só existe no Electron —
+   * no navegador, cai no `fetch` direto (sujeito a CORS).
    */
   buscarTexto(url: string): Promise<TextoRemoto>
   /**
@@ -49,8 +73,18 @@ export interface AurumBridge {
   lerXml(caminho: string): Promise<string>
   /** Remove um XML guardado; inexistente não é erro. */
   removerXml(caminho: string): Promise<void>
-  /** Assina eventos de menu nativo (ex.: "abrir", "exportar", "tema"). */
+  /** Assina eventos de menu nativo (ex.: "abrir", "exportar", "tema", "atualizar"). */
   onMenu(cb: (acao: string) => void): void
+  /**
+   * Atualização do programa (electron-updater + GitHub Releases).
+   * É aqui que as bases embutidas (`dist/base`) são renovadas.
+   * Fora do Electron, os métodos rejeitam e `onAtualizacao` é inerte.
+   */
+  versaoApp(): Promise<VersaoApp>
+  verificarAtualizacao(): Promise<VerificacaoAtualizacao>
+  baixarAtualizacao(): Promise<{ ok: boolean }>
+  instalarAtualizacao(): Promise<{ ok: boolean }>
+  onAtualizacao(cb: (evento: EventoAtualizacao) => void): void
 }
 
 declare global {

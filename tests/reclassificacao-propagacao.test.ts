@@ -14,6 +14,11 @@ import {
   salvarReclassificacaoManual,
 } from '@/infrastructure/base/reclassificacao-repo'
 import { classificacaoRegraGeral } from '@/infrastructure/base/classificacao-repo'
+import { REF_DEFAULT } from '@/domain/constants'
+
+// Usa as alíquotas de referência padrão do sistema (dinâmicas conforme regras vigentes)
+const REF_IBS = REF_DEFAULT.IBS
+const REF_CBS = REF_DEFAULT.CBS
 
 const NCM = '99999999'
 
@@ -54,14 +59,14 @@ async function semear() {
     destDoc: '22222222000122', destNome: 'Dest', destIe: '',
     valorProdutos: 100, valorTotal: 100,
     empresaId: 1, direcao: 'saida', arquivo: null, xmlConteudo: null,
-    refIBS: 17.7, refCBS: 8.8, totalIBS: 17.7, totalCBS: 8.8, totalTributos: 26.5,
+    refIBS: REF_IBS, refCBS: REF_CBS, totalIBS: REF_IBS, totalCBS: REF_CBS, totalTributos: REF_IBS + REF_CBS,
     importadoEm: new Date().toISOString(),
     itensAnalisados: [{
       chave: '1'.repeat(44), numItem: '1', codProd: 'SKU-1', descricao: 'Produto teste',
       ncm: NCM, cfop: '5102', cstIcms: '00', qtd: 1, unid: 'UN',
       vlUnit: 100, vlTotal: 100, vlDesc: 0, vlIcms: 18, cstPis: '01', cstCofins: '01',
       classificacao: rg, regraGeral: true, manual: false,
-      redIBS: 0, redCBS: 0, ibs: 17.7, cbs: 8.8, totalTributos: 26.5, carga: 26.5,
+      redIBS: 0, redCBS: 0, ibs: REF_IBS, cbs: REF_CBS, totalTributos: REF_IBS + REF_CBS, carga: REF_IBS + REF_CBS,
       anexo: 'isento', observacoes: [],
     }],
   } as never)
@@ -101,10 +106,10 @@ describe('propagarClassificacaoNcm', () => {
     expect(it.regraGeral).toBe(false)
     expect(it.manual).toBe(true)
     expect(it.redIBS).toBe(60)
-    // 100 × (1-0.6) × 17.7% = 7.08 ; 100 × 0.4 × 8.8% = 3.52
-    expect(it.ibs).toBeCloseTo(7.08, 2)
-    expect(it.cbs).toBeCloseTo(3.52, 2)
-    expect(n.totalIBS).toBeCloseTo(7.08, 2)
+    // 100 × (1-0.6) × REF_IBS% = 100 × 0.4 × REF_IBS / 100
+    expect(it.ibs).toBeCloseTo(100 * 0.4 * REF_IBS / 100, 2)
+    expect(it.cbs).toBeCloseTo(100 * 0.4 * REF_CBS / 100, 2)
+    expect(n.totalIBS).toBeCloseTo(100 * 0.4 * REF_IBS / 100, 2)
   })
 
   it('remover a manual volta produtos e notas à regra geral', async () => {

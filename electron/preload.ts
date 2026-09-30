@@ -11,7 +11,7 @@
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AurumBridge } from '../src/infrastructure/bridge'
+import type { AurumBridge, EventoAtualizacao } from '../src/infrastructure/bridge'
 
 /**
  * Versão do aplicativo, repassada pelo processo principal por meio de
@@ -50,7 +50,7 @@ const aurum: AurumBridge = {
   /** Grava `conteudo` (base64) no local escolhido pelo usuário. */
   salvarArquivo: (op) => ipcRenderer.invoke('arquivo:salvar', op),
 
-  /** Baixa o HTML de norma oficial (leitura dentro do sistema, sem CORS). */
+  /** Baixa texto remoto (norma oficial) sem CORS. */
   buscarTexto: (url) => ipcRenderer.invoke('rede:buscar-texto', url),
 
   /** Guarda o XML da nota em `userData/xml/<cnpj>/<chave>.xml`. */
@@ -72,6 +72,28 @@ const aurum: AurumBridge = {
       const acao =
         typeof payload === 'string' ? payload : (payload as { acao?: unknown } | null)?.acao
       if (typeof acao === 'string') cb(acao)
+    })
+  },
+
+  /** Versão instalada (canal `atualizacao:versao`). */
+  versaoApp: () => ipcRenderer.invoke('atualizacao:versao'),
+
+  /** Consulta o GitHub Releases (canal `atualizacao:verificar`). */
+  verificarAtualizacao: () => ipcRenderer.invoke('atualizacao:verificar'),
+
+  /** Baixa a versão encontrada (canal `atualizacao:baixar`). */
+  baixarAtualizacao: () => ipcRenderer.invoke('atualizacao:baixar'),
+
+  /** Aplica a versão baixada e reinicia (canal `atualizacao:instalar`). */
+  instalarAtualizacao: () => ipcRenderer.invoke('atualizacao:instalar'),
+
+  /** Eventos do auto-updater (canal `atualizacao:evento`). */
+  onAtualizacao: (cb) => {
+    ipcRenderer.removeAllListeners('atualizacao:evento')
+    ipcRenderer.on('atualizacao:evento', (_evento, payload: unknown) => {
+      if (payload && typeof payload === 'object' && typeof (payload as { tipo?: unknown }).tipo === 'string') {
+        cb(payload as EventoAtualizacao)
+      }
     })
   },
 }

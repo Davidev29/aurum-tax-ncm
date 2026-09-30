@@ -5,8 +5,8 @@
 
 /** Nome/versão do IndexedDB legado (paridade com a v1). */
 export const DB_NAME = 'aurum_tax_ncm_v1'
-/** Versão do IndexedDB. A v7 adiciona `classificacaoProduto` (CFF por sistema). */
-export const DB_VERSION = 7
+/** Versão do IndexedDB. A v8 adiciona `audit_log` (log imutável) + `cest`. */
+export const DB_VERSION = 8
 
 /** Itens por página nas listagens. */
 export const PAGE_SIZE = 10
@@ -90,6 +90,8 @@ export const STORES = {
   NFENOTAS: 'nfeNotas',
   RECLASS: 'reclassificacoesManuais',
   CLASSPROD: 'classificacaoProduto',
+  AUDIT: 'audit_log',
+  CEST: 'cest',
 } as const
 
 export type StoreName = (typeof STORES)[keyof typeof STORES]
@@ -118,6 +120,33 @@ export const LINK_RES_CGIBS_6 =
 
 /** Portal da Conformidade Fácil (CFF). */
 export const LINK_PORTAL_CFF = 'https://dfe-portal.svrs.rs.gov.br/Cff'
+
+/** Emenda Constitucional nº 132/2023 — base constitucional da Reforma. */
+export const LINK_EC132 =
+  'https://www.planalto.gov.br/ccivil_03/constituicao/emendas/emc/emc132.htm'
+
+/** Lei Complementar nº 227/2026 — altera a LC 214/2025. */
+export const LINK_LC227 = 'https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp227.htm'
+
+/**
+ * Índice oficial de decretos federais (Portal da Legislação — Planalto).
+ * Ponto de partida passado pelo usuário para navegar por todos os decretos.
+ */
+export const LINK_PORTAL_DECRETOS_PLANALTO =
+  'https://www4.planalto.gov.br/legislacao/portal-legis/legislacao-1/decretos1/decretos-1'
+
+/** Receita Federal — página oficial da legislação da Reforma do Consumo. */
+export const LINK_RFB_LEGISLACAO_REFORMA =
+  'https://www.gov.br/receitafederal/pt-br/acesso-a-informacao/acoes-e-programas/programas-e-atividades/reforma-tributaria-do-consumo/legislacao'
+
+/**
+ * Portal SEFAZLEGIS — legislação tributária do Estado do Ceará
+ * (decretos do RICMS, leis estaduais, normas de execução).
+ */
+export const LINK_SEFAZLEGIS_CE = 'https://sefazlegis.sefaz.ce.gov.br/portal#/'
+
+/** SEFAZ-CE — página de legislação tributária e informativos quinzenais. */
+export const LINK_SEFAZCE_LEGISLACAO = 'https://www.ce.gov.br/sefaz/legislacao-tributaria'
 
 /** Re-exporta constantes da API CFF */
 export * from './cff-apis'

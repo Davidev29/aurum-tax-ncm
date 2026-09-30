@@ -12,6 +12,7 @@
  */
 
 import { db, bulkPut } from '../db/schema'
+import { bridge } from '../bridge'
 import {
   SISCOMEX_NCM_META_KEY,
   SISCOMEX_NCM_URLS,
@@ -25,7 +26,7 @@ export interface NcmSyncResultado {
   status: 'atualizado' | 'inalterado' | 'erro'
   mensagem: string
   /** Causa classificada (para a UI orientar o próximo passo). */
-  codigoErro?: 'timeout' | 'rede' | 'tls' | 'http' | 'limite' | 'json' | null
+  codigoErro?: 'timeout' | 'rede' | 'cors' | 'tls' | 'http' | 'limite' | 'json' | null
   total?: number
   novos?: number
   alterados?: number
@@ -93,9 +94,11 @@ function canonicoNomenclaturas(itens: unknown): string {
 
 /**
  * Classifica um erro de rede em causa provável + mensagem acionável em pt-BR.
- * Cobre os modos reais de falha em ambiente corporativo: proxy/firewall que
- * bloqueia o domínio, certificado TLS interceptado (MITM), DNS, timeout em
- * link lento e rate-limit do portal.
+ * Cobre os modos reais de falha em ambiente corporativo: CORS (o portal não
+ * envia `Access-Control-Allow-Origin`, então o `fetch` direto do navegador
+ * sempre cai em `Failed to fetch`), proxy/firewall que bloqueia o domínio,
+ * certificado TLS interceptado (MITM), DNS, timeout em link lento e
+ * rate-limit do portal.
  */
 export function classificarErroRede(erro: unknown): { codigo: NonNullable<NcmSyncResultado['codigoErro']>; mensagem: string } {
   const nome = erro instanceof Error ? erro.name : ''
@@ -118,7 +121,15 @@ export function classificarErroRede(erro: unknown): { codigo: NonNullable<NcmSyn
         'Fale com o TI para liberar portalunico.siscomex.gov.br ou importe o JSON baixado no navegador.',
     }
   }
-  if (/failed to fetch|networkerror|network request failed|load failed|econn|enotfound|enot|eai_again|econnrefused|econnreset|ehostunreach|enetunreach|dns|offline|internet/i.test(texto)) {
+  if (/failed to fetch|networkerror|network request failed|load failed/i.test(texto)) {
+    return {
+      codigo: 'cors',
+      mensagem:
+        'O navegador bloqueou a leitura direta do Portal Siscomex (CORS — o portal não libera acesso externo). ' +
+        'No app desktop a sincronização usa o canal interno sem CORS; no navegador, baixe o JSON no portal e importe manualmente.',
+    }
+  }
+  if (/econn|enotfound|enot|eai_again|econnrefused|econnreset|ehostunreach|enetunreach|dns|offline|internet/i.test(texto)) {
     return {
       codigo: 'rede',
       mensagem:
@@ -178,6 +189,10 @@ function mensagemHttp(status: number, retryAfterSeg: number | null): { codigo: N
  * - tenta as URLs em ordem (se uma falhar por rede, tenta a próxima);
  * - repete falhas de rede/timeout/5xx (com espera), NUNCA 429/4xx;
  * - respeita `Retry-After` do 429 sem re-tentar dentro da mesma execução.
+ *
+ * NOTA: sem `User-Agent` customizado de propósito — no navegador esse é um
+ * header proibido (ignorado) e qualquer header não-safelisted forçaria
+ * preflight CORS. O UA segue só no processo principal (canal IPC).
  */
 async function fetchComRetry(
   tentativas: number = SISCOMEX_SYNC_CONFIG.maxTentativas,
@@ -197,7 +212,6 @@ async function fetchComRetry(
       resposta = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'User-Agent': SISCOMEX_SYNC_CONFIG.userAgent,
           Accept: 'application/json',
         },
       })
@@ -231,35 +245,65 @@ function erroFinal(erro: unknown): Error & { codigoErro: NonNullable<NcmSyncResu
     const m = mensagemHttp(erro.status, erro.retryAfterSeg)
     return Object.assign(new Error(m.mensagem), { codigoErro: m.codigo })
   }
+  // Erros do canal IPC chegam como Error comum com "HTTP NNN" na mensagem
+  // (props extras nem sempre atravessam o IPC) — reconstrói o HTTP.
+  if (erro instanceof Error) {
+    const mHttp = /HTTP\s+(\d{3})/i.exec(erro.message)
+    if (mHttp) {
+      const status = Number(mHttp[1])
+      const mRa = /Retry-After:\s*([^\s,)]+)/i.exec(erro.message)
+      const segs = mRa ? Number(String(mRa[1]).split(',')[0].trim()) : NaN
+      const m = mensagemHttp(status, Number.isFinite(segs) && segs > 0 ? Math.min(segs, 3600) : null)
+      return Object.assign(new Error(m.mensagem), { codigoErro: m.codigo })
+    }
+  }
   const m = classificarErroRede(erro)
   return Object.assign(new Error(m.mensagem), { codigoErro: m.codigo })
 }
 
 /**
- * Baixa a tabela oficial e devolve o JSON bruto + hash de conteúdo + rótulos.
- * Falhas saem classificadas (`codigoErro`) para a UI orientar o próximo passo.
+ * Bridge ativo no momento da chamada (leitura dinâmica de `window.aurum` com
+ * fallback ao import estático — facilita mocks em testes e cobre preload
+ * tardio). Retorna `null` no navegador puro.
  */
-export async function buscarTabelaNcm(): Promise<{
+function obterBridge(): typeof bridge {
+  const dinamico = (globalThis as { window?: { aurum?: typeof bridge } }).window?.aurum
+  return dinamico ?? bridge
+}
+
+/**
+ * Baixa a tabela via processo principal (Electron, canal `rede:buscar-texto`
+ * — fetch do Node, sem restrição de CORS). Devolve o texto + URL que
+ * respondeu. Lança quando não há bridge — o chamador só chama com
+ * `obterBridge()` ativo, ou cai no `fetch` direto no navegador puro.
+ */
+async function baixarTextoNcmViaBridge(): Promise<{ texto: string; url: string }> {
+  const b = obterBridge()
+  if (!b) throw new Error('Canal interno (IPC) indisponível — sem Electron.')
+  let ultimoErro: unknown = null
+  for (const url of SISCOMEX_NCM_URLS) {
+    try {
+      const r = await b.buscarTexto(url)
+      if (r && typeof r.texto === 'string' && r.texto.length > 0) {
+        return { texto: r.texto, url: r.urlFinal || url }
+      }
+      ultimoErro = new Error('Resposta vazia do canal interno (IPC).')
+    } catch (erro) {
+      ultimoErro = erro
+      // 429/4xx do portal via IPC são definitivos — não adianta trocar de URL.
+      if (erro instanceof Error && /HTTP\s+(429|403|404)/i.test(erro.message)) throw erro
+    }
+  }
+  throw ultimoErro instanceof Error ? ultimoErro : new Error(String(ultimoErro ?? 'falha desconhecida'))
+}
+
+/** Valida o JSON bruto da tabela e extrai rótulos (comum aos transportes). */
+async function validarTabelaNcmJson(json: Record<string, unknown>): Promise<{
   json: { Nomenclaturas: unknown[]; Data_Ultima_Atualizacao_NCM?: unknown; Ato?: unknown }
   hash: string
   vigencia: string | null
   ato: string | null
 }> {
-  let resposta: Response
-  try {
-    resposta = await fetchComRetry()
-  } catch (erro) {
-    throw erroFinal(erro)
-  }
-  let json: Record<string, unknown>
-  try {
-    json = (await resposta.json()) as Record<string, unknown>
-  } catch {
-    throw Object.assign(
-      new Error('Resposta inválida do Portal Siscomex (JSON esperado). Tente de novo ou importe o arquivo manualmente.'),
-      { codigoErro: 'json' as const },
-    )
-  }
   if (!Array.isArray(json.Nomenclaturas) || !json.Nomenclaturas.length) {
     throw Object.assign(
       new Error('Tabela NCM vazia ou em formato inesperado no Portal Siscomex. Tente de novo ou importe o arquivo manualmente.'),
@@ -285,6 +329,65 @@ export async function buscarTabelaNcm(): Promise<{
   }
 }
 
+/**
+ * Baixa a tabela oficial e devolve o JSON bruto + hash de conteúdo + rótulos.
+ * Transporte: 1º canal IPC do Electron (sem CORS), 2º `fetch` direto
+ * (navegador / proxy same-origin futuro). Falhas saem classificadas
+ * (`codigoErro`) para a UI orientar o próximo passo.
+ */
+export async function buscarTabelaNcm(): Promise<{
+  json: { Nomenclaturas: unknown[]; Data_Ultima_Atualizacao_NCM?: unknown; Ato?: unknown }
+  hash: string
+  vigencia: string | null
+  ato: string | null
+}> {
+  // 1. Electron: processo principal (sem CORS) — caminho principal no desktop.
+  if (obterBridge()) {
+    try {
+      const { texto } = await baixarTextoNcmViaBridge()
+      let json: Record<string, unknown>
+      try {
+        json = JSON.parse(texto) as Record<string, unknown>
+      } catch {
+        throw Object.assign(
+          new Error('Resposta inválida do Portal Siscomex (JSON esperado). Tente de novo ou importe o arquivo manualmente.'),
+          { codigoErro: 'json' as const },
+        )
+      }
+      return validarTabelaNcmJson(json)
+    } catch (erro) {
+      // Erro HTTP definitivo do portal via IPC (429/403/4xx/5xx): não faz
+      // sentido cair no fetch direto (que ainda teria CORS) — classifica direto.
+      if (erro instanceof Error && /HTTP\s+\d{3}/i.test(erro.message)) throw erroFinal(erro)
+      if ((erro as { codigoErro?: unknown })?.codigoErro === 'json') throw erro
+      // Falha de rede no IPC: tenta o fetch direto antes de desistir.
+      try {
+        const resposta = await fetchComRetry()
+        return validarTabelaNcmJson((await resposta.json()) as Record<string, unknown>)
+      } catch (erroFetch) {
+        throw erroFinal(erroFetch)
+      }
+    }
+  }
+  // 2. Navegador puro: fetch direto (sujeito a CORS — vira codigo 'cors').
+  let resposta: Response
+  try {
+    resposta = await fetchComRetry()
+  } catch (erro) {
+    throw erroFinal(erro)
+  }
+  let json: Record<string, unknown>
+  try {
+    json = (await resposta.json()) as Record<string, unknown>
+  } catch {
+    throw Object.assign(
+      new Error('Resposta inválida do Portal Siscomex (JSON esperado). Tente de novo ou importe o arquivo manualmente.'),
+      { codigoErro: 'json' as const },
+    )
+  }
+  return validarTabelaNcmJson(json)
+}
+
 /** Etapa do diagnóstico de conexão exibida na UI. */
 export interface EtapaDiagnostico {
   etapa: string
@@ -295,8 +398,9 @@ export interface EtapaDiagnostico {
 
 /**
  * Testa a conexão com o Portal Siscomex passo a passo (rápido, sem gravar
- * nada): alcance → HTTP → tamanho → JSON válido. Serve para distinguir
- * "portal fora do ar" de "rede da máquina bloqueando" na hora do suporte.
+ * nada): canal Electron (sem CORS) → alcance → HTTP → tamanho → JSON válido.
+ * Serve para distinguir "portal fora do ar" de "rede da máquina bloqueando"
+ * na hora do suporte.
  */
 export async function diagnosticarConexaoNcm(): Promise<{
   ok: boolean
@@ -305,6 +409,45 @@ export async function diagnosticarConexaoNcm(): Promise<{
 }> {
   const etapas: EtapaDiagnostico[] = []
   const push = (etapa: string, ok: boolean, detalhe: string, ms: number) => etapas.push({ etapa, ok, detalhe, ms })
+
+  // Via IPC primeiro: no desktop o download nem passa pelo CORS do navegador.
+  if (obterBridge()) {
+    const tIpc = Date.now()
+    try {
+      const { texto, url } = await baixarTextoNcmViaBridge()
+      push('Canal Electron', true, `Via processo principal (sem CORS) · ${url}`, Date.now() - tIpc)
+      const tJ = Date.now()
+      let total = 0
+      let vigenciaTxt: string | null = null
+      try {
+        const json = JSON.parse(texto) as Record<string, unknown>
+        total = Array.isArray(json.Nomenclaturas) ? json.Nomenclaturas.length : 0
+        vigenciaTxt = typeof json.Data_Ultima_Atualizacao_NCM === 'string' ? json.Data_Ultima_Atualizacao_NCM : null
+      } catch {
+        push('JSON', false, 'Corpo não é o JSON da tabela oficial', Date.now() - tJ)
+        return { ok: false, etapas, resumo: 'Resposta não é a tabela oficial. Tente de novo.' }
+      }
+      if (!total) {
+        push('JSON', false, 'JSON sem a lista Nomenclaturas', Date.now() - tJ)
+        return { ok: false, etapas, resumo: 'Resposta não é a tabela oficial. Tente de novo.' }
+      }
+      if (total < MIN_LINHAS_TABELA_NCM) {
+        push('JSON', false, `Tabela parcial: só ${total} linhas (esperado milhares)`, Date.now() - tJ)
+        return { ok: false, etapas, resumo: 'Tabela parcial — o sync recusaria aplicar. Tente de novo.' }
+      }
+      push('JSON', true, `${total.toLocaleString('pt-BR')} códigos · ${vigenciaTxt ?? 'vigência não informada'}`, Date.now() - tJ)
+      return { ok: true, etapas, resumo: 'Conexão com o Portal Siscomex funcionando (via app desktop, sem CORS).' }
+    } catch (erro) {
+      const f = erroFinal(erro)
+      push('Canal Electron', false, f.message, Date.now() - tIpc)
+      // Erro HTTP definitivo via IPC (portal respondeu com 4xx/5xx): não há
+      // por que tentar o fetch direto — encerra com o diagnóstico do portal.
+      if (erro instanceof Error && /HTTP\s+(429|4\d\d|5\d\d)/i.test(erro.message)) {
+        return { ok: false, etapas, resumo: f.message }
+      }
+      // Falha de rede no IPC: continua para o fetch direto abaixo.
+    }
+  }
 
   const t0 = Date.now()
   let resposta: Response

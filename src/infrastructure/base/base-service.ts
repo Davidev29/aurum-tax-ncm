@@ -35,6 +35,8 @@ export interface StatusBase {
   ultimaImportacao: MetaRecord | null
   ultimaNomenclatura: MetaRecord | null
   embutida: boolean
+  /** Data de geração da base embutida (`MANIFEST.json → geradoEm`), ou `null`. */
+  geradoEm: string | null
 }
 
 interface Manifest {
@@ -294,6 +296,7 @@ export async function statusBase(): Promise<StatusBase> {
       db.meta.get(META_KEYS.IMPORTACAO_NOMENCLATURA),
     ])
   const embutida = await db.meta.get('base_embutida')
+  const valorEmbutida = embutida?.valor as { geradoEm?: unknown } | undefined
   return {
     ncm,
     cst,
@@ -304,6 +307,10 @@ export async function statusBase(): Promise<StatusBase> {
     ultimaImportacao: ultima ?? null,
     ultimaNomenclatura: ultimaNom ?? null,
     embutida: Boolean(embutida),
+    geradoEm:
+      typeof valorEmbutida?.geradoEm === 'string' && valorEmbutida.geradoEm
+        ? valorEmbutida.geradoEm
+        : null,
   }
 }
 

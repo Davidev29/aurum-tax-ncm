@@ -1,6 +1,5 @@
-import { anexoDeReducao, calcularTributos, observacoesFiscais } from '@/domain/services/calculo'
-import { classificacaoNcmInvalido } from '@/domain/services/classificacao'
-import { norm } from '@/domain/services/format'
+import { anexoReal, calcularTributos, observacoesFiscais, round2 } from '@/domain/services/calculo'
+import { classificacaoNcmInvalido, interpretarEntradaNcm } from '@/domain/services/classificacao'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
 import {
   buscarNomenclatura,
@@ -35,11 +34,16 @@ export async function analisarItens(
 
   for (let i = 0; i < itens.length; i++) {
     const item = itens[i]
+    // Entrada pelo intérprete único: >8 dígitos (possível NBS/EX) reduz aos
+    // 8 do NCM com aviso — mesma regra do XML, mesmo motor em seguida.
     // O NCM pode chegar mascarado ("0201.10.00") ou com sufixo EX/NBS — reduz
-    // aos 8 dígitos do NCM para que nenhum produto válido caia em "inválido".
-    const digitos = norm(item.ncm)
-    const cod = digitos.length > 8 ? digitos.slice(0, 8) : digitos
-    const valido = cod.length === 8
+    // aos 8 dígitos do NCM para que nenhum produto válido caia em "inválido",
+    // mas sinaliza o truncamento para auditoria.
+    const ncmOriginal = String(item.ncm ?? '')
+    const entrada = interpretarEntradaNcm(item.ncm)
+    const ncmTruncado = entrada.kind === 'truncado'
+    const cod = entrada.codigo
+    const valido = entrada.kind !== 'invalido'
 
     let lista: Classificacao[] = []
     let regraGeralDaBase = false
@@ -88,6 +92,10 @@ export async function analisarItens(
     resultados.push({
       ...item,
       ncm: cod,
+      ncmOriginal,
+      ncmTruncado,
+      ncmInvalido: !valido,
+      opcoesClassificacao: lista.length,
       classificacao,
       regraGeral,
       manual,
@@ -97,9 +105,20 @@ export async function analisarItens(
       cbs: calc.vCBS,
       totalTributos: calc.total,
       carga: calc.carga,
-      anexo: anexoDeReducao(redIBS, redCBS),
+      anexo: anexoReal(classificacao.resumo?.anexo ?? (classificacao as { referencia?: { anexo?: unknown } }).referencia?.anexo, redIBS, redCBS),
       nomenclatura: cacheNomen.get(cod) ?? null,
-      observacoes: observacoesFiscais(cod, classificacao, cacheNomen.get(cod) ?? null),
+      observacoes: [
+        ...(ncmTruncado
+          ? [{ titulo: 'NCM truncado — conferir', texto: `Original "${ncmOriginal}" tinha ${entrada.digitos} dígitos (possível NBS/EX). Usado ${cod}.`, cor: 'amber' as const }]
+          : []),
+        ...(!valido
+          ? [{ titulo: 'NCM inválido', texto: `Original "${ncmOriginal}" não tem 8 dígitos. Tributação integral aplicada como estimativa.`, cor: 'red' as const }]
+          : []),
+        ...(lista.length > 1
+          ? [{ titulo: 'Múltiplas classificações', texto: `Este NCM tem ${lista.length} enquadramentos. Usada a 1ª opção como estimativa — escolha a correta.`, cor: 'amber' as const }]
+          : []),
+        ...observacoesFiscais(cod, classificacao, cacheNomen.get(cod) ?? null),
+      ],
     })
 
     onProgress?.(i + 1, itens.length)
@@ -204,11 +223,11 @@ export function totaisItens(resultados: ResultadoItem[]) {
   let totalIBS = 0
   let totalCBS = 0
   for (const r of resultados) {
-    totalBase += Number(r.vlItem) || 0
-    totalIBS += r.ibs
-    totalCBS += r.cbs
+    totalBase = round2(totalBase + (Number(r.vlItem) || 0))
+    totalIBS = round2(totalIBS + r.ibs)
+    totalCBS = round2(totalCBS + r.cbs)
   }
-  const totalTributos = totalIBS + totalCBS
+  const totalTributos = round2(totalIBS + totalCBS)
   return {
     itens: resultados.length,
     totalBase,

@@ -1,8 +1,9 @@
 /**
- * Reclassificação manual do usuário (NCM sem vínculo oficial).
+ * Reclassificação manual do usuário.
  *
- * Prioridade: base oficial > manual > regra geral. A manual só vale quando
- * não há vínculo, aparece sinalizada em consulta/SPED/XML/lote e isenta o sistema.
+ * Prioridade: manual do usuário > base oficial > regra geral. Existindo
+ * manual, todas as telas puxam a que o usuário criou (acima da base oficial),
+ * sinalizada — responsabilidade dele, isentando o sistema.
  */
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -109,15 +110,17 @@ describe('reclassificação manual', () => {
     expect(r.lista[0].resumo.percentualReducaoIBS).toBe(60)
   })
 
-  it('base oficial sempre vence a manual', async () => {
+  it('manual do usuário vence a base oficial', async () => {
     await salvarReclassificacaoManual({
       ncm: NCM_COM_VINCULO, cst: '200', cClassTrib: '200001',
-      descricao: 'tentativa', fonteDescricao: 'fonte', fonteUrl: 'https://example.com/lei',
+      descricao: 'escolha do usuário', fonteDescricao: 'fonte', fonteUrl: 'https://example.com/lei',
     })
     const r = await resolverClassificacoes(NCM_COM_VINCULO)
     expect(r.vinculos.length).toBeGreaterThan(0)
-    expect(r.manual).toBe(false)
-    expect(r.lista[0].manual ?? null).toBeNull()
+    expect(r.manual).toBe(true)
+    expect(r.regraGeral).toBe(false)
+    expect(r.lista).toHaveLength(1)
+    expect(r.lista[0].manual?.descricao).toBe('escolha do usuário')
   })
 
   it('SPED e XML usam a manual com indicativo', async () => {

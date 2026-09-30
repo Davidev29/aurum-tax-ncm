@@ -8,6 +8,11 @@ import { divergenciaXmlSistema } from '@/infrastructure/nfe/credito'
 import { reaplicarClassificacaoNota } from '@/application/notas-xml'
 import { salvarReclassificacaoManual } from '@/infrastructure/base/reclassificacao-repo'
 import { classificacaoRegraGeral } from '@/infrastructure/base/classificacao-repo'
+import { REF_DEFAULT } from '@/domain/constants'
+
+// Usa as alíquotas de referência padrão do sistema (dinâmicas conforme regras vigentes)
+const REF_IBS = REF_DEFAULT.IBS
+const REF_CBS = REF_DEFAULT.CBS
 
 const NCM = '99999999'
 
@@ -44,14 +49,14 @@ async function semearNota() {
     destDoc: '22222222000122', destNome: 'Dest', destIe: '',
     valorProdutos: 100, valorTotal: 100,
     empresaId: 1, direcao: 'saida', arquivo: null, xmlConteudo: null,
-    refIBS: 17.7, refCBS: 8.8, totalIBS: 17.7, totalCBS: 8.8, totalTributos: 26.5,
+    refIBS: REF_IBS, refCBS: REF_CBS, totalIBS: REF_IBS, totalCBS: REF_CBS, totalTributos: REF_IBS + REF_CBS,
     importadoEm: new Date().toISOString(),
     itensAnalisados: [{
       ...itemBase(),
       // Emitente destacou CST 000 integral com valores cheios…
-      cstIbsCbs: '000', cClassTribIbsCbs: '000001', vBcIbsCbs: 100, vIbsItem: 17.7, vCbsItem: 8.8,
+      cstIbsCbs: '000', cClassTribIbsCbs: '000001', vBcIbsCbs: 100, vIbsItem: REF_IBS, vCbsItem: REF_CBS,
       classificacao: rg, regraGeral: true, manual: false,
-      redIBS: 0, redCBS: 0, ibs: 17.7, cbs: 8.8, totalTributos: 26.5, carga: 26.5,
+      redIBS: 0, redCBS: 0, ibs: REF_IBS, cbs: REF_CBS, totalTributos: REF_IBS + REF_CBS, carga: REF_IBS + REF_CBS,
       anexo: 'isento', observacoes: [],
     }],
   } as never)
@@ -73,8 +78,8 @@ describe('divergenciaXmlSistema', () => {
 
   it('enquadramento igual e valores iguais: confere', () => {
     const d = divergenciaXmlSistema({
-      cstIbsCbs: '000', cClassTribIbsCbs: '000001', vIbsItem: 17.7, vCbsItem: 8.8,
-      classificacao: { cst: '000', cClassTrib: '000001' }, ibs: 17.7, cbs: 8.8,
+      cstIbsCbs: '000', cClassTribIbsCbs: '000001', vIbsItem: REF_IBS, vCbsItem: REF_CBS,
+      classificacao: { cst: '000', cClassTrib: '000001' }, ibs: REF_IBS, cbs: REF_CBS,
     })
     expect(d.temXml).toBe(true)
     expect(d.diverge).toBe(false)
@@ -82,8 +87,8 @@ describe('divergenciaXmlSistema', () => {
 
   it('CST do emitente ≠ sistema: diverge enquadramento', () => {
     const d = divergenciaXmlSistema({
-      cstIbsCbs: '000', cClassTribIbsCbs: '000001', vIbsItem: 17.7, vCbsItem: 8.8,
-      classificacao: { cst: '200', cClassTrib: '200001' }, ibs: 7.08, cbs: 3.52,
+      cstIbsCbs: '000', cClassTribIbsCbs: '000001', vIbsItem: REF_IBS, vCbsItem: REF_CBS,
+      classificacao: { cst: '200', cClassTrib: '200001' }, ibs: REF_IBS * 0.4, cbs: REF_CBS * 0.4,
     })
     expect(d.divergeEnquadramento).toBe(true)
     expect(d.divergeValores).toBe(true)
@@ -93,7 +98,7 @@ describe('divergenciaXmlSistema', () => {
   it('mesmo enquadramento, valores diferentes: diverge valores', () => {
     const d = divergenciaXmlSistema({
       cstIbsCbs: '000', cClassTribIbsCbs: '000001', vIbsItem: 10, vCbsItem: 5,
-      classificacao: { cst: '000', cClassTrib: '000001' }, ibs: 17.7, cbs: 8.8,
+      classificacao: { cst: '000', cClassTrib: '000001' }, ibs: REF_IBS, cbs: REF_CBS,
     })
     expect(d.divergeEnquadramento).toBe(false)
     expect(d.divergeValores).toBe(true)
@@ -124,6 +129,6 @@ describe('reaplicarClassificacaoNota', () => {
     const atual = await db.nfeNotas.get(nota.id!)
     expect(atual?.itensAnalisados[0].classificacao.cClassTrib).toBe('200001')
     expect(atual?.itensAnalisados[0].manual).toBe(true)
-    expect(atual?.totalIBS).toBeCloseTo(7.08, 2)
+    expect(atual?.totalIBS).toBeCloseTo(REF_IBS * 0.4, 2)
   })
 })
