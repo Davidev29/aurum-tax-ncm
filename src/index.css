@@ -238,6 +238,28 @@
     border: 1px solid transparent;
     text-decoration: none;
   }
+  /* Giro de ação em andamento (`Btn carregando`): feedback tátil/visual
+     enquanto a ação assíncrona não conclui. */
+  .btn-spinner {
+    display: inline-block;
+    width: 0.95em;
+    height: 0.95em;
+    flex: none;
+    border-radius: 9999px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    animation: btn-girar 0.7s linear infinite;
+  }
+  @keyframes btn-girar {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .btn-spinner {
+      animation-duration: 1.6s;
+    }
+  }
   /* Ação primária: marinho com filete de ouro — assinatura da marca. */
   .btn-primary {
     background: linear-gradient(135deg, #16233a, #2b3f63);
@@ -314,9 +336,19 @@
     object-fit: contain;
     filter: drop-shadow(0 2px 5px rgb(16 28 46 / 0.3));
   }
-  /* Wordmark ao lado do escudo. */
+  /* Caixa da marca na sidebar: sempre alinhada à esquerda, no menu aberto
+     e no recolhido. O `padding-left` igual ao padding interno do `.side-btn`
+     (0.85rem) alinha a borda esquerda do escudo com a dos ícones do
+     hambúrguer/menu. */
+  .marca-caixa {
+    justify-content: flex-start;
+    text-align: left;
+    padding-left: 0.85rem;
+  }
+  /* Wordmark ao lado do escudo (tamanhos travados aqui — proporção fixa). */
   .marca-nome {
     font-weight: 900;
+    font-size: 1.25rem;
     letter-spacing: 0.04em;
     line-height: 1.1;
     color: var(--color-brand-800);
@@ -326,7 +358,7 @@
   }
   .marca-sub {
     font-weight: 800;
-    font-size: 0.8125rem;
+    font-size: 0.6875rem;
     letter-spacing: 0.28em;
     color: var(--color-aurum-600);
   }
@@ -339,7 +371,79 @@
     background: linear-gradient(to right, var(--color-aurum-500), transparent);
   }
 
-  /* --- navegação lateral -------------------------------------------------- */
+  /* --- navegação lateral: Liquid Glass + física de mola --------------------
+     Vidro líquido estilo Apple, só na sidebar: véu translúcido com blur e
+     saturação (`.sidebar-liquida`), brilho especular no topo do botão
+     (`.side-btn::before`), gota em movimento que atravessa o botão no hover
+     (`::after`) e ondulação que nasce no ponto do clique (`.side-gota`,
+     injetada via `pointerdown`).
+     Hover com física de mola (sem `translateY`, que rouba o cursor);
+     abrir/fechar com elástico na largura (`cubic-bezier` com overshoot). */
+  .sidebar-liquida {
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.45), transparent 24%),
+      linear-gradient(135deg, color-mix(in srgb, var(--color-aurum-500) 9%, transparent), transparent 46%),
+      color-mix(in srgb, var(--surface-2) 84%, transparent);
+    backdrop-filter: blur(20px) saturate(1.6);
+    -webkit-backdrop-filter: blur(20px) saturate(1.6);
+    /* `translate` cobre o drawer móvel (Tailwind v4 usa a propriedade
+       nativa); `width` cobre o colapso no desktop — ambos com elástico. */
+    transition:
+      transform 0.55s cubic-bezier(0.34, 1.35, 0.64, 1),
+      translate 0.55s cubic-bezier(0.34, 1.35, 0.64, 1),
+      width 0.55s cubic-bezier(0.34, 1.35, 0.64, 1),
+      background-color 0.3s ease;
+  }
+  .dark .sidebar-liquida {
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.07), transparent 24%),
+      linear-gradient(135deg, rgb(190 148 51 / 0.13), transparent 46%),
+      color-mix(in srgb, var(--surface-2) 84%, transparent);
+  }
+
+  /* Hambúrguer do topo da sidebar: barras fixas (nunca viram ✕) dentro do
+     selo padrão dos itens (`.side-ico`) — mesmos contornos dos menus. */
+  .gota-barras {
+    display: grid;
+    gap: 2.5px;
+    justify-items: center;
+  }
+  .gota-barras > span {
+    display: block;
+    width: 13px;
+    height: 2px;
+    border-radius: 9999px;
+    background: currentColor;
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .side-btn:hover .gota-barras > span:nth-child(2) {
+    transform: scaleX(0.65);
+  }
+
+  /* Hambúrguer é só ícone (sem rótulo visível): abraça o ícone em vez de
+     esticar na largura total. Mantém o alinhamento à esquerda como a marca. */
+  .side-hamb {
+    width: auto;
+    align-self: flex-start;
+  }
+
+  /* Wordmark da sidebar: entra com fade/deslize após a largura expandir
+     (escopo restrito à sidebar para não afetar outros `.marca-texto`).
+     Ao recolher, o React desmonta o nó — some na hora, sem fade fantasma. */
+  .sidebar-liquida .marca-texto {
+    animation: marca-texto-in 0.32s ease 0.16s backwards;
+  }
+  @keyframes marca-texto-in {
+    from {
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
   .side-btn {
     position: relative;
     display: flex;
@@ -347,37 +451,122 @@
     gap: 0.75rem;
     width: 100%;
     padding: 0.7rem 0.85rem;
-    border-radius: 0.75rem;
+    border-radius: 0.9rem;
     font-size: 0.8125rem;
     font-weight: 600;
     color: var(--ink-soft);
-    transition: all 0.18s ease;
     text-align: left;
-    border: 1px solid transparent;
-    background: transparent;
+    border: 1px solid rgb(255 255 255 / 0.1);
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.35), rgb(255 255 255 / 0.06));
+    overflow: hidden;
+    isolation: isolate;
     cursor: pointer;
+    transition:
+      transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1),
+      background-color 0.25s ease,
+      border-color 0.25s ease,
+      color 0.2s ease,
+      box-shadow 0.3s ease;
+  }
+  /* Brilho especular: filete de luz no topo do vidro. */
+  .side-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.5), transparent 45%);
+    opacity: 0.35;
+    transition: opacity 0.3s ease;
+  }
+  /* Gota em movimento: véu líquido que atravessa o botão no hover. */
+  .side-btn::after {
+    content: '';
+    position: absolute;
+    top: -30%;
+    bottom: -30%;
+    left: 0;
+    width: 55%;
+    pointer-events: none;
+    background: radial-gradient(closest-side, rgb(234 215 158 / 0.55), transparent 70%);
+    transform: translateX(-140%) skewX(-12deg);
+    opacity: 0;
+    transition:
+      transform 0.7s cubic-bezier(0.2, 0.9, 0.3, 1),
+      opacity 0.3s ease;
   }
   .side-btn:hover {
-    background: color-mix(in oklab, var(--color-brand-600) 7%, transparent);
+    border-color: color-mix(in srgb, var(--color-aurum-500) 45%, transparent);
     color: var(--color-brand-700);
+    transform: translateX(4px) scale(1.015);
+    box-shadow:
+      0 10px 24px -12px rgb(22 35 58 / 0.35),
+      inset 0 1px 0 rgb(255 255 255 / 0.5);
+  }
+  .side-btn:hover::before {
+    opacity: 0.7;
+  }
+  .side-btn:hover::after {
+    transform: translateX(240%) skewX(-12deg);
+    opacity: 1;
+  }
+  .side-btn:active {
+    transform: translateX(2px) scale(0.97);
+    transition-duration: 0.12s;
+  }
+  .dark .side-btn {
+    border-color: rgb(234 215 158 / 0.1);
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.07), rgb(255 255 255 / 0.02));
+  }
+  .dark .side-btn::before {
+    background: linear-gradient(180deg, rgb(255 255 255 / 0.14), transparent 45%);
   }
   .dark .side-btn:hover {
-    background: rgb(190 148 51 / 0.1);
+    background: linear-gradient(180deg, rgb(190 148 51 / 0.18), rgb(190 148 51 / 0.06));
     color: var(--color-aurum-200);
+    box-shadow:
+      0 10px 24px -12px rgb(0 0 0 / 0.7),
+      inset 0 1px 0 rgb(234 215 158 / 0.2);
   }
-  /* Item ativo: marinho com barra de ouro à esquerda. */
+  /* Ondulação no ponto do clique (dissolve em 0.6s, removida via JS). */
+  .side-gota {
+    position: absolute;
+    z-index: 0;
+    border-radius: 9999px;
+    pointer-events: none;
+    background: radial-gradient(circle, rgb(234 215 158 / 0.8) 0%, rgb(210 169 78 / 0.35) 45%, transparent 70%);
+    transform: scale(0);
+    opacity: 0.7;
+    animation: gota-expandir 0.6s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+  }
+  @keyframes gota-expandir {
+    to {
+      transform: scale(1);
+      opacity: 0;
+    }
+  }
+  .side-btn > :not(.side-gota) {
+    position: relative;
+    z-index: 1;
+  }
+  /* Item ativo: marinho com barra de ouro à esquerda + verniz de vidro. */
   .side-btn[data-active='true'] {
-    background: linear-gradient(135deg, #16233a, #2b3f63);
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.14), transparent 40%),
+      linear-gradient(135deg, #16233a, #2b3f63);
     color: #f7f3e8;
-    border-color: rgb(190 148 51 / 0.5);
+    border-color: rgb(190 148 51 / 0.55);
     box-shadow:
       inset 3px 0 0 var(--color-aurum-400),
+      inset 0 1px 0 rgb(234 215 158 / 0.25),
       0 8px 20px -10px rgb(22 35 58 / 0.6);
   }
   .side-btn[data-active='true']:hover {
-    background: linear-gradient(135deg, #1e2f4d, #3e587e);
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.18), transparent 40%),
+      linear-gradient(135deg, #1e2f4d, #3e587e);
     color: #f7f3e8;
-    transform: none;
+    transform: translateX(4px) scale(1.015);
   }
   .side-btn .side-ico {
     display: grid;
@@ -391,6 +580,10 @@
     border: 1px solid var(--color-aurum-300);
     color: var(--color-brand-700);
     box-shadow: 0 2px 6px -2px rgb(154 119 31 / 0.4);
+    transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .side-btn:hover .side-ico {
+    transform: scale(1.08) rotate(-4deg);
   }
   .side-btn .side-ico .icone-svg {
     width: 1.1rem;
@@ -402,9 +595,158 @@
     color: var(--color-aurum-200);
   }
   .side-btn[data-active='true'] .side-ico {
+    position: relative;
     background: rgb(234 215 158 / 0.14);
     border-color: rgb(210 169 78 / 0.7);
     color: var(--color-aurum-200);
+    animation: ico-cintilar 2.4s ease-in-out infinite;
+  }
+  /* Cintilação só na borda do ícone ativo: anel cônico de ouro percorrendo o
+     perímetro (`girar-borda`, mesmo mecanismo da `.borda-cintilante`) + pulso
+     de brilho. O botão selecionado em si permanece como está. */
+  .side-btn[data-active='true'] .side-ico::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 0.8rem;
+    padding: 2px;
+    background: conic-gradient(
+      from var(--angulo-borda),
+      transparent 0deg,
+      transparent 230deg,
+      var(--color-aurum-400) 290deg,
+      #fff7e0 315deg,
+      transparent 340deg
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: girar-borda 2.6s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes ico-cintilar {
+    0%,
+    100% {
+      box-shadow:
+        0 2px 6px -2px rgb(154 119 31 / 0.4),
+        0 0 6px -2px rgb(210 169 78 / 0.5);
+    }
+    50% {
+      box-shadow:
+        0 2px 10px -1px rgb(154 119 31 / 0.6),
+        0 0 16px -2px rgb(210 169 78 / 0.9);
+    }
+  }
+
+  /* Rótulo com saída elástica ao recolher (desktop). */
+  .side-rotulo {
+    max-width: 12rem;
+    opacity: 1;
+    transition:
+      opacity 0.25s ease,
+      transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1),
+      max-width 0.5s cubic-bezier(0.34, 1.35, 0.64, 1);
+  }
+
+  /* Entrada elástica em cascata ao expandir (`--atraso` via style inline).
+     `backwards` (sem retenção): ao terminar, o hover com física reassume. */
+  .animar-entrada .side-btn {
+    animation: side-item-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+    animation-delay: var(--atraso, 0ms);
+  }
+  @keyframes side-item-in {
+    0% {
+      opacity: 0;
+      transform: translateX(-16px) scale(0.95);
+    }
+    60% {
+      opacity: 1;
+      transform: translateX(4px) scale(1.01);
+    }
+    100% {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Separador de seção vira ponto de ouro quando só há ícones. */
+  .side-secao-ponto {
+    display: none;
+  }
+  .sidebar-rodape-mini {
+    display: none;
+  }
+
+  /* --- sidebar recolhida: só no desktop, o drawer móvel segue expandido --- */
+  @media (min-width: 1024px) {
+    .sidebar-liquida[data-recolhida='true'] .marca-caixa {
+      justify-content: flex-start;
+    }
+    .sidebar-liquida[data-recolhida='true'] .marca-texto {
+      display: none;
+    }
+    .sidebar-liquida[data-recolhida='true'] .side-btn {
+      justify-content: center;
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+      gap: 0;
+    }
+    .sidebar-liquida[data-recolhida='true'] .side-hamb {
+      align-self: flex-start;
+    }
+    .sidebar-liquida[data-recolhida='true'] .side-rotulo {
+      opacity: 0;
+      transform: translateX(-10px) scale(0.92);
+      max-width: 0;
+    }
+    .sidebar-liquida[data-recolhida='true'] .side-secao-texto {
+      display: none;
+    }
+    .sidebar-liquida[data-recolhida='true'] .side-secao-ponto {
+      display: block;
+      width: 5px;
+      height: 5px;
+      border-radius: 9999px;
+      margin: 2px auto;
+      background: linear-gradient(135deg, var(--color-aurum-400), var(--color-aurum-600));
+      box-shadow: 0 0 8px rgb(190 148 51 / 0.6);
+    }
+    .sidebar-liquida[data-recolhida='true'] .sidebar-rodape {
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
+    .sidebar-liquida[data-recolhida='true'] .sidebar-rodape-detalhe {
+      display: none;
+    }
+    .sidebar-liquida[data-recolhida='true'] .sidebar-rodape-mini {
+      display: grid;
+      place-items: center;
+      height: 2rem;
+      border-radius: 0.65rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      color: var(--color-aurum-600);
+      background: linear-gradient(135deg, #fbf7ea, #f5eacb);
+      border: 1px solid var(--color-aurum-300);
+    }
+    .dark .sidebar-liquida[data-recolhida='true'] .sidebar-rodape-mini {
+      color: var(--color-aurum-200);
+      background: linear-gradient(135deg, #1e2f4d, #101c2e);
+      border-color: var(--color-aurum-800);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar-liquida,
+    .side-btn,
+    .side-btn::after,
+    .side-rotulo,
+    .sidebar-liquida .marca-texto,
+    .animar-entrada .side-btn,
+    .side-gota,
+    .side-btn[data-active='true'] .side-ico,
+    .side-btn[data-active='true'] .side-ico::before {
+      animation: none;
+    }
   }
 
   /* --- selo de ícone SVG (substitui emojis) --------------------------------- */
@@ -780,6 +1122,74 @@
     color: #94a3b8;
   }
 
+  /* --- faixa tributária acessível (hero enxuto da Consulta) ---------------- */
+  .faixa {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 1rem;
+    border: 2px solid transparent;
+    padding: 0.75rem 1rem;
+  }
+  .faixa-icone {
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    font-size: 1.1rem;
+    font-weight: 900;
+    flex-shrink: 0;
+  }
+  .faixa-corpo { min-width: 0; flex: 1; }
+  .faixa-titulo {
+    font-size: 1rem;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+  }
+  .faixa-sub { font-size: 0.72rem; line-height: 1.4; opacity: 0.92; }
+  .faixa-pct {
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    font-weight: 900;
+    flex-shrink: 0;
+  }
+  .faixa--zero {
+    background: #064e3b;
+    border-color: #10b981;
+    color: #ecfdf5;
+    background-image: repeating-linear-gradient(-45deg, transparent 0 10px, rgb(255 255 255 / 0.06) 10px 20px);
+  }
+  .faixa--zero .faixa-icone { background: #10b981; color: #064e3b; }
+  .faixa--zero .faixa-sub { color: #a7f3d0; }
+  .dark .faixa--zero { background: #022c22; border-color: #34d399; color: #d1fae5; }
+  .faixa--reducao {
+    background: #78350f;
+    border-color: #f59e0b;
+    color: #fffbeb;
+  }
+  .faixa--reducao .faixa-icone { background: #f59e0b; color: #78350f; }
+  .faixa--reducao .faixa-sub { color: #fde68a; }
+  .dark .faixa--reducao { background: #451a03; border-color: #fbbf24; color: #fef3c7; }
+  .faixa--mista {
+    background: #4c1d95;
+    border-color: #a78bfa;
+    color: #f5f3ff;
+  }
+  .faixa--mista .faixa-icone { background: #a78bfa; color: #4c1d95; }
+  .faixa--mista .faixa-sub { color: #ddd6fe; }
+  .dark .faixa--mista { background: #2e1065; border-color: #c4b5fd; color: #ede9fe; }
+  .faixa--integral {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #0f172a;
+  }
+  .faixa--integral .faixa-icone { background: #64748b; color: #f8fafc; }
+  .faixa--integral .faixa-sub { color: #475569; }
+  .dark .faixa--integral { background: #0f172a; border-color: #475569; color: #e2e8f0; }
+  .dark .faixa--integral .faixa-sub { color: #94a3b8; }
+
   /* --- borda cintilante por anexo (crédito IBS/CBS) ------------------------ */
   @property --angulo-borda {
     syntax: '<angle>';
@@ -1011,10 +1421,12 @@
   }
   .modal-box {
     width: 100%;
+    max-width: calc(100vw - 2rem);
     max-height: calc(100vh - 2rem);
     display: flex;
     flex-direction: column;
     border-radius: 1.1rem;
+    overflow: hidden;
     animation: glass-pop-in 0.26s cubic-bezier(0.2, 0.9, 0.3, 1);
   }
   .modal-box.is-saindo {
@@ -1078,6 +1490,10 @@
    */
   body:has(.modal-backdrop) .borda-cintilante,
   body:has(.modal-backdrop) .borda-cintilante::before,
+  body:has(.modal-backdrop) .aurum-ai-destaque,
+  body:has(.modal-backdrop) .aurum-ai-destaque::before,
+  body:has(.modal-backdrop) .aurum-ai-pensando-ponto,
+  body:has(.modal-backdrop) .aurum-ai-pensando-barra > span,
   body:has(.modal-backdrop) .skeleton {
     animation-play-state: paused;
   }
@@ -1134,6 +1550,10 @@
     .modal-box,
     .borda-cintilante,
     .borda-cintilante::before,
+    .aurum-ai-destaque,
+    .aurum-ai-destaque::before,
+    .aurum-ai-pensando-ponto,
+    .aurum-ai-pensando-barra > span,
     .borda-fluida {
       animation: none;
     }
@@ -1250,12 +1670,25 @@
   }
 
   /* --- scroll elegante (viewport fixo da nomenclatura NCM) ------------------ */
+  /* O modal só rola na vertical: `overflow-x: hidden` impede a barra
+     horizontal — o conteúdo longo trunca (`truncate`) e só o `pre` interno
+     de JSON rola sozinho (`overflow-x: auto` nele). */
   .modal-scroll {
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     max-height: min(62vh, 34rem);
     scroll-behavior: smooth;
     scrollbar-gutter: stable;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .modal-scroll > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .modal-scroll pre {
+    max-width: 100%;
   }
   .scroll-elegante {
     scrollbar-width: thin;
@@ -1441,5 +1874,823 @@
     .calc-aside-enter {
       animation: none;
     }
+  }
+
+  /* --- Aurum AI: identidade, micro-interações e acessibilidade ------------- */
+  /* Selo principal: marinho + filete ouro, brilho percorrendo a borda. */
+  .aurum-ai-selo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    padding: 0.3rem 0.75rem 0.3rem 0.55rem;
+    font-size: 0.6875rem;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+    color: #f7f3e8;
+    background: linear-gradient(135deg, #16233a, #2b3f63 65%, #3e587e);
+    border: 1px solid rgb(190 148 51 / 0.65);
+    box-shadow:
+      inset 0 1px 0 rgb(234 215 158 / 0.22),
+      0 6px 18px -8px rgb(22 35 58 / 0.7),
+      0 0 14px -6px rgb(190 148 51 / 0.7);
+    position: relative;
+    overflow: hidden;
+    animation: aurum-ai-pulso 2.6s ease-in-out infinite;
+  }
+  .aurum-ai-selo::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 30%, rgb(234 215 158 / 0.35) 50%, transparent 70%);
+    background-size: 200% 100%;
+    animation: shimmer 2.8s linear infinite;
+    pointer-events: none;
+  }
+  .aurum-ai-selo-sub {
+    display: block;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #ead79e;
+    line-height: 1.1;
+  }
+  .aurum-ai-estrela {
+    display: grid;
+    place-items: center;
+    width: 1.4rem;
+    height: 1.4rem;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, #be9433, #ead79e);
+    color: #16233a;
+    font-size: 0.8rem;
+    flex: 0 0 auto;
+  }
+  .aurum-ai-selo--compacto {
+    padding: 0.15rem 0.55rem;
+    font-size: 0.625rem;
+  }
+  .aurum-ai-selo--compacto .aurum-ai-selo-sub {
+    display: none;
+  }
+  .aurum-ai-selo--fantasma {
+    background: rgb(190 148 51 / 0.12);
+    color: var(--color-brand-700);
+    border-color: rgb(190 148 51 / 0.5);
+    box-shadow: none;
+  }
+  .dark .aurum-ai-selo--fantasma {
+    color: var(--color-aurum-200);
+    background: rgb(190 148 51 / 0.14);
+  }
+  @keyframes aurum-ai-pulso {
+    0%, 100% { box-shadow: inset 0 1px 0 rgb(234 215 158 / 0.22), 0 6px 18px -8px rgb(22 35 58 / 0.7), 0 0 14px -6px rgb(190 148 51 / 0.7); }
+    50% { box-shadow: inset 0 1px 0 rgb(234 215 158 / 0.22), 0 6px 22px -6px rgb(22 35 58 / 0.7), 0 0 22px -4px rgb(210 169 78 / 0.9); }
+  }
+  /* Atribuição "Sugerido por Aurum AI": sempre visível, alto contraste. */
+  .aurum-ai-atribuicao {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 9999px;
+    padding: 0.15rem 0.6rem;
+    font-size: 0.625rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, rgb(190 148 51 / 0.16), rgb(190 148 51 / 0.07));
+    border: 1px solid rgb(190 148 51 / 0.55);
+    color: var(--color-brand-700);
+  }
+  .dark .aurum-ai-atribuicao {
+    color: var(--color-aurum-200);
+    background: rgb(190 148 51 / 0.14);
+  }
+  .aurum-ai-atribuicao-detalhe {
+    font-weight: 600;
+    opacity: 0.85;
+  }
+  /* Barra de confiança com trilho visível e foco ouro. */
+  .aurum-ai-confianca {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border-radius: 9999px;
+    padding: 0.2rem 0.6rem 0.2rem 0.45rem;
+    font-size: 0.625rem;
+    font-weight: 800;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+  }
+  .aurum-ai-confianca-trilho {
+    display: block;
+    width: 3.5rem;
+    height: 0.4rem;
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--line) 80%, transparent);
+    overflow: hidden;
+  }
+  .aurum-ai-confianca-preenchimento {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    transition: width 0.4s cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+  .aurum-ai-confianca--alta .aurum-ai-confianca-preenchimento { background: linear-gradient(90deg, #059669, #34d399); }
+  .aurum-ai-confianca--media .aurum-ai-confianca-preenchimento { background: linear-gradient(90deg, #d97706, #fbbf24); }
+  .aurum-ai-confianca--baixa .aurum-ai-confianca-preenchimento { background: linear-gradient(90deg, #dc2626, #f87171); }
+  .aurum-ai-confianca--alta .aurum-ai-confianca-rotulo { color: #047857; }
+  .dark .aurum-ai-confianca--alta .aurum-ai-confianca-rotulo { color: #6ee7b7; }
+  .aurum-ai-confianca--media .aurum-ai-confianca-rotulo { color: #b45309; }
+  .dark .aurum-ai-confianca--media .aurum-ai-confianca-rotulo { color: #fcd34d; }
+  .aurum-ai-confianca--baixa .aurum-ai-confianca-rotulo { color: #b91c1c; }
+  .dark .aurum-ai-confianca--baixa .aurum-ai-confianca-rotulo { color: #fca5a5; }
+  /* Painel de análise Aurum AI no cartão regra geral: vigente vs hipótese. */
+  .aurum-ai-analise {
+    border-radius: 0.9rem;
+    border: 1px solid rgb(190 148 51 / 0.5);
+    background: linear-gradient(180deg, rgb(190 148 51 / 0.1), transparent 60%), var(--surface-2);
+    overflow: hidden;
+  }
+  .aurum-ai-analise-cab {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.6rem 0.8rem;
+    background: linear-gradient(135deg, rgb(22 35 58 / 0.06), rgb(190 148 51 / 0.12));
+    border-bottom: 1px solid rgb(190 148 51 / 0.35);
+  }
+  .aurum-ai-analise-corpo { padding: 0.8rem; }
+  .aurum-ai-camada {
+    border-radius: 0.7rem;
+    padding: 0.6rem 0.7rem;
+    font-size: 0.75rem;
+    line-height: 1.55;
+  }
+  .aurum-ai-camada--vigente {
+    background: color-mix(in oklab, var(--surface-2) 85%, transparent);
+    border: 1px solid var(--line);
+  }
+  .aurum-ai-camada--hipotese {
+    background: rgb(254 243 199 / 0.7);
+    border: 1px dashed #d97706;
+  }
+  .dark .aurum-ai-camada--hipotese {
+    background: rgb(190 148 51 / 0.1);
+    border-color: var(--color-aurum-700);
+  }
+  .aurum-ai-fontes {
+    margin-top: 0.6rem;
+    font-size: 0.625rem;
+    color: var(--ink-soft);
+  }
+  .aurum-ai-fontes-titulo { font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+  .aurum-ai-fontes ul { margin: 0.25rem 0 0 1rem; list-style: disc; }
+  .aurum-ai-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.625rem;
+    font-weight: 800;
+  }
+  .aurum-ai-status-ponto {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 9999px;
+    background: #9aa3b5;
+  }
+  .aurum-ai-status--processando .aurum-ai-status-ponto {
+    background: linear-gradient(135deg, #be9433, #ead79e);
+    animation: aurum-ai-pulso 1.2s ease-in-out infinite;
+  }
+  .aurum-ai-status--pronto .aurum-ai-status-ponto { background: #10b981; }
+  /* --- Aurum AI: borda animada do bloco classificado pela IA -----------------
+     Mesma mecânica da `.borda-cintilante` (padrão do sistema): anel cônico que
+     percorre o perímetro (`girar-borda`) + pulso de brilho (`pulsar-brilho`).
+     O ouro é o padrão; `--cor-borda` / `--cor-brilho` permitem variar por
+     contexto sem criar nova animação. */
+  .aurum-ai-destaque {
+    position: relative;
+    border: 1px solid color-mix(in srgb, var(--cor-borda, #be9433) 55%, transparent);
+    animation: pulsar-brilho 2.8s ease-in-out infinite;
+  }
+  .aurum-ai-destaque::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+      from var(--angulo-borda),
+      transparent 0deg,
+      transparent 248deg,
+      var(--cor-borda, #be9433) 298deg,
+      var(--cor-brilho, #ead79e) 318deg,
+      transparent 338deg
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: girar-borda 3.2s linear infinite;
+    pointer-events: none;
+  }
+  /* --- Aurum AI: "pensando" — loading animado enquanto a IA raciocina -------
+     Três pontos que quicam em cascata + barra varrendo em ouro + etapas com
+     spinner herdado. Tudo em `transform`/`opacity` (barato no compositor). */
+  .aurum-ai-pensando {
+    border-radius: 1rem;
+    border: 1px solid rgb(190 148 51 / 0.5);
+    background:
+      linear-gradient(180deg, rgb(190 148 51 / 0.1), transparent 55%),
+      var(--surface-2);
+    padding: 0.9rem;
+  }
+  .aurum-ai-pensando-cab {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--color-brand-700);
+  }
+  .dark .aurum-ai-pensando-cab { color: var(--color-aurum-200); }
+  .aurum-ai-pensando-estrela {
+    display: grid;
+    place-items: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, #be9433, #ead79e);
+    color: #16233a;
+    font-size: 0.9rem;
+    animation: aurum-ai-pulso 1.4s ease-in-out infinite;
+  }
+  .aurum-ai-pensando-pontos {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 3px;
+    margin-left: 2px;
+    height: 1em;
+  }
+  .aurum-ai-pensando-ponto {
+    width: 5px;
+    height: 5px;
+    border-radius: 9999px;
+    background: currentColor;
+    opacity: 0.25;
+    animation: aurum-ai-ponto 1.2s ease-in-out infinite;
+  }
+  .aurum-ai-pensando-ponto:nth-child(2) { animation-delay: 0.15s; }
+  .aurum-ai-pensando-ponto:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes aurum-ai-ponto {
+    0%, 60%, 100% { opacity: 0.25; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-3px); }
+  }
+  .aurum-ai-pensando-barra {
+    position: relative;
+    margin-top: 0.6rem;
+    height: 4px;
+    overflow: hidden;
+    border-radius: 9999px;
+    background: color-mix(in oklab, var(--line) 80%, transparent);
+  }
+  .aurum-ai-pensando-barra > span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 32%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #be9433, #ead79e);
+    animation: loading-slide 1.1s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    will-change: transform;
+  }
+  .aurum-ai-pensando-etapas {
+    margin-top: 0.6rem;
+    display: grid;
+    gap: 0.3rem;
+    font-size: 0.6875rem;
+    color: var(--ink-soft);
+  }
+  .aurum-ai-pensando-etapa {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .aurum-ai-selo, .aurum-ai-selo::after, .aurum-ai-status--processando .aurum-ai-status-ponto,
+    .aurum-ai-confianca-preenchimento, .aurum-ai-destaque, .aurum-ai-destaque::before,
+    .aurum-ai-pensando-estrela, .aurum-ai-pensando-ponto, .aurum-ai-pensando-barra > span {
+      animation: none;
+    }
+  }
+
+  /* --- Aurum AI premium: espectro cintilante + ícone facetado ---------------
+     Micro-interações de nível premium: o ouro continua na borda do bloco
+     (`.aurum-ai-destaque`), mas selo, ícone, barra e linha preferida percorrem
+     o ESPECTRO (ouro → magenta → índigo → ciano → ouro). Tudo em
+     transform/opacity/background-position (barato no compositor). */
+  @keyframes aurum-espectro {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  @keyframes aurum-flutuar {
+    0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 0 6px rgb(232 121 249 / 0.45)); }
+    50% { transform: translateY(-1.5px) scale(1.06); filter: drop-shadow(0 0 10px rgb(34 211 238 / 0.6)); }
+  }
+  @keyframes aurum-orb-girar {
+    to { transform: rotate(360deg); }
+  }
+  .aurum-ai-icone-premium {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border-radius: 9999px;
+    line-height: 1;
+    animation: aurum-flutuar 2.8s ease-in-out infinite;
+  }
+  .aurum-ai-icone-premium svg { display: block; overflow: visible; }
+  .aurum-ai-icone-premium--sm { width: 1.05rem; height: 1.05rem; }
+  .aurum-ai-icone-premium--md { width: 1.35rem; height: 1.35rem; }
+  .aurum-ai-icone-premium--lg { width: 1.7rem; height: 1.7rem; }
+  .aurum-ai-selo--espectro::after {
+    background: linear-gradient(
+      110deg,
+      transparent 20%,
+      rgb(190 148 51 / 0.45) 36%,
+      rgb(232 121 249 / 0.55) 46%,
+      rgb(129 140 248 / 0.6) 54%,
+      rgb(34 211 238 / 0.55) 62%,
+      rgb(234 215 158 / 0.5) 72%,
+      transparent 88%
+    );
+    background-size: 220% 100%;
+    animation: aurum-espectro 3.2s linear infinite;
+  }
+  .aurum-ai-atribuicao--espectro {
+    position: relative;
+    overflow: hidden;
+  }
+  .aurum-ai-atribuicao--espectro::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(110deg, transparent 30%, rgb(232 121 249 / 0.22) 45%, rgb(34 211 238 / 0.25) 55%, transparent 70%);
+    background-size: 220% 100%;
+    animation: aurum-espectro 3.8s linear infinite;
+    pointer-events: none;
+  }
+  .aurum-ai-destaque-cab {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem 0;
+    min-width: 0;
+  }
+  .aurum-ai-pensando-estrela--espectro {
+    background: linear-gradient(135deg, #16233a, #2b3f63);
+    border: 1px solid rgb(232 121 249 / 0.5);
+    box-shadow: 0 0 16px -4px rgb(129 140 248 / 0.8), inset 0 1px 0 rgb(255 255 255 / 0.2);
+  }
+  .aurum-ai-pensando-barra--espectro > span {
+    width: 38%;
+    background: linear-gradient(90deg, #be9433, #e879f9, #818cf8, #22d3ee, #ead79e);
+    background-size: 300% 100%;
+    animation: aurum-espectro 1.6s linear infinite, loading-slide 1.1s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+  .aurum-ai-pensando-orb {
+    width: 0.75rem;
+    height: 0.75rem;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    background: conic-gradient(from 0deg, #be9433, #e879f9, #818cf8, #22d3ee, #be9433);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+    animation: aurum-orb-girar 1.1s linear infinite;
+  }
+  /* Linha preferida: sublinha o NCM que a IA usou como referência. */
+  .aurum-ai-linha-preferida {
+    display: block;
+    height: 3px;
+    margin-top: 0.35rem;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, #be9433, #e879f9, #818cf8, #22d3ee, #34d399, #be9433);
+    background-size: 300% 100%;
+    animation: aurum-espectro 2.6s linear infinite;
+    box-shadow: 0 0 14px -2px rgb(232 121 249 / 0.9), 0 0 8px -2px rgb(34 211 238 / 0.8);
+  }
+  .aurum-ai-linha-preferida-brilho { display: block; height: 100%; border-radius: inherit; }
+  .aurum-ai-selo-preferido {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 9999px;
+    padding: 0.12rem 0.55rem;
+    font-size: 0.6rem;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #f7f3e8;
+    background: linear-gradient(135deg, #16233a, #4c1d95 55%, #0e7490);
+    border: 1px solid rgb(232 121 249 / 0.55);
+    box-shadow: 0 0 14px -4px rgb(232 121 249 / 0.8);
+  }
+  /* Botões premium que abrem os modais glass (excesso comportado). */
+  .aurum-ai-acoes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.65rem;
+  }
+  .btn-detalhe-premium {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 0.7rem;
+    padding: 0.38rem 0.7rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow-card);
+    transition: border-color 0.18s ease, box-shadow 0.2s ease, transform 0.12s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-detalhe-premium:hover {
+    border-color: var(--color-aurum-500);
+    box-shadow: 0 8px 22px -10px rgb(129 140 248 / 0.55), var(--shadow-card);
+  }
+  .btn-detalhe-premium:active { transform: scale(0.97); }
+  .btn-detalhe-premium::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 35%, rgb(232 121 249 / 0.14) 48%, rgb(34 211 238 / 0.16) 55%, transparent 70%);
+    background-size: 220% 100%;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+  }
+  .btn-detalhe-premium:hover::after {
+    opacity: 1;
+    animation: aurum-espectro 1.8s linear infinite;
+  }
+  .btn-detalhe-premium--ia {
+    color: #f7f3e8;
+    background: linear-gradient(135deg, #16233a, #2b3f63 60%, #3e587e);
+    border-color: rgb(232 121 249 / 0.5);
+  }
+  .btn-detalhe-premium--ia:hover {
+    border-color: rgb(34 211 238 / 0.7);
+    color: #fff;
+  }
+  .btn-detalhe-premium-cont {
+    display: inline-grid;
+    place-items: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.3rem;
+    border-radius: 9999px;
+    font-size: 0.625rem;
+    font-weight: 900;
+    background: rgb(232 121 249 / 0.16);
+    border: 1px solid rgb(232 121 249 / 0.4);
+  }
+  .btn-detalhe-premium--ia .btn-detalhe-premium-cont {
+    background: rgb(255 255 255 / 0.14);
+    border-color: rgb(255 255 255 / 0.3);
+  }
+  /* Hero compacto da Consulta: 1 veredito reina, resto em modais. */
+  .consulta-hero-ncm {
+    font-family: var(--font-mono);
+    font-size: 1.35rem;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+  .consulta-justificativa-clamp {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 0.78rem;
+    line-height: 1.55;
+  }
+  /* Lista do modal "NCMs analisados": nunca vaza na horizontal — o modal só
+     rola na vertical; o texto longo trunca com ellipsis e o `pre` interno
+     rola sozinho sem alargar o modal. */
+  .consulta-ncm-lista {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .consulta-ncm-item {
+    display: block;
+    border-radius: 0.9rem;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    padding: 0.65rem 0.8rem;
+    text-align: left;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.16s ease, box-shadow 0.2s ease, transform 0.12s ease;
+  }
+  .consulta-ncm-item:hover { border-color: var(--color-aurum-500); box-shadow: var(--shadow-card); }
+  .consulta-ncm-item--preferido {
+    border-color: rgb(232 121 249 / 0.6);
+    background: linear-gradient(180deg, rgb(232 121 249 / 0.08), transparent 60%), var(--surface-2);
+    box-shadow: 0 10px 28px -14px rgb(129 140 248 / 0.6);
+  }
+  .consulta-ncm-item-topo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .aurum-ai-icone-premium, .aurum-ai-selo--espectro::after,
+    .aurum-ai-atribuicao--espectro::after,
+    .aurum-ai-pensando-barra--espectro > span, .aurum-ai-pensando-orb,
+    .aurum-ai-linha-preferida, .btn-detalhe-premium:hover::after {
+      animation: none;
+    }
+  }
+
+  /* --- lote + Aurum AI assistida (nome + NCM = tributação provável) ---------
+     Micro-interações: tudo em transform/opacity (barato no compositor);
+     stagger via animation-delay inline; respeita prefers-reduced-motion. */
+  .lote-hero { position: relative; }
+  .lote-hero-faixa {
+    position: absolute; inset: 0 0 auto 0; height: 3px;
+    background: linear-gradient(90deg, #16233a, #be9433 45%, #ead79e 60%, #16233a);
+    background-size: 200% 100%;
+    animation: lote-faixa 6s ease infinite;
+  }
+  @keyframes lote-faixa {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .lote-hero-icone {
+    display: grid; place-items: center;
+    width: 2rem; height: 2rem; border-radius: 0.7rem; font-size: 1.1rem;
+    background: linear-gradient(135deg, #fbf7ea, #f5eacb);
+    border: 1px solid var(--color-aurum-300);
+    box-shadow: 0 2px 6px -2px rgb(154 119 31 / 0.4);
+  }
+  .lote-garantia {
+    display: inline-flex; align-items: center; gap: 0.25rem;
+    border-radius: 9999px; padding: 0.15rem 0.6rem;
+    font-size: 0.625rem; font-weight: 800;
+    background: rgb(5 150 105 / 0.1); border: 1px solid rgb(5 150 105 / 0.35);
+    color: #047857;
+  }
+  .dark .lote-garantia { color: #6ee7b7; background: rgb(5 150 105 / 0.14); }
+  .lote-steps {
+    display: flex; align-items: center; gap: 0.35rem;
+    list-style: none; margin: 0; padding: 0;
+  }
+  .lote-step { display: flex; align-items: center; gap: 0.35rem; }
+  .lote-step-num {
+    display: grid; place-items: center;
+    width: 1.5rem; height: 1.5rem; border-radius: 9999px;
+    font-size: 0.6875rem; font-weight: 900;
+    background: var(--surface-2); border: 1.5px solid var(--line); color: var(--ink-soft);
+    transition: all 0.2s ease;
+  }
+  .lote-step--feito .lote-step-num { background: linear-gradient(135deg, #059669, #34d399); border-color: #047857; color: #fff; }
+  .lote-step--atual .lote-step-num {
+    background: linear-gradient(135deg, #16233a, #3e587e); border-color: rgb(190 148 51 / 0.7); color: #ead79e;
+    animation: aurum-ai-pulso 2.2s ease-in-out infinite;
+  }
+  .lote-step-rot { font-size: 0.6875rem; font-weight: 800; color: var(--ink-soft); }
+  .lote-step--atual .lote-step-rot { color: var(--ink); }
+  .lote-step-linha { width: 1.25rem; height: 2px; border-radius: 9999px; background: var(--line); }
+  .lote-processando-cab { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
+  .lote-ia-ponto { display: inline-flex; gap: 3px; }
+  .lote-ia-ponto > span {
+    width: 6px; height: 6px; border-radius: 9999px;
+    background: linear-gradient(135deg, #be9433, #ead79e);
+    opacity: 0.3; animation: aurum-ai-ponto 1.2s ease-in-out infinite;
+  }
+  .lote-ia-ponto > span:nth-child(2) { animation-delay: 0.15s; }
+  .lote-ia-ponto > span:nth-child(3) { animation-delay: 0.3s; }
+  .lote-como-funciona .lote-mini {
+    border-radius: 0.8rem; border: 1px solid var(--line);
+    background: color-mix(in oklab, var(--surface-2) 88%, transparent);
+    padding: 0.6rem 0.75rem;
+    transition: border-color 0.18s ease, box-shadow 0.2s ease;
+  }
+  .lote-como-funciona .lote-mini:hover { border-color: var(--color-aurum-500); box-shadow: var(--shadow-card); }
+  .lote-stats { display: grid; gap: 0.6rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (min-width: 640px) { .lote-stats { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+  .lote-stat {
+    border-radius: 0.9rem; border: 1px solid var(--line); background: var(--surface-2);
+    padding: 0.65rem 0.75rem; display: grid; gap: 0.1rem; position: relative; overflow: hidden;
+    transition: transform 0.18s ease, box-shadow 0.22s ease, border-color 0.18s ease;
+  }
+  .lote-stat:hover { transform: translateY(-1px); box-shadow: 0 12px 28px -14px rgb(16 28 46 / 0.25); border-color: var(--color-aurum-500); }
+  .lote-stat::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--line); }
+  .lote-stat--ok::before { background: linear-gradient(180deg, #10b981, #6ee7b7); }
+  .lote-stat--ia::before { background: linear-gradient(180deg, #be9433, #ead79e); }
+  .lote-stat--warn::before { background: linear-gradient(180deg, #d97706, #fbbf24); }
+  .lote-stat--err::before { background: linear-gradient(180deg, #dc2626, #f87171); }
+  .lote-stat--ia { border-color: rgb(190 148 51 / 0.5); }
+  .lote-stat-icone { font-size: 1rem; line-height: 1; }
+  .lote-stat-num { font-size: 1.35rem; font-weight: 900; letter-spacing: -0.02em; animation: lote-pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1); }
+  @keyframes lote-pop { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: none; } }
+  .lote-stat-rot { font-size: 0.625rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
+  .lote-stat-sub { font-size: 0.625rem; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lote-toolbar .lote-busca { min-width: min(100%, 220px); flex: 1 1 220px; max-width: 300px; }
+  .lote-filtro {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    border-radius: 9999px; padding: 0.3rem 0.65rem;
+    font-size: 0.6875rem; font-weight: 800;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-soft);
+    cursor: pointer; transition: all 0.16s ease;
+  }
+  .lote-filtro:hover { border-color: var(--color-aurum-500); color: var(--ink); transform: translateY(-1px); }
+  .lote-filtro-num {
+    display: inline-grid; place-items: center; min-width: 1.25rem; height: 1.25rem; padding: 0 0.3rem;
+    border-radius: 9999px; font-size: 0.625rem; font-weight: 900;
+    background: color-mix(in oklab, var(--line) 70%, transparent);
+  }
+  .lote-filtro.is-ativo {
+    background: linear-gradient(135deg, #16233a, #2b3f63); color: #f7f3e8;
+    border-color: rgb(190 148 51 / 0.6);
+    box-shadow: 0 8px 18px -10px rgb(22 35 58 / 0.7);
+  }
+  .lote-filtro.is-ativo .lote-filtro-num { background: rgb(234 215 158 / 0.2); color: #ead79e; }
+  .lote-toolbar-dica { margin: 0; padding: 0 1rem 0.8rem; font-size: 0.6875rem; color: var(--ink-soft); }
+  .lote-tabela-rolagem { scrollbar-gutter: stable; }
+  .lote-linha { transition: background 0.14s ease; }
+  .lote-linha.is-aberta { background: color-mix(in oklab, var(--color-aurum-500) 6%, transparent); }
+  .lote-linha.precisa-revisao td:first-child { box-shadow: inset 3px 0 0 var(--color-aurum-500); }
+  .lote-expansor {
+    display: flex; align-items: flex-start; gap: 0.5rem; width: 100%;
+    background: transparent; border: 0; padding: 0; color: inherit; cursor: pointer; text-align: left;
+    border-radius: 0.5rem;
+  }
+  .lote-expansor:focus-visible { outline: 2px solid var(--color-aurum-600); outline-offset: 2px; }
+  .lote-chevron {
+    display: inline-grid; place-items: center; flex: 0 0 auto;
+    width: 1.35rem; height: 1.35rem; margin-top: 0.1rem; border-radius: 0.5rem;
+    background: var(--surface-2); border: 1px solid var(--line);
+    font-size: 0.7rem; color: var(--ink-soft);
+    transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1), background 0.16s ease, color 0.16s ease;
+  }
+  .lote-chevron.is-aberto { transform: rotate(90deg); background: linear-gradient(135deg, #16233a, #3e587e); color: #ead79e; border-color: rgb(190 148 51 / 0.6); }
+  .lote-expansao > td { background: color-mix(in oklab, var(--color-aurum-500) 5%, transparent); padding: 0; border-bottom: 1px solid var(--line); }
+  .lote-celula { border-radius: 0.7rem; padding: 0.35rem 0.5rem; transition: background 0.16s ease; }
+  .lote-celula--geral, .lote-celula--manual { background: rgb(254 243 199 / 0.6); border: 1px dashed rgb(217 119 6 / 0.5); }
+  .dark .lote-celula--geral, .dark .lote-celula--manual { background: rgb(190 148 51 / 0.08); }
+  .lote-ok { font-size: 0.625rem; font-weight: 900; color: #047857; background: rgb(5 150 105 / 0.12); border-radius: 9999px; padding: 0.05rem 0.4rem; }
+  .dark .lote-ok { color: #6ee7b7; }
+  .lote-sugere {
+    font-size: 0.625rem; font-weight: 900; white-space: nowrap;
+    background: linear-gradient(135deg, rgb(190 148 51 / 0.2), rgb(190 148 51 / 0.08));
+    border: 1px solid rgb(190 148 51 / 0.55); color: var(--color-brand-700);
+    border-radius: 9999px; padding: 0.05rem 0.45rem;
+  }
+  .dark .lote-sugere { color: var(--color-aurum-200); }
+  .lote-invalido { font-size: 0.6875rem; font-weight: 800; color: #b91c1c; }
+  .dark .lote-invalido { color: #fca5a5; }
+  .lote-divergente {
+    margin-top: 0.25rem; display: inline-block; font-size: 0.625rem; font-weight: 800;
+    background: rgb(220 38 38 / 0.1); border: 1px solid rgb(220 38 38 / 0.35); color: #b91c1c;
+    border-radius: 9999px; padding: 0.05rem 0.45rem;
+    animation: lote-pop 0.3s ease;
+  }
+  .dark .lote-divergente { color: #fca5a5; }
+  .lote-select { transition: border-color 0.16s ease, box-shadow 0.16s ease; }
+  .lote-select:focus { border-color: var(--color-aurum-500); box-shadow: 0 0 0 4px rgb(190 148 51 / 0.18); outline: none; }
+  .lote-ia { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; font-size: 0.6875rem; font-weight: 800; }
+  .lote-ia--ok { color: #047857; }
+  .dark .lote-ia--ok { color: #6ee7b7; }
+  .lote-ia--multi { color: var(--color-brand-700); }
+  .dark .lote-ia--multi { color: var(--color-aurum-200); }
+  .lote-ia--geral { color: #b45309; }
+  .dark .lote-ia--geral { color: #fcd34d; }
+  .lote-ia--erro { color: #b91c1c; }
+  .dark .lote-ia--erro { color: #fca5a5; }
+  .lote-ia--manual { color: #b45309; }
+  .lote-ia-trocou {
+    font-size: 0.625rem; font-weight: 800; border-radius: 9999px; padding: 0.05rem 0.45rem;
+    background: rgb(59 130 246 / 0.12); border: 1px solid rgb(59 130 246 / 0.4); color: #1d4ed8;
+  }
+  .dark .lote-ia-trocou { color: #93c5fd; }
+  .lote-ia-ok {
+    font-size: 0.625rem; font-weight: 800; border-radius: 9999px; padding: 0.05rem 0.45rem;
+    background: rgb(5 150 105 / 0.12); border: 1px solid rgb(5 150 105 / 0.35); color: #047857;
+  }
+  .dark .lote-ia-ok { color: #6ee7b7; }
+  .lote-analise {
+    margin: 0.6rem; border-radius: 0.9rem; border: 1px solid rgb(190 148 51 / 0.5);
+    background: linear-gradient(180deg, rgb(190 148 51 / 0.08), transparent 55%), var(--surface-2);
+    padding: 0.8rem;
+  }
+  .lote-analise-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+  .lote-analise-resumo { margin: 0.6rem 0 0; font-size: 0.75rem; line-height: 1.6; }
+  .lote-porque {
+    margin-top: 0.6rem; border-radius: 0.7rem; padding: 0.6rem 0.7rem; font-size: 0.75rem; line-height: 1.6;
+    background: rgb(239 246 255 / 0.8); border: 1px solid rgb(59 130 246 / 0.3);
+  }
+  .dark .lote-porque { background: rgb(59 130 246 / 0.08); }
+  .lote-porque-titulo { font-weight: 900; margin-bottom: 0.25rem; }
+  .lote-porque p { margin: 0; }
+  .lote-alertas { margin: 0.6rem 0 0; padding: 0; list-style: none; display: grid; gap: 0.35rem; }
+  .lote-alertas li {
+    font-size: 0.75rem; font-weight: 600; line-height: 1.55;
+    border-radius: 0.7rem; padding: 0.5rem 0.65rem;
+    background: rgb(220 38 38 / 0.07); border: 1px dashed rgb(220 38 38 / 0.45); color: #991b1b;
+  }
+  .dark .lote-alertas li { color: #fca5a5; }
+  .lote-opcoes { margin-top: 0.6rem; display: grid; gap: 0.5rem; }
+  @media (min-width: 720px) { .lote-opcoes { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); } }
+  .lote-opcao {
+    display: grid; gap: 0.4rem; cursor: pointer;
+    border-radius: 0.8rem; border: 1.5px solid var(--line); background: var(--surface-2);
+    padding: 0.6rem 0.7rem; font-size: 0.75rem; line-height: 1.6;
+    transition: border-color 0.16s ease, box-shadow 0.2s ease, transform 0.16s ease;
+  }
+  .lote-opcao:hover { border-color: var(--color-aurum-500); transform: translateY(-1px); box-shadow: var(--shadow-card); }
+  .lote-opcao.is-sugerida { border-style: dashed; border-color: rgb(190 148 51 / 0.7); }
+  .lote-opcao.is-selecionada {
+    border-color: var(--color-aurum-500); border-style: solid;
+    box-shadow: 0 0 0 3px rgb(190 148 51 / 0.18), var(--shadow-card);
+  }
+  .lote-opcao-topo { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+  .lote-opcao-radio { color: var(--color-aurum-600); font-size: 0.8rem; }
+  .dark .lote-opcao-radio { color: var(--color-aurum-300); }
+  .lote-opcao-selo {
+    font-size: 0.625rem; font-weight: 900; border-radius: 9999px; padding: 0.05rem 0.5rem;
+    background: linear-gradient(135deg, rgb(190 148 51 / 0.2), rgb(190 148 51 / 0.08));
+    border: 1px solid rgb(190 148 51 / 0.55); color: var(--color-brand-700);
+  }
+  .dark .lote-opcao-selo { color: var(--color-aurum-200); }
+  .lote-opcao-selo--sua { background: rgb(59 130 246 / 0.12); border-color: rgb(59 130 246 / 0.4); color: #1d4ed8; }
+  .dark .lote-opcao-selo--sua { color: #93c5fd; }
+  .lote-opcao-comentario { color: var(--ink); font-size: 0.75rem; }
+  .lote-opcao-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+  .lote-link {
+    background: transparent; border: 0; padding: 0; cursor: pointer;
+    font-size: 0.6875rem; font-weight: 800; text-decoration: underline;
+    color: var(--color-brand-600);
+  }
+  .dark .lote-link { color: var(--color-aurum-200); }
+  .lote-link--forte { text-decoration: none; border: 1px solid var(--line); border-radius: 9999px; padding: 0.15rem 0.6rem; }
+  .lote-link--forte:hover { border-color: var(--color-aurum-500); }
+  .lote-orientacao {
+    margin: 0.6rem 0 0; font-size: 0.75rem; line-height: 1.6;
+    border-radius: 0.7rem; padding: 0.55rem 0.7rem;
+    background: color-mix(in oklab, var(--surface-2) 85%, transparent);
+    border: 1px solid var(--line);
+  }
+  /* --- lote: revisão obrigatória antes de salvar --------------------------- */
+  .lote-confirm-nums { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .lote-confirm-num {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    border-radius: 9999px; padding: 0.25rem 0.7rem;
+    font-size: 0.6875rem; font-weight: 800;
+    background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-soft);
+  }
+  .lote-confirm-num--ok { background: rgb(5 150 105 / 0.1); border-color: rgb(5 150 105 / 0.4); color: #047857; }
+  .dark .lote-confirm-num--ok { color: #6ee7b7; }
+  .lote-confirm-num--fora { background: rgb(220 38 38 / 0.07); border-color: rgb(220 38 38 / 0.35); color: #b91c1c; }
+  .dark .lote-confirm-num--fora { color: #fca5a5; }
+  .lote-confirm-bloco {
+    border-radius: 0.8rem; border: 1px solid var(--line);
+    background: color-mix(in oklab, var(--surface-2) 90%, transparent);
+    padding: 0.65rem 0.75rem;
+  }
+  .lote-confirm-bloco--alerta { border-color: rgb(217 119 6 / 0.5); background: rgb(254 243 199 / 0.5); }
+  .dark .lote-confirm-bloco--alerta { background: rgb(190 148 51 / 0.08); }
+  .lote-confirm-titulo { font-size: 0.6875rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.45rem; }
+  .lote-confirm-lista { margin: 0; padding-left: 1rem; font-size: 0.75rem; line-height: 1.6; display: grid; gap: 0.25rem; }
+  .lote-confirm-mais { margin: 0.4rem 0 0; font-size: 0.6875rem; color: var(--ink-soft); }
+  .lote-confirm-vazio {
+    border-radius: 0.8rem; padding: 0.7rem 0.8rem; font-size: 0.75rem; font-weight: 600; line-height: 1.6;
+    background: rgb(220 38 38 / 0.07); border: 1px dashed rgb(220 38 38 / 0.45); color: #991b1b;
+  }
+  .dark .lote-confirm-vazio { color: #fca5a5; }
+  .lote-confirm-nota { margin: 0; font-size: 0.6875rem; color: var(--ink-soft); }
+  @media (prefers-reduced-motion: reduce) {
+    .lote-hero-faixa, .lote-step--atual .lote-step-num, .lote-ia-ponto > span,
+    .lote-stat-num, .lote-divergente {
+      animation: none;
+    }
+    .lote-stat:hover, .lote-opcao:hover, .lote-filtro:hover { transform: none; }
   }
 }

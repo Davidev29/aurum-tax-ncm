@@ -343,4 +343,105 @@ describe('Exportação de PDF', { timeout: 60000 }, () => {
     const todos = gerados.filter((x) => x.buf.subarray(0, 5).toString('latin1') === '%PDF-')
     expect(todos.length).toBeGreaterThanOrEqual(6)
   })
+
+  it('gera o PDF sob medida: só produtos + só crédito', async () => {
+    const { exportarNfePDF } = await import('@/infrastructure/exporters/relatorios')
+    const antes = gerados.length
+    await exportarNfePDF({
+      notas: [nota],
+      ranking: [fornecedor],
+      emitente,
+      empresaNome: empresa.razaoSocial,
+      periodo: '01/09/2025 a 30/09/2025',
+      opcoes: {
+        produtos: true, itensFluxo: false, lojas: false, simples: false,
+        direcao: 'todas', resumo: 'credito',
+      },
+    })
+
+    const g = gerados.slice(antes).find((x) => x.nome.startsWith('NFe_Apuracao_'))
+    expect(g, 'PDF sob medida foi gerado').toBeDefined()
+    expect(g!.buf.subarray(0, 5).toString('latin1')).toBe('%PDF-')
+    expect(g!.buf.length).toBeGreaterThan(1000)
+  })
+
+  it('gera o PDF sob medida: Simples + só vendas + só débito', async () => {
+    const { exportarNfePDF } = await import('@/infrastructure/exporters/relatorios')
+    const antes = gerados.length
+    await exportarNfePDF({
+      notas: [nota],
+      ranking: [fornecedor],
+      emitente,
+      empresaNome: empresa.razaoSocial,
+      periodo: '01/09/2025 a 30/09/2025',
+      opcoes: {
+        produtos: false, itensFluxo: false, lojas: false, simples: true,
+        direcao: 'saida', resumo: 'debito',
+      },
+    })
+
+    const g = gerados.slice(antes).find((x) => x.nome.startsWith('NFe_Apuracao_'))
+    expect(g, 'PDF sob medida foi gerado').toBeDefined()
+    expect(g!.buf.subarray(0, 5).toString('latin1')).toBe('%PDF-')
+    expect(g!.buf.length).toBeGreaterThan(1000)
+  })
+
+  it('relação completa de vendidos: top 5 + todos com NCM e regras', async () => {
+    const { exportarNfePDF } = await import('@/infrastructure/exporters/relatorios')
+    const itens = Array.from({ length: 7 }, (_, i) => ({
+      ...itemNfe,
+      numItem: String(i + 1),
+      codProd: `SKU-V${i + 1}`,
+      descricao: `Produto vendido ${i + 1}`,
+      ncm: `0201100${i}`,
+      vlTotal: 100 + i * 10,
+      totalTributos: 11.6 + i,
+    }))
+    const notaSaida: NotaXml = {
+      ...nota,
+      chave: 'chave-saida-7-itens',
+      direcao: 'saida',
+      itensAnalisados: itens,
+    }
+
+    for (const itensFluxo of [true, false]) {
+      const antes = gerados.length
+      await exportarNfePDF({
+        notas: [notaSaida],
+        ranking: [fornecedor],
+        emitente,
+        empresaNome: empresa.razaoSocial,
+        periodo: '01/09/2025 a 30/09/2025',
+        opcoes: {
+          produtos: true, itensFluxo, lojas: false, simples: false,
+          direcao: 'todas', resumo: 'completo',
+        },
+      })
+      const g = gerados.slice(antes).find((x) => x.nome.startsWith('NFe_Apuracao_'))
+      expect(g, `PDF com relação completa (itensFluxo=${itensFluxo}) foi gerado`).toBeDefined()
+      expect(g!.buf.subarray(0, 5).toString('latin1')).toBe('%PDF-')
+      expect(g!.buf.length).toBeGreaterThan(1000)
+    }
+  })
+
+  it('gera o PDF sob medida mínimo (nada marcado, só conta completa)', async () => {
+    const { exportarNfePDF } = await import('@/infrastructure/exporters/relatorios')
+    const antes = gerados.length
+    await exportarNfePDF({
+      notas: [nota],
+      ranking: [fornecedor],
+      emitente,
+      empresaNome: empresa.razaoSocial,
+      periodo: '01/09/2025 a 30/09/2025',
+      opcoes: {
+        produtos: false, itensFluxo: false, lojas: false, simples: false,
+        direcao: 'todas', resumo: 'completo',
+      },
+    })
+
+    const g = gerados.slice(antes).find((x) => x.nome.startsWith('NFe_Apuracao_'))
+    expect(g, 'PDF mínimo foi gerado').toBeDefined()
+    expect(g!.buf.subarray(0, 5).toString('latin1')).toBe('%PDF-')
+    expect(g!.buf.length).toBeGreaterThan(1000)
+  })
 })

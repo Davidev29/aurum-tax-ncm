@@ -16,6 +16,7 @@ import {
   statusBase,
   ARQUIVOS_BASE,
   type FormatoBase,
+  type OpcoesImportacao,
   type StatusBase,
 } from '@/infrastructure/base/base-service'
 import { garantirSementes } from './auxiliares'
@@ -66,8 +67,9 @@ export async function importarArquivoBase(
   json: unknown,
   nomeArquivo: string,
   onProgress: Progresso,
+  opcoes: OpcoesImportacao = {},
 ): Promise<FormatoBase> {
-  const formato = await importarBase(json, nomeArquivo, onProgress)
+  const formato = await importarBase(json, nomeArquivo, onProgress, opcoes)
   await semearAuxiliares()
   // Regra mudou → reaplica a vigente em tudo que já foi gravado.
   await revalidarSilencioso(onProgress)

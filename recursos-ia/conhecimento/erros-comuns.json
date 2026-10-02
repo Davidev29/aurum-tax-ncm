@@ -1,0 +1,24 @@
+{
+  "versao": "conhecimento-v1",
+  "descricao": "Erros comuns de digitação (já normalizados) → forma correta. Minerado de logs/consultas-ia.jsonl + feedback. Só correção ortográfica, nunca classificação.",
+  "correcoes": {
+    "parmezao": "parmesao",
+    "muzzarela": "mozarela",
+    "mussarela": "mozarela",
+    "notbook": "notebook",
+    "notebbok": "notebook",
+    "celula": "celular",
+    "smartfone": "smartphone",
+    "television": "televisao",
+    "teve": "televisao",
+    "xocolate": "chocolate",
+    "cerjeva": "cerveja",
+    "serueja": "cerveja",
+    "linguissa": "linguica",
+    "salsixa": "salsicha",
+    "presuntoo": "presunto",
+    "camizeta": "camiseta",
+    "tennis": "tenis",
+    "fraldaa": "fralda"
+  }
+}

@@ -33,6 +33,47 @@ export interface VersaoApp {
   empacotado: boolean
 }
 
+/** Candidato NCM oferecido ao worker IA (Top-5 RAG no fluxo real). */
+export interface CandidatoIa {
+  codigo: string
+  descricao: string
+  /** Pontuação do RAG (quando vindo de `ia:buscar`). */
+  score?: number
+}
+
+/** Decisão do worker IA (`NÃO SEI` sob baixa similaridade/confiança). */
+export interface ResultadoIaBridge {
+  ok: boolean
+  codigo: string
+  confianca: number
+  motivo: string
+  mock: boolean
+  candidatos?: CandidatoIa[]
+  ms?: number
+  ramMB?: number
+  /** Presente quando o main respondeu sem worker vivo (mock local). */
+  fallback?: string
+  erro?: string
+}
+
+/** Estado do worker IA (canal `ia:status`). */
+export interface StatusIaBridge {
+  pronto: boolean
+  mock: boolean
+  modo: 'desligado' | 'mock' | 'modelo'
+  modelPath: string | null
+  workerPath: string | null
+  pid: number | null
+  erro: string | null
+}
+
+/** Ponte da IA offline (worker `utilityProcess` via processo principal). */
+export interface IaBridge {
+  classificar(descricao: string, candidatos?: CandidatoIa[]): Promise<ResultadoIaBridge>
+  buscar(consulta: string, k?: number): Promise<{ ok: boolean; candidatos: CandidatoIa[]; erro?: string }>
+  status(): Promise<StatusIaBridge>
+}
+
 /** Resultado da verificação de atualizações (electron-updater). */
 export interface VerificacaoAtualizacao {
   disponivel: boolean
@@ -85,6 +126,12 @@ export interface AurumBridge {
   baixarAtualizacao(): Promise<{ ok: boolean }>
   instalarAtualizacao(): Promise<{ ok: boolean }>
   onAtualizacao(cb: (evento: EventoAtualizacao) => void): void
+  /**
+   * IA offline (Phase 6 / IA-05). Só existe no Electron — fora dele
+   * (`window.aurum` ausente) o fluxo usa o fallback local em
+   * `src/application/classificacao-ia.ts`.
+   */
+  ia: IaBridge
 }
 
 declare global {

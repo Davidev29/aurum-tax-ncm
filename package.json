@@ -14,6 +14,9 @@
   "main": "electron/dist/main.js",
   "scripts": {
     "base": "node scripts/build-base.mjs",
+    "ia:indice": "node scripts/gerar-indice-ia.mjs",
+    "ia:testar-indice": "node scripts/testar-indice-ia.mjs",
+    "ia:validar-conhecimento": "node scripts/validar-conhecimento.mjs",
     "predev": "node scripts/kill-port.mjs 5173 && npm run base && npm run build:electron",
     "dev": "concurrently -k -s first \"npm:dev:renderer\" \"npm:dev:electron\"",
     "prestart": "npm run build",
@@ -89,6 +92,42 @@
       "package.json"
     ],
     "asar": true,
+    "afterPack": "scripts/after-pack-ia.cjs",
+    "extraResources": [
+      {
+        "from": "recursos-ia/dados-brutos",
+        "to": "recursos-ia/dados-brutos",
+        "filter": ["**/*", "!**/.gitkeep"]
+      },
+      {
+        "from": "recursos-ia/indice-ncm/indice-lexical.json",
+        "to": "recursos-ia/indice-ncm/indice-lexical.json"
+      },
+      {
+        "from": "recursos-ia/indice-ncm/.manifest-hash",
+        "to": "recursos-ia/indice-ncm/.manifest-hash"
+      },
+      {
+        "from": "recursos-ia/indice-ncm/sinonimos-gerados.json",
+        "to": "recursos-ia/indice-ncm/sinonimos-gerados.json"
+      },
+      {
+        "from": "recursos-ia/conhecimento",
+        "to": "recursos-ia/conhecimento",
+        "filter": ["**/*.json", "**/*.md"]
+      },
+      {
+        "from": "recursos-ia/CHECKSUMS.txt",
+        "to": "recursos-ia/CHECKSUMS.txt"
+      }
+    ],
+    "asarUnpack": [
+      "**/node-llama-cpp/**",
+      "**/@xenova/transformers/**",
+      "**/vectra/**",
+      "electron/dist/ia-worker.cjs",
+      "electron/dist/caminhos-ia.cjs"
+    ],
     "win": {
       "target": [
         {

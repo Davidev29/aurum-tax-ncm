@@ -11,8 +11,10 @@ import {
   comporCaminho,
   normalizarBusca,
   pontuarCandidato,
-  tokenizarBusca,
+  pontuarCandidatoParcial,
+  tokensRelevantes,
 } from '@/domain/services/busca-texto'
+import { expandirSinonimoFiscal } from '@/domain/services/vocabulario'
 import { norm } from '@/domain/services/format'
 import { db } from '../db/schema'
 import { obterRevogacoesCff } from '../cff/cff-sync'
@@ -143,39 +145,87 @@ async function indiceBuscaTexto(): Promise<EntradaIndiceTexto[]> {
 /**
  * Busca NCMs pelo **nome do produto** (ex.: "queijo mozarela").
  *
+ * RAG em 2 fases (proativo, sem inventar NCM):
+ * - Fase 1 (precisão): AND estrito (`pontuarCandidato`) sobre tokens RELEVANTES
+ *   (sem stopwords: "ração PARA cães" vira ["racao","caes"]) + variação com
+ *   sinônimos ("boi"→"bovin", "celular"→"telefone");
+ * - Fase 2 (cobertura): OR tolerante (`pontuarCandidatoParcial`: radical,
+ *   prefixo, fuzzy) completa até o limite quando a fase 1 retorna pouco —
+ *   é isto que evita a lista vazia ("IA nunca sabe o que é nada").
+ *
  * - Somente NCMs de 8 dígitos (os únicos classificáveis);
  * - match sobre o caminho hierárquico completo (pais + item), insensível a
  *   acento/caixa — `0406.10.10` ("Mozarela") é achado por "queijo";
- * - vigentes antes dos extintos; genéricos ("Outros") por último;
+ * - vigentes antes dos extintos; com vínculo antes dos sem vínculo;
+ *   genéricos ("Outros") por último;
  * - enriquece com a contagem de vínculos da Reforma (`totalClassificacoes`).
  */
 export async function buscarNomenclaturaPorTexto(
   termo: unknown,
   limite = 30,
+  opts?: { tolerante?: boolean },
 ): Promise<ResultadoBuscaTexto[]> {
-  const tokens = tokenizarBusca(termo)
+  const tokens = tokensRelevantes(termo)
   if (!tokens.length) return []
   const indice = await indiceBuscaTexto()
+  const teto = Math.max(1, Math.min(limite, 100))
+  const tolerante = opts?.tolerante ?? true
 
-  const candidatos: ResultadoBuscaTexto[] = []
-  for (const e of indice) {
-    const score = pontuarCandidato(tokens, e.normPropria, e.normCaminho)
-    if (score < 0) continue
-    candidatos.push({
-      ...e.item,
-      caminho: e.caminho,
-      caminhoTexto: [...e.caminho, e.item.descricao].filter(Boolean).join(' › '),
-      totalClassificacoes: 0,
-      score,
-    })
+  // Variação com sinônimos (dia a dia → oficial). Ex.: "boi"→"bovin".
+  const expandidos = tokens.map((t) => expandirSinonimoFiscal(t) ?? t)
+  const tokensExpandidos = [...new Set(expandidos)].join(' ') !== tokens.join(' ') ? [...new Set(expandidos)] : null
+
+  const porCodigo = new Map<string, ResultadoBuscaTexto>()
+
+  function oferecer(item: (typeof indice)[number], score: number): void {
+    if (score < 0) return
+    const atual = porCodigo.get(item.item.codigo)
+    if (!atual || score > atual.score) {
+      porCodigo.set(item.item.codigo, {
+        ...item.item,
+        caminho: item.caminho,
+        caminhoTexto: [...item.caminho, item.item.descricao].filter(Boolean).join(' › '),
+        totalClassificacoes: 0,
+        score,
+      })
+    }
   }
+
+  // Fase 1 — AND estrito (tokens originais + expandidos).
+  for (const e of indice) {
+    oferecer(e, pontuarCandidato(tokens, e.normPropria, e.normCaminho))
+  }
+  if (tokensExpandidos) {
+    for (const e of indice) {
+      if (porCodigo.has(e.item.codigo)) continue
+      oferecer(e, pontuarCandidato(tokensExpandidos, e.normPropria, e.normCaminho))
+    }
+  }
+
+  // Fase 2 — OR tolerante até encher (só se a fase 1 deu pouco e quando
+  // permitido; o determinístico passa `tolerante: false` para não deixar match
+  // fraco virar "alta" — tolerância no determinístico é só via `consultasTolerantes`).
+  if (tolerante && porCodigo.size < teto) {
+    const listas: string[][] = [tokens]
+    if (tokensExpandidos) listas.push(tokensExpandidos)
+    for (const toks of listas) {
+      for (const e of indice) {
+        if (porCodigo.has(e.item.codigo)) continue
+        oferecer(e, pontuarCandidatoParcial(toks, e.normPropria, e.normCaminho))
+        if (porCodigo.size >= teto * 3) break
+      }
+      if (porCodigo.size >= teto * 3) break
+    }
+  }
+
+  const candidatos = [...porCodigo.values()]
   candidatos.sort((a, b) => {
     const vig = Number(Boolean(a.dataFim)) - Number(Boolean(b.dataFim))
     if (vig !== 0) return vig
     if (b.score !== a.score) return b.score - a.score
     return a.codigo.localeCompare(b.codigo)
   })
-  const pagina = candidatos.slice(0, Math.max(1, Math.min(limite, 100)))
+  const pagina = candidatos.slice(0, teto)
 
   // Enriquecimento fiscal: quantos vínculos cada NCM tem na base da Reforma.
   if (pagina.length) {

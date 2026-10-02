@@ -1,0 +1,12 @@
+{
+  "versao": "conhecimento-v1",
+  "descricao": "Overrides de peso do RAG lexical. Padrão: nomenclatura x3 > capítulo x2 > vínculo x1 > cClassTrib x0.5. Só ajustar após medir precisão em testar-indice-ia.mjs.",
+  "pesos": {
+    "nomenclatura": 3,
+    "capitulo": 2,
+    "descricao": 1,
+    "cClassTrib": 0.5,
+    "sinonimo": 0.85,
+    "pinDicionario": 500
+  }
+}

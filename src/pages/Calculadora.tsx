@@ -38,7 +38,7 @@ import {
 import { useProdutos, type ProdutoLinha } from '@/store/produtos'
 import { confirmar } from '@/store/dialogo'
 import { toast } from '@/store/ui'
-import { Btn, IconeBadge, Painel, Texto } from '@/ui/kit'
+import { Btn, IconeBadge, Painel, Texto, useAcaoTatil } from '@/ui/kit'
 
 /* ------------------------------------------------------------- alíquotas --- */
 
@@ -406,6 +406,8 @@ export function Calculadora() {
   const salvarNoProdutos = useCalculadora((s) => s.salvarNoProdutos)
   const revalidarItens = useCalculadora((s) => s.revalidarItens)
   const [revalidando, setRevalidando] = useState(false)
+  // Giro no botão de ação (grava os itens no cadastro de produtos).
+  const acaoSalvar = useAcaoTatil(salvarNoProdutos)
 
   const [modalAberto, setModalAberto] = useState(false)
   const [ncmInicial, setNcmInicial] = useState('')
@@ -547,7 +549,7 @@ export function Calculadora() {
             </Btn>
             <Btn
               className="flex-1"
-              disabled={revalidando}
+              carregando={revalidando}
               title="Re-resolve cada item no motor único (preserva sua escolha quando ainda válida)"
               onClick={() => {
                 if (!itens.length || revalidando) return
@@ -562,10 +564,15 @@ export function Calculadora() {
                   .finally(() => setRevalidando(false))
               }}
             >
-              {revalidando ? '⋯' : '🔄 Revalidar'}
+              {revalidando ? 'Revalidando…' : '🔄 Revalidar'}
             </Btn>
-            <Btn variante="primary" className="flex-[2]" onClick={() => void salvarNoProdutos()}>
-              Salvar no produto
+            <Btn
+              variante="primary"
+              className="flex-[2]"
+              carregando={acaoSalvar.carregando}
+              onClick={acaoSalvar.executar}
+            >
+              {acaoSalvar.carregando ? 'Salvando…' : 'Salvar no produto'}
             </Btn>
           </div>
         </div>

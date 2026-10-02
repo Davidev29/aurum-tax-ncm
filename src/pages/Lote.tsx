@@ -1,28 +1,60 @@
 /**
- * Tela **Classificação em lote** (SPEC §6).
+ * Tela **Classificação em lote** (SPEC §6) — com Aurum AI assistida.
  *
- * Envio de CSV/XLSX, resolução da classificação linha a linha, troca manual
- * em NCMs ambíguos e gravação em massa (upsert por SKU).
+ * Fluxo 1 · 2 · 3:
+ * 1. Enviar CSV/XLSX (COD/SKU, NOME DO PRODUTO, NCM, CFOP, CST, PIS, COFINS);
+ * 2. Revisar com a IA — nome + NCM = tributação provável. Com 1 opção a IA
+ *    confirma; com N opções ela explica por que há N
+ *    e pré-seleciona a mais provável — a decisão final é do usuário;
+ * 3. Salvar todos como produtos (upsert por SKU).
  *
- * Paridade com a v1:
- * - colunas aceitas: COD/SKU, NOME DO PRODUTO, NCM, CFOP, CST, PIS, COFINS;
- * - tabela renderiza no máximo `ROWS_LIMIT` linhas;
- * - "Salvar todos" grava somente linhas com SKU **e** classificação escolhida.
+ * Paridade v1: "Salvar todos" grava só linhas com SKU **e** classificação.
+ * Anti-alucinação: todo comentário da IA vem de `analiseIA` (template sobre
+ * CST/cClassTrib/redução/anexo/base legal oficiais) — nenhum artigo é inferido.
+ * Garantia de revisão: nada é gravado sem o modal "Revisar antes de salvar"
+ * (o que será salvo × o que ficará de fora + aceite explícito do usuário).
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ROWS_LIMIT } from '@/domain/constants'
+import { NOME_IA } from '@/domain/aurum-ai'
 import { EMITENTE_PADRAO } from '@/domain/entities'
 import { fmtNcm } from '@/domain/services/format'
+import type { AnaliseLoteIA } from '@/domain/services/analise-lote-ia'
 import { baixarModeloLote, exportarLotePDF } from '@/infrastructure/exporters/relatorios'
 import { registrarExportador } from '@/infrastructure/pdf/menu-exportacao'
 import type { LinhaLote } from '@/infrastructure/exporters/relatorios'
 import type { ItemLote, ResumoLote } from '@/infrastructure/parsers/lote'
+import { dividirLoteParaSalvamento, origemLinhaLote } from '@/domain/services/salvamento-lote'
 import { useLote } from '@/store/lote'
 import { useSessao } from '@/store/sessao'
 import { useUi, toast } from '@/store/ui'
-import { ZonaArquivo, AvisoDiferimento, AvisoManual, AvisoNcmExtinto } from '@/ui/cartoes'
-import { BarraProgresso, Btn, Modal, Painel, Pill } from '@/ui/kit'
-import { Campo, Olho, Secao } from '@/ui/detalhes'
+import {
+  AvisoDiferimento,
+  AvisoManual,
+  AvisoNcmExtinto,
+  BotaoVerLegislacao,
+  ZonaArquivo,
+} from '@/ui/cartoes'
+import {
+  AtribuicaoAurumAI,
+  BarraConfiancaAurumAI,
+  FontesAurumAI,
+  MolduraAurumAI,
+  SeloAurumAI,
+} from '@/ui/aurum-ai'
+import { BarraProgresso, Btn, Check, Modal, Painel, Texto } from '@/ui/kit'
+import { Campo, Olho, Secao, SecaoInformacoesAdicionais } from '@/ui/detalhes'
+
+type FiltroLote = 'todos' | 'multiplas' | 'regra-geral' | 'divergentes' | 'invalidos' | 'unicas'
+
+const FILTROS: { id: FiltroLote; rotulo: string; dica: string }[] = [
+  { id: 'todos', rotulo: 'Todos', dica: 'Todas as linhas processadas' },
+  { id: 'multiplas', rotulo: 'Escolha assistida', dica: 'NCM com 2+ tributações — a IA sugere a mais provável' },
+  { id: 'regra-geral', rotulo: 'Regra geral', dica: 'Sem vínculo oficial — tributação integral vigente' },
+  { id: 'divergentes', rotulo: 'Revisar nome × NCM', dica: 'O nome não conversa com o NCM — confira o código' },
+  { id: 'invalidos', rotulo: 'Inválidos', dica: 'NCM fora do padrão de 8 dígitos' },
+  { id: 'unicas', rotulo: 'Únicas', dica: 'Tributação única confirmada' },
+]
 
 export function Lote() {
   const resumo = useLote((s) => s.resumo)
@@ -36,19 +68,31 @@ export function Lote() {
   const emitente = useSessao((s) => s.emitente)
   const trocarView = useUi((s) => s.trocarView)
   const [salvando, setSalvando] = useState(false)
+  // PDF do lote: giro no botão enquanto o pdfMake monta o documento.
+  const [gerandoPdf, setGerandoPdf] = useState(false)
+  const [busca, setBusca] = useState('')
+  const [filtro, setFiltro] = useState<FiltroLote>('todos')
+  const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
+  // Garantia de revisão: o salvamento só acontece dentro do modal de
+  // confirmação — abrir a tabela não salva nada sozinho.
+  const [revisaoAberta, setRevisaoAberta] = useState(false)
 
-  const aoSalvar = async () => {
+  const aoConfirmarSalvar = async () => {
     setSalvando(true)
     try {
       const ok = await salvarTodos()
-      if (ok) trocarView('produtos')
+      if (ok) {
+        setRevisaoAberta(false)
+        trocarView('produtos')
+      }
     } finally {
       setSalvando(false)
     }
   }
 
   const exportarPdf = async () => {
-    if (!resumo) return
+    if (!resumo || gerandoPdf) return
+    setGerandoPdf(true)
     try {
       await exportarLotePDF(
         resumo.itens.map(paraLinhaLote),
@@ -58,37 +102,90 @@ export function Lote() {
       toast('PDF do lote gerado.', 'ok')
     } catch (e) {
       toast(`Erro ao gerar PDF: ${e instanceof Error ? e.message : String(e)}`, 'err')
+    } finally {
+      setGerandoPdf(false)
     }
   }
 
-  // Menu nativo (Ctrl+E): registra o exportador de PDF desta view.
   useEffect(() => registrarExportador('lote', () => void exportarPdf()), [exportarPdf])
+  // Nova análise: reseta busca/filtro/expansão para o usuário rever do zero.
+  useEffect(() => {
+    if (resumo) {
+      setBusca('')
+      setFiltro(resumo.ambiguos > 0 ? 'multiplas' : 'todos')
+      setExpandidos(new Set())
+    }
+  }, [resumo?.nomeArquivo]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const etapa = !resumo ? 1 : processando ? 1 : 3
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <Painel>
-        <div className="border-b border-slate-100 p-5 dark:border-slate-800">
-          <h2 className="flex items-center gap-2 text-base font-bold">
-            <span className="text-lg">📁</span> Classificação em lote
-          </h2>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Envie CSV/Excel com colunas COD/SKU, NOME DO PRODUTO, NCM, CFOP, CST, PIS, COFINS.
-          </p>
+    <div className="lote mx-auto max-w-6xl space-y-5">
+      {/* ------------------------------------------------ HERO + stepper -- */}
+      <Painel className="lote-hero overflow-hidden">
+        <div className="lote-hero-faixa" aria-hidden="true" />
+        <div className="flex flex-wrap items-start gap-4 p-5 sm:p-6">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="lote-hero-icone" aria-hidden="true">📁</span>
+              <h2 className="text-base font-black tracking-tight sm:text-lg">
+                Classificação em lote
+              </h2>
+              <SeloAurumAI variante="compacto" titulo={`${NOME_IA} assistida: nome + NCM = tributação provável, sempre validada pela base oficial`} />
+            </div>
+            <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+              Envie CSV/Excel com colunas COD/SKU, NOME DO PRODUTO, NCM, CFOP, CST, PIS, COFINS.
+              A {NOME_IA} lê o <strong>nome + NCM</strong> de cada linha: com 1 tributação ela confirma;
+              com 2+ ela explica <strong>por que há várias</strong> e
+              <strong> pré-seleciona a mais provável</strong> — você confere e confirma.
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <AtribuicaoAurumAI detalhe="nome + NCM = tributação provável" />
+              <span className="lote-garantia" title="A Aurum AI roda 100% local neste computador: lê o nome + NCM e sugere entre as tributações oficiais da base do sistema.">
+                💻 Aurum AI — sua inteligência artificial rodando local
+              </span>
+            </div>
+          </div>
+          <ol className="lote-steps" aria-label="Etapas da importação em lote">
+            {['Enviar', 'Revisar IA', 'Salvar'].map((rot, i) => {
+              const n = i + 1
+              const estado = n < etapa || (resumo && n === 2) ? 'feito' : n === etapa ? 'atual' : 'todo'
+              return (
+                <li key={rot} className={`lote-step lote-step--${estado}`}>
+                  <span className="lote-step-num" aria-hidden="true">
+                    {estado === 'feito' ? '✓' : n}
+                  </span>
+                  <span className="lote-step-rot">{rot}</span>
+                  {i < 2 ? <span className="lote-step-linha" aria-hidden="true" /> : null}
+                </li>
+              )
+            })}
+          </ol>
         </div>
+      </Painel>
 
+      {/* ---------------------------------------------------------- envio -- */}
+      <Painel className="animate-fade-up">
         <div className="p-5">
           <ZonaArquivo
             onArquivo={(f) => void processar(f)}
             accept=".csv,.xlsx,.xls,.txt"
-            rotulo="Arraste o arquivo"
-            dica="Aceita CSV, XLSX e XLS"
+            rotulo="Arraste a planilha"
+            dica="Aceita CSV, XLSX e XLS · o NCM manda, o nome assiste"
             desabilitada={processando}
             icone="📄"
           />
 
           {processando ? (
-            <div className="mt-4">
-              <BarraProgresso pct={progresso} etapa="Processando arquivo…" />
+            <div className="lote-processando mt-4" role="status" aria-live="polite">
+              <div className="lote-processando-cab">
+                <span className="lote-ia-ponto" aria-hidden="true"><span /><span /><span /></span>
+                <span className="text-xs font-bold">
+                  {progresso < 40 ? 'Lendo planilha…' : progresso < 75 ? 'Resolvendo NCMs na base oficial…' : `${NOME_IA} analisando nome × tributação…`}
+                </span>
+                <span className="num ml-auto font-mono text-[11px] text-slate-500">{progresso}%</span>
+              </div>
+              <BarraProgresso pct={progresso} etapa="Nada é salvo antes da sua revisão — pode acompanhar." />
             </div>
           ) : null}
 
@@ -98,6 +195,9 @@ export function Lote() {
               <Btn
                 onClick={() => {
                   limpar()
+                  setBusca('')
+                  setFiltro('todos')
+                  setExpandidos(new Set())
                   toast('Resultados do lote limpos.', 'warn')
                 }}
               >
@@ -111,109 +211,750 @@ export function Lote() {
               {erro}
             </div>
           ) : null}
+
+          {!resumo && !processando && !erro ? (
+            <div className="lote-como-funciona mt-4 grid gap-2 sm:grid-cols-3">
+              {[
+                { t: '1 · NCM manda', d: 'Cada linha é resolvida pelo motor único (vínculos oficiais ou regra geral).' },
+                { t: '2 · Nome assiste', d: 'Com 2+ opções, a IA ordena pela aderência do nome e explica cada base legal.' },
+                { t: '3 · Você decide', d: 'A sugestão já vem pré-selecionada — troque se a operação pedir e salve.' },
+              ].map((c) => (
+                <div key={c.t} className="lote-mini">
+                  <div className="text-[11px] font-black">{c.t}</div>
+                  <div className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{c.d}</div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </Painel>
 
       {resumo ? (
-        <Painel className="animate-fade-up overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-4 dark:border-slate-800">
-            <Pill>📄 {resumo.nomeArquivo}</Pill>
-            <Pill>{resumo.itens.length} linhas</Pill>
-            <Pill cor="emerald">{resumo.comClassificacao} classificadas</Pill>
-            {resumo.regraGeral ? <Pill cor="amber">{resumo.regraGeral} em regra geral</Pill> : null}
-            {'manuais' in resumo && (resumo as { manuais?: number }).manuais ? (
-              <Pill cor="amber">✋ {(resumo as { manuais?: number }).manuais} manuais · usuário</Pill>
-            ) : null}
-            {resumo.ambiguos ? (
-              <Pill cor="amber">{resumo.ambiguos} com múltiplas opções</Pill>
-            ) : null}
-            {resumo.semNcm ? <Pill cor="red">{resumo.semNcm} inválidos</Pill> : null}
-            <div className="flex-1" />
-            <Btn onClick={() => void exportarPdf()}>📕 PDF</Btn>
-            <Btn variante="primary" disabled={salvando} onClick={() => void aoSalvar()}>
-              💾 Salvar todos como produtos
-            </Btn>
-          </div>
-
-          <TabelaLote resumo={resumo} />
-        </Painel>
+        <section className="animate-fade-up space-y-4" aria-label="Resultados da análise em lote">
+          <ResumoHero resumo={resumo} />
+          <BarraFerramentas
+            resumo={resumo}
+            busca={busca}
+            onBusca={setBusca}
+            filtro={filtro}
+            onFiltro={setFiltro}
+            onExportar={() => void exportarPdf()}
+            exportandoPdf={gerandoPdf}
+            onSalvar={() => setRevisaoAberta(true)}
+            salvando={salvando}
+          />
+          <TabelaLote
+            resumo={resumo}
+            busca={busca}
+            filtro={filtro}
+            expandidos={expandidos}
+            onAlternar={(idx) =>
+              setExpandidos((ant) => {
+                const nx = new Set(ant)
+                if (nx.has(idx)) nx.delete(idx)
+                else nx.add(idx)
+                return nx
+              })
+            }
+          />
+          <ModalRevisaoSalvamento
+            aberto={revisaoAberta}
+            resumo={resumo}
+            salvando={salvando}
+            onFechar={() => !salvando && setRevisaoAberta(false)}
+            onConfirmar={() => void aoConfirmarSalvar()}
+          />
+        </section>
       ) : null}
     </div>
   )
 }
 
-/* --------------------------------------------------------------- tabela ---- */
+/* ---------------------------------------------------------- resumo hero -- */
 
-function TabelaLote({ resumo }: { resumo: ResumoLote }) {
-  const visiveis = resumo.itens.slice(0, ROWS_LIMIT)
-  // 👁 Detalhe compacto: regime anterior + Reforma + valores do item.
-  const [detalhe, setDetalhe] = useState<ItemLote | null>(null)
+function ResumoHero({ resumo }: { resumo: ResumoLote }) {
+  const divergentes = resumo.divergentes ?? resumo.itens.filter((i) => i.analiseIA?.divergenciaNome).length
+  const assistidas = resumo.assistidas ?? resumo.itens.filter((i) => (i.analiseIA?.confianca ?? 0) >= 0.6 && i.analiseIA?.situacao === 'multipla').length
+  const unicas = resumo.unicas ?? resumo.itens.filter((i) => i.analiseIA?.situacao === 'unica').length
+  const cards = [
+    { rot: 'Linhas', val: resumo.itens.length, sub: resumo.nomeArquivo, tom: '' as const, icone: '📄' },
+    { rot: 'Classificadas', val: resumo.comClassificacao, sub: `${unicas} únicas confirmadas`, tom: 'ok' as const, icone: '✅' },
+    { rot: `✨ ${NOME_IA} sugere`, val: resumo.ambiguos, sub: `${assistidas} com sugestão forte`, tom: 'ia' as const, icone: '✨' },
+    { rot: 'Regra geral', val: resumo.regraGeral, sub: 'tributação integral vigente', tom: 'warn' as const, icone: '⚡' },
+    { rot: 'Revisar', val: divergentes + resumo.semNcm, sub: `${divergentes} nome × NCM · ${resumo.semNcm} inválidos`, tom: 'err' as const, icone: '👁' },
+  ]
+  return (
+    <div className="lote-stats" role="status" aria-live="polite">
+      {cards.map((c, i) => (
+        <div
+          key={c.rot}
+          className={`lote-stat lote-stat--${c.tom || 'base'} animate-fade-up`}
+          style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
+          title={c.sub}
+        >
+          <span className="lote-stat-icone" aria-hidden="true">{c.icone}</span>
+          <span className="lote-stat-num num">{c.val}</span>
+          <span className="lote-stat-rot">{c.rot}</span>
+          <span className="lote-stat-sub">{c.sub}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------- ferramentas -- */
+
+function BarraFerramentas({
+  resumo,
+  busca,
+  onBusca,
+  filtro,
+  onFiltro,
+  onExportar,
+  exportandoPdf,
+  onSalvar,
+  salvando,
+}: {
+  resumo: ResumoLote
+  busca: string
+  onBusca: (v: string) => void
+  filtro: FiltroLote
+  onFiltro: (f: FiltroLote) => void
+  onExportar: () => void
+  exportandoPdf: boolean
+  onSalvar: () => void
+  salvando: boolean
+}) {
+  const cont = useMemo(() => contarFiltros(resumo), [resumo])
+  return (
+    <Painel className="lote-toolbar">
+      <div className="flex flex-wrap items-center gap-2 p-4">
+        <div className="lote-busca">
+          <Texto
+            value={busca}
+            onChange={(e) => onBusca(e.target.value)}
+            placeholder="🔍 Buscar SKU, produto ou NCM…"
+            aria-label="Buscar por SKU, produto ou NCM"
+            className="field-sm"
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filtrar linhas do lote">
+          {FILTROS.map((f) => {
+            const n = cont[f.id] ?? 0
+            const ativo = filtro === f.id
+            return (
+              <button
+                key={f.id}
+                type="button"
+                role="tab"
+                aria-selected={ativo}
+                title={f.dica}
+                onClick={() => onFiltro(f.id)}
+                className={`lote-filtro${ativo ? ' is-ativo' : ''}`}
+              >
+                {f.rotulo}
+                <span className="lote-filtro-num num">{n}</span>
+              </button>
+            )
+          })}
+        </div>
+        <div className="flex flex-1 flex-wrap justify-end gap-2">
+          <Btn tam="sm" carregando={exportandoPdf} onClick={onExportar}>
+            {exportandoPdf ? 'Gerando…' : '📕 PDF'}
+          </Btn>
+          <Btn variante="primary" tam="sm" carregando={salvando} onClick={onSalvar} title="Abre a revisão completa antes de salvar — nada é gravado sem o seu aceite">
+            {salvando ? 'Salvando…' : '💾 Revisar e salvar…'}
+          </Btn>
+        </div>
+      </div>
+      <p className="lote-toolbar-dica">
+        ✨ A sugestão da {NOME_IA} já vem <strong>pré-selecionada</strong> em cada linha — abra a linha, leia o porquê e confirme ou troque. <strong>Nada é salvo sem a sua revisão e aceite no “Revisar e salvar…”.</strong>
+      </p>
+    </Painel>
+  )
+}
+
+/* --------------------------------------------- revisão antes de salvar -- */
+
+/**
+ * Modal obrigatório "Revisar antes de salvar".
+ *
+ * Mostra exatamente o que será gravado × o que ficará de fora (com motivo
+ * por linha ignorada) + alertas (nome × NCM, NCM extinto, regra geral,
+ * sugestão trocada) e só libera o botão após o aceite explícito.
+ * Sem aceite, `salvarTodos` nunca é chamado.
+ */
+function ModalRevisaoSalvamento({
+  aberto,
+  resumo,
+  salvando,
+  onFechar,
+  onConfirmar,
+}: {
+  aberto: boolean
+  resumo: ResumoLote
+  salvando: boolean
+  onFechar: () => void
+  onConfirmar: () => void
+}) {
+  const [aceite, setAceite] = useState(false)
+  useEffect(() => {
+    if (aberto) setAceite(false)
+  }, [aberto, resumo.nomeArquivo])
+
+  const { gravaveis, ignorados } = useMemo(
+    () => dividirLoteParaSalvamento(resumo.itens),
+    [resumo],
+  )
+  const alertas = useMemo(() => {
+    const divergentes = gravaveis.filter((i) => i.analiseIA?.divergenciaNome)
+    const extintos = gravaveis.filter((i) => i.nomenclatura?.dataFim)
+    const regraGeral = gravaveis.filter((i) => i.regraGeral)
+    const trocadas = gravaveis.filter((i) => {
+      const a = i.analiseIA
+      if (!a || a.situacao !== 'multipla') return false
+      const idx = Math.max(
+        0,
+        i.classificacoes.findIndex((x) => x.id === i.escolhida?.id && x.cst === i.escolhida?.cst),
+      )
+      return idx !== a.maisProvavelIndice
+    })
+    return { divergentes, extintos, regraGeral, trocadas }
+  }, [gravaveis])
+
+  const preview = gravaveis.slice(0, 8)
+  const ignoradosPreview = ignorados.slice(0, 8)
+
+  return (
+    <Modal
+      aberto={aberto}
+      onFechar={onFechar}
+      titulo="Revisar antes de salvar"
+      subtitulo={`${resumo.nomeArquivo} · ${gravaveis.length} para salvar · ${ignorados.length} ficarão de fora`}
+      largura="max-w-2xl"
+      rodape={
+        <>
+          <Btn tam="sm" onClick={onFechar} disabled={salvando}>
+            Voltar e revisar
+          </Btn>
+          <Btn
+            variante="primary"
+            tam="sm"
+            disabled={!aceite || !gravaveis.length}
+            carregando={salvando}
+            onClick={onConfirmar}
+            title={
+              !gravaveis.length
+                ? 'Nada para salvar — todas as linhas estão sem SKU ou sem classificação'
+                : !aceite
+                  ? 'Marque o aceite abaixo após revisar os dados'
+                  : `Confirmar e salvar ${gravaveis.length} produtos`
+            }
+          >
+            {salvando ? 'Salvando…' : `✓ Confirmar e salvar ${gravaveis.length}`}
+          </Btn>
+        </>
+      }
+    >
+      <div className="lote-confirm space-y-3">
+        <div className="lote-confirm-nums" role="status" aria-live="polite">
+          <span className="lote-confirm-num lote-confirm-num--ok">✓ {gravaveis.length} serão salvos</span>
+          <span className="lote-confirm-num lote-confirm-num--fora">{ignorados.length} ficarão de fora</span>
+          <span className="lote-confirm-num">{resumo.itens.length} linhas no arquivo</span>
+        </div>
+
+        {!gravaveis.length ? (
+          <p className="lote-confirm-vazio">
+            ⛔ Nada para salvar: todas as linhas estão sem SKU ou sem classificação válida.
+            Corrija a planilha (COD/SKU + NCM de 8 dígitos) e reimporte.
+          </p>
+        ) : (
+          <div className="lote-confirm-bloco">
+            <div className="lote-confirm-titulo">📦 O que será salvo ({gravaveis.length})</div>
+            <div className="max-h-56 overflow-auto rounded-xl border border-slate-200 dark:border-slate-700">
+              <table className="tbl w-full">
+                <thead>
+                  <tr>
+                    <th>SKU</th>
+                    <th>Produto</th>
+                    <th>NCM</th>
+                    <th>CST · cClassTrib</th>
+                    <th>Origem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.map((it) => (
+                    <tr key={`${it.indice}-${it.codigo}`}>
+                      <td className="whitespace-nowrap font-mono font-bold">{it.codigo}</td>
+                      <td className="max-w-[180px] truncate" title={it.nome}>{it.nome || '—'}</td>
+                      <td className="whitespace-nowrap font-mono">{fmtNcm(it.ncm)}</td>
+                      <td className="whitespace-nowrap font-mono text-[11px]">
+                        {it.escolhida?.cst} · {it.escolhida?.cClassTrib}
+                      </td>
+                      <td className="text-[11px]">{origemLinhaLote(it)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {gravaveis.length > preview.length ? (
+              <p className="lote-confirm-mais">…e mais {gravaveis.length - preview.length} linhas com o mesmo padrão (SKU + classificação exibida).</p>
+            ) : null}
+          </div>
+        )}
+
+        {ignorados.length ? (
+          <div className="lote-confirm-bloco">
+            <div className="lote-confirm-titulo">🚫 O que ficará de fora ({ignorados.length}) — nada será gravado destas linhas</div>
+            <ul className="lote-confirm-lista">
+              {ignoradosPreview.map(({ item, motivo }) => (
+                <li key={`${item.indice}-${item.codigo || 'sem-sku'}`}>
+                  <span className="font-mono font-bold">{item.codigo || `(linha ${item.indice})`}</span>
+                  {' · '}{item.nome ? `${item.nome.slice(0, 50)} · ` : ''}{motivo}
+                </li>
+              ))}
+            </ul>
+            {ignorados.length > ignoradosPreview.length ? (
+              <p className="lote-confirm-mais">…e mais {ignorados.length - ignoradosPreview.length} linhas ignoradas pelo mesmo motivo.</p>
+            ) : null}
+          </div>
+        ) : null}
+
+        {alertas.divergentes.length || alertas.extintos.length || alertas.regraGeral.length || alertas.trocadas.length ? (
+          <div className="lote-confirm-bloco lote-confirm-bloco--alerta">
+            <div className="lote-confirm-titulo">⚠ Pontos de atenção antes de confirmar</div>
+            <ul className="lote-confirm-lista">
+              {alertas.divergentes.length ? (
+                <li>👁 {alertas.divergentes.length} com nome × NCM divergente — confira se o NCM está correto (o NCM manda na tributação).</li>
+              ) : null}
+              {alertas.extintos.length ? (
+                <li>⛔ {alertas.extintos.length} com NCM extinto — a tributação é só referência histórica, confira o NCM substituto.</li>
+              ) : null}
+              {alertas.regraGeral.length ? (
+                <li>⚡ {alertas.regraGeral.length} em regra geral (tributação integral vigente — sem vínculo oficial).</li>
+              ) : null}
+              {alertas.trocadas.length ? (
+                <li>✨ {alertas.trocadas.length} onde você trocou a sugestão da {NOME_IA} — vale a sua escolha.</li>
+              ) : null}
+            </ul>
+          </div>
+        ) : null}
+
+        <Check
+          label={`Revisei os ${gravaveis.length} produtos acima (CST · cClassTrib · origem) e autorizo salvar — ${ignorados.length} linhas ficarão de fora.`}
+          checked={aceite}
+          onChange={(e) => setAceite(e.target.checked)}
+        />
+        <p className="lote-confirm-nota">
+          Upsert por SKU: se o SKU já existir no cadastro, ele será atualizado com a classificação exibida.
+        </p>
+      </div>
+    </Modal>
+  )
+}
+
+function contarFiltros(resumo: ResumoLote): Record<FiltroLote, number> {
+  const itens = resumo.itens
+  return {
+    todos: itens.length,
+    multiplas: itens.filter((i) => i.classificacoes.length > 1).length,
+    'regra-geral': itens.filter((i) => i.regraGeral).length,
+    divergentes: itens.filter((i) => i.analiseIA?.divergenciaNome).length,
+    invalidos: itens.filter((i) => i.ncm.length !== 8).length,
+    unicas: itens.filter((i) => i.analiseIA?.situacao === 'unica').length,
+  }
+}
+
+/* --------------------------------------------------------------- tabela -- */
+
+function TabelaLote({
+  resumo,
+  busca,
+  filtro,
+  expandidos,
+  onAlternar,
+}: {
+  resumo: ResumoLote
+  busca: string
+  filtro: FiltroLote
+  expandidos: Set<number>
+  onAlternar: (indiceOriginal: number) => void
+}) {
+  const [detalhe, setDetalhe] = useState<{ item: ItemLote; indiceOriginal: number } | null>(null)
+
+  const linhas = useMemo(() => {
+    const q = busca.trim().toLowerCase()
+    return resumo.itens
+      .map((item, indiceOriginal) => ({ item, indiceOriginal }))
+      .filter(({ item }) => {
+        if (filtro === 'multiplas' && item.classificacoes.length <= 1) return false
+        if (filtro === 'regra-geral' && !item.regraGeral) return false
+        if (filtro === 'divergentes' && !item.analiseIA?.divergenciaNome) return false
+        if (filtro === 'invalidos' && item.ncm.length === 8) return false
+        if (filtro === 'unicas' && item.analiseIA?.situacao !== 'unica') return false
+        if (!q) return true
+        const alvo = `${item.codigo} ${item.nome} ${item.ncm}`.toLowerCase()
+        return alvo.includes(q)
+      })
+  }, [resumo, busca, filtro])
+
+  const visiveis = linhas.slice(0, ROWS_LIMIT)
+
+  if (!linhas.length) {
+    return (
+      <Painel className="p-8 text-center">
+        <div className="text-3xl opacity-60" aria-hidden="true">🔍</div>
+        <div className="mt-2 text-sm font-bold">Nenhuma linha neste filtro</div>
+        <p className="mt-1 text-xs text-slate-500">
+          Ajuste a busca ou escolha outro filtro — a análise completa continua salva acima.
+        </p>
+      </Painel>
+    )
+  }
 
   return (
     <>
-    <div className="max-h-[60vh] overflow-auto">
-      <table className="tbl w-full">
-        <thead>
-          <tr>
-            <th>SKU</th>
-            <th>Nome</th>
-            <th>NCM</th>
-            <th>Reforma</th>
-            <th className="th-r">👁</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visiveis.map((it, i) => (
-            <LinhaTabela key={`${it.indice}-${i}`} item={it} indice={i} onDetalhe={() => setDetalhe(it)} />
-          ))}
-          {resumo.itens.length > ROWS_LIMIT ? (
-            <tr>
-              <td colSpan={5} className="px-3 py-3 text-center text-[11px] text-slate-500">
-                Exibindo as primeiras {ROWS_LIMIT} de {resumo.itens.length} linhas. 👁 abre CFOP · CST · PIS · COFINS.
-              </td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
-    </div>
-    <ModalLoteDetalhe item={detalhe} onFechar={() => setDetalhe(null)} />
+      <Painel className="lote-tabela overflow-hidden">
+        <div className="lote-tabela-rolagem max-h-[62vh] overflow-auto">
+          <table className="tbl lote-tbl w-full">
+            <thead>
+              <tr>
+                <th>SKU · Produto · NCM</th>
+                <th>Tributação</th>
+                <th>
+                  <span className="inline-flex items-center gap-1">✨ {NOME_IA}</span>
+                </th>
+                <th className="th-r">Detalhe</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visiveis.map(({ item, indiceOriginal }, i) => {
+                const aberto = expandidos.has(indiceOriginal)
+                return (
+                  <LinhaLote
+                    key={`${item.indice}-${indiceOriginal}`}
+                    item={item}
+                    indiceOriginal={indiceOriginal}
+                    aberto={aberto}
+                    atraso={Math.min(i * 25, 400)}
+                    onAlternar={() => onAlternar(indiceOriginal)}
+                    onDetalhe={() => setDetalhe({ item, indiceOriginal })}
+                  />
+                )
+              })}
+              {linhas.length > ROWS_LIMIT ? (
+                <tr>
+                  <td colSpan={4} className="px-3 py-3 text-center text-[11px] text-slate-500">
+                    Exibindo as primeiras {ROWS_LIMIT} de {linhas.length} linhas filtradas — refine a busca para revisar o restante.
+                    A seta abre a análise da {NOME_IA}; 👁 abre CFOP · CST · PIS · COFINS e Reforma.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </Painel>
+      <ModalLoteDetalhe
+        item={detalhe?.item ?? null}
+        indiceOriginal={detalhe?.indiceOriginal ?? 0}
+        onFechar={() => setDetalhe(null)}
+      />
     </>
   )
 }
 
-function LinhaTabela({ item, indice, onDetalhe }: { item: ItemLote; indice: number; onDetalhe: () => void }) {
+function LinhaLote({
+  item,
+  indiceOriginal,
+  aberto,
+  atraso,
+  onAlternar,
+  onDetalhe,
+}: {
+  item: ItemLote
+  indiceOriginal: number
+  aberto: boolean
+  atraso: number
+  onAlternar: () => void
+  onDetalhe: () => void
+}) {
   const escolher = useLote((s) => s.escolher)
+  const analise = item.analiseIA
+  const c = item.escolhida
+  const sugerida = analise ? analise.maisProvavelIndice : 0
+  const indiceEscolhido = Math.max(
+    0,
+    item.classificacoes.findIndex((x) => x.id === c?.id && x.cst === c?.cst),
+  )
+  const trocouSugestao = analise && analise.totalOpcoes > 1 && indiceEscolhido !== sugerida
+  const precisaRevisao = item.ncm.length !== 8 || Boolean(analise?.divergenciaNome) || item.classificacoes.length > 1
 
   return (
-    <tr className="cursor-pointer" onClick={onDetalhe} title="👁 Ver CFOP · CST · PIS · COFINS e Reforma">
-      <td className="whitespace-nowrap font-mono font-bold">{item.codigo || '—'}</td>
-      <td className="max-w-[280px] truncate" title={item.nome}>
-        {item.nome || '—'}
-      </td>
-      <td className="whitespace-nowrap font-mono">{fmtNcm(item.ncm) || item.ncm || '—'}</td>
-      <td onClick={(e) => e.stopPropagation()}>{celulaLote(item, indice, escolher)}</td>
-      <td className="text-right" onClick={(e) => e.stopPropagation()}>
-        <Olho onClick={onDetalhe} titulo="Ver todos os tributos do item" />
-      </td>
-    </tr>
+    <>
+      <tr
+        className={`lote-linha animate-fade-up${aberto ? ' is-aberta' : ''}${precisaRevisao ? ' precisa-revisao' : ''}`}
+        style={{ animationDelay: `${atraso}ms` }}
+      >
+        <td className="min-w-[220px]">
+          <button type="button" onClick={onAlternar} className="lote-expansor" aria-expanded={aberto} title={aberto ? 'Recolher análise da IA' : 'Expandir análise da IA'}>
+            <span className={`lote-chevron${aberto ? ' is-aberto' : ''}`} aria-hidden="true">▸</span>
+            <span className="min-w-0 text-left">
+              <span className="block truncate font-mono text-[11px] font-black">{item.codigo || '—'}</span>
+              <span className="block max-w-[260px] truncate text-xs font-semibold" title={item.nome}>{item.nome || '—'}</span>
+              <span className="block font-mono text-[10px] text-slate-500">NCM {fmtNcm(item.ncm) || item.ncm || '—'}</span>
+            </span>
+          </button>
+        </td>
+        <td onClick={(e) => e.stopPropagation()} className="min-w-[190px]">
+          {celulaLote(item, indiceOriginal, escolher)}
+        </td>
+        <td className="min-w-[170px]">
+          <CelulaIA item={item} indiceEscolhido={indiceEscolhido} trocouSugestao={Boolean(trocouSugestao)} />
+        </td>
+        <td className="text-right" onClick={(e) => e.stopPropagation()}>
+          <Olho onClick={onDetalhe} titulo="Ver todos os tributos do item + análise da IA" />
+        </td>
+      </tr>
+      {aberto ? (
+        <tr className="lote-expansao">
+          <td colSpan={4}>
+            <PainelAnaliseIA item={item} indiceOriginal={indiceOriginal} indiceEscolhido={indiceEscolhido} onDetalhe={onDetalhe} />
+          </td>
+        </tr>
+      ) : null}
+    </>
   )
 }
 
-/** Modal compacto do item do lote — regime anterior + Reforma. */
-function ModalLoteDetalhe({ item, onFechar }: { item: ItemLote | null; onFechar: () => void }) {
+/** Selo compacto da IA na grade: confiança + estado da sugestão. */
+function CelulaIA({ item, indiceEscolhido, trocouSugestao }: { item: ItemLote; indiceEscolhido: number; trocouSugestao: boolean }) {
+  const a = item.analiseIA
+  if (!a) return <span className="text-[11px] text-slate-400">—</span>
+  if (a.situacao === 'invalida') {
+    return (
+      <span className="lote-ia lote-ia--erro" title={a.resumo}>
+        <span aria-hidden="true">⛔</span> corrigir NCM
+      </span>
+    )
+  }
+  if (a.situacao === 'extinta') {
+    return (
+      <span className="lote-ia lote-ia--erro" title={a.resumo}>
+        <span aria-hidden="true">⛔</span> NCM extinto
+      </span>
+    )
+  }
+  if (a.situacao === 'manual') {
+    return (
+      <span className="lote-ia lote-ia--manual" title={a.resumo}>
+        <span aria-hidden="true">👤</span> sua regra
+      </span>
+    )
+  }
+  if (a.situacao === 'regra-geral') {
+    return (
+      <span className="lote-ia lote-ia--geral" title={a.resumo}>
+        <span aria-hidden="true">⚡</span> regra geral
+        {a.divergenciaNome ? ' · revisar nome' : ''}
+      </span>
+    )
+  }
+  if (a.situacao === 'unica') {
+    return (
+      <span className="lote-ia lote-ia--ok" title={a.resumo}>
+        <span aria-hidden="true">✓</span> única · confirmada
+        <BarraConfiancaAurumAI valor={a.confianca} compact />
+      </span>
+    )
+  }
+  return (
+    <span className="lote-ia lote-ia--multi" title={a.resumo}>
+      <span aria-hidden="true">✨</span> sugere Opção {a.maisProvavelIndice + 1}/{a.totalOpcoes}
+      <BarraConfiancaAurumAI valor={a.confianca} compact />
+      {trocouSugestao ? (
+        <span className="lote-ia-trocou" title={`Você escolheu a Opção ${indiceEscolhido + 1}; a IA sugeria a Opção ${a.maisProvavelIndice + 1}. A decisão final é sua.`}>
+          você optou pela {indiceEscolhido + 1}
+        </span>
+      ) : (
+        <span className="lote-ia-ok" title="A sugestão da IA está selecionada — confira a análise abrindo a linha.">
+          pré-selecionada ✓
+        </span>
+      )}
+    </span>
+  )
+}
+
+/* -------------------------------------------------- análise expandida -- */
+
+/** Painel inline da linha: porquê das N opções + cards de escolha assistida. */
+function PainelAnaliseIA({
+  item,
+  indiceOriginal,
+  indiceEscolhido,
+  onDetalhe,
+}: {
+  item: ItemLote
+  indiceOriginal: number
+  indiceEscolhido: number
+  onDetalhe: () => void
+}) {
+  const escolher = useLote((s) => s.escolher)
+  const a: AnaliseLoteIA | null | undefined = item.analiseIA
+  if (!a) return null
+  const sugerida = a.maisProvavelIndice
+
+  return (
+    <div className="lote-analise animate-fade-up" aria-label={`Análise da ${NOME_IA} para ${item.codigo || 'item'}`}>
+      <div className="lote-analise-cab">
+        <SeloAurumAI variante="compacto" />
+        <span className="text-[11px] font-black uppercase tracking-wide">{a.titulo}</span>
+        <span className="ml-auto flex flex-wrap items-center gap-1.5">
+          <BarraConfiancaAurumAI valor={a.confianca} />
+          <button type="button" onClick={onDetalhe} className="lote-link" title="Abrir o cartão completo (regime anterior + Reforma + análise)">
+            👁 cartão completo
+          </button>
+        </span>
+      </div>
+
+      <p className="lote-analise-resumo">{a.resumo}</p>
+
+      {a.porqueMultiplas ? (
+        <div className="lote-porque">
+          <div className="lote-porque-titulo">💬 Por que {a.totalOpcoes} tributações?</div>
+          <p>{a.porqueMultiplas}</p>
+        </div>
+      ) : null}
+
+      {a.alertas.length ? (
+        <ul className="lote-alertas">
+          {a.alertas.map((al, i) => (
+            <li key={i}>⚠ {al}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      {a.opcoes.length > 1 ? (
+        <div className="lote-opcoes" role="radiogroup" aria-label={`Opções oficiais para o NCM ${fmtNcm(item.ncm)}`}>
+          {a.opcoes.map((op) => {
+            const selecionada = op.indice === indiceEscolhido
+            const ehSugerida = op.indice === sugerida
+            return (
+              <div
+                key={op.indice}
+                role="radio"
+                aria-checked={selecionada}
+                tabIndex={0}
+                onClick={() => escolher(indiceOriginal, op.indice)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    escolher(indiceOriginal, op.indice)
+                  }
+                }}
+                className={`lote-opcao${selecionada ? ' is-selecionada' : ''}${ehSugerida ? ' is-sugerida' : ''}`}
+                aria-label={`Opção ${op.indice + 1}: CST ${op.cst}, cClassTrib ${op.cClassTrib}${ehSugerida ? ' (sugestão da IA)' : ''}`}
+              >
+                <span className="lote-opcao-topo">
+                  <span className="lote-opcao-radio" aria-hidden="true">{selecionada ? '●' : '○'}</span>
+                  <span className="font-mono text-[11px] font-black">
+                    Opção {op.indice + 1} · {op.cst} · {op.cClassTrib}
+                  </span>
+                  {ehSugerida ? (
+                    <span className="lote-opcao-selo" title="Sugestão da IA pela aderência do nome — confira a base legal antes de salvar.">
+                      ✨ sugere a {NOME_IA}
+                    </span>
+                  ) : null}
+                  {selecionada && !ehSugerida ? (
+                    <span className="lote-opcao-selo lote-opcao-selo--sua" title="Você trocou a sugestão da IA — a decisão final é sua e fica registrada.">
+                      sua escolha
+                    </span>
+                  ) : null}
+                </span>
+                <span className="lote-opcao-comentario">{op.comentario}</span>
+                <span className="lote-opcao-acoes" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                  {op.urlLegislacao ? (
+                    <BotaoVerLegislacao
+                      url={op.urlLegislacao}
+                      titulo={`Base legal — CST ${op.cst}/${op.cClassTrib}`}
+                      referencia={op.baseLegal}
+                      texto={op.descricao}
+                      rotulo="Ver base legal"
+                      className="lote-link"
+                    />
+                  ) : (
+                    <span className="text-[10px] text-slate-400" title="A base oficial não traz URL de legislação para este enquadramento — a fundamentação exibida é o texto da base.">
+                      Base: {op.baseLegal.slice(0, 80)}
+                    </span>
+                  )}
+                  {!selecionada ? (
+                    <button
+                      type="button"
+                      className="lote-link lote-link--forte"
+                      onClick={() => escolher(indiceOriginal, op.indice)}
+                    >
+                      escolher esta →
+                    </button>
+                  ) : null}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
+
+      <p className="lote-orientacao">🧭 {a.orientacaoEscolha}</p>
+      <FontesAurumAI fontes={a.fontes} />
+    </div>
+  )
+}
+
+/** Modal compacto do item do lote — regime anterior + Reforma + análise IA. */
+function ModalLoteDetalhe({ item, indiceOriginal, onFechar }: { item: ItemLote | null; indiceOriginal: number; onFechar: () => void }) {
+  const escolher = useLote((s) => s.escolher)
   const c = item?.escolhida
+  const a = item?.analiseIA
+  const indiceEscolhido = item
+    ? Math.max(0, item.classificacoes.findIndex((x) => x.id === c?.id && x.cst === c?.cst))
+    : 0
   return (
     <Modal
       aberto={item !== null}
       onFechar={onFechar}
       titulo={item ? `${item.codigo || '—'} · ${item.nome || '—'}` : ''}
       subtitulo={item ? `NCM ${fmtNcm(item.ncm) || item.ncm || '—'} · CST ${c?.cst || '—'} · cClassTrib ${c?.cClassTrib || '—'}` : ''}
-      largura="max-w-lg"
+      largura="max-w-2xl"
       rodape={null}
     >
-      {item ? (
+      {item && a ? (
         <div className="space-y-3">
           <AvisoNcmExtinto nomenclatura={item.nomenclatura} />
+          <MolduraAurumAI detalhe={a.titulo}>
+            <p className="text-xs leading-relaxed">{a.resumo}</p>
+            {a.porqueMultiplas ? (
+              <p className="mt-2 text-xs leading-relaxed"><strong>💬 Por que {a.totalOpcoes}?</strong> {a.porqueMultiplas}</p>
+            ) : null}
+            {a.opcoes.length > 1 ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-bold">Trocar enquadramento:</span>
+                <select
+                  className="field field-sm field-mono max-w-full"
+                  value={indiceEscolhido}
+                  onChange={(e) => escolher(indiceOriginal, Number(e.target.value))}
+                  aria-label="Escolher entre as tributações oficiais"
+                >
+                  {item.classificacoes.map((op, j) => (
+                    <option key={`${op.id}-${j}`} value={j}>
+                      {j === a.maisProvavelIndice ? '✨ ' : ''}Opção {j + 1}: {op.cst} · {op.cClassTrib} —{' '}
+                      {(op.resumo?.descricaoCClassTrib || op.baseLegal || '').slice(0, 60)}
+                    </option>
+                  ))}
+                </select>
+                <BarraConfiancaAurumAI valor={a.confianca} compact />
+              </div>
+            ) : null}
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-500">🧭 {a.orientacaoEscolha}</p>
+            <FontesAurumAI fontes={a.fontes} />
+          </MolduraAurumAI>
           <Secao titulo="Regime anterior" icone="🧾">
             <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
               <Campo rotulo="CFOP" valor={item.cfop || '—'} mono />
@@ -243,6 +984,26 @@ function ModalLoteDetalhe({ item, onFechar }: { item: ItemLote | null; onFechar:
                 {c?.resumo?.descricaoCClassTrib || c?.baseLegal}
               </p>
             ) : null}
+            {c?.resumo?.urlLegislacao || c?.referencia?.urlLegislacao ? (
+              <BotaoVerLegislacao
+                url={c.resumo?.urlLegislacao ?? c.referencia?.urlLegislacao}
+                titulo={`Base legal — CST ${c.cst}/${c.cClassTrib}`}
+                referencia={c.baseLegal}
+                texto={c.resumo?.descricaoCClassTrib ?? null}
+                rotulo="Visualizar legislação no trecho citado"
+                className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline dark:text-aurum-200 cursor-pointer"
+              />
+            ) : null}
+            {c ? (
+              <SecaoInformacoesAdicionais
+                ncm={c.codigo || item.ncm}
+                temCredito={
+                  c.referencia?.creditoPresumido === true ||
+                  c.referencia?.creditoPresumido === 'Sim' ||
+                  c.cstClassTribDetalhes?.indCredPres === 1
+                }
+              />
+            ) : null}
           </Secao>
         </div>
       ) : null}
@@ -251,8 +1012,9 @@ function ModalLoteDetalhe({ item, onFechar }: { item: ItemLote | null; onFechar:
 }
 
 /**
- * Célula "Classificação Reforma" — 3 estados da v1 (SPEC R6.10):
- * NCM inválido → regra geral (âmbar) → uma opção → seletor de N opções.
+ * Célula "Classificação Reforma" — 3 estados da v1 (SPEC R6.10) + selo IA:
+ * NCM inválido → regra geral (âmbar) → uma opção → seletor de N opções
+ * (agora com ✨ na sugestão da IA).
  */
 function celulaLote(
   item: ItemLote,
@@ -261,6 +1023,7 @@ function celulaLote(
 ) {
   const c = item.escolhida
   const r = c?.resumo
+  const a = item.analiseIA
   const indiceEscolhido = Math.max(
     0,
     item.classificacoes.findIndex(
@@ -269,16 +1032,16 @@ function celulaLote(
   )
 
   if (item.ncm.length !== 8) {
-    return <span className="text-red-500">NCM inválido</span>
+    return <span className="lote-invalido">⛔ NCM inválido — corrija na planilha</span>
   }
   const seloExtinto = item.nomenclatura?.dataFim ? (
     <div className="mt-1 inline-block rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-black text-red-800 dark:bg-red-950/60 dark:text-red-200" title={`Extinto em ${item.nomenclatura.dataFim}`}>
-      ⛔ extinto
+      ⛔ extinto — só histórico
     </div>
   ) : null
   if (item.manual && c) {
     return (
-      <div className="rounded-lg bg-amber-50 px-2 py-1 dark:bg-amber-950/30">
+      <div className="lote-celula lote-celula--manual">
         <div className="font-mono text-[11px] font-bold text-amber-800 dark:text-amber-300">
           {c.cst} · {c.cClassTrib} ✋
         </div>
@@ -291,43 +1054,61 @@ function celulaLote(
   }
   if (item.regraGeral) {
     return (
-      <div className="rounded-lg bg-amber-50 px-2 py-1 dark:bg-amber-950/30">
+      <div className="lote-celula lote-celula--geral">
         <div className="font-mono text-[11px] font-bold text-amber-800 dark:text-amber-300">
           CST 000 · 000001
         </div>
         <div className="text-[10px] text-amber-700 dark:text-amber-400">
           ⚡ {r?.descricaoCClassTrib || 'Tributação integral'}
         </div>
+        {a?.divergenciaNome ? (
+          <div className="lote-divergente" title={a.alertas[0] ?? 'O nome não conversa com o NCM.'}>
+            ⚠ revisar nome × NCM
+          </div>
+        ) : null}
         {seloExtinto}
       </div>
     )
   }
   if (item.classificacoes.length === 1 && c) {
     return (
-      <div className="min-w-[170px]">
+      <div className="lote-celula min-w-[170px]">
         <div className="font-mono text-[11px] font-bold">
-          {c.cst} · {c.cClassTrib}
+          {c.cst} · {c.cClassTrib} <span className="lote-ok" title={a?.resumo ?? 'Tributação única oficial.'}>✓ IA</span>
         </div>
         <div className="truncate text-[10px] text-slate-500" title={r?.descricaoCClassTrib}>
           {r?.descricaoCClassTrib || c.baseLegal}
         </div>
+        {a?.divergenciaNome ? (
+          <div className="lote-divergente" title={a.alertas[0] ?? 'O nome não conversa com o NCM.'}>
+            ⚠ revisar nome × NCM
+          </div>
+        ) : null}
         {seloExtinto}
       </div>
     )
   }
   return (
-    <div className="min-w-[210px]">
-      <div className="mb-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">
-        ⚠ {item.classificacoes.length} opções
+    <div className="lote-celula min-w-[210px]">
+      <div className="mb-1 flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+        <span title={a?.porqueMultiplas ?? `${item.classificacoes.length} vínculos oficiais distintos para este NCM.`}>
+          ⚠ {item.classificacoes.length} opções
+        </span>
+        {a ? (
+          <span className="lote-sugere" title={`A ${NOME_IA} sugere a Opção ${a.maisProvavelIndice + 1} pelo nome — já pré-selecionada. ${a.resumo}`}>
+            ✨ sugere {a.maisProvavelIndice + 1}
+          </span>
+        ) : null}
       </div>
       <select
-        className="field field-sm field-mono w-full"
+        className="field field-sm field-mono lote-select w-full"
         value={indiceEscolhido}
         onChange={(e) => escolher(indice, Number(e.target.value))}
+        aria-label={`Escolher entre as ${item.classificacoes.length} tributações oficiais`}
       >
         {item.classificacoes.map((op, j) => (
           <option key={`${op.id}-${j}`} value={j}>
-            {op.cst} · {op.cClassTrib} —{' '}
+            {j === a?.maisProvavelIndice ? '✨ ' : ''}{op.cst} · {op.cClassTrib} —{' '}
             {(op.resumo?.descricaoCClassTrib || op.baseLegal || '').slice(0, 60)}
           </option>
         ))}
@@ -340,16 +1121,17 @@ function celulaLote(
 
 function paraLinhaLote(it: ItemLote): LinhaLote {
   const c = it.escolhida
+  const a = it.analiseIA
   const situacao =
     it.ncm.length !== 8
       ? 'sem NCM válido'
       : it.manual
         ? 'manual · usuário (isenta o sistema)'
         : it.regraGeral
-          ? 'regra geral'
+          ? `regra geral${a?.divergenciaNome ? ' · revisar nome × NCM' : ''}`
           : it.classificacoes.length > 1
-            ? `${it.classificacoes.length} opções · escolhida manualmente`
-            : 'classificada'
+            ? `${it.classificacoes.length} opções · ${NOME_IA} sugere Opção ${(a?.maisProvavelIndice ?? 0) + 1} · escolha do usuário`
+            : `classificada${a ? ` · ${NOME_IA} confirma` : ''}`
 
   return {
     linha: it.indice,

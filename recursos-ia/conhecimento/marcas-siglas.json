@@ -1,0 +1,23 @@
+{
+  "versao": "conhecimento-v1",
+  "descricao": "Marcas, siglas e inglês comercial → hiperônimo oficial. Usado para expandir a consulta, nunca para decidir. A decisão final é sempre do resolvedor sobre a base oficial.",
+  "entradas": [
+    { "termo": "samsung", "expansao": "telefone", "nota": "celulares Samsung" },
+    { "termo": "motorola", "expansao": "telefone", "nota": "celulares Motorola" },
+    { "termo": "xiaomi", "expansao": "telefone", "nota": "celulares Xiaomi" },
+    { "termo": "lg", "expansao": "televisao", "nota": "TVs LG" },
+    { "termo": "sony", "expansao": "televisao", "nota": "TVs Sony" },
+    { "termo": "nescau", "expansao": "cacau", "nota": "achocolatado" },
+    { "termo": "danone", "expansao": "iogurte", "nota": "iogurtes" },
+    { "termo": "nike", "expansao": "calcado", "nota": "só em frase: tenis nike" },
+    { "termo": "adidas", "expansao": "calcado", "nota": "só em frase: tenis adidas" },
+    { "termo": "tv", "expansao": "televisao", "nota": "sigla" },
+    { "termo": "pc", "expansao": "computador", "nota": "sigla" },
+    { "termo": "ar cond", "expansao": "condicionador", "nota": "ar-condicionado" },
+    { "termo": "headset", "expansao": "fone", "nota": "inglês" },
+    { "termo": "whey", "expansao": "suplemento", "nota": "inglês suplemento" },
+    { "termo": "pet food", "expansao": "alimentacao", "nota": "ração pet" },
+    { "termo": "notebook", "expansao": "processamento dados", "nota": "via grupos do índice" },
+    { "termo": "air fryer", "expansao": "grelha", "nota": "fritadeira sem óleo" }
+  ]
+}

@@ -111,6 +111,10 @@ export interface VinculoNbs {
  * É o "permitido × negado" por sistema: indica se um `cClassTrib` pode ser
  * usado naquele documento fiscal e em qual vigência. `permitido === null`
  * = a fonte não informa o flag (só a presença na tabela).
+ *
+ * Formato legado (suposto): usado pelo sync quando o endpoint devolve linhas
+ * chaveadas por cClassTrib. Os arquivos reais da API vêm chaveados por
+ * `codClassProd` (ver `ProdutoDfe`) — esses vão para a store `produtosDfe`.
  */
 export interface ClassificacaoProdutoSistema {
   /** Chave `sistema|cClassTrib` (keyPath da store `classificacaoProduto`). */
@@ -128,6 +132,94 @@ export interface ClassificacaoProdutoSistema {
   fimVigencia: string | null
   /** Quando a linha foi sincronizada/importada. */
   sincronizadoEm: string
+}
+
+/**
+ * Linha da tabela de Anexos da LC 214 (CFF `anexos` — formato real da API).
+ *
+ * Liga um NCM (8 dígitos) ou NBS (9 dígitos) a um anexo com permissão explícita.
+ * Linhas com `codNcmNbs: "Sem código"` viram item de catálogo do anexo
+ * (`codigo: null`): valem como documentação do anexo, sem vínculo com NCM/NBS.
+ */
+export interface AnexoNcm {
+  /** Chave `${codigo ?? 'sem-codigo'}|${nroAnexo}|${indice}` (keyPath da store `anexos`). */
+  id: string
+  /** Dígitos do código, ou `null` quando a fonte informa "Sem código". */
+  codigo: string | null
+  /** NCM | NBS | null (quando sem código). */
+  tipo: 'NCM' | 'NBS' | null
+  /** Permitido × Não Permitido × sem informação (NBS nunca informa). */
+  permissao: 'permitido' | 'negado' | null
+  nroAnexo: number
+  nroItemAnexoLei: number | null
+  descrAnexo: string
+  descrItemAnexo: string | null
+  descrCondicao: string | null
+  descrExcecao: string | null
+  observacao: string | null
+  inicioVigencia: string | null
+  fimVigencia: string | null
+}
+
+/**
+ * Linha do catálogo de produtos de um DFe (CFF
+ * `ConsultaClassificacaoProduto?sistema=*` — formato real da API).
+ *
+ * Eixo **produto** (`codClassProd` de 7 dígitos), não cClassTrib: o mesmo código
+ * pode existir em sistemas diferentes com descrições diferentes, por isso o
+ * sistema de origem é parte da chave e precisa ser informado na importação
+ * (o arquivo não declara o próprio sistema).
+ */
+export interface ProdutoDfe {
+  /** Chave `sistema|codClassProd` (keyPath da store `produtosDfe`). */
+  id: string
+  /** NFCom | NFAg | NF3e | NFGas (informado na importação). */
+  sistema: string
+  codClassProd: string
+  codGrupo: string | null
+  descrGrupo: string | null
+  descricao: string
+  tipoPrestacao: string | null
+  /** Demais flags da linha (regras de validação do MOC). */
+  flags: Record<string, boolean>
+  /** Quando a linha foi importada. */
+  sincronizadoEm: string
+}
+
+/**
+ * Regra de crédito presumido IBS/CBS (CFF `credPresumido` — formato real).
+ * Exibida como informação adicional quando a classificação do NCM indica
+ * crédito presumido (`referencia.creditoPresumido`).
+ */
+export interface CreditoPresumido {
+  cod: number
+  descricao: string
+  indIbs: boolean
+  indCbs: boolean
+  apropriaDfe: boolean
+  apropriaEvento: boolean
+  condSuspensiva: boolean
+  deduz: boolean
+  iniVigIbs: string | null
+  fimVigIbs: string | null
+  iniVigCbs: string | null
+  fimVigCbs: string | null
+}
+
+/**
+ * Local da operação/fornecimento (CFF `indOper` — formato real).
+ * Tabela de referência exibida nas tabelas oficiais (sem chave com o NCM).
+ */
+export interface LocalOperacao {
+  cod: string
+  nome: string
+  dispLegal: string | null
+  localOperacao: string | null
+  localFornec: string | null
+  caractFornec: string | null
+  publicacao: string | null
+  iniVig: string | null
+  fimVig: string | null
 }
 
 /** Entrada da tabela NCM/SH vigente (nomenclatura). */

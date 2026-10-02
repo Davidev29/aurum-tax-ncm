@@ -1,0 +1,7 @@
+# CHECKSUMS — recursos-ia (Phase 6, IA-01/IA-04)
+# Formato: "<sha256-hex>  <caminho-relativo-a-recursos-ia/>"
+# Gerado offline em 2026-09-30 (plan 06-04). O GGUF real (~97MB) ainda NÃO foi
+# adquirido (sem rede). Ao colocar o arquivo em recursos-ia/modelo/, recalcule:
+#   certutil -hashfile recursos-ia\modelo\ailo-152m-v2-q4_k_m.gguf SHA256
+# e substitua a linha PENDENTE abaixo pelo hash real.
+PENDENTE-OFFLINE-SEM-REDE  modelo/ailo-152m-v2-q4_k_m.gguf

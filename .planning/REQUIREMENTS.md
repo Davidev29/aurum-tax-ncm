@@ -54,6 +54,22 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **CALC-04**: Ao iniciar o sistema, verificar e atualizar automaticamente as bases oficiais (NCM vigente, nomenclatura, classificação tributária da Receita Federal)
 - [ ] **CALC-05**: Indicadores visuais claros de redução nos itens da calculadora e no resumo (badge/pill com percentual, tooltip com base legal completa)
 
+### IA Assistida Offline — NCM only, camada superior (IA)
+
+- [ ] **IA-00**: Spike viabilidade `node-llama-cpp` + `utilityProcess` Electron 44, GO/NO-GO em Win/macOS/Linux (`docs/spike-eletron-llama.md`)
+- [ ] **IA-01**: Ambiente diagnosticado, `recursos-ia/` criado, `.gguf`/índice bloqueados no git, `CHECKSUMS.txt`
+- [ ] **IA-02**: Base `ncm-para-ia.json` com 2335 NCMs (8 dígitos, sem NBS), paridade com `montarClassificacao`
+- [ ] **IA-03**: Índice Vectra <200MB, Frango vivo→cap.01 top-3, Notebook→84/85 top-5, rebuild por hash MANIFEST
+- [ ] **IA-04**: Modelo AILO-152M-v2 q4_k_m íntegro, prompt restrito (candidato ou NÃO SEI), <5s CPU, ~300MB RAM
+- [ ] **IA-05**: Worker `utilityProcess` isolado, IPC `ia:classificar`/`ia:status`, store `ia.ts`, `DebugIA.tsx` (Ctrl+Shift+D)
+- [ ] **IA-06**: Fallback IA: determinístico primeiro; se null/baixa → Top5→LLM→`resolverClassificacoes`→`calcularTributos`, audit com `via`
+- [ ] **IA-07**: Instaladores NSIS/DMG/AppImage offline ≤300MB, `extraResources` + `asarUnpack`, zero rede
+- [ ] **IA-08**: Ofuscação worker + cifragem GGUF em repouso + rename `aux.dat`/`idx/`
+- [ ] **IA-09**: Testes 30 conhecidos +10 ambíguos +5 inválidos + bypass determinístico, ≥85%, zero alucinação, perf <5s/<500MB, 37 legadas verdes
+- [ ] **IA-10**: Docs arquitetura/manual/troubleshooting/dossiê + `taxa_uso_ia` (<30%), ROADMAP/REQUIREMENTS encerrados
+
+**Scope note**: Somente NCM de 8 dígitos. NBS e códigos de 9 dígitos excluídos (os 10 ignorados do MANIFEST permanecem ignorados).
+
 ### Persistence & Settings (PER)
 
 - [ ] **PER-01**: Persistir classificações do usuário em IndexedDB (sobrevivem a reinícios)
@@ -86,7 +102,6 @@ Deferred to future release. Tracked but not in current roadmap.
 | Classificação de serviços (Código de Serviço) | LC 214/2025 foca em bens; serviços têm legislação distinta |
 | Versão web/SaaS com multi-tenancy | Requer autenticação, billing, infra; desktop-first MVP |
 | Integração direta com ERPs via API | APIs proprietárias, suporte contínuo; exportação CSV resolve v1 |
-| IA/ML para sugestão de classificação | Dados de treino limitados, risco regulatório; regra determinística v1 |
 | Assinatura digital de relatórios | Requer certificado digital, infra PKI; PDF assinado v2+ |
 
 ## Traceability
@@ -128,12 +143,23 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CALC-03 | Phase 5 | Pending |
 | CALC-04 | Phase 5 | Pending |
 | CALC-05 | Phase 5 | Pending |
+| IA-00 | Phase 6 | Pending |
+| IA-01 | Phase 6 | Pending |
+| IA-02 | Phase 6 | Pending |
+| IA-03 | Phase 6 | Pending |
+| IA-04 | Phase 6 | Pending |
+| IA-05 | Phase 6 | Pending |
+| IA-06 | Phase 6 | Pending |
+| IA-07 | Phase 6 | Pending |
+| IA-08 | Phase 6 | Pending |
+| IA-09 | Phase 6 | Pending |
+| IA-10 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 31 total
-- Mapped to phases: 31
+- v1 requirements: 42 total (31 + 11 IA NCM-only com spike 06-00)
+- Mapped to phases: 42
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-09-29*
-*Last updated: 2026-09-29 after initial definition*
+*Last updated: 2026-09-30 — Phase 6 IA NCM-only camada superior + spike 06-00, atalho Ctrl+Shift+D, 37 suítes*

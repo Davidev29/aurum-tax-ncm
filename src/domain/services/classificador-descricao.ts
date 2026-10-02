@@ -12,6 +12,7 @@
  * Todas as comparações usam `normalizarBusca` (sem acento/caixa/pontuação).
  */
 import { normalizarBusca, pareceCodigoNcm, tokenizarBusca } from './busca-texto'
+import { SINONIMOS_FISCAIS, expandirSinonimoFiscal } from './vocabulario'
 
 /** Entrada do classificador: descrição livre + contexto opcional. */
 export interface EntradaDescricao {
@@ -36,6 +37,11 @@ export type SinalFiscal =
   | 'CEREAL'
   | 'DISPOSITIVO_MEDICO'
   | 'MEDICAMENTO'
+  | 'VESTUARIO'
+  | 'CALCADO'
+  | 'ELETRONICO'
+  | 'MOVEIS'
+  | 'VEICULO'
   | 'COZIDO'
   | 'IN_NATURA'
 
@@ -67,67 +73,19 @@ const STOPWORDS = new Set([
 
 /**
  * Sinônimos/inferências: termo do dia a dia → vocabulário da nomenclatura.
- * Chave e valor já normalizados (sem acento). A inferência só EXPANDE a
- * consulta — a prova continua sendo o match na descrição oficial.
+ * Fonte única em `./vocabulario` (cobertura de todos os capítulos, não só
+ * agro). A inferência só EXPANDE a consulta — a prova continua sendo o match
+ * na descrição oficial.
  *
- * ATENÇÃO (armadilha do AND): a busca exige TODOS os termos no caminho do
- * NCM, então cada expansão deve ser termo ÚNICO presente literalmente no
+ * ATENÇÃO (armadilha do AND): a busca estrita exige TODOS os termos no caminho
+ * do NCM, então cada expansão deve ser termo ÚNICO presente literalmente no
  * texto oficial — de preferência o radical comum às flexões
  * (`bovin` casa com bovino/bovina/bovinos; `suin` com suíno/suína/suínos).
  * Multi-termo só quando os termos coocorrem no oficial (ex.: `cães` + `gatos`
- * em 2309.10.00). Termo sem correspondente oficial (ex.: `hibrido`, `pet`)
- * fica sem entrada e cai no fallback de tolerância a ruído.
+ * em 2309.10.00). Termo sem correspondente oficial cai no fallback tolerante
+ * (2ª fase OR + fuzzy do RAG).
  */
-const SINONIMOS: Record<string, string> = {
-  boi: 'bovin',
-  vaca: 'bovin',
-  novilho: 'bovin',
-  novilha: 'bovin',
-  bezerro: 'bovin',
-  gado: 'bovin',
-  nelore: 'bovin',
-  zebu: 'bovin',
-  bufalo: 'bufalo',
-  porco: 'suin',
-  porca: 'suin',
-  leitao: 'suin',
-  suino: 'suin',
-  frango: 'ave',
-  galinha: 'galinha',
-  galo: 'ave',
-  franga: 'galinha',
-  pintinho: 'ave',
-  ave: 'ave',
-  carcaca: 'carcaca',
-  milho: 'milho',
-  semente: 'semente',
-  sementes: 'semente',
-  plantio: 'semeadura',
-  plantar: 'semeadura',
-  semeadura: 'semeadura',
-  sementeira: 'semente',
-  grao: 'grao',
-  graos: 'grao',
-  racao: 'alimentacao',
-  cao: 'caes',
-  caes: 'caes',
-  cachorro: 'caes',
-  gato: 'gatos',
-  gatos: 'gatos',
-  sal: 'sal',
-  arroz: 'arroz',
-  feijao: 'feijao',
-  trigo: 'trigo',
-  soja: 'soja',
-  cafe: 'cafe',
-  acucar: 'acucar',
-  queijo: 'queijo',
-  leite: 'leite',
-  remedio: 'medicamento',
-  antibiotico: 'medicamento',
-  seringa: 'seringa',
-  protese: 'protese',
-}
+const SINONIMOS: Record<string, string> = SINONIMOS_FISCAIS
 
 /** Cada sinal: gatilhos (tokens normalizados) e capítulos prioritários. */
 const REGRAS_SINAL: { sinal: SinalFiscal; gatilhos: string[]; capitulos: string[] }[] = [
@@ -162,13 +120,18 @@ const REGRAS_SINAL: { sinal: SinalFiscal; gatilhos: string[]; capitulos: string[
   },
   { sinal: 'DISPOSITIVO_MEDICO', gatilhos: ['dispositivo', 'protese', 'seringa', 'cateter', 'medico', 'hospitalar'], capitulos: ['90'] },
   { sinal: 'MEDICAMENTO', gatilhos: ['medicamento', 'remedio', 'farmaco', 'antibiotico', 'comprimido'], capitulos: ['30'] },
+  { sinal: 'VESTUARIO', gatilhos: ['camisa', 'camiseta', 'blusa', 'calca', 'jeans', 'bermuda', 'vestido', 'saia', 'terno', 'cueca', 'meia', 'algodao', 'seda', 'poliester', 'vestuario', 'confeccao', 'tecido', 'malha'], capitulos: ['52', '54', '55', '60', '61', '62'] },
+  { sinal: 'CALCADO', gatilhos: ['calcado', 'sapato', 'tenis', 'chinelo', 'sandalia', 'bota', 'couro', 'bolsa', 'mochila', 'mala', 'cinto'], capitulos: ['41', '42', '64'] },
+  { sinal: 'ELETRONICO', gatilhos: ['telefone', 'tablet', 'computador', 'monitor', 'teclado', 'impressora', 'televisao', 'radio', 'audio', 'fone', 'carregador', 'bateria', 'lampada', 'led', 'refrigerador', 'congelador', 'fogao', 'forno', 'microondas', 'condicionador', 'ventilador'], capitulos: ['84', '85'] },
+  { sinal: 'MOVEIS', gatilhos: ['assento', 'mesa', 'cama', 'armario', 'estante', 'colchao', 'panela', 'talher', 'copo', 'prato', 'moveis', 'mobilia'], capitulos: ['44', '73', '82', '94'] },
+  { sinal: 'VEICULO', gatilhos: ['veiculo', 'motocicleta', 'caminhao', 'onibus', 'bicicleta', 'pneu', 'retrovisor', 'farol', 'automovel', 'carro', 'moto'], capitulos: ['86', '87'] },
   { sinal: 'COZIDO', gatilhos: ['cozido', 'cozida', 'cozidos', 'cozimento', 'precozido'], capitulos: [] },
   { sinal: 'IN_NATURA', gatilhos: ['natura', 'fresco', 'fresca', 'cru', 'crua', 'resfriado', 'congelado'], capitulos: [] },
 ]
 
 /** Expande um token para o vocabulário da nomenclatura (ou `null`). */
 export function expandirSinonimo(token: string): string | null {
-  return SINONIMOS[token] ?? null
+  return expandirSinonimoFiscal(token) ?? SINONIMOS[token] ?? null
 }
 
 /** Extrai os sinais fiscais presentes nos tokens. */
@@ -185,7 +148,7 @@ export function extrairSinais(tokens: string[]): SinalFiscal[] {
   return out
 }
 
-/** Monta as variações de consulta (original + expansões com sinônimos). */
+/** Monta as variações de consulta (original + expansão com sinônimos). */
 export function expandirConsultas(tokensUteis: string[]): string[] {
   const base = tokensUteis.join(' ')
   if (!base) return []
@@ -193,11 +156,7 @@ export function expandirConsultas(tokensUteis: string[]): string[] {
   const expandidos = tokensUteis.map((t) => expandirSinonimo(t) ?? t)
   const expandida = [...new Set(expandidos.join(' ').split(' '))].join(' ')
   if (expandida && expandida !== base) consultas.push(expandida)
-  // Terceira variação: só os termos de maior peso (sinônimos aplicados),
-  // para descrições longas com ruído ("ração para cães com adição de sal"
-  // → "alimentacao animal caes sal").
-  if (tokensUteis.length >= 3 && expandida !== base) consultas.push(expandida)
-  return [...new Set(consultas)].slice(0, 3)
+  return [...new Set(consultas)].slice(0, 2)
 }
 
 /** Tokens de condição de risco: saem da consulta-núcleo (o match é no
@@ -217,13 +176,14 @@ export function consultasEfetivas(analise: AnaliseDescricao): string[] {
   const base = analise.consultasExpandidas
   const nucleo = analise.tokens.filter((t) => !TOKENS_CONDICAO_RISCO.has(t))
   const semRisco = expandirConsultas(nucleo)
-  return [...new Set([...base, ...semRisco])].slice(0, 5)
+  return [...new Set([...base, ...semRisco])].slice(0, 6)
 }
 
 /**
  * Tolerância a ruído: descrições reais trazem termos sem correspondente
  * oficial (`raça`, `Nelore` já coberto por sinônimo, `híbrido`). Quando a
- * rodada principal não matcha nada, tenta cada consulta sem 1 token por vez.
+ * rodada principal não matcha nada, tenta cada consulta sem 1 token por vez
+ * (vale desde 2 termos — "galeto caipira" também precisa de fallback).
  * Retorna as consultas extras e os termos ignorados (para a trilha auditar).
  */
 export function consultasTolerantes(consultas: string[]): { consultas: string[]; ignorados: string[] } {
@@ -231,7 +191,17 @@ export function consultasTolerantes(consultas: string[]): { consultas: string[];
   const ignorados: string[] = []
   for (const base of consultas) {
     const termos = base.split(' ').filter(Boolean)
-    if (termos.length < 3) continue
+    if (termos.length < 2) {
+      // unigrama sem match: tenta o sinônimo sozinho como última bala
+      for (const t of termos) {
+        const s = expandirSinonimo(t)
+        if (s && !consultas.includes(s) && !extras.includes(s)) {
+          extras.push(s)
+          if (!ignorados.includes(t)) ignorados.push(t)
+        }
+      }
+      continue
+    }
     for (const t of termos) {
       const sem = termos.filter((x) => x !== t).join(' ')
       if (sem && !consultas.includes(sem) && !extras.includes(sem)) {
@@ -283,7 +253,13 @@ export function analisarDescricao(entrada: EntradaDescricao): AnaliseDescricao {
     rgiAplicaveis.push('Notas de Seção/Capítulo (uso e destinação)')
   }
 
-  const insuficiente = tokens.length < 2 && !pareceCodigoNcm(combinado)
+  // Proativo sem perder segurança: 1 termo LONGO e específico ("semeadura",
+  // "retalho", "celular") já tenta classificar; 1 termo curto/genérico
+  // ("sal", "milho", "ovo") continua insuficiente — pede contexto em vez de
+  // chutar. Código NCM nunca é insuficiente.
+  const unico = tokens.length === 1 ? tokens[0] : ''
+  const unicoForte = unico.length >= 5 && !STOPWORDS.has(unico)
+  const insuficiente = (tokens.length === 0 || (tokens.length < 2 && !unicoForte)) && !pareceCodigoNcm(combinado)
   return {
     textoNormalizado,
     tokens,
@@ -303,7 +279,7 @@ export function analisarDescricao(entrada: EntradaDescricao): AnaliseDescricao {
 export function perguntasComplementares(analise: AnaliseDescricao): string[] {
   const perguntas: string[] = []
   if (analise.insuficiente) {
-    perguntas.push('Informe a composição ou destinação do produto para melhor precisão (ex.: vivo ou abatido? para plantio, consumo ou ração?).')
+    perguntas.push('Informe a composição ou destinação do produto para melhor precisão (ex.: vivo ou abatido? para plantio, consumo ou ração? camisa de algodão ou sintética? celular smartphone?).')
     return perguntas
   }
   if (analise.sinais.includes('VIVO') && !analise.sinais.includes('REPRODUTOR') && !analise.sinais.includes('ABATE')) {
@@ -317,6 +293,18 @@ export function perguntasComplementares(analise: AnaliseDescricao): string[] {
   }
   if (analise.sinais.includes('SEMENTE_PLANTIO')) {
     perguntas.push('É semente para semeadura (plantio) ou grão para consumo/industrialização?')
+  }
+  if (analise.sinais.includes('VESTUARIO')) {
+    perguntas.push('Qual o tecido/composição (algodão, sintético, malha?) e o tipo de peça (camisa, calça, vestido?)?')
+  }
+  if (analise.sinais.includes('ELETRONICO')) {
+    perguntas.push('Qual a função principal do aparelho (telefonia, informática, eletrodoméstico?) e suas características (tensão, capacidade?)?')
+  }
+  if (analise.sinais.includes('CALCADO')) {
+    perguntas.push('Qual o material predominante (couro, têxtil, borracha?) e o tipo (tênis, sapato, bota?)?')
+  }
+  if (!perguntas.length && analise.tokens.length <= 2) {
+    perguntas.push('Descreva com mais 1–2 detalhes (material, uso, estado) para a Aurum AI desempatar entre os candidatos.')
   }
   return perguntas
 }

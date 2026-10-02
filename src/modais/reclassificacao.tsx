@@ -271,13 +271,13 @@ export function ModalReclassificacao({
       rodape={
         <>
           {temManual ? (
-            <Btn variante="danger" disabled={salvando} onClick={() => void excluir()}>
-              🗑 Remover manual
+            <Btn variante="danger" carregando={salvando} onClick={() => void excluir()}>
+              {salvando ? 'Removendo…' : '🗑 Remover manual'}
             </Btn>
           ) : null}
           <Btn onClick={onFechar}>Cancelar</Btn>
-          <Btn variante="primary" disabled={salvando || carregando} onClick={() => void confirmar()}>
-            ✋ Salvar reclassificação
+          <Btn variante="primary" carregando={salvando} disabled={carregando} onClick={() => void confirmar()}>
+            {salvando ? 'Salvando…' : '✋ Salvar reclassificação'}
           </Btn>
         </>
       }
@@ -286,7 +286,9 @@ export function ModalReclassificacao({
         <div className="rounded-xl border border-[var(--line)] bg-slate-50 p-3 dark:bg-slate-950/40">
           <div className="flex flex-wrap items-center gap-2">
             <Pill cor="brand">NCM {fmtNcm(codigo)}</Pill>
-            <Pill cor="amber">⚠ Sem classificação específica</Pill>
+            <span title="Nenhum vínculo oficial CST × cClassTrib — vale o fallback universal da LC 214/2025">
+              <Pill cor="amber">⚠ Sem vínculo oficial — regra geral</Pill>
+            </span>
           </div>
           {nomenclatura?.descricao ? (
             <div className="mt-2 text-sm text-slate-600 dark:text-slate-300">{nomenclatura.descricao}</div>

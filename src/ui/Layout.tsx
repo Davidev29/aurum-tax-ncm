@@ -5,7 +5,7 @@
  * A view ativa é renderizada pelo `App`; aqui ficam apenas o que é comum a
  * todas as telas (SPEC §10.1).
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties, type PointerEvent as EventoPonteiro } from 'react'
 import { BANNER_KEY, LINK_LC214 } from '@/domain/constants'
 import { fmtCnpj } from '@/domain/services/format'
 import { bridge } from '@/infrastructure/bridge'
@@ -41,11 +41,57 @@ const NAV: { secao?: string; itens: { id: ViewId; icone: NomeIcone; rotulo: stri
   },
 ]
 
+/** Media query reativa: decide se o hambúrguer único recolhe (desktop) ou abre o drawer (móvel). */
+function useMidia(query: string): boolean {
+  const [ok, setOk] = useState(() => window.matchMedia?.(query).matches ?? false)
+  useEffect(() => {
+    const lista = window.matchMedia?.(query)
+    if (!lista) return
+    const atualizar = () => setOk(lista.matches)
+    atualizar()
+    lista.addEventListener('change', atualizar)
+    return () => lista.removeEventListener('change', atualizar)
+  }, [query])
+  return ok
+}
+
+/**
+ * Gota d'água (Liquid Glass): ondulação que nasce no ponto exato do clique
+ * e se dissolve — injetada via `pointerdown` para seguir o dedo/cursor.
+ */
+function gotaNoClique(e: EventoPonteiro<HTMLButtonElement>) {
+  const alvo = e.currentTarget
+  const caixa = alvo.getBoundingClientRect()
+  const diametro = Math.max(caixa.width, caixa.height) * 2.2
+  const gota = document.createElement('span')
+  gota.className = 'side-gota'
+  gota.style.width = `${diametro}px`
+  gota.style.height = `${diametro}px`
+  gota.style.left = `${e.clientX - caixa.left - diametro / 2}px`
+  gota.style.top = `${e.clientY - caixa.top - diametro / 2}px`
+  alvo.appendChild(gota)
+  window.setTimeout(() => gota.remove(), 650)
+}
+
 function Sidebar() {
   const view = useUi((s) => s.view)
   const trocarView = useUi((s) => s.trocarView)
   const aberta = useUi((s) => s.sidebarAberta)
   const fechar = useUi((s) => s.fecharSidebar)
+  const recolhida = useUi((s) => s.sidebarRecolhida)
+  const toggleSidebar = useUi((s) => s.toggleSidebar)
+  const toggleRecolhida = useUi((s) => s.toggleRecolhida)
+  // Controle único da sidebar: no desktop recolhe/expande, no móvel abre o
+  // drawer. Mora na gota sobre a borda direita — sempre junto da sidebar.
+  const ehDesktop = useMidia('(min-width: 1024px)')
+  const expandida = ehDesktop ? !recolhida : aberta
+  const rotuloGota = ehDesktop
+    ? recolhida
+      ? 'Expandir menu lateral'
+      : 'Recolher menu lateral'
+    : aberta
+      ? 'Fechar menu'
+      : 'Abrir menu'
 
   // Drawer móvel: `Escape` fecha sem obrigar o usuário a mirar o botão ✕.
   useEffect(() => {
@@ -56,6 +102,9 @@ function Sidebar() {
     window.addEventListener('keydown', aoTeclar)
     return () => window.removeEventListener('keydown', aoTeclar)
   }, [aberta, fechar])
+
+  // Atraso em cascata da entrada elástica (recalculado a cada expansão).
+  let indiceItem = -1
 
   return (
     <>
@@ -69,16 +118,39 @@ function Sidebar() {
       <aside
         id="menu-lateral"
         aria-label="Menu principal"
-        className={`fixed inset-y-0 left-0 z-50 flex w-[min(16rem,82vw)] flex-col border-r border-[var(--line)] bg-[var(--surface-2)] shadow-drawer transition-transform duration-200 lg:static lg:h-full lg:w-64 lg:translate-x-0 lg:shadow-none ${
+        data-recolhida={recolhida}
+        className={`sidebar-liquida fixed inset-y-0 left-0 z-50 flex w-[min(16rem,82vw)] flex-col border-r border-[var(--line)] shadow-drawer lg:static lg:h-full lg:shadow-none ${
           aberta ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        } lg:translate-x-0 ${recolhida ? 'lg:w-[5.5rem]' : 'lg:w-64'}`}
       >
-        <div className="flex shrink-0 items-center gap-3 border-b border-[var(--line)] px-4 py-4">
-          <MarcaSidebar />
+        <div className="sidebar-topo relative flex shrink-0 flex-col items-stretch gap-2 border-b border-[var(--line)] px-3 py-3">
+          {/* Hambúrguer interno, acima da logo: só o ícone, sem rótulo
+              visível (a ação vive só no `aria-label`/`title`). */}
+          <button
+            type="button"
+            onClick={ehDesktop ? toggleRecolhida : toggleSidebar}
+            className="side-btn side-hamb mr-10 lg:mr-0"
+            onPointerDown={gotaNoClique}
+            aria-controls="menu-lateral"
+            aria-expanded={expandida}
+            aria-label={rotuloGota}
+            title={rotuloGota}
+          >
+            <span className="side-ico" aria-hidden="true">
+              <span className="gota-barras" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            </span>
+          </button>
+          <div className="min-w-0">
+            <MarcaSidebar expandida={expandida} />
+          </div>
           <button
             type="button"
             onClick={fechar}
-            className="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden"
+            className="absolute right-3 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden"
             aria-label="Fechar menu"
           >
             ✕
@@ -88,44 +160,61 @@ function Sidebar() {
         {/* O menu é fixo: só rola internamente se não couber na altura da
             janela (desktop com zoom alto / viewport curto). */}
         <nav
-          className="scroll-elegante min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4"
+          key={recolhida ? 'recolhida' : 'expandida'}
+          className={`scroll-elegante min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4 ${
+            recolhida ? '' : 'animar-entrada'
+          }`}
           aria-label="Seções do sistema"
         >
           {NAV.map((grupo) => (
-            <div key={grupo.secao}>
+            <div key={grupo.secao} className="space-y-2">
               <div className="mb-2 mt-4 px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 first:mt-0 dark:text-slate-500">
-                {grupo.secao}
+                <span className="side-secao-texto">{grupo.secao}</span>
+                <span className="side-secao-ponto" aria-hidden="true" />
               </div>
-              {grupo.itens.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="side-btn"
-                  data-active={view === item.id}
-                  aria-current={view === item.id ? 'page' : undefined}
-                  onClick={() => trocarView(item.id)}
-                >
-                  <span className="side-ico" aria-hidden="true">
-                    <Icone nome={item.icone} />
-                  </span>
-                  <span className="truncate">{item.rotulo}</span>
-                </button>
-              ))}
+              {grupo.itens.map((item) => {
+                indiceItem += 1
+                const ativo = view === item.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="side-btn"
+                    style={{ '--atraso': `${indiceItem * 45}ms` } as CSSProperties}
+                    data-active={ativo}
+                    aria-current={ativo ? 'page' : undefined}
+                    aria-label={item.rotulo}
+                    title={item.rotulo}
+                    onPointerDown={gotaNoClique}
+                    onClick={() => trocarView(item.id)}
+                  >
+                    <span className="side-ico" aria-hidden="true">
+                      <Icone nome={item.icone} />
+                    </span>
+                    <span className="side-rotulo truncate">{item.rotulo}</span>
+                  </button>
+                )
+              })}
             </div>
           ))}
         </nav>
 
-        <div className="shrink-0 border-t border-[var(--line)] px-4 py-3 text-[10px] leading-relaxed text-slate-400">
-          <a
-            href={LINK_LC214}
-            target="_blank"
-            rel="noreferrer"
-            className="font-semibold hover:text-brand-600 hover:underline dark:hover:text-aurum-300"
-          >
-            LC 214/2025 · CST · cClassTrib
-          </a>
-          <br />
-          Aurum Bit Labs &amp; Studios LTDA
+        <div className="sidebar-rodape shrink-0 border-t border-[var(--line)] px-4 py-3 text-[10px] leading-relaxed text-slate-400">
+          <div className="sidebar-rodape-detalhe">
+            <a
+              href={LINK_LC214}
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold hover:text-brand-600 hover:underline dark:hover:text-aurum-300"
+            >
+              LC 214/2025 · CST · cClassTrib
+            </a>
+            <br />
+            Aurum Bit Labs &amp; Studios LTDA
+          </div>
+          <div className="sidebar-rodape-mini" aria-hidden="true" title="LC 214/2025">
+            LC
+          </div>
         </div>
       </aside>
     </>
@@ -194,8 +283,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const tema = useUi((s) => s.tema)
   const alternarTema = useUi((s) => s.alternarTema)
   const abrirModal = useUi((s) => s.abrirModal)
-  const toggleSidebar = useUi((s) => s.toggleSidebar)
-  const sidebarAberta = useUi((s) => s.sidebarAberta)
   const meta = VIEW_META[view]
 
   // Atalhos de teclado do menu nativo (Electron) — via canal IPC `menu:acao`.
@@ -211,22 +298,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
     })
   }, [abrirModal, alternarTema])
 
+  // Diagnóstico IA (06-05): `Ctrl+Shift+D` alterna a view oculta `debugia`.
+  // Registrado aqui (sempre montado) para funcionar de qualquer tela.
+  useEffect(() => {
+    const aoTeclar = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey
+      if (mod && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+        e.preventDefault()
+        const atual = useUi.getState().view
+        useUi.getState().trocarView(atual === 'debugia' ? 'calculadora' : 'debugia')
+      }
+    }
+    window.addEventListener('keydown', aoTeclar)
+    return () => window.removeEventListener('keydown', aoTeclar)
+  }, [])
+
   return (
     <div className="flex h-dvh min-h-0 w-full overflow-hidden bg-[var(--surface)] text-[var(--ink)]">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="z-30 shrink-0 border-b border-[var(--line)] bg-[var(--surface)]/90 backdrop-blur">
           <div className="flex flex-wrap items-center gap-2 px-4 py-3 sm:gap-3 sm:px-6">
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              className="btn btn-press btn-ghost btn-sm lg:hidden"
-              aria-label="Abrir menu"
-              aria-controls="menu-lateral"
-              aria-expanded={sidebarAberta}
-            >
-              ☰
-            </button>
             <div className="min-w-0 flex-1 basis-40">
               <h1 className="truncate text-base font-black tracking-tight sm:text-lg">{meta.titulo}</h1>
               <p className="hidden truncate text-xs text-slate-500 sm:block">{meta.subtitulo}</p>

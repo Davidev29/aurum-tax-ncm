@@ -6,6 +6,7 @@ import { lerAceite } from '@/domain/contrato';
 import { useUi } from '@/store/ui';
 import { Calculadora } from '@/pages/Calculadora';
 import { Consulta } from '@/pages/Consulta';
+import { DebugIA } from '@/pages/DebugIA';
 import { Lote } from '@/pages/Lote';
 import { NfeXml } from '@/pages/NfeXml';
 import { Produtos } from '@/pages/Produtos';
@@ -39,6 +40,9 @@ export function App() {
       break;
     case 'legislacao':
       pagina = <Legislacao />;
+      break;
+    case 'debugia':
+      pagina = <DebugIA />;
       break;
     default:
       pagina = <Calculadora />;

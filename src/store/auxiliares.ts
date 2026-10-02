@@ -60,6 +60,8 @@ interface AuxState {
   paginas: Partial<Record<TipoAux, number>>
   edicao: EdicaoAux | null
   carregando: boolean
+  /** Falha do último `carregar(tipo)` (mensagem curta para a UI exibir + retry). */
+  erros: Partial<Record<TipoAux, string>>
 
   carregar: (tipo: TipoAux) => Promise<void>
   recarregarTudo: () => Promise<void>
@@ -82,12 +84,25 @@ export const itensVisiveis = (
   meta: MetaAux,
   tamanhoPagina: number = PAGE_SIZE,
 ): RegistroAux[] => {
-  const p = Math.max(1, Math.floor(paginaNum) || 1)
-  const tam = Math.max(1, Math.floor(tamanhoPagina) || PAGE_SIZE)
-  const f = filtro.trim().toLowerCase()
-  const filtrados = f ? lista.filter((r) => meta.texto(r).includes(f)) : lista
-  const inicio = (p - 1) * tam
-  return filtrados.slice(inicio, inicio + tam)
+  try {
+    const p = Math.max(1, Math.floor(paginaNum) || 1)
+    const tam = Math.max(1, Math.floor(tamanhoPagina) || PAGE_SIZE)
+    const f = (filtro ?? '').trim().toLowerCase()
+    const base = Array.isArray(lista) ? lista : []
+    const filtrados = f
+      ? base.filter((r) => {
+          try {
+            return meta.texto(r).includes(f)
+          } catch {
+            return false
+          }
+        })
+      : base
+    const inicio = (p - 1) * tam
+    return filtrados.slice(inicio, inicio + tam)
+  } catch {
+    return []
+  }
 }
 
 export const totalFiltrado = (
@@ -95,12 +110,33 @@ export const totalFiltrado = (
   filtro: string,
   meta: MetaAux,
 ): number => {
-  const f = filtro.trim().toLowerCase()
-  return f ? lista.filter((r) => meta.texto(r).includes(f)).length : lista.length
+  try {
+    const base = Array.isArray(lista) ? lista : []
+    const f = (filtro ?? '').trim().toLowerCase()
+    if (!f) return base.length
+    return base.filter((r) => {
+      try {
+        return meta.texto(r).includes(f)
+      } catch {
+        return false
+      }
+    }).length
+  } catch {
+    return 0
+  }
 }
 
 async function lerStore(store: StoreName): Promise<RegistroAux[]> {
-  return (await db.table(store).toArray()) as RegistroAux[]
+  try {
+    // Banco legado (v6/v8/v9) pode não ter a store nova (ex.: `anexos`,
+    // `produtosDfe` só existem na v10): sem a guarda, `db.table()` lança e
+    // derruba o carregamento das demais tabelas.
+    const existe = db.tables.some((t) => t.name === store)
+    if (!existe) return []
+    return (await db.table(store).toArray()) as RegistroAux[]
+  } catch {
+    return []
+  }
 }
 
 export const useAuxiliares = create<AuxState>((set, get) => ({
@@ -109,21 +145,36 @@ export const useAuxiliares = create<AuxState>((set, get) => ({
   paginas: {},
   edicao: null,
   carregando: false,
+  erros: {},
 
   carregar: async (tipo) => {
-    const lista = await lerStore(AUX_META[tipo].store)
-    set((s) => ({ caches: { ...s.caches, [tipo]: lista } }))
+    try {
+      const lista = await lerStore(AUX_META[tipo].store)
+      set((s) => ({
+        caches: { ...s.caches, [tipo]: lista },
+        erros: { ...s.erros, [tipo]: undefined },
+      }))
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      set((s) => ({ erros: { ...s.erros, [tipo]: msg || 'Falha ao carregar.' } }))
+    }
   },
 
   recarregarTudo: async () => {
     set({ carregando: true })
     const caches: Partial<Record<TipoAux, RegistroAux[]>> = {}
+    const erros: Partial<Record<TipoAux, string>> = {}
     await Promise.all(
       TIPOS_AUX.map(async (t) => {
-        caches[t] = await lerStore(AUX_META[t].store)
+        try {
+          caches[t] = await lerStore(AUX_META[t].store)
+        } catch (e) {
+          caches[t] = []
+          erros[t] = e instanceof Error ? e.message : 'Falha ao carregar.'
+        }
       }),
     )
-    set({ caches, carregando: false })
+    set({ caches, carregando: false, erros })
   },
 
   filtrar: (tipo, texto) =>
@@ -221,15 +272,23 @@ export const useAuxiliares = create<AuxState>((set, get) => ({
     if (tipo === 'cst' || tipo === 'cstct' || tipo === 'ncm') {
       try {
         const chaveStr = String(chave)
+        const contarSeguro = async (store: string, campo: string, valor: string): Promise<number> => {
+          try {
+            if (!db.tables.some((t) => t.name === store)) return 0
+            return await db.table(store).where(campo).equals(valor).count()
+          } catch {
+            return 0
+          }
+        }
         let emUso = 0
-        if (tipo === 'ncm') emUso = await db.table('ncm').where('codigo').equals(chaveStr).count()
+        if (tipo === 'ncm') emUso = await contarSeguro('ncm', 'codigo', chaveStr)
         if (tipo === 'cst') {
           emUso =
-            (await db.table('ncm').where('cst').equals(chaveStr).count()) +
-            (await db.table('cstClassTrib').where('cst').equals(chaveStr).count())
+            (await contarSeguro('ncm', 'cst', chaveStr)) +
+            (await contarSeguro('cstClassTrib', 'cst', chaveStr))
         }
         if (tipo === 'cstct') {
-          emUso = await db.table('ncm').where('cClassTrib').equals(chaveStr.split('|')[1] ?? chaveStr).count()
+          emUso = await contarSeguro('ncm', 'cClassTrib', chaveStr.split('|')[1] ?? chaveStr)
         }
         if (emUso > 0) {
           toast(`Exclusão bloqueada: ${emUso} vínculo(s) usam este registro. Reclassifique antes de excluir.`, 'warn')
@@ -239,7 +298,12 @@ export const useAuxiliares = create<AuxState>((set, get) => ({
         /* segue para exclusão se a checagem falhar */
       }
     }
-    await excluirRegistroAux(meta.store, chave)
+    try {
+      await excluirRegistroAux(meta.store, chave)
+    } catch (e) {
+      toast(`Falha ao excluir: ${e instanceof Error ? e.message : String(e)}`, 'err')
+      return
+    }
     await get().carregar(tipo)
     toast('Registro excluído.', 'warn')
     if (tipo === 'ncm' || tipo === 'cst' || tipo === 'cstct' || tipo === 'ncmnomen') {

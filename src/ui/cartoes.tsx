@@ -6,8 +6,10 @@
  * um `Classificacao`/`Observacao` já resolvido pelas camadas de domínio e
  * aplicação (Clean Code — apresentação pura).
  */
-import { useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
 import { ANEXO_LABELS } from '@/domain/constants/tributarios'
+import { NOME_IA } from '@/domain/aurum-ai'
+import { analisarFichaAbsoluta, type FichaAbsoluta } from '@/application/aurum-ai-contexto'
 import { urlLegislacaoComAncora } from '@/domain/legislacao'
 import type {
   Classificacao,
@@ -27,6 +29,7 @@ import { observacaoRevogacao } from '@/domain/services/revogacao'
 import { fmtMoeda, fmtNcm, parseMoeda } from '@/domain/services/format'
 import { useCalculadora } from '@/store/calculadora'
 import { AnexoBadge, Btn, Pill, Texto, type CorPill } from './kit'
+import { AtribuicaoAurumAI, FontesAurumAI, SeloAurumAI } from './aurum-ai'
 import { ModalLegislacao, type DestinoLegislacao } from './ModalLegislacao'
 
 /* --------------------------------------------------------------- helpers -- */
@@ -99,6 +102,45 @@ export function AvisoVigenciaCct({
   const obs = observacaoVigenciaCct(cct)
   if (!obs) return null
   return <ListaObservacoes itens={[obs]} />
+}
+
+/**
+ * Selo de anexos oficiais do NCM — só renderiza quando a tabela de anexos
+ * cita o NCM (descoberta para abrir o detalhe). Carrega sozinho do Dexie.
+ */
+export function PillAnexos({ ncm }: { ncm: string }) {
+  const [total, setTotal] = useState<number | null>(null)
+  const [negado, setNegado] = useState(false)
+  useEffect(() => {
+    let vivo = true
+    const cod = String(ncm ?? '').replace(/\D/g, '')
+    if (cod.length !== 8) {
+      setTotal(null)
+      return
+    }
+    void (async () => {
+      try {
+        const { anexosDoNcm } = await import('@/infrastructure/base/info-adicional')
+        const linhas = await anexosDoNcm(cod)
+        if (!vivo) return
+        setTotal(linhas.length || null)
+        setNegado(linhas.some((l) => l.permissao === 'negado'))
+      } catch {
+        if (vivo) setTotal(null)
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [ncm])
+  if (!total) return null
+  return (
+    <span className="mt-2 flex flex-wrap gap-1.5" title={`${total} linha(s) da tabela oficial de anexos citam este NCM — veja em Detalhes fiscais`}>
+      <Pill cor={negado ? 'red' : 'slate'}>
+        {negado ? '⛔' : '📎'} {total} anexo{total > 1 ? 's' : ''}
+      </Pill>
+    </span>
+  )
 }
 
 /** Bloqueio por sistema vindo da tabela CFF (`classificacaoProduto`). */
@@ -405,6 +447,8 @@ export function CartaoClassificacao({
   onSalvar,
   onAddCalc,
   onReclassificar,
+  /** Borda animada ouro + selo: este cartão foi a IA que classificou. */
+  destaqueIA = false,
 }: {
   cl: Classificacao
   indice: number
@@ -418,6 +462,7 @@ export function CartaoClassificacao({
   onAddCalc?: () => void
   /** Abre a edição da reclassificação manual (só faz sentido no cartão manual). */
   onReclassificar?: () => void
+  destaqueIA?: boolean
 }) {
   const r = cl.resumo
   const cct = cl.cstClassTribDetalhes
@@ -444,7 +489,16 @@ export function CartaoClassificacao({
   const observacoes = [...(obsRev ? [obsRev] : []), ...obsDiferimento, ...(obsTipo ? [obsTipo] : obsLegais)]
 
   return (
-    <div className="panel animate-fade-up card-hover p-5">
+    <div
+      className={`panel animate-fade-up card-hover p-5 ${destaqueIA ? 'aurum-ai-destaque' : ''}`}
+      style={destaqueIA ? ({ '--cor-borda': '#be9433', '--cor-brilho': '#ead79e' } as CSSProperties) : undefined}
+    >
+      {destaqueIA ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <SeloAurumAI variante="compacto" />
+          <AtribuicaoAurumAI detalhe="classificou este NCM" />
+        </div>
+      ) : null}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Pill cor="slate">
           Opção {indice + 1}/{total}
@@ -562,9 +616,17 @@ export function CartaoClassificacao({
 /* ------------------------------------------- cartão: tributação integral --- */
 
 /**
- * Cartão "sem classificação específica" (regra geral).
+ * Cartão "sem vínculo oficial" (regra geral) com veredito unificado Aurum AI.
  *
- * É o **único** lugar onde aparece o aviso *in natura* (Art. 137) — SPEC D04.
+ * Corrige a divergência "alíquota cheia × redução 60%": há UMA verdade com
+ * duas camadas rotuladas —
+ * - **Vigente (fato oficial)**: tributação integral, redução 0%, cálculo cheio;
+ * - **Hipótese condicional (a verificar)**: possível redução 60% SE comprovar
+ *   in natura / alimento. Hipótese nunca entra no cálculo nem no selo.
+ *
+ * É o **único** lugar onde aparece o aviso *in natura* (Art. 137) — SPEC D04 —
+ * agora dentro do painel `Aurum AI · análise do conjunto absoluto`, assinado
+ * como "Sugerido por Aurum AI".
  */
 export function CartaoTributacaoIntegral({
   cl,
@@ -573,6 +635,9 @@ export function CartaoTributacaoIntegral({
   onSalvar,
   onAddCalc,
   onReclassificar,
+  ficha,
+  /** Borda animada ouro + selo: este enquadramento foi sugerido pela IA. */
+  destaqueIA = false,
 }: {
   cl: Classificacao
   nomenclatura: NomenclaturaNcm | null
@@ -582,6 +647,9 @@ export function CartaoTributacaoIntegral({
   onAddCalc?: () => void
   /** Aberto somente quando não há classificação específica (caso regra geral). */
   onReclassificar?: () => void
+  /** Ficha absoluta da Aurum AI (quando já montada — evita releitura). */
+  ficha?: FichaAbsoluta | null
+  destaqueIA?: boolean
 }) {
   const cct = cl.cstClassTribDetalhes
   const cstDet = cl.cstDetalhes
@@ -593,12 +661,67 @@ export function CartaoTributacaoIntegral({
   const obsRevIntegral = observacaoRevogacao(cl.revogado)
   const extinto = isNcmExtinto(nomenclatura)
 
+  // Veredito unificado: usa a ficha absoluta quando disponível; senão,
+  // reconstrói a hipótese mínima a partir do aviso in natura (mesma regra).
+  const veredito = (() => {
+    if (ficha) return analisarFichaAbsoluta(ficha)
+    if (!aviso) {
+      return {
+        exigeVerificacao: false,
+        mensagemVigente:
+          'Sem vínculo específico na base oficial: vale a regra geral (CST 000/cClassTrib 000001, alíquota cheia de IBS/CBS).',
+        mensagemHipotese: null as string | null,
+        checklist: [] as string[],
+        artigosHipotese: [] as string[],
+        fontes: [
+          'Nomenclatura vigente (TEC)',
+          'Vínculos oficiais da Reforma (CST × cClassTrib)',
+          'Vigência: NCM vigente',
+        ],
+      }
+    }
+    // Hipótese mínima síncrona (espelha analisarFichaAbsoluta para regra geral
+    // com capítulo in natura): vigente integral + hipótese 60% a verificar.
+    return {
+      exigeVerificacao: true,
+      mensagemVigente:
+        'Sem vínculo específico na base oficial: HOJE vale a regra geral (CST 000/cClassTrib 000001, alíquota cheia). O cálculo abaixo usa a alíquota cheia — nenhuma redução foi aplicada.',
+      mensagemHipotese:
+        `A ${NOME_IA} identificou hipótese CONDICIONAL de redução de 60% (não vigente): ela só vale SE o seu produto/operação comprovar a condição legal. Enquanto não comprovada, escriture pela regra geral.`,
+      checklist: [
+        'O produto é in natura (agropecuário, aquícola, pesqueiro, florestal ou extrativista vegetal, sem industrialização relevante)?',
+        'Se confirmar a condição, reclassifique com a regra específica (botão "Reclassificar manualmente") informando descrição + link da legislação.',
+      ],
+      artigosHipotese: ['Art. 137 da LC 214/2025 (in natura — redução de 60%)'],
+      fontes: [
+        'Nomenclatura vigente (TEC)',
+        'Vínculos oficiais da Reforma (CST × cClassTrib)',
+        (aviso.titulo || 'Capítulo com hipótese in natura') as string,
+        'Vigência: NCM vigente',
+      ],
+    }
+  })()
+
   return (
-    <div className="animate-fade-up overflow-hidden rounded-2xl border border-amber-300 bg-white shadow-card dark:border-amber-800 dark:bg-slate-900">
+    <div
+      className={`animate-fade-up overflow-hidden rounded-2xl border bg-white shadow-card dark:bg-slate-900 ${destaqueIA ? 'aurum-ai-destaque border-amber-300 dark:border-amber-800' : 'border-amber-300 dark:border-amber-800'}`}
+      style={destaqueIA ? ({ '--cor-borda': '#be9433', '--cor-brilho': '#ead79e' } as CSSProperties) : undefined}
+    >
       <div className="border-b border-amber-200 bg-gradient-to-r from-amber-50 to-white px-5 py-4 dark:border-amber-900 dark:from-amber-950/40 dark:to-slate-900">
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <Pill cor="amber">⚠ Sem classificação específica</Pill>
-          <Pill cor="red">⚡ Alíquota cheia</Pill>
+          {destaqueIA ? (
+            <>
+              <SeloAurumAI variante="compacto" />
+              <AtribuicaoAurumAI detalhe="sugeriu este enquadramento" />
+            </>
+          ) : null}
+          <span title="Nenhum vínculo oficial CST × cClassTrib para este NCM — vale o fallback universal da LC 214/2025">
+            <Pill cor="amber">⚠ Sem vínculo oficial — regra geral</Pill>
+          </span>
+          <span title="Redução vigente 0% IBS / 0% CBS — o simulador e a calculadora usam a alíquota cheia">
+            <Pill cor="red">⚡ Alíquota cheia vigente</Pill>
+          </span>
+          {veredito.exigeVerificacao ? <SeloAurumAI variante="compacto" /> : null}
           {extinto ? <Pill cor="red">⛔ NCM extinto</Pill> : null}
           {cl.revogado ? <Pill cor="red">⛔ Revogado</Pill> : null}
           {temVigenciaCct ? <Pill cor="amber">⏳ Vigência cClassTrib</Pill> : null}
@@ -609,6 +732,11 @@ export function CartaoTributacaoIntegral({
         {nomenclatura?.ato ? (
           <div className="mt-1 text-[10px] text-slate-500">📎 {nomenclatura.ato}</div>
         ) : null}
+        {veredito.exigeVerificacao ? (
+          <div className="mt-2">
+            <AtribuicaoAurumAI detalhe="hipótese condicional detectada" />
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-4 p-5">
@@ -616,41 +744,83 @@ export function CartaoTributacaoIntegral({
         {obsRevIntegral ? <ListaObservacoes itens={[obsRevIntegral]} /> : null}
         {temVigenciaCct ? <AvisoVigenciaCct cct={cct} /> : null}
         {aviso ? (
-          <div className="animate-fade-up rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
-            <div className="mb-1 flex items-center gap-2 font-bold">
-              <span className="text-base">🌿</span>
-              <span>Atenção: Produto potencialmente &quot;in natura&quot;</span>
+          <section
+            className="aurum-ai-analise animate-fade-up"
+            aria-label={`${NOME_IA} · análise do conjunto absoluto — vigente vs hipótese`}
+          >
+            <div className="aurum-ai-analise-cab">
+              <SeloAurumAI variante="compacto" />
+              <span className="text-[11px] font-black uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                Análise do conjunto absoluto
+              </span>
+              <span className="ml-auto">
+                <AtribuicaoAurumAI />
+              </span>
             </div>
-            <p className="leading-relaxed">{aviso.texto}</p>
-            {aviso.adendo ? (
-              <p className="mt-2 leading-relaxed">{aviso.adendo}</p>
-            ) : null}
-            <BotaoVerLegislacao
-              url={aviso.link}
-              titulo={aviso.titulo}
-              referencia={aviso.titulo}
-              texto={aviso.texto}
-              rotulo={aviso.rotuloLink ?? 'Visualizar legislação'}
-              className="mt-2 inline-flex items-center gap-1 font-semibold text-amber-800 underline hover:text-amber-950 dark:text-amber-300 cursor-pointer"
-            />
-          </div>
+            <div className="aurum-ai-analise-corpo space-y-2.5">
+              <div className="aurum-ai-camada aurum-ai-camada--vigente">
+                <div className="font-bold text-emerald-800 dark:text-emerald-200">
+                  ● Situação vigente (fato oficial): tributação integral
+                </div>
+                <p className="mt-1 leading-relaxed text-slate-700 dark:text-slate-300">{veredito.mensagemVigente}</p>
+                <p className="mt-1 font-mono text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                  Redução vigente: 0,00% IBS / 0,00% CBS — cálculo com alíquota cheia
+                </p>
+              </div>
+              <div className="aurum-ai-camada aurum-ai-camada--hipotese">
+                <div className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200">
+                  <span aria-hidden="true">🌿</span>
+                  <span>○ Hipótese condicional a verificar (NÃO vigente): possível redução de 60%</span>
+                </div>
+                <p className="mt-1 leading-relaxed">{aviso.texto}</p>
+                {veredito.mensagemHipotese ? (
+                  <p className="mt-2 leading-relaxed">{veredito.mensagemHipotese}</p>
+                ) : null}
+                {aviso.adendo ? <p className="mt-2 leading-relaxed">{aviso.adendo}</p> : null}
+                {veredito.checklist.length ? (
+                  <ul className="mt-2 list-disc space-y-1 pl-4">
+                    {veredito.checklist.map((c, i) => (
+                      <li key={i}>{c}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {veredito.artigosHipotese.length ? (
+                  <p className="mt-2 text-[11px] font-semibold">
+                    Fundamento da hipótese: {veredito.artigosHipotese.join(' · ')}
+                  </p>
+                ) : null}
+                <BotaoVerLegislacao
+                  url={aviso.link}
+                  titulo={aviso.titulo}
+                  referencia={aviso.titulo}
+                  texto={aviso.texto}
+                  rotulo={aviso.rotuloLink ?? 'Consultar Art. 137 da LC 214/2025'}
+                  className="mt-2 inline-flex items-center gap-1 font-semibold text-amber-800 underline hover:text-amber-950 dark:text-amber-300 cursor-pointer"
+                />
+              </div>
+              <FontesAurumAI fontes={veredito.fontes} />
+            </div>
+          </section>
         ) : null}
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Dado rotulo="CST" valor={cstDet?.codigo || '000'} sub={cstDet?.descricao} />
-          <Dado rotulo="cClassTrib" valor={cct?.cClassTrib || '000001'} />
+          <Dado rotulo="CST vigente" valor={cstDet?.codigo || '000'} sub={cstDet?.descricao} />
+          <Dado rotulo="cClassTrib vigente" valor={cct?.cClassTrib || '000001'} />
           <div className="col-span-2 rounded-xl bg-slate-50 p-2.5 dark:bg-slate-950/40">
-            <div className="text-[10px] font-bold uppercase text-slate-500">Classificação</div>
-            <div className="text-xs font-semibold">{cct?.nome || cct?.descricao || '—'}</div>
+            <div className="text-[10px] font-bold uppercase text-slate-500">Classificação vigente</div>
+            <div className="text-xs font-semibold">Situações tributadas integralmente pelo IBS e CBS.</div>
           </div>
         </div>
 
         <SimuladorRapido redIBS={0} redCBS={0} />
 
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          <div className="mb-1 font-bold">ℹ Regra geral da LC 214/2025</div>
+          <div className="mb-1 font-bold">ℹ Regra geral da LC 214/2025 — vale hoje</div>
           <div>
-            Aplica-se <strong>tributação integral</strong>: alíquota cheia de IBS/CBS.
+            Aplica-se <strong>tributação integral vigente</strong>: alíquota cheia de IBS/CBS (redução 0%).
+            {veredito.exigeVerificacao
+              ? ' A hipótese de 60% acima NÃO foi aplicada ao cálculo — só vale após comprovação + reclassificação.'
+              : null}
           </div>
         </div>
 
@@ -671,7 +841,7 @@ export function CartaoTributacaoIntegral({
               </Btn>
             ) : null}
             {onReclassificar ? (
-              <Btn variante="primary" tam="sm" onClick={onReclassificar}>
+              <Btn variante="primary" tam="sm" onClick={onReclassificar} title={veredito.exigeVerificacao ? `A ${NOME_IA} detectou hipótese de 60% — reclassifique com a regra específica + fonte legal` : undefined}>
                 ✋ Reclassificar manualmente
               </Btn>
             ) : null}

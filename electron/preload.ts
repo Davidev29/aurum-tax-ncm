@@ -11,7 +11,13 @@
  */
 
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AurumBridge, EventoAtualizacao } from '../src/infrastructure/bridge'
+import type {
+  AurumBridge,
+  CandidatoIa,
+  EventoAtualizacao,
+  ResultadoIaBridge,
+  StatusIaBridge,
+} from '../src/infrastructure/bridge'
 
 /**
  * Versão do aplicativo, repassada pelo processo principal por meio de
@@ -95,6 +101,20 @@ const aurum: AurumBridge = {
         cb(payload as EventoAtualizacao)
       }
     })
+  },
+
+  /**
+   * IA offline (Phase 6 / IA-05 — tracer 06-05).
+   *
+   * O LLM roda exclusivamente no worker `utilityProcess` (nunca no
+   * renderer/preload — `node-llama-cpp` declara crash em renderer). Aqui só
+   * o round-trip IPC `ia:classificar`/`ia:buscar`/`ia:status`.
+   */
+  ia: {
+    classificar: (descricao: string, candidatos?: CandidatoIa[]): Promise<ResultadoIaBridge> =>
+      ipcRenderer.invoke('ia:classificar', descricao, candidatos),
+    buscar: (consulta: string, k?: number) => ipcRenderer.invoke('ia:buscar', consulta, k),
+    status: (): Promise<StatusIaBridge> => ipcRenderer.invoke('ia:status'),
   },
 }
 

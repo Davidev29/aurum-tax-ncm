@@ -197,6 +197,8 @@ export function ModalProdutoDetalhe({
             </Grade>
           </Secao>
 
+          <SecaoInformacoesAdicionais ncm={produto.ncm} />
+
           <Secao titulo="Valores" icone="💰">
             <Grade cols="grid-cols-3">
               <Campo rotulo="Qtd" valor={fmtNum(produto.quantidade)} mono />
@@ -332,7 +334,7 @@ export function ModalItemNfeDetalhe({
             <Btn tam="sm" onClick={onFechar}>
               Fechar
             </Btn>
-            <Btn variante="primary" tam="sm" onClick={() => void salvar()} disabled={salvando}>
+            <Btn variante="primary" tam="sm" onClick={() => void salvar()} carregando={salvando}>
               {salvando ? 'Salvando…' : salvo ? '✓ Salvo · clicar atualiza' : '＋ Salvar produto'}
             </Btn>
           </span>
@@ -423,6 +425,14 @@ export function ModalItemNfeDetalhe({
               </p>
             ) : null}
             <BlocoDiferimentoClassificacao cl={item.classificacao} />
+            <SecaoInformacoesAdicionais
+              ncm={item.ncm}
+              temCredito={
+                item.classificacao.referencia?.creditoPresumido === true ||
+                item.classificacao.referencia?.creditoPresumido === 'Sim' ||
+                item.classificacao.cstClassTribDetalhes?.indCredPres === 1
+              }
+            />
           </Secao>
           <p className="rounded-xl bg-brand-50/70 px-3 py-2 text-[11px] leading-relaxed text-brand-800 dark:bg-brand-950/30 dark:text-brand-300">
             Gostou deste item? Use <strong>＋ Salvar produto</strong> abaixo para gravá-lo no cadastro
@@ -441,4 +451,100 @@ export function ModalItemNfeDetalhe({
  */
 function FaixaDivergencia({ item }: { item: ResultadoItemNfe }) {
   return <FaixaConfrontoXml item={item} />
+}
+
+/* ------------------------------------------- informações adicionais (CFF) --- */
+
+import { useRef } from 'react'
+import { norm } from '@/domain/services/format'
+import type { AnexoNcm, CreditoPresumido } from '@/domain/entities'
+import { anexosDoNcm, regrasCreditoPresumido } from '@/infrastructure/base/info-adicional'
+
+/**
+ * Informações adicionais da classificação (opt-in, colapsadas).
+ *
+ * Só aparece quando há match com regra existente:
+ * - **Anexos do NCM**: linhas da tabela oficial que citam o NCM
+ *   (Permitido × Não Permitido + condição);
+ * - **Crédito presumido**: regras vigentes, quando a classificação indica
+ *   crédito presumido (`temCredito`).
+ *
+ * Carrega do Dexie local (sem rede) e nunca altera a classificação.
+ */
+export function SecaoInformacoesAdicionais({
+  ncm,
+  temCredito = false,
+}: {
+  ncm: string
+  temCredito?: boolean | null
+}) {
+  const [dados, setDados] = useState<{ anexos: AnexoNcm[]; credito: CreditoPresumido[] } | null>(null)
+  const chave = norm(ncm)
+  const flagCredito = Boolean(temCredito)
+  const chaveRef = useRef('')
+
+  useEffect(() => {
+    const k = `${chave}|${flagCredito ? 1 : 0}`
+    if (chaveRef.current === k) return
+    chaveRef.current = k
+    let vivo = true
+    void (async () => {
+      const [anexos, credito] = await Promise.all([
+        anexosDoNcm(chave),
+        flagCredito ? regrasCreditoPresumido() : Promise.resolve([] as CreditoPresumido[]),
+      ])
+      if (vivo) setDados({ anexos, credito })
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [chave, flagCredito])
+
+  if (!dados || (!dados.anexos.length && !dados.credito.length)) return null
+
+  return (
+    <div className="space-y-2">
+      {dados.anexos.length ? (
+        <details className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950/40">
+          <summary className="cursor-pointer text-xs font-bold">
+            📎 Anexos do NCM ({dados.anexos.length})
+          </summary>
+          <ul className="mt-2 space-y-1.5">
+            {dados.anexos.slice(0, 20).map((a) => (
+              <li key={a.id} className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+                <span className="font-mono font-bold">Anexo {a.nroAnexo}</span>
+                {' — '}
+                <span className={a.permissao === 'negado' ? 'font-bold text-red-600 dark:text-red-300' : 'font-bold text-emerald-700 dark:text-emerald-300'}>
+                  {a.permissao === 'negado' ? '⛔ Não permitido' : a.permissao === 'permitido' ? '✓ Permitido' : 'sem informação de permissão'}
+                </span>
+                {a.descrCondicao ? <span> · {a.descrCondicao.slice(0, 120)}</span> : null}
+              </li>
+            ))}
+          </ul>
+          {dados.anexos.length > 20 ? (
+            <p className="mt-1 text-[10px] text-slate-400">… e mais {dados.anexos.length - 20} linhas na tabela oficial.</p>
+          ) : null}
+        </details>
+      ) : null}
+      {dados.credito.length ? (
+        <details className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950/40">
+          <summary className="cursor-pointer text-xs font-bold">
+            💰 Crédito presumido — regras vigentes ({dados.credito.length})
+          </summary>
+          <ul className="mt-2 space-y-1.5">
+            {dados.credito.map((c) => (
+              <li key={c.cod} className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+                <span className="font-mono font-bold">{c.cod}</span>
+                {' · '}
+                {c.indIbs ? 'IBS ' : ''}
+                {c.indCbs ? 'CBS' : ''}
+                {' — '}
+                {c.descricao.slice(0, 160)}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </div>
+  )
 }

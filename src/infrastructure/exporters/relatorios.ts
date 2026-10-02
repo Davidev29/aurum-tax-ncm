@@ -28,13 +28,28 @@ import type { ResultadoItem, ResultadoResumo, ResultadoSped } from '../sped/tipo
 import { creditoDaNota, creditoIbsCbsDaNota } from '../nfe/credito'
 import { apurarIbsCbs } from '../nfe/apuracao'
 import { REGIME_LABELS, regimeDoEmitente } from '../nfe/regime'
-import type { CreditoFornecedor, NotaXml } from '../nfe/tipos'
-import type { Emitente, Empresa, Produto } from '../../domain/entities'
+import type { CreditoFornecedor, CreditoLoja, DisponibilidadeCredito, InsightNfe, NotaXml, OpcoesRelatorioNfe, VerificacaoRagNfe } from '../nfe/tipos'
+import { OPCOES_RELATORIO_CHEIO } from '../nfe/tipos'
+import type { AnexoNcm, Emitente, Empresa, Produto } from '../../domain/entities'
+import { anexosNegadosPara } from '../base/info-adicional'
+import { OURO_AURUM, fundoMarcaDagua } from '../pdf/marca-dagua'
 
 /* --------------------------------------------------------------- helpers -- */
 
 const BOM = '﻿'
 const hojeISO = (): string => new Date().toISOString().slice(0, 10)
+
+/**
+ * Restrições oficiais "Não Permitido" para os NCMs do relatório (best-effort:
+ * sem tabela de anexos, devolve vazio e o relatório sai como antes).
+ */
+async function anexosNegadosRelatorio(ncms: unknown[]): Promise<AnexoNcm[]> {
+  try {
+    return await anexosNegadosPara(ncms)
+  } catch {
+    return []
+  }
+}
 
 /** Sufixo de arquivo usado pela v1: razão social sem não-alfanuméricos. */
 function sufixo(emp: Empresa | null, fallback: string): string {
@@ -349,15 +364,19 @@ function linhasEmitente(e: Emitente): string[][] {
   ].filter((l) => l[0])
 }
 
-/** Timbrado repetido no topo de todas as páginas (equivalente ao `drawLetterhead`). */
+/** Timbrado premium repetido no topo de todas as páginas (equivalente ao `drawLetterhead`). */
 function timbrado(emitente: Emitente, cor: string, titulo: string, subtitulo: string) {
   const info = linhasEmitente(emitente)
   return {
     margin: [34, 8, 34, 0] as [number, number, number, number],
     stack: [
+      // Abertura em filete duplo: ouro Aurum + barra na cor do emitente.
       {
-        canvas: [{ type: 'rect' as const, x: 0, y: 0, w: 527, h: 11.3, color: cor }],
-        margin: [0, 0, 0, 6] as [number, number, number, number],
+        canvas: [
+          { type: 'rect' as const, x: 0, y: 0, w: 527, h: 2.2, color: OURO_AURUM },
+          { type: 'rect' as const, x: 0, y: 3.4, w: 527, h: 7.5, color: cor },
+        ],
+        margin: [0, 0, 0, 7] as [number, number, number, number],
       },
       {
         columnGap: 14,
@@ -368,20 +387,42 @@ function timbrado(emitente: Emitente, cor: string, titulo: string, subtitulo: st
             stack: [
               { text: emitente.razaoSocial || 'Aurum Bit Labs & Studios LTDA', fontSize: 11.5, bold: true, color: cor },
               ...info.map((linha) => ({ text: linha[0], fontSize: 7.4, color: '#64748b', margin: [0, 1, 0, 0] as [number, number, number, number] })),
+              {
+                text: 'AURUM TAX NCM · REFORMA TRIBUTÁRIA — LC 214/2025',
+                fontSize: 6.4,
+                bold: true,
+                color: OURO_AURUM,
+                margin: [0, 3, 0, 0] as [number, number, number, number],
+              },
             ],
           },
           {
             width: 'auto',
-            alignment: 'right',
-            stack: [
-              { text: titulo, fontSize: 8.4, bold: true, color: '#334155' },
-              { text: subtitulo, fontSize: 7.2, color: '#94a3b8', margin: [0, 2, 0, 0] as [number, number, number, number] },
+            columns: [
+              {
+                width: 2.4,
+                canvas: [{ type: 'rect' as const, x: 0, y: 0, w: 2.4, h: 30, color: OURO_AURUM }],
+                margin: [0, 1, 0, 0] as [number, number, number, number],
+              },
+              {
+                width: 'auto',
+                alignment: 'right',
+                stack: [
+                  { text: titulo, fontSize: 8.4, bold: true, color: '#334155' },
+                  { text: subtitulo, fontSize: 7.2, color: '#94a3b8', margin: [0, 2, 0, 0] as [number, number, number, number] },
+                ],
+                margin: [7, 0, 0, 0] as [number, number, number, number],
+              },
             ],
           },
         ],
       },
+      // Fechamento em filete duplo: cinza + ouro fino.
       {
-        canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 527, y2: 0, lineWidth: 0.7, lineColor: '#dfe4e8' }],
+        canvas: [
+          { type: 'line' as const, x1: 0, y1: 0, x2: 527, y2: 0, lineWidth: 0.7, lineColor: '#dfe4e8' },
+          { type: 'line' as const, x1: 0, y1: 1.8, x2: 527, y2: 1.8, lineWidth: 0.5, lineColor: OURO_AURUM },
+        ],
         margin: [0, 5, 0, 0] as [number, number, number, number],
       },
     ],
@@ -392,12 +433,24 @@ function rodape(emitente: Emitente) {
   return (pagina: number, total: number) => ({
     margin: [34, 0, 34, 24] as [number, number, number, number],
     stack: [
-      { canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 527, y2: 0, lineWidth: 0.5, lineColor: '#e6eaee' }] },
+      {
+        canvas: [
+          { type: 'line' as const, x1: 0, y1: 0, x2: 527, y2: 0, lineWidth: 0.5, lineColor: '#e6eaee' },
+          { type: 'rect' as const, x: 0, y: 1.4, w: 44, h: 1.6, color: OURO_AURUM },
+        ],
+      },
       {
         margin: [0, 4, 0, 0] as [number, number, number, number],
         columns: [
           { text: emitente.rodape || emitente.razaoSocial || 'Aurum Tax NCM', fontSize: 6.8, color: '#8c96a5' },
-          { text: `Aurum Bit Labs & Studios LTDA · Página ${pagina} de ${total}`, fontSize: 6.8, color: '#8c96a5', alignment: 'right' },
+          {
+            text: [
+              { text: `Página ${pagina} de ${total}`, bold: true, color: '#334155' },
+              { text: '  ·  Aurum Tax NCM — Aurum Bit Labs & Studios LTDA', color: '#8c96a5' },
+            ],
+            fontSize: 6.8,
+            alignment: 'right',
+          },
         ],
       },
     ],
@@ -540,6 +593,7 @@ export async function exportarProdutosPDF({ produtos, empresa, emitente, refIBS,
     pageSize: 'A4',
     pageMargins: [34, 102, 34, 52],
     defaultStyle: { font: 'Roboto', fontSize: 7, color: '#1e293b' },
+    background: fundoMarcaDagua(300, 0.07),
     info: {
       title: 'Relatório de Classificação Tributária',
       author: 'Aurum Tax NCM',
@@ -844,16 +898,24 @@ export async function exportarSpedPDF(params: RelatorioSpedParams): Promise<void
     : ['TOTAL', `${resultados.length} itens`, '', '', '', '', fmtMoeda(tot.base), '', '', '', '',
        fmtMoeda(tot.ibs), fmtMoeda(tot.cbs), fmtMoeda(tot.trib)]
 
+  const negadosSped = resumo
+    ? []
+    : await anexosNegadosRelatorio((resultados as ResultadoItem[]).map((r) => r.ncm))
+
   const doc: TDocumentDefinitions = {
     pageSize: { width: 841.89, height: 595.28 }, // A4 paisagem
     pageMargins: [28, 102, 28, 44],
     defaultStyle: { font: 'Roboto', fontSize: 6.4, color: '#1e293b' },
+    background: fundoMarcaDagua(360, 0.06),
     info: { title: `${tipoNome} — Relatório Tributário`, author: 'Aurum Tax NCM', creator: 'Aurum Tax NCM' },
     header: () => ({
       margin: [28, 8, 28, 0] as [number, number, number, number],
       stack: [
         {
-          canvas: [{ type: 'rect', x: 0, y: 0, w: 785, h: 11.3, color: cor }],
+          canvas: [
+            { type: 'rect', x: 0, y: 0, w: 785, h: 2.2, color: OURO_AURUM },
+            { type: 'rect', x: 0, y: 3.4, w: 785, h: 7.5, color: cor },
+          ],
           margin: [0, 0, 0, 7] as [number, number, number, number],
         },
         {
@@ -869,6 +931,13 @@ export async function exportarSpedPDF(params: RelatorioSpedParams): Promise<void
                   color: '#7a8896',
                   margin: [0, 2, 0, 0] as [number, number, number, number],
                 },
+                {
+                  text: 'AURUM TAX NCM · REFORMA TRIBUTÁRIA — LC 214/2025',
+                  fontSize: 6.4,
+                  bold: true,
+                  color: OURO_AURUM,
+                  margin: [0, 3, 0, 0] as [number, number, number, number],
+                },
               ],
               width: '*',
             },
@@ -881,16 +950,37 @@ export async function exportarSpedPDF(params: RelatorioSpedParams): Promise<void
           ],
         },
         {
-          canvas: [{ type: 'line', x1: 0, y1: 0, x2: 785, y2: 0, lineWidth: 0.7, lineColor: '#dfe4e8' }],
+          canvas: [
+            { type: 'line', x1: 0, y1: 0, x2: 785, y2: 0, lineWidth: 0.7, lineColor: '#dfe4e8' },
+            { type: 'line', x1: 0, y1: 1.8, x2: 785, y2: 1.8, lineWidth: 0.5, lineColor: OURO_AURUM },
+          ],
           margin: [0, 5, 0, 0] as [number, number, number, number],
         },
       ],
     }),
     footer: (pagina: number, total: number) => ({
       margin: [28, 0, 28, 22] as [number, number, number, number],
-      columns: [
-        { text: emitente.rodape || 'Aurum Tax NCM · Aurum Bit Labs & Studios LTDA', fontSize: 6.6, color: '#8c96a5' },
-        { text: `Página ${pagina} de ${total}`, fontSize: 6.6, color: '#8c96a5', alignment: 'right' },
+      stack: [
+        {
+          canvas: [
+            { type: 'line', x1: 0, y1: 0, x2: 785, y2: 0, lineWidth: 0.5, lineColor: '#e6eaee' },
+            { type: 'rect', x: 0, y: 1.4, w: 44, h: 1.6, color: OURO_AURUM },
+          ],
+        },
+        {
+          margin: [0, 4, 0, 0] as [number, number, number, number],
+          columns: [
+            { text: emitente.rodape || 'Aurum Tax NCM · Aurum Bit Labs & Studios LTDA', fontSize: 6.6, color: '#8c96a5' },
+            {
+              text: [
+                { text: `Página ${pagina} de ${total}`, bold: true, color: '#334155' },
+                { text: '  ·  Aurum Tax NCM', color: '#8c96a5' },
+              ],
+              fontSize: 6.6,
+              alignment: 'right',
+            },
+          ],
+        },
       ],
     }),
     content: [
@@ -914,6 +1004,29 @@ export async function exportarSpedPDF(params: RelatorioSpedParams): Promise<void
           : 'Classificação resolvida pela base oficial LC 214/2025 para cada NCM do item.',
       ),
       tabelaRelatorio({ cols, rows, total: totalRow, corCabecalho: cor }),
+      ...(negadosSped.length
+        ? [
+            ...secao(
+              'Anexos — NCMs com restrição oficial',
+              'Linhas "Não Permitido" da tabela oficial de anexos para NCMs deste SPED.',
+            ),
+            tabelaRelatorio({
+              cols: [
+                { titulo: 'NCM', larg: 12, mono: true, alin: 'center' },
+                { titulo: 'Anexo', larg: 20 },
+                { titulo: 'Restrição', larg: 68 },
+              ],
+              rows: negadosSped.slice(0, 20).map((a) => [
+                a.codigo ? fmtNcm(a.codigo) : '—',
+                `Anexo ${a.nroAnexo}`,
+                ['Não permitido na tabela oficial', a.descrExcecao ? `Exceto: ${String(a.descrExcecao).slice(0, 90)}` : null]
+                  .filter(Boolean)
+                  .join(' · '),
+              ]),
+              corCabecalho: cor,
+            }),
+          ]
+        : []),
     ],
   }
 
@@ -975,10 +1088,18 @@ export async function exportarLotePDF(
     l.situacao ?? (l.regraGeral ? 'regra geral' : 'ok'),
   ])
 
+  const negadosLote = await anexosNegadosRelatorio(linhas.map((l) => l.ncmSugerido ?? l.ncmOriginal))
+  const rowsNegadosLote: Cell[][] = negadosLote.slice(0, 20).map((a) => [
+    a.codigo ? fmtNcm(a.codigo) : '—',
+    `Anexo ${a.nroAnexo}`,
+    ['Não permitido na tabela oficial', a.descrExcecao ? `Exceto: ${String(a.descrExcecao).slice(0, 90)}` : null].filter(Boolean).join(' · '),
+  ])
+
   const doc: TDocumentDefinitions = {
     pageSize: 'A4',
     pageMargins: [34, 102, 34, 52],
     defaultStyle: { font: 'Roboto', fontSize: 7, color: '#1e293b' },
+    background: fundoMarcaDagua(300, 0.07),
     info: { title: 'Classificação em lote', author: 'Aurum Tax NCM', creator: 'Aurum Tax NCM' },
     header: (() => timbrado(emitente, cor, 'Classificação em lote', `LC 214/2025 · ${nomeArquivo}`)) as TDocumentDefinitions['header'],
     footer: rodape(emitente) as TDocumentDefinitions['footer'],
@@ -1000,6 +1121,26 @@ export async function exportarLotePDF(
         cor,
       ),
       tabelaRelatorio({ cols, rows, corCabecalho: cor }),
+      ...(negadosLote.length
+        ? [
+            {
+              text: 'Anexos — NCMs com restrição oficial ("Não Permitido" na tabela de anexos)',
+              fontSize: 9,
+              bold: true,
+              color: cor,
+              margin: [0, 10, 0, 4] as [number, number, number, number],
+            },
+            tabelaRelatorio({
+              cols: [
+                { titulo: 'NCM', larg: 12, mono: true, alin: 'center' },
+                { titulo: 'Anexo', larg: 18 },
+                { titulo: 'Restrição', larg: 70 },
+              ],
+              rows: rowsNegadosLote,
+              corCabecalho: cor,
+            }),
+          ]
+        : []),
     ],
   }
 
@@ -1069,110 +1210,25 @@ export interface RelatorioNfeParams {
   emitente: Emitente
   empresaNome: string
   periodo: string
+  /**
+   * Pacote preparado por `prepararRelatorioNfeComIA` (v5).
+   * Opcionais para compatibilidade: sem eles, o relatório sai sem o quadro
+   * da Aurum AI e sem os recados — só com os números das notas.
+   */
+  verificacao?: VerificacaoRagNfe | null
+  insights?: InsightNfe[]
+  confronto?: unknown
+  duplicadasIgnoradas?: number
+  /**
+   * O que entra no relatório (modal "Gerar PDF", v6).
+   * Ausente = relatório cheio (comportamento anterior).
+   */
+  opcoes?: OpcoesRelatorioNfe
 }
 
 /* ------------------------------------------- novas seções (reforma v2) --- */
 
-/** Agrega itens das entradas por fornecedor Simples/MEI. */
-function fornecedoresSimples(notas: NotaXml[]): { nome: string; cnpj: string; qtdNotas: number; total: number }[] {
-  const mapa = new Map<string, { nome: string; cnpj: string; qtdNotas: number; total: number }>()
-  for (const n of notas) {
-    if (n.direcao !== 'entrada') continue
-    const regime = regimeDoEmitente(n.emitCrt, n.itensAnalisados)
-    if (regime !== 'simples' && regime !== 'mei') continue
-    const chave = n.emitCnpj
-    const atual = mapa.get(chave) ?? { nome: n.emitNome, cnpj: n.emitCnpj, qtdNotas: 0, total: 0 }
-    atual.qtdNotas++
-    atual.total += Number(n.valorTotal) || 0
-    mapa.set(chave, atual)
-  }
-  return [...mapa.values()].sort((a, b) => b.total - a.total)
-}
-
-/** Agrega itens por NCM com classificação da Reforma + rastreabilidade. */
-function distribuicaoNcm(notas: NotaXml[]): {
-  ncm: string
-  produto: string
-  cst: string
-  cClassTrib: string
-  anexo: string
-  redIBS: number
-  redCBS: number
-  base: number
-  ibs: number
-  cbs: number
-  totalTributos: number
-  qtdItens: number
-  manuais: number
-  regraGeral: number
-  truncados: number
-  invalidos: number
-  ambiguos: number
-  baseLegal: string
-}[] {
-  const mapa = new Map<string, {
-    ncm: string
-    produto: string
-    cst: string
-    cClassTrib: string
-    anexo: string
-    redIBS: number
-    redCBS: number
-    base: number
-    ibs: number
-    cbs: number
-    totalTributos: number
-    qtdItens: number
-    manuais: number
-    regraGeral: number
-    truncados: number
-    invalidos: number
-    ambiguos: number
-    baseLegal: string
-  }>()
-  for (const n of notas) {
-    for (const it of n.itensAnalisados) {
-      const chave = it.ncm
-      const atual = mapa.get(chave) ?? {
-        ncm: it.ncm,
-        produto: it.descricao || it.codProd,
-        cst: it.classificacao.cst || '—',
-        cClassTrib: it.classificacao.cClassTrib || '—',
-        // BLINDAGEM: só o anexo oficial; sem cobertura, '—' (nunca `60`/`isento`).
-        anexo: anexoOficial(it.classificacao) ?? '—',
-        redIBS: it.redIBS,
-        redCBS: it.redCBS,
-        base: 0,
-        ibs: 0,
-        cbs: 0,
-        totalTributos: 0,
-        qtdItens: 0,
-        manuais: 0,
-        regraGeral: 0,
-        truncados: 0,
-        invalidos: 0,
-        ambiguos: 0,
-        baseLegal: it.classificacao.baseLegal || '',
-      }
-      atual.base += Number(it.vlTotal) || 0
-      atual.ibs += Number(it.ibs) || 0
-      atual.cbs += Number(it.cbs) || 0
-      atual.totalTributos += Number(it.totalTributos) || 0
-      atual.qtdItens += 1
-      if (it.manual) atual.manuais += 1
-      if (it.regraGeral) atual.regraGeral += 1
-      if ((it as { ncmTruncado?: boolean }).ncmTruncado) atual.truncados += 1
-      if ((it as { ncmInvalido?: boolean }).ncmInvalido) atual.invalidos += 1
-      if (Number((it as { opcoesClassificacao?: number }).opcoesClassificacao ?? 1) > 1) atual.ambiguos += 1
-      // Preserva a 1ª base legal não vazia do grupo (auditoria).
-      if (!atual.baseLegal && it.classificacao.baseLegal) atual.baseLegal = it.classificacao.baseLegal
-      mapa.set(chave, atual)
-    }
-  }
-  return [...mapa.values()].sort((a, b) => b.base - a.base)
-}
-
-/** Agrega itens por produto (código) separado por fluxo. */
+/** Agrega itens por produto (código) separado por fluxo, marcando ajuste do usuário. */
 function produtosPorFluxo(notas: NotaXml[], fluxo: 'entrada' | 'saida'): {
   codigo: string
   nome: string
@@ -1182,22 +1238,122 @@ function produtosPorFluxo(notas: NotaXml[], fluxo: 'entrada' | 'saida'): {
   ibs: number
   cbs: number
   trib: number
+  /** `true` quando você ajustou o imposto de ao menos um item (só etiqueta). */
+  ajustado: boolean
+  /** Imposto da Reforma do grupo (primeiro item — mesmo produto costuma repetir). */
+  redIBS: number
+  redCBS: number
+  cst: string
+  cct: string
 }[] {
-  const mapa = new Map<string, { codigo: string; nome: string; ncm: string; qtd: number; base: number; ibs: number; cbs: number; trib: number }>()
+  const mapa = new Map<string, { codigo: string; nome: string; ncm: string; qtd: number; base: number; ibs: number; cbs: number; trib: number; ajustado: boolean; redIBS: number; redCBS: number; cst: string; cct: string }>()
   for (const n of notas) {
     if (n.direcao !== fluxo) continue
     for (const it of n.itensAnalisados) {
       const chave = `${it.codProd}‖${it.ncm}`
-      const atual = mapa.get(chave) ?? { codigo: it.codProd, nome: it.descricao || it.codProd, ncm: it.ncm, qtd: 0, base: 0, ibs: 0, cbs: 0, trib: 0 }
+      const atual = mapa.get(chave) ?? {
+        codigo: it.codProd, nome: it.descricao || it.codProd, ncm: it.ncm, qtd: 0, base: 0, ibs: 0, cbs: 0, trib: 0,
+        ajustado: false, redIBS: Number(it.redIBS) || 0, redCBS: Number(it.redCBS) || 0,
+        cst: it.classificacao?.cst || '—', cct: it.classificacao?.cClassTrib || '—',
+      }
       atual.qtd += Number(it.qtd) || 0
       atual.base += Number(it.vlTotal) || 0
       atual.ibs += Number(it.ibs) || 0
       atual.cbs += Number(it.cbs) || 0
       atual.trib += Number(it.totalTributos) || 0
+      if (it.manual) atual.ajustado = true
       mapa.set(chave, atual)
     }
   }
   return [...mapa.values()].sort((a, b) => b.base - a.base)
+}
+
+/**
+ * Verificação de crédito por loja de entrada: Simples/MEI nunca transfere
+ * crédito desse imposto; regime desconhecido fica "a confirmar".
+ */
+function disponibilidadeCredito(notas: NotaXml[]): CreditoLoja[] {
+  const mapa = new Map<string, CreditoLoja & { simples: boolean; desconhecido: boolean }>()
+  for (const n of notas) {
+    if (n.direcao !== 'entrada') continue
+    const regime = regimeDoEmitente(n.emitCrt, n.itensAnalisados)
+    const chave = n.emitCnpj || n.emitNome
+    let loja = mapa.get(chave)
+    if (!loja) {
+      loja = { nome: n.emitNome || n.emitCnpj, cnpj: n.emitCnpj, qtdNotas: 0, total: 0, disponibilidade: 'com-credito', simples: false, desconhecido: false }
+      mapa.set(chave, loja)
+    }
+    if (regime === 'simples' || regime === 'mei') loja.simples = true
+    else if (regime === 'desconhecido') loja.desconhecido = true
+    loja.qtdNotas++
+    loja.total += Number(n.valorTotal) || 0
+  }
+  const out: CreditoLoja[] = []
+  for (const l of mapa.values()) {
+    let disponibilidade: DisponibilidadeCredito = 'com-credito'
+    if (l.simples) disponibilidade = 'sem-credito'
+    else if (l.desconhecido) disponibilidade = 'a-confirmar'
+    if (disponibilidade === 'com-credito') continue
+    out.push({ nome: l.nome, cnpj: l.cnpj, qtdNotas: l.qtdNotas, total: l.total, disponibilidade })
+  }
+  return out.sort((a, b) => b.total - a.total)
+}
+
+/**
+ * Para cada loja de fora do Simples: o produto que mais gerou crédito para
+ * você + se o imposto dele bate com a lei atual (`bate com a lei`) ou foi
+ * ajustado por você (`você ajustou` — só etiqueta, sem aviso).
+ */
+function destaquesPorFornecedor(notas: NotaXml[]): {
+  nome: string
+  qtdNotas: number
+  credito: number
+  produto: string
+  creditoProduto: number
+  ajustado: boolean
+}[] {
+  const lojas = new Map<string, {
+    nome: string
+    qtdNotas: number
+    credito: number
+    simples: boolean
+    produtos: Map<string, { nome: string; credito: number; ajustado: boolean }>
+  }>()
+  for (const n of notas) {
+    if (n.direcao !== 'entrada') continue
+    const regime = regimeDoEmitente(n.emitCrt, n.itensAnalisados)
+    const chave = n.emitCnpj || n.emitNome
+    let loja = lojas.get(chave)
+    if (!loja) {
+      loja = { nome: n.emitNome || n.emitCnpj, qtdNotas: 0, credito: 0, simples: false, produtos: new Map() }
+      lojas.set(chave, loja)
+    }
+    if (regime === 'simples' || regime === 'mei') loja.simples = true
+    loja.qtdNotas++
+    loja.credito += Number(n.totalTributos) || 0
+    for (const it of n.itensAnalisados) {
+      const cp = `${it.codProd}‖${it.ncm}`
+      const p = loja.produtos.get(cp) ?? { nome: it.descricao || it.codProd, credito: 0, ajustado: false }
+      p.credito += Number(it.totalTributos) || 0
+      if (it.manual) p.ajustado = true
+      loja.produtos.set(cp, p)
+    }
+  }
+  return [...lojas.values()]
+    .filter((l) => !l.simples)
+    .map((l) => {
+      const top = [...l.produtos.values()].sort((a, b) => b.credito - a.credito)[0]
+      return {
+        nome: l.nome,
+        qtdNotas: l.qtdNotas,
+        credito: l.credito,
+        produto: top?.nome ?? '—',
+        creditoProduto: top?.credito ?? 0,
+        ajustado: top?.ajustado ?? false,
+      }
+    })
+    .sort((a, b) => b.credito - a.credito)
+    .slice(0, 3)
 }
 
 /* ------------------------------------- tabela editorial (só NFe) --- */
@@ -1225,7 +1381,7 @@ function tabelaEditorial(opts: { cols: ColunaEditorial[]; rows: Cell[][] }) {
     bold: true,
     fontSize: 6.5,
     alignment: (c.alin ?? 'left') as 'left' | 'right' | 'center',
-    margin: [0, 0, 0, 5] as [number, number, number, number],
+    margin: [5, 0, 5, 6] as [number, number, number, number],
   }))
 
   const corpo = opts.rows.map((linha) =>
@@ -1239,7 +1395,7 @@ function tabelaEditorial(opts: { cols: ColunaEditorial[]; rows: Cell[][] }) {
         color: '#1e293b',
         ...(col.mono ? { font: 'Courier' as const } : {}),
         alignment: (col.alin ?? 'left') as 'left' | 'right' | 'center',
-        margin: [0, 3, 0, 3] as [number, number, number, number],
+        margin: [5, 4, 5, 4] as [number, number, number, number],
         border: [false, false, false, false] as [boolean, boolean, boolean, boolean],
       }
     }),
@@ -1260,86 +1416,123 @@ function tabelaEditorial(opts: { cols: ColunaEditorial[]; rows: Cell[][] }) {
 }
 
 /**
- * Relatório das notas de XML em **retrato A4, nível editorial**: uma ideia
- * por seção, tabelas leves com poucas colunas, respiro entre blocos.
+ * Relatório das notas em **retrato A4, linguagem simples**: só o essencial,
+ * sem termo técnico, uma ideia por quadro.
  *
- * ## v3 editorial — menos é mais
- * 1. Comprou de Simples? (resposta direta, top 5, 3 colunas)
- * 2. Produtos que mais comprou/vendeu (top 5, 4 colunas)
- * 3. Fornecedor que mais deu crédito (top 5, 4 colunas)
- * 4. Tributação por NCM (top 6, 5 colunas, classificação combinada)
- * 5. Apuração resumida (4 linhas)
+ * ## v5 — simples de verdade
+ * - Sem duplicidade (chave única) e sem repetir a mesma informação;
+ * - "A Aurum AI encontrou…" no lugar de qualquer nome técnico;
+ * - Itens que você ajustou ganham só uma etiqueta ("você ajustou"), sem aviso;
+ * - Só o essencial: o que mais comprou/vendeu, quem mais gerou crédito (e com
+ *   qual produto, e se bate com a lei atual) + conta final do imposto.
  */
 export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> {
-  const { notas, ranking, emitente, empresaNome, periodo } = params
+  // Dedup defensivo: a importação já barra repetidas no banco, mas o filtro
+  // pode reunir a mesma chave duas vezes — o relatório nunca soma em dobro.
+  const vistas = new Set<string>()
+  const notas: NotaXml[] = []
+  let dupFiltro = 0
+  for (const n of params.notas ?? []) {
+    const chave = String(n?.chave ?? '').trim()
+    if (chave && vistas.has(chave)) {
+      dupFiltro++
+      continue
+    }
+    if (chave) vistas.add(chave)
+    notas.push(n)
+  }
+  const { emitente, empresaNome, periodo } = params
+  const duplicadasIgnoradas = (params.duplicadasIgnoradas ?? 0) + dupFiltro
+  const verificacao: VerificacaoRagNfe | null = params.verificacao ?? null
+  const insights: InsightNfe[] = (params.insights ?? []).slice(0, 3)
+  /** O que entra no relatório (v6) — ausente = relatório cheio. */
+  const op = { ...OPCOES_RELATORIO_CHEIO, ...(params.opcoes ?? {}) }
   const cor = rgbHex(emitente.cor || '#0f215c')
   const data = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
   const ap = apurarIbsCbs(notas)
 
-  const baseTotal = ap.baseEntradas + ap.baseSaidas
-  const tribEstimado = notas.reduce((s, n) => s + (Number(n.totalTributos) || 0), 0)
-  const carga = baseTotal > 0 ? (tribEstimado / baseTotal) * 100 : 0
-  const cargaSaldo = ap.baseSaidas > 0 ? (ap.saldoTotal / ap.baseSaidas) * 100 : 0
-
   const vereditoTexto =
-    ap.resultado === 'a-pagar'
-      ? `Imposto a pagar: ${fmtMoeda(ap.valorAPagar)}`
-      : ap.resultado === 'saldo-credor'
-        ? `Saldo credor: ${fmtMoeda(ap.saldoCredor)} — disponível para restituição ou compensação`
-        : ap.resultado === 'zerado'
-          ? 'Débitos e créditos equivalentes — sem saldo a pagar ou restituir'
-          : 'Sem movimento no período avaliado'
+    op.resumo === 'credito'
+      ? ap.creditoTotal > 0
+        ? `Você tem ${fmtMoeda(ap.creditoTotal)} de crédito para usar`
+        : 'Nenhum crédito no período'
+      : op.resumo === 'debito'
+        ? ap.debitoTotal > 0
+          ? `Suas vendas deram ${fmtMoeda(ap.debitoTotal)} de imposto`
+          : 'Nenhuma venda no período'
+        : ap.resultado === 'a-pagar'
+          ? `Você vai pagar ${fmtMoeda(ap.valorAPagar)}`
+          : ap.resultado === 'saldo-credor'
+            ? `Sobrou ${fmtMoeda(ap.saldoCredor)} para você usar depois`
+            : ap.resultado === 'zerado'
+              ? 'Empatou — nada a pagar nem a receber'
+              : 'Sem movimento no período'
   const vereditoCor = ap.resultado === 'a-pagar' ? '#dc2626' : ap.resultado === 'saldo-credor' ? '#047857' : '#475569'
   const vereditoFundo = ap.resultado === 'a-pagar' ? '#fef2f2' : ap.resultado === 'saldo-credor' ? '#ecfdf5' : '#f8fafc'
 
-  // Paleta editorial fixa — slate + esmeralda.
+  // Paleta fixa — slate + esmeralda.
   const TINTA = '#0f172a'
   const SUAVE = '#64748b'
   const LINHA = '#e2e8f0'
   const ESMERALDA = '#047857'
-  const ALERTA = '#d97706'
 
-  // -- dados agregados --------------------------------------------------------
-  const simples = fornecedoresSimples(notas)
-  const totalSimples = simples.reduce((s, f) => s + f.total, 0)
-  const qtdNotasSimples = simples.reduce((s, f) => s + f.qtdNotas, 0)
-  const totalNotasEntrada = ap.qtdEntradasApropriaveis + ap.qtdEntradasBloqueadas + ap.qtdEntradasNaoConfirmadas
-  const pctSimples = totalNotasEntrada > 0
-    ? ((qtdNotasSimples / totalNotasEntrada) * 100).toFixed(1).replace('.', ',')
-    : '0'
+  // -- só o essencial (o modal escolhe o que entra) --------------------------------
+  const creditoLojas = disponibilidadeCredito(notas)
+  const totalSemCredito = creditoLojas
+    .filter((l) => l.disponibilidade === 'sem-credito')
+    .reduce((s, l) => s + l.total, 0)
+  const qtdSemCredito = creditoLojas
+    .filter((l) => l.disponibilidade === 'sem-credito')
+    .reduce((s, l) => s + l.qtdNotas, 0)
 
-  // Poucas linhas por tabela: top 5-6, para a página respirar (com cobertura da cauda).
-  const ncmTodos = distribuicaoNcm(notas)
-  const ncmDist = ncmTodos.slice(0, 6)
-  const ncmOcultos = ncmTodos.length - ncmDist.length
-  const ncmBaseOculta = ncmTodos.slice(6).reduce((s, n) => s + n.base, 0)
+  const listaCompras = produtosPorFluxo(notas, 'entrada')
+  const listaVendas = produtosPorFluxo(notas, 'saida')
+  const maisComprados = listaCompras.slice(0, 5)
+  const maisVendidos = listaVendas.slice(0, 5)
+  const qtdProdutosDistintos = new Set(
+    [...listaCompras, ...listaVendas].map((p) => `${p.codigo}‖${p.ncm}`),
+  ).size
 
-  const prodEntradas = produtosPorFluxo(notas, 'entrada')
-  const prodSaidas = produtosPorFluxo(notas, 'saida')
-  const todosProdutos = [...prodEntradas.map(p => ({ ...p, dir: 'Compra' as const })), ...prodSaidas.map(p => ({ ...p, dir: 'Venda' as const }))]
-    .sort((a, b) => b.base - a.base)
-  const topProdutos = todosProdutos.slice(0, 5)
-  const prodOcultos = todosProdutos.length - topProdutos.length
-  const prodBaseOculta = todosProdutos.slice(5).reduce((s, p) => s + p.base, 0)
+  const lojasDestaque = destaquesPorFornecedor(notas)
 
-  const topForn = ranking.slice(0, 5)
-  const fornOcultos = Math.max(0, ranking.length - topForn.length)
+  /** O recorte de notas vale para as seções de movimento (só o escolhido). */
+  const mostraCompras = op.direcao !== 'saida'
+  const mostraVendas = op.direcao !== 'entrada'
+  /** Lojas e Simples só existem em compras — somem no recorte só-vendas. */
+  const mostraLojas = op.lojas && mostraCompras
+  const mostraSimples = op.simples && mostraCompras
 
-  // Rastreabilidade fiscal: o que foi escolha do usuário vs sistema.
-  let qtdItensManual = 0
-  let qtdItensRegraGeral = 0
-  let qtdItensTruncados = 0
-  let qtdItensInvalidos = 0
-  let qtdItensAmbiguos = 0
-  for (const n of notas) {
-    for (const it of n.itensAnalisados) {
-      const r = it as { manual?: boolean; ncmTruncado?: boolean; ncmInvalido?: boolean; opcoesClassificacao?: number }
-      if (r.manual) qtdItensManual++
-      if (it.regraGeral) qtdItensRegraGeral++
-      if (r.ncmTruncado) qtdItensTruncados++
-      if (r.ncmInvalido) qtdItensInvalidos++
-      if (Number(r.opcoesClassificacao ?? 1) > 1) qtdItensAmbiguos++
+  /** Etiqueta discreta: o que você ajustou só se diferencia, sem aviso. */
+  const etiqueta = (ajustado: boolean): string => (ajustado ? 'você ajustou' : 'bate com a lei')
+
+  /** Situação do produto em palavras simples, com a particularidade (desconto). */
+  const detalheSituacao = (p: { ajustado: boolean; redIBS: number; redCBS: number }): string => {
+    if (p.ajustado) return 'você ajustou'
+    const a = Number(p.redIBS) || 0
+    const b = Number(p.redCBS) || 0
+    if (a > 0 && a === b) return `bate com a lei · desconto de ${a}%`
+    if (a > 0 || b > 0) return `bate com a lei · desconto IBS ${a}% · CBS ${b}%`
+    return 'bate com a lei'
+  }
+
+  /** Frase simples da conferência na lei atual (nunca mostra termo técnico). */
+  const fraseAurumAI = (): string => {
+    if (!verificacao) return 'A Aurum AI ainda não conferiu estas notas na lei de hoje.'
+    const erros = verificacao.alertas.filter((a) => a.tipo === 'erro').length
+    let frase = `A Aurum AI olhou ${notas.length === 1 ? 'sua 1 nota' : `suas ${notas.length} notas`} e ${qtdProdutosDistintos === 1 ? '1 produto' : `${qtdProdutosDistintos} produtos`} na lei de hoje.`
+    if (verificacao.itensManuais > 0) {
+      frase += verificacao.itensManuais === 1
+        ? ' 1 item foi ajustado por você e aparece marcado como "você ajustou".'
+        : ` ${verificacao.itensManuais} itens foram ajustados por você e aparecem marcados como "você ajustou".`
     }
+    if (erros > 0) {
+      frase += erros === 1
+        ? ' Encontrou 1 ponto que merece sua atenção antes de usar.'
+        : ` Encontrou ${erros} pontos que merecem sua atenção antes de usar.`
+    } else if (verificacao.itensManuais === 0) {
+      frase += ' Está tudo batendo com a lei atual.'
+    }
+    return frase
   }
 
   /** Cartão de KPI do sumário executivo — fundo branco, filete superior. */
@@ -1353,10 +1546,10 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
     margin: [10, 6, 10, 6] as [number, number, number, number],
   })
 
-  const tituloSecao = (num: string, titulo: string, sub?: string): NonNullable<Content>[] => [
+  const titulo = (texto: string, sub?: string): NonNullable<Content>[] => [
     {
       stack: [
-        { text: `${num} — ${titulo}`, fontSize: 13, bold: true, color: TINTA, margin: [0, 0, 0, 2] as [number, number, number, number] },
+        { text: texto, fontSize: 13, bold: true, color: TINTA, margin: [0, 0, 0, 2] as [number, number, number, number] },
         ...(sub ? [{ text: sub, fontSize: 8, color: SUAVE, margin: [0, 0, 0, 0] as [number, number, number, number] }] : []),
         { canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 499, y2: 0, lineWidth: 0.5, lineColor: LINHA }], margin: [0, 8, 0, 0] as [number, number, number, number] },
       ],
@@ -1364,97 +1557,94 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
     },
   ]
 
-  // -- tabelas editoriais (poucas colunas) --------------------------------------
-  const colsApuracao: ColunaEditorial[] = [
-    { titulo: '', larg: 46 },
-    { titulo: 'IBS', larg: 18, alin: 'right' },
-    { titulo: 'CBS', larg: 18, alin: 'right' },
-    { titulo: 'Total', larg: 18, alin: 'right', forte: true },
-  ]
-  const rowsApuracao: Cell[][] = [
-    [`Saídas · ${ap.qtdSaidas} notas`, fmtMoeda(ap.debitoIBS), fmtMoeda(ap.debitoCBS), fmtMoeda(ap.debitoTotal)],
-    [`Entradas regime normal · ${ap.qtdEntradasApropriaveis} notas`, fmtMoeda(ap.creditoIBS), fmtMoeda(ap.creditoCBS), fmtMoeda(ap.creditoTotal)],
-    ['Saldo apurado', fmtMoeda(ap.saldoIBS), fmtMoeda(ap.saldoCBS), fmtMoeda(ap.saldoTotal)],
-    ['Carga sobre saldo (saldo ÷ base saídas)', '—', '—', ap.baseSaidas > 0 ? fmtCarga(cargaSaldo) : '—'],
-    ...(ap.qtdEntradasBloqueadas > 0
-      ? [[`Simples/MEI bloqueado · ${ap.qtdEntradasBloqueadas} notas`, fmtMoeda(ap.bloqueadoIBS), fmtMoeda(ap.bloqueadoCBS), fmtMoeda(ap.bloqueadoTotal)] as Cell[]]
-      : []),
-  ]
-
-  const colsRank: ColunaEditorial[] = [
-    { titulo: 'Fornecedor', larg: 40 },
-    { titulo: 'Notas', larg: 10, alin: 'right' },
-    { titulo: 'Base', larg: 18, alin: 'right' },
-    { titulo: 'IBS / CBS', larg: 18, alin: 'right' },
-    { titulo: 'Crédito', larg: 14, alin: 'right', forte: true },
-  ]
-  const rowsRank: Cell[][] = topForn.map((r) => [
-    `${r.nome}${r.simples ? ' [Simples]' : ''}`.slice(0, 40),
-    r.qtdNotas,
-    fmtMoeda(r.totalEntradas),
-    r.simples ? '—' : `${fmtMoeda(r.creditoIBS)} / ${fmtMoeda(r.creditoCBS)}`,
-    r.simples ? 'sem crédito' : fmtMoeda(r.creditoTotal),
-  ])
-
+  // -- tabelas simples (poucas colunas, palavras do dia a dia) ----------------------
+  interface LinhaProduto {
+    nome: string
+    ncm: string
+    base: number
+    trib: number
+    ajustado: boolean
+    redIBS: number
+    redCBS: number
+  }
   const colsProduto: ColunaEditorial[] = [
-    { titulo: 'Produto', larg: 38 },
-    { titulo: 'Fluxo', larg: 11, alin: 'center' },
-    { titulo: 'Qtd', larg: 11, alin: 'right', mono: true },
-    { titulo: 'Base', larg: 18, alin: 'right' },
-    { titulo: 'Tributos', larg: 14, alin: 'right', forte: true },
-    { titulo: 'Carga', larg: 8, alin: 'right', mono: true },
+    { titulo: 'Produto', larg: 34 },
+    { titulo: 'NCM', larg: 15, mono: true, alin: 'center' },
+    { titulo: 'Valor', larg: 14, alin: 'right' },
+    { titulo: 'Imposto', larg: 15, alin: 'right', forte: true },
+    { titulo: 'Situação', larg: 22 },
   ]
-  const rowsProduto: Cell[][] = topProdutos.map((p) => [
-    `${p.nome.slice(0, 30)}`.slice(0, 32),
-    p.dir,
-    fmtNum(p.qtd),
+  const colsProdutoUni: ColunaEditorial[] = [
+    { titulo: 'Produto', larg: 28 },
+    { titulo: 'NCM', larg: 14, mono: true, alin: 'center' },
+    { titulo: 'Movimento', larg: 11, alin: 'center' },
+    { titulo: 'Valor', larg: 13, alin: 'right' },
+    { titulo: 'Imposto', larg: 13, alin: 'right', forte: true },
+    { titulo: 'Situação', larg: 21 },
+  ]
+  const linhaProduto = (p: LinhaProduto): Cell[] => [
+    p.nome.slice(0, 38),
+    fmtNcm(p.ncm),
     fmtMoeda(p.base),
     fmtMoeda(p.trib),
-    p.base > 0 ? fmtCarga((p.trib / p.base) * 100) : '—',
+    detalheSituacao(p),
+  ]
+  /** Unificado (sem separar compras e vendas): top 10 com a coluna Movimento. */
+  const produtosUnificados = [...listaCompras.map((p) => ({ ...p, mov: 'Compra' })), ...listaVendas.map((p) => ({ ...p, mov: 'Venda' }))]
+    .filter((p) => (p.mov === 'Compra' ? mostraCompras : mostraVendas))
+    .sort((a, b) => b.base - a.base)
+    .slice(0, 10)
+  const rowsProdutoUni: Cell[][] = produtosUnificados.map((p) => [
+    p.nome.slice(0, 32),
+    fmtNcm(p.ncm),
+    p.mov,
+    fmtMoeda(p.base),
+    fmtMoeda(p.trib),
+    detalheSituacao(p),
   ])
 
-  const colsNcm: ColunaEditorial[] = [
-    { titulo: 'NCM', larg: 13, mono: true, alin: 'left', forte: true },
-    { titulo: 'Tributação · Reforma', larg: 32 },
-    { titulo: 'Redução', larg: 13, alin: 'center' },
-    { titulo: 'Origem', larg: 12, alin: 'center' },
-    { titulo: 'Base', larg: 15, alin: 'right' },
-    { titulo: 'Tributos', larg: 15, alin: 'right', forte: true },
+  const colsLojas: ColunaEditorial[] = [
+    { titulo: 'Loja', larg: 26 },
+    { titulo: 'Produto que mais ajudou', larg: 36 },
+    { titulo: 'Crédito p/ você', larg: 20, alin: 'right', forte: true },
+    { titulo: 'Como está', larg: 18, alin: 'center' },
   ]
-  const reformaTxt = (cst: string, cClass: string, anexo: string): string => {
-    const trib = [cst !== '—' ? `CST ${cst}` : null, cClass !== '—' ? cClass : null].filter(Boolean).join(' · ')
-    const anx = anexo !== '—' && anexo !== '' ? ` · An. ${anexo}` : ''
-    return `${trib}${anx}` || '—'
-  }
-  const reducaoTxt = (ibs: number, cbs: number): string => {
-    if (!ibs && !cbs) return 'cheia'
-    if (ibs === cbs) return `−${fmtPct(ibs)}`
-    return `−${fmtPct(ibs)} / −${fmtPct(cbs)}`
-  }
-  const origemTxt = (n: { manuais: number; qtdItens: number; regraGeral: number }): string => {
-    if (n.manuais > 0) return 'Manual*'
-    if (n.regraGeral >= n.qtdItens && n.qtdItens > 0) return 'Regra geral'
-    return 'Sistema'
-  }
-  const rowsNcm: Cell[][] = ncmDist.map((n) => [
-    fmtNcm(n.ncm),
-    reformaTxt(n.cst, n.cClassTrib, n.anexo),
-    reducaoTxt(n.redIBS, n.redCBS),
-    origemTxt(n),
-    fmtMoeda(n.base),
-    fmtMoeda(n.ibs + n.cbs),
+  const rowsLojas: Cell[][] = lojasDestaque.map((d) => [
+    d.nome.slice(0, 32),
+    `${d.produto.slice(0, 30)} (${fmtMoeda(d.creditoProduto)})`,
+    fmtMoeda(d.credito),
+    etiqueta(d.ajustado),
   ])
 
-  const colsSimples: ColunaEditorial[] = [
-    { titulo: 'Fornecedor', larg: 52 },
-    { titulo: 'Notas', larg: 14, alin: 'right' },
-    { titulo: 'Sem crédito', larg: 34, alin: 'right', forte: true },
+  const resultadoValor =
+    ap.resultado === 'a-pagar'
+      ? fmtMoeda(ap.valorAPagar)
+      : ap.resultado === 'saldo-credor'
+        ? fmtMoeda(ap.saldoCredor)
+        : '—'
+  const colsResumo: ColunaEditorial[] = [
+    { titulo: '', larg: 55 },
+    { titulo: 'Valor', larg: 45, alin: 'right', forte: true },
   ]
-  const rowsSimples: Cell[][] = simples.slice(0, 5).map((f) => [
-    f.nome.slice(0, 42),
-    f.qtdNotas,
-    fmtMoeda(f.total),
-  ])
+  /** A conta final obedece ao modal: completa, só crédito ou só débito. */
+  const rowsResumo: Cell[][] =
+    op.resumo === 'credito'
+      ? [[`Crédito das compras · ${ap.qtdEntradasApropriaveis} compra(s)`, fmtMoeda(ap.creditoTotal)]]
+      : op.resumo === 'debito'
+        ? [[`Imposto das vendas · ${ap.qtdSaidas} venda(s)`, fmtMoeda(ap.debitoTotal)]]
+        : [
+            [`Imposto das vendas · ${ap.qtdSaidas} venda(s)`, fmtMoeda(ap.debitoTotal)],
+            [`Menos: crédito das compras · ${ap.qtdEntradasApropriaveis} compra(s)`, `− ${fmtMoeda(ap.creditoTotal)}`],
+            ['Resultado para você', resultadoValor],
+          ]
+  const tituloResumo = op.resumo === 'credito'
+    ? 'Crédito apurado'
+    : op.resumo === 'debito'
+      ? 'Débito apurado'
+      : 'Resumo do imposto'
+  const subResumo = op.resumo === 'completo'
+    ? 'A conta é simples: imposto das vendas menos o crédito das compras.'
+    : undefined
 
   const infoTimbre = linhasEmitente(emitente).map((l) => l[0]).filter(Boolean)
   const doc: TDocumentDefinitions = {
@@ -1462,8 +1652,9 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
     pageOrientation: 'portrait',
     pageMargins: [42, 48, 42, 50],
     defaultStyle: { font: 'Roboto', fontSize: 9, color: '#1e293b', lineHeight: 1.35 },
+    background: fundoMarcaDagua(300, 0.07),
     info: {
-      title: `Apuração IBS/CBS — Notas Fiscais (XML) · ${empresaNome} · ${periodo}`,
+      title: `Seu imposto novo — Notas fiscais · ${empresaNome} · ${periodo}`,
       author: emitente.razaoSocial || 'Aurum Tax NCM',
       creator: 'Aurum Tax NCM',
     },
@@ -1476,17 +1667,30 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
         stack: [
           {
             columns: [
-              { text: 'Apuração IBS/CBS · XML', fontSize: 7, color: '#8a94a6' },
+              { text: 'Aurum Tax NCM · Seu imposto das notas', fontSize: 7, color: '#8a94a6' },
               { text: `${empresaNome} · ${periodo}`, fontSize: 7, color: '#8a94a6', alignment: 'right' as const },
             ],
           },
-          { canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 499, y2: 0, lineWidth: 0.5, lineColor: LINHA }], margin: [0, 6, 0, 0] as [number, number, number, number] },
+          {
+            canvas: [
+              { type: 'line' as const, x1: 0, y1: 0, x2: 499, y2: 0, lineWidth: 0.5, lineColor: LINHA },
+              { type: 'rect' as const, x: 0, y: 1.4, w: 30, h: 1.6, color: OURO_AURUM },
+            ],
+            margin: [0, 6, 0, 0] as [number, number, number, number],
+          },
         ],
       }
     }) as TDocumentDefinitions['header'],
     footer: rodape(emitente) as TDocumentDefinitions['footer'],
     content: [
-      // -- timbre da primeira folha (leve, sem barra chapada) ----------------------
+      // -- timbre da primeira folha (filete duplo ouro + cor, sem barra chapada) ---
+      {
+        canvas: [
+          { type: 'rect' as const, x: 0, y: 0, w: 499, h: 2.2, color: OURO_AURUM },
+          { type: 'rect' as const, x: 0, y: 3.4, w: 499, h: 7, color: cor },
+        ],
+        margin: [0, 0, 0, 10] as [number, number, number, number],
+      },
       {
         columnGap: 14,
         columns: [
@@ -1510,24 +1714,40 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
         ],
         margin: [0, 0, 0, 4] as [number, number, number, number],
       },
-      { canvas: [{ type: 'line' as const, x1: 0, y1: 0, x2: 499, y2: 0, lineWidth: 0.5, lineColor: LINHA }], margin: [0, 8, 0, 18] as [number, number, number, number] },
-      // -- capa ------------------------------------------------------------------
-      { text: 'Reforma tributária · LC 214/2025', fontSize: 8, bold: true, color: ESMERALDA, margin: [0, 0, 0, 6] as [number, number, number, number] },
-      { text: 'Apuração IBS / CBS', fontSize: 28, bold: true, color: TINTA, margin: [0, 0, 0, 4] as [number, number, number, number] },
-      { text: 'Créditos das entradas × débitos das saídas', fontSize: 10.5, color: '#475569', margin: [0, 0, 0, 4] as [number, number, number, number] },
       {
-        text: `${empresaNome} · ${notas.length} notas no filtro`,
+        canvas: [
+          { type: 'line' as const, x1: 0, y1: 0, x2: 499, y2: 0, lineWidth: 0.5, lineColor: LINHA },
+          { type: 'line' as const, x1: 0, y1: 1.8, x2: 499, y2: 1.8, lineWidth: 0.5, lineColor: OURO_AURUM },
+        ],
+        margin: [0, 8, 0, 18] as [number, number, number, number],
+      },
+      // -- capa (adapta-se ao que foi escolhido no modal) ---------------------------
+      { text: 'Imposto novo (IBS + CBS) · somados para facilitar', fontSize: 8, bold: true, color: ESMERALDA, margin: [0, 0, 0, 6] as [number, number, number, number] },
+      { text: 'Seu imposto das notas', fontSize: 28, bold: true, color: TINTA, margin: [0, 0, 0, 4] as [number, number, number, number] },
+      {
+        text: op.resumo === 'credito'
+          ? 'O crédito das suas compras'
+          : op.resumo === 'debito'
+            ? 'O imposto das suas vendas'
+            : 'O que você comprou, vendeu e pode abater',
+        fontSize: 10.5, color: '#475569', margin: [0, 0, 0, 4] as [number, number, number, number],
+      },
+      {
+        text: `${empresaNome} · ${notas.length === 1 ? '1 nota' : `${notas.length} notas`} no período${duplicadasIgnoradas > 0 ? ` · ${duplicadasIgnoradas} repetida(s) contada(s) uma vez só` : ''}`,
         fontSize: 8, color: SUAVE, margin: [0, 0, 0, 14] as [number, number, number, number],
       },
       {
         table: {
-          widths: ['*', '*', '*'],
+          widths: op.resumo === 'completo' ? ['*', '*'] : ['*'],
           body: [
-            [
-              cartaoKpi('Crédito apropriável', fmtMoeda(ap.creditoTotal), `${ap.qtdEntradasApropriaveis} entradas · IBS ${fmtMoeda(ap.creditoIBS)} + CBS ${fmtMoeda(ap.creditoCBS)}`),
-              cartaoKpi('Débito das saídas', fmtMoeda(ap.debitoTotal), `${ap.qtdSaidas} saídas · IBS ${fmtMoeda(ap.debitoIBS)} + CBS ${fmtMoeda(ap.debitoCBS)}`),
-              cartaoKpi('Carga estimada', fmtCarga(carga), `Base total ${fmtMoeda(baseTotal)} · Sobre saldo ${ap.baseSaidas > 0 ? fmtCarga(cargaSaldo) : '—'}`),
-            ],
+            op.resumo === 'debito'
+              ? [cartaoKpi('Imposto das suas vendas', fmtMoeda(ap.debitoTotal), `${ap.qtdSaidas} venda(s) no período`)]
+              : op.resumo === 'credito'
+                ? [cartaoKpi('Crédito que você pode usar', fmtMoeda(ap.creditoTotal), `${ap.qtdEntradasApropriaveis} compra(s) de loja comum`)]
+                : [
+                    cartaoKpi('Crédito que você pode usar', fmtMoeda(ap.creditoTotal), `${ap.qtdEntradasApropriaveis} compra(s) de loja comum`),
+                    cartaoKpi('Imposto das suas vendas', fmtMoeda(ap.debitoTotal), `${ap.qtdSaidas} venda(s) no período`),
+                  ],
           ],
         },
         layout: 'noBorders' as const,
@@ -1544,7 +1764,7 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
                 stack: [
                   { text: vereditoTexto, fontSize: 11, bold: true, color: vereditoCor },
                   {
-                    text: ap.qtdQuarentena > 0 ? `${ap.qtdQuarentena} nota(s) em quarentena, fora da apuração.` : 'Quarentena excluída da apuração.',
+                    text: ap.qtdQuarentena > 0 ? `${ap.qtdQuarentena} nota(s) ficaram de fora da conta por falta de informação.` : 'Todas as notas entraram na conta.',
                     fontSize: 7.5, color: '#475569', margin: [0, 3, 0, 0] as [number, number, number, number],
                   },
                 ],
@@ -1557,73 +1777,147 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
         layout: 'noBorders' as const,
         margin: [0, 4, 0, 6] as [number, number, number, number],
       },
-      // -- 1. comprou de Simples? ---------------------------------------------------
-      ...(simples.length > 0
-        ? [
-            ...tituloSecao('01', 'Comprou de Simples / MEI?', 'Sem crédito de IBS/CBS — fica fora da apuração.'),
-            {
-              table: {
-                widths: [3, '*'],
-                body: [
-                  [
-                    { text: '', fillColor: ALERTA, margin: [0, 0, 0, 0] as [number, number, number, number] },
-                    {
-                      stack: [
-                        { text: `${fmtMoeda(totalSimples)} em ${qtdNotasSimples} notas — sem crédito`, fontSize: 11, bold: true, color: ALERTA },
-                        { text: `${pctSimples}% das notas de entrada (valor acima = total da nota, inclui tributos antigos; a apuração usa a base IBS/CBS).`, fontSize: 8, color: '#475569', margin: [0, 2, 0, 0] as [number, number, number, number] },
-                      ],
-                      fillColor: '#fffbeb',
-                      margin: [14, 12, 14, 12] as [number, number, number, number],
-                    },
-                  ],
+      // -- o que a Aurum AI encontrou (conferência na lei atual, sem tecnicês) ----
+      {
+        table: {
+          widths: [3, '*'],
+          body: [
+            [
+              { text: '', fillColor: '#047857', margin: [0, 0, 0, 0] as [number, number, number, number] },
+              {
+                stack: [
+                  { text: 'O que a Aurum AI encontrou', fontSize: 9, bold: true, color: '#047857' },
+                  { text: fraseAurumAI(), fontSize: 8, color: '#334155', margin: [0, 3, 0, 0] as [number, number, number, number] },
                 ],
+                fillColor: '#ecfdf5',
+                margin: [14, 10, 14, 10] as [number, number, number, number],
               },
-              layout: 'noBorders' as const,
-              margin: [0, 0, 0, 10] as [number, number, number, number],
-            },
-            tabelaEditorial({ cols: colsSimples, rows: rowsSimples }),
-          ]
-        : [
-            ...tituloSecao('01', 'Comprou de Simples / MEI?', 'Sem crédito de IBS/CBS.'),
-            {
-              text: 'Nenhuma entrada do Simples/MEI — tudo gera crédito integral.',
-              fontSize: 8.5, color: '#047857', margin: [0, 2, 0, 10] as [number, number, number, number],
-            },
-          ]),
-      // -- 2. produtos que mais comprou/vendeu ---------------------------------------
-      ...tituloSecao('02', 'Produtos que mais comprou / vendeu', `Top 5 por valor de base${prodOcultos > 0 ? ` — mais ${prodOcultos} produto(s) (${fmtMoeda(prodBaseOculta)}) fora do top.` : '.'}`),
-      tabelaEditorial({ cols: colsProduto, rows: rowsProduto }),
-      // -- 3. fornecedor que mais deu crédito -----------------------------------------
-      ...(topForn.length
-        ? [
-            ...tituloSecao('03', 'Fornecedor que mais deu crédito', `Top 5 por crédito estimado${fornOcultos > 0 ? ` — mais ${fornOcultos} fora do top.` : '.'} [Simples] = sem transferência de crédito.`),
-            tabelaEditorial({ cols: colsRank, rows: rowsRank }),
-          ]
-        : []),
-      // -- 4. tributação por NCM (página própria, tabela mais larga) --------------------
-      ...(ncmDist.length
-        ? [
-            ...tituloSecao('04', 'Tributação por NCM', `Top 6 por base, com a classificação da Reforma${ncmOcultos > 0 ? ` — mais ${ncmOcultos} NCM(s) (${fmtMoeda(ncmBaseOculta)}) fora do top.` : '.'} *Manual = escolha do usuário (isenta o sistema).`),
-            tabelaEditorial({ cols: colsNcm, rows: rowsNcm }),
-          ]
-        : []),
-      // -- 5. apuração resumida ---------------------------------------------------------
-      ...tituloSecao('05', 'Apuração — resumo', 'Estimativa LC 214/2025.'),
-      tabelaEditorial({ cols: colsApuracao, rows: rowsApuracao }),
-      // -- 6. rastreabilidade e divergências ------------------------------------------
-      ...tituloSecao('06', 'Rastreabilidade — sistema × sua escolha', 'Transparência fiscal: o que é regra oficial e o que você decidiu.'),
-      {
-        stack: [
-          { text: `Itens com classificação manual (sua escolha, isenta o sistema): ${qtdItensManual}`, fontSize: 8.5, color: qtdItensManual > 0 ? '#b45309' : SUAVE, margin: [0, 0, 0, 2] as [number, number, number, number] },
-          { text: `Itens na regra geral — sem vínculo específico (alíquota cheia): ${qtdItensRegraGeral}`, fontSize: 8.5, color: SUAVE, margin: [0, 0, 0, 2] as [number, number, number, number] },
-          { text: `Itens com NCM ambíguo (2+ enquadramentos, usada a 1ª opção como estimativa): ${qtdItensAmbiguos}`, fontSize: 8.5, color: qtdItensAmbiguos > 0 ? '#b45309' : SUAVE, margin: [0, 0, 0, 2] as [number, number, number, number] },
-          { text: `Itens com NCM truncado (NBS/EX, confira): ${qtdItensTruncados} · NCM inválido: ${qtdItensInvalidos}`, fontSize: 8.5, color: qtdItensTruncados + qtdItensInvalidos > 0 ? '#dc2626' : SUAVE, margin: [0, 0, 0, 2] as [number, number, number, number] },
-          { text: 'Carga estimada = tributos estimados ÷ base total (entradas + saídas). Carga sobre saldo = saldo apurado ÷ base das saídas (seção 05).', fontSize: 7.5, italics: true, color: '#94a3b8', margin: [0, 6, 0, 0] as [number, number, number, number] },
-        ],
-        margin: [0, 2, 0, 10] as [number, number, number, number],
+            ],
+          ],
+        },
+        layout: 'noBorders' as const,
+        margin: [0, 2, 0, 6] as [number, number, number, number],
       },
+      // -- produtos (só se marcado no modal; separado ou junto) ------------------------
+      ...(op.produtos && op.itensFluxo && mostraCompras && maisComprados.length
+        ? [
+            ...titulo('O que você mais comprou', 'Os 5 maiores valores que entraram, com o imposto de cada um.'),
+            tabelaEditorial({ cols: colsProduto, rows: maisComprados.map(linhaProduto) }),
+          ]
+        : []),
+      ...(op.produtos && op.itensFluxo && mostraVendas && maisVendidos.length
+        ? [
+            ...titulo('O que você mais vendeu', 'Os 5 maiores valores que saíram, com o imposto de cada um.'),
+            tabelaEditorial({ cols: colsProduto, rows: maisVendidos.map(linhaProduto) }),
+          ]
+        : []),
+      // -- relação completa de vendidos (além do top 5, com NCM e regras) ---------
+      // Só quando há mais do que o top 5 já mostrou (ou no modo junto, onde o
+      // top 10 mistura compras e vendas) — nunca repete a mesma lista.
+      ...(op.produtos && mostraVendas && listaVendas.length > (op.itensFluxo ? 5 : 0)
+        ? [
+            ...titulo(
+              `Todos os produtos vendidos (${listaVendas.length})`,
+              'Relação completa, com o NCM e o imposto de cada um.',
+            ),
+            tabelaEditorial({ cols: colsProduto, rows: listaVendas.map(linhaProduto) }),
+          ]
+        : []),
+      ...(op.produtos && !op.itensFluxo && produtosUnificados.length
+        ? [
+            ...titulo('Produtos', 'Os 10 maiores valores, com o imposto de cada um.'),
+            tabelaEditorial({ cols: colsProdutoUni, rows: rowsProdutoUni }),
+          ]
+        : []),
+      ...(op.produtos && !produtosUnificados.length && !(mostraCompras && maisComprados.length) && !(mostraVendas && maisVendidos.length)
+        ? [{ text: 'Sem produtos neste período.', fontSize: 8.5, color: SUAVE, margin: [0, 2, 0, 10] as [number, number, number, number] }]
+        : []),
+      // -- quem mais gerou crédito para você (só se marcado; some em só-vendas) ----
+      ...(mostraLojas
+        ? lojasDestaque.length
+          ? [
+              ...titulo('Quem mais gerou crédito para você', 'A loja, o produto que mais ajudou e se o imposto dele bate com a lei atual.'),
+              tabelaEditorial({ cols: colsLojas, rows: rowsLojas }),
+            ]
+          : [
+              ...titulo('Quem mais gerou crédito para você', undefined),
+              {
+                text: 'Sem compras de loja comum neste período — nenhum crédito a mostrar.',
+                fontSize: 8.5, color: SUAVE, margin: [0, 2, 0, 10] as [number, number, number, number],
+              },
+            ]
+        : []),
+      // -- lojas do Simples e o crédito (com a verificação por loja) ------------------
+      ...(mostraSimples
+        ? [
+            ...titulo('Lojas do Simples e o crédito', 'O sistema verificou loja por loja se há crédito disponível.'),
+            ...(creditoLojas.length
+              ? [
+                  {
+                    text: totalSemCredito > 0.005
+                      ? `Compras de lojas do Simples (${fmtMoeda(totalSemCredito)} em ${qtdSemCredito} nota(s)) não transferem crédito — ficam de fora da sua conta.`
+                      : 'Nenhuma compra de loja do Simples neste período — tudo pode gerar crédito.',
+                    fontSize: 8, color: SUAVE, margin: [0, 0, 0, 4] as [number, number, number, number],
+                  },
+                  tabelaEditorial({
+                    cols: [
+                      { titulo: 'Loja', larg: 40 },
+                      { titulo: 'Compras', larg: 12, alin: 'right' },
+                      { titulo: 'Valor', larg: 20, alin: 'right' },
+                      { titulo: 'Crédito', larg: 28, alin: 'center', forte: true },
+                    ],
+                    rows: creditoLojas.map((l) => [
+                      l.nome.slice(0, 40),
+                      l.qtdNotas,
+                      fmtMoeda(l.total),
+                      l.disponibilidade === 'sem-credito' ? 'Sem crédito disponível' : 'A confirmar',
+                    ]),
+                  }),
+                ]
+              : [{
+                  text: 'Nenhuma compra de loja do Simples neste período — tudo pode gerar crédito.',
+                  fontSize: 8.5, color: SUAVE, margin: [0, 2, 0, 10] as [number, number, number, number],
+                }]),
+          ]
+        : []),
+      // -- conta final do imposto (obedece ao modal) -------------------------------------
+      ...titulo(tituloResumo, subResumo),
+      tabelaEditorial({ cols: colsResumo, rows: rowsResumo }),
+      // -- vale saber (recados curtos da Aurum AI, só com seus números) ---------------
+      ...(insights.length
+        ? [
+            ...titulo('Vale saber', 'A Aurum AI separou o que mais importa nos seus dados:'),
+            ...insights.flatMap((ins) => {
+              const corTom = ins.tom === 'alerta' ? '#d97706' : ins.tom === 'oportunidade' ? '#2563eb' : '#047857'
+              const fundo = ins.tom === 'alerta' ? '#fffbeb' : ins.tom === 'oportunidade' ? '#eff6ff' : '#ecfdf5'
+              const icone = ins.tom === 'alerta' ? '⚠' : ins.tom === 'oportunidade' ? '◉' : '✓'
+              return [
+                {
+                  table: {
+                    widths: [3, '*'],
+                    body: [
+                      [
+                        { text: '', fillColor: corTom, margin: [0, 0, 0, 0] as [number, number, number, number] },
+                        {
+                          stack: [
+                            { text: `${icone}  ${ins.titulo}`, fontSize: 8.5, bold: true, color: corTom },
+                            { text: ins.texto, fontSize: 7.8, color: '#334155', margin: [0, 2, 0, 0] as [number, number, number, number] },
+                          ],
+                          fillColor: fundo,
+                          margin: [12, 8, 12, 8] as [number, number, number, number],
+                        },
+                      ],
+                    ],
+                  },
+                  layout: 'noBorders' as const,
+                  margin: [0, 0, 0, 5] as [number, number, number, number],
+                },
+              ]
+            }),
+          ]
+        : []),
       {
-        text: 'Estimativa por item (base × alíquota de referência, com reduções da Reforma). Confira na EFD — o documento fiscal válido é o XML.',
+        text: 'Valores estimados pela lei de hoje. O que vale de verdade é a sua nota fiscal.',
         fontSize: 7, italics: true, color: '#94a3b8', margin: [0, 10, 0, 0] as [number, number, number, number],
       },
     ],

@@ -32,6 +32,9 @@ const LOJA_BACKUP: StoreName[] = [
   'nfeNotas',
   'reclassificacoesManuais',
   'classificacaoProduto',
+  'anexos',
+  'produtosDfe',
+  'ia_feedback',
 ]
 
 export interface Backup {
@@ -53,10 +56,14 @@ export interface Backup {
   nfeNotas: unknown[]
   reclassificacoesManuais?: unknown[]
   classificacaoProduto?: unknown[]
+  anexos?: unknown[]
+  produtosDfe?: unknown[]
+  /** Feedback IA (Dexie v9) — opcional para backups antigos. */
+  iaFeedback?: unknown[]
 }
 
 export async function montarBackup(): Promise<Backup> {
-  const [ncm, cst, cstClassTrib, referencia, nbs, cest, auditLog, ncmNomenclatura, empresas, produtos, cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto] =
+  const [ncm, cst, cstClassTrib, referencia, nbs, cest, auditLog, ncmNomenclatura, empresas, produtos, cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, anexos, produtosDfe, iaFeedback] =
     await Promise.all([
       db.ncm.toArray(),
       db.cst.toArray(),
@@ -74,6 +81,9 @@ export async function montarBackup(): Promise<Backup> {
       db.nfeNotas.toArray(),
       db.reclassificacoesManuais.toArray().catch(() => []),
       db.classificacaoProduto.toArray().catch(() => []),
+      db.table('anexos').toArray().catch(() => []),
+      db.table('produtosDfe').toArray().catch(() => []),
+      db.table('ia_feedback').toArray().catch(() => []),
     ])
   const metaEmitente = await db.meta.get(META_KEYS.EMITENTE)
   return {
@@ -95,6 +105,9 @@ export async function montarBackup(): Promise<Backup> {
     nfeNotas,
     reclassificacoesManuais,
     classificacaoProduto,
+    anexos,
+    produtosDfe,
+    iaFeedback,
   }
 }
 
@@ -125,6 +138,9 @@ export async function restaurarBackup(b: Backup): Promise<void> {
   await gravar('nfeNotas', b.nfeNotas)
   await gravar('reclassificacoesManuais', b.reclassificacoesManuais)
   await gravar('classificacaoProduto', b.classificacaoProduto)
+  await gravar('anexos', b.anexos)
+  await gravar('produtosDfe', b.produtosDfe)
+  await gravar('ia_feedback', b.iaFeedback)
   await gravar('audit_log', b.auditLog)
 
   if (b.emitente) {

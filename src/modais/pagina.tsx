@@ -154,8 +154,8 @@ export function ModalSalvarClass({
       rodape={
         <>
           <Btn onClick={onFechar}>Cancelar</Btn>
-          <Btn variante="primary" disabled={salvando} onClick={() => void confirmar()}>
-            {editando ? '💾 Salvar alterações' : '💾 Salvar produto'}
+          <Btn variante="primary" carregando={salvando} onClick={() => void confirmar()}>
+            {salvando ? 'Salvando…' : editando ? '💾 Salvar alterações' : '💾 Salvar produto'}
           </Btn>
         </>
       }
@@ -317,7 +317,7 @@ export function ModalCalcCustom({
     setDescricaoNcm(r.nomenclatura?.descricao ?? '')
     setAviso(
       r.regraGeral
-        ? '⚠ Sem classificação específica — regra geral (tributação integral, alíquota cheia).'
+        ? '⚠ Sem vínculo oficial — regra geral (tributação integral vigente, alíquota cheia).'
         : r.lista.length > 1
           ? `${r.lista.length} classificações disponíveis`
           : null,

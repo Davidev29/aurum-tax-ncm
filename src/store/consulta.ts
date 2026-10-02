@@ -16,11 +16,14 @@ import {
   sugerirNomenclatura,
   type ResultadoBuscaTexto,
 } from '@/infrastructure/base/classificacao-repo'
-import {
-  classificarPorDescricao,
-  type EntradaDescricao,
-  type SugestaoNcmJson,
+import type {
+  EntradaDescricao,
+  SugestaoNcmJson,
 } from '@/application/classificacao-inteligente'
+import { classificarComIA, registrarFeedbackIa } from '@/infrastructure/ia/classificacao-ia-repo'
+import type { CandidatoIa } from '@/infrastructure/bridge'
+import type { ResultadoCalculo } from '@/domain/entities'
+import type { ViaClassificacao } from '@/store/ia'
 import { registrarLimpeza } from './ui'
 
 export interface ResultadoConsulta {
@@ -87,6 +90,26 @@ interface ConsultaState {
   sugestao: SugestaoNcmJson | null
   classificandoDescricao: boolean
 
+  /**
+   * Camada Aurum AI (Phase 6 / 06-06): `via` indica se o determinístico venceu
+   * (`deterministico`, sem worker) ou o fallback Aurum AI acionou (`ia`).
+   * Só quando `via === 'ia'` a UI exibe a seção "Sugerido por Aurum AI".
+   */
+  via: ViaClassificacao | null
+  candidatosIa: CandidatoIa[]
+  decisaoIa: Classificacao | null
+  nomenclaturaIa: NomenclaturaNcm | null
+  regraGeralIa: boolean
+  calculoIa: ResultadoCalculo | null
+  codigoIa: string | null
+  confiancaIa: number
+  motivoIa: string | null
+  mockIa: boolean
+  feedbackIaEnviado: boolean
+  fichaIa: import('@/application/aurum-ai-contexto').FichaAbsoluta | null
+  vereditoIa: import('@/application/aurum-ai-contexto').VereditoAurumAI | null
+  fontesIa: string[]
+
   setCodigo: (v: string) => void
   consultar: (codigo?: string) => Promise<void>
   buscarSugestoes: (texto: string) => Promise<void>
@@ -117,6 +140,10 @@ interface ConsultaState {
   classificarDescricao: (entrada?: EntradaDescricao) => Promise<void>
   /** Classifica oficialmente o NCM sugerido (ancora a sugestão na base). */
   usarSugestao: () => Promise<void>
+  /** Usa a decisão IA validada (ancora o NCM escolhido pelo fallback). */
+  usarSugestaoIa: () => Promise<void>
+  /** Registra "Não é esse" para a sugestão IA atual (Dexie `ia_feedback`). */
+  feedbackIaNegativo: () => Promise<void>
   limpar: () => void
 }
 
@@ -137,6 +164,9 @@ let seqSugestoes = 0
 
 /** Geração da busca unificada — invalida fan-outs anteriores. */
 let seqUnificada = 0
+
+/** Geração da predição/IA — só a mais recente escreve (evita worker velho cobrindo o novo). */
+let seqDescricao = 0
 
 export const useConsulta = create<ConsultaState>((set, get) => ({
   codigo: '',
@@ -161,6 +191,21 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
   usoDescricao: '',
   sugestao: null,
   classificandoDescricao: false,
+
+  via: null,
+  candidatosIa: [],
+  decisaoIa: null,
+  nomenclaturaIa: null,
+  regraGeralIa: false,
+  calculoIa: null,
+  codigoIa: null,
+  confiancaIa: 0,
+  motivoIa: null,
+  mockIa: true,
+  feedbackIaEnviado: false,
+  fichaIa: null,
+  vereditoIa: null,
+  fontesIa: [],
 
   setCodigo: (v) => set({ codigo: v }),
 
@@ -244,6 +289,7 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
     if (intencao.tipo === 'vazia') {
       seqSugestoes++
       seqBuscaTexto++
+      seqDescricao++
       set({
         nomenclatura: null,
         resultados: [],
@@ -256,6 +302,20 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
         buscandoTexto: false,
         sugestao: null,
         classificandoDescricao: false,
+        via: null,
+        candidatosIa: [],
+        decisaoIa: null,
+        nomenclaturaIa: null,
+        regraGeralIa: false,
+        calculoIa: null,
+        codigoIa: null,
+        confiancaIa: 0,
+        motivoIa: null,
+        mockIa: true,
+        feedbackIaEnviado: false,
+        fichaIa: null,
+        vereditoIa: null,
+        fontesIa: [],
       })
       return
     }
@@ -295,7 +355,24 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
         }),
       )
     } else {
-      set({ sugestao: null, classificandoDescricao: false })
+      seqDescricao++
+      set({
+        sugestao: null,
+        classificandoDescricao: false,
+        via: null,
+        candidatosIa: [],
+        decisaoIa: null,
+        nomenclaturaIa: null,
+        regraGeralIa: false,
+        calculoIa: null,
+        codigoIa: null,
+        confiancaIa: 0,
+        motivoIa: null,
+        feedbackIaEnviado: false,
+        fichaIa: null,
+        vereditoIa: null,
+        fontesIa: [],
+      })
     }
     await Promise.allSettled(tarefas)
     if (!aindaVale()) return
@@ -306,6 +383,7 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
     if (digitos.length !== 8) return
     seqUnificada++
     seqBuscaTexto++
+    seqDescricao++
     set({ modo: 'ncm', entrada: fmtNcm(digitos) })
     await get().consultar(digitos)
   },
@@ -325,15 +403,71 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
       uso: get().usoDescricao,
     }
     if (!e.descricao.trim()) {
-      set({ sugestao: null, classificandoDescricao: false })
+      seqDescricao++
+      set({
+        sugestao: null,
+        classificandoDescricao: false,
+        via: null,
+        candidatosIa: [],
+        decisaoIa: null,
+        nomenclaturaIa: null,
+        regraGeralIa: false,
+        calculoIa: null,
+        codigoIa: null,
+        confiancaIa: 0,
+        motivoIa: null,
+        feedbackIaEnviado: false,
+        fichaIa: null,
+        vereditoIa: null,
+        fontesIa: [],
+      })
       return
     }
-    set({ classificandoDescricao: true })
+    const seq = ++seqDescricao
+    set({ classificandoDescricao: true, feedbackIaEnviado: false })
     try {
-      const sugestao = await classificarPorDescricao(e)
-      set({ sugestao, classificandoDescricao: false })
+      // GATE Aurum AI como camada superior: determinístico primeiro; worker só no
+      // fallback (baixa/null). O fan-out exato/descritivo/preditivo segue
+      // intacto — só a predição passa a carregar `via`/candidatos/calculo/ficha.
+      const r = await classificarComIA(e)
+      if (seq !== seqDescricao) return
+      set({
+        sugestao: r.sugestao,
+        classificandoDescricao: false,
+        via: r.via,
+        candidatosIa: r.candidatos,
+        decisaoIa: r.decisao,
+        nomenclaturaIa: r.nomenclatura,
+        regraGeralIa: r.regraGeral,
+        calculoIa: r.calculo,
+        codigoIa: r.codigoEscolhido,
+        confiancaIa: r.confiancaIa,
+        motivoIa: r.motivo,
+        mockIa: r.mock,
+        feedbackIaEnviado: false,
+        fichaIa: r.ficha,
+        vereditoIa: r.veredito,
+        fontesIa: r.fontes,
+      })
     } catch {
-      set({ sugestao: null, classificandoDescricao: false })
+      if (seq !== seqDescricao) return
+      set({
+        sugestao: null,
+        classificandoDescricao: false,
+        via: null,
+        candidatosIa: [],
+        decisaoIa: null,
+        nomenclaturaIa: null,
+        regraGeralIa: false,
+        calculoIa: null,
+        codigoIa: null,
+        confiancaIa: 0,
+        motivoIa: null,
+        feedbackIaEnviado: false,
+        fichaIa: null,
+        vereditoIa: null,
+        fontesIa: [],
+      })
     }
   },
 
@@ -342,6 +476,32 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
     if (!s) return
     set({ modo: 'ncm', entrada: s })
     await get().consultar(s)
+  },
+
+  usarSugestaoIa: async () => {
+    const s = get().codigoIa
+    if (!s) return
+    set({ modo: 'ncm', entrada: s })
+    await get().consultar(s)
+  },
+
+  feedbackIaNegativo: async () => {
+    const s = get()
+    if (!s.codigoIa && s.via !== 'ia') return
+    if (s.feedbackIaEnviado) return
+    try {
+      await registrarFeedbackIa({
+        descricao: s.entrada || s.descricao,
+        via: s.via ?? 'ia',
+        decisao: s.codigoIa,
+        confianca: s.confiancaIa,
+        motivo: 'feedback-negativo',
+        mock: s.mockIa,
+      })
+    } catch {
+      /* feedback é best-effort */
+    }
+    set({ feedbackIaEnviado: true })
   },
 
   limpar: () =>
@@ -365,6 +525,20 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
       usoDescricao: '',
       sugestao: null,
       classificandoDescricao: false,
+      via: null,
+      candidatosIa: [],
+      decisaoIa: null,
+      nomenclaturaIa: null,
+      regraGeralIa: false,
+      calculoIa: null,
+      codigoIa: null,
+      confiancaIa: 0,
+      motivoIa: null,
+      mockIa: true,
+      feedbackIaEnviado: false,
+      fichaIa: null,
+      vereditoIa: null,
+      fontesIa: [],
     }),
 }))
 

@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand'
 import type { Classificacao } from '@/domain/entities'
+import { dividirLoteParaSalvamento } from '@/domain/services/salvamento-lote'
 import type { ItemLote, ResumoLote } from '@/infrastructure/parsers/lote'
 import { salvarProdutosEmLote, type ItemLoteGravavel } from '@/application/produtos'
 import { useProdutos } from './produtos'
@@ -66,22 +67,26 @@ export const useLote = create<LoteState>((set, get) => ({
       toast('Nenhum dado para salvar.', 'warn')
       return false
     }
+    // Mesma divisão exibida no modal de revisão (sem surpresa no salvamento).
+    const { gravaveis } = dividirLoteParaSalvamento(r.itens)
+    if (!gravaveis.length) {
+      toast('Nada para salvar — todas as linhas estão sem SKU ou sem classificação.', 'warn')
+      return false
+    }
     const ativa = useSessao.getState().ativa
-    const gravaveis: ItemLoteGravavel[] = r.itens
-      .filter((it) => it.escolhida && it.codigo)
-      .map((it) => ({
-        codigo: it.codigo,
-        nome: it.nome || it.codigo,
-        ncm: it.ncm,
-        cfop: it.cfop,
-        cstIcms: it.cstIcms,
-        pis: it.pis,
-        cofins: it.cofins,
-        classificacao: it.escolhida as Classificacao,
-      }))
+    const paraGravar: ItemLoteGravavel[] = gravaveis.map((it) => ({
+      codigo: it.codigo,
+      nome: it.nome || it.codigo,
+      ncm: it.ncm,
+      cfop: it.cfop,
+      cstIcms: it.cstIcms,
+      pis: it.pis,
+      cofins: it.cofins,
+      classificacao: it.escolhida as Classificacao,
+    }))
 
-    const ignorados = r.itens.length - gravaveis.length
-    const c = await salvarProdutosEmLote(gravaveis, ativa?.id ?? null)
+    const ignorados = r.itens.length - paraGravar.length
+    const c = await salvarProdutosEmLote(paraGravar, ativa?.id ?? null)
     await useProdutos.getState().carregar()
     toast(`${c.salvos + c.atualizados} produtos salvos.${ignorados ? ` ${ignorados} ignorados.` : ''}`, 'ok')
     return true
@@ -94,3 +99,5 @@ export const useLote = create<LoteState>((set, get) => ({
 registrarLimpeza('lote', () => useLote.getState().limpar())
 
 export type { ItemLote }
+export { dividirLoteParaSalvamento, origemLinhaLote } from '@/domain/services/salvamento-lote'
+export type { IgnoradoLote } from '@/domain/services/salvamento-lote'

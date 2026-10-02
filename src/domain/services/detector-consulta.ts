@@ -12,7 +12,7 @@
  * base oficial, nenhuma inventa NCM.
  */
 import { norm } from './format'
-import { pareceCodigoNcm, tokenizarBusca } from './busca-texto'
+import { pareceCodigoNcm, tokensRelevantes } from './busca-texto'
 
 export type TipoEntradaConsulta = 'vazia' | 'numerica' | 'textual' | 'mista'
 
@@ -34,18 +34,21 @@ export interface IntencaoConsulta {
   rotulo: string
 }
 
-/** Mínimos por seção (robustez: evita worker caro em digitação curta). */
+/** Mínimos por seção (proativo: 1 palavra relevante já acende a predição). */
 export const LIMITES_ENTRADA_UNIFICADA = {
   /** Prefixo NCM precisa de ao menos 2 dígitos (paridade com `sugerirNomenclatura`). */
   digitosMinimos: 2,
   /** Busca por nome precisa de ao menos 2 caracteres úteis. */
   textoMinimo: 2,
   /**
-   * Predição assistiva só com frase expressiva: ≥2 tokens úteis OU texto
-   * corrido ≥10 chars. Evita `classificarPorDescricao` a cada 2 letras.
+   * Predição assistiva desde a 1ª palavra relevante: ≥1 token útil OU texto
+   * corrido ≥4 chars. Antes exigia frase expressiva (≥2 tokens ou ≥10 chars),
+   * então "queijo", "celular", "camiseta" mostravam só o nome e nunca a IA —
+   * parecia que "a IA nunca sabia nada". O custo continua controlado pelo
+   * debounce (600 ms) + RAG lexical local.
    */
-  descricaoTokensMinimos: 2,
-  descricaoCharsMinimos: 10,
+  descricaoTokensMinimos: 1,
+  descricaoCharsMinimos: 4,
 } as const
 
 export function detectarIntencaoConsulta(entrada: unknown): IntencaoConsulta {
@@ -86,11 +89,11 @@ export function detectarIntencaoConsulta(entrada: unknown): IntencaoConsulta {
   }
 
   // A partir daqui há letras — sempre alimenta a seção Por nome.
-  const tokens = tokenizarBusca(texto)
+  // A predição usa tokens RELEVANTES (sem "para", "de", "com"): "para" sozinho
+  // não acende a IA, mas "queijo" sozinho já acende.
+  const tokens = tokensRelevantes(texto)
   const deveBuscarNome = texto.length >= LIMITES_ENTRADA_UNIFICADA.textoMinimo
-  const fraseExpressiva =
-    tokens.length >= LIMITES_ENTRADA_UNIFICADA.descricaoTokensMinimos ||
-    texto.length >= LIMITES_ENTRADA_UNIFICADA.descricaoCharsMinimos
+  const fraseExpressiva = tokens.length >= LIMITES_ENTRADA_UNIFICADA.descricaoTokensMinimos
   const deveBuscarDescricao = deveBuscarNome && fraseExpressiva
 
   if (ehMista) {

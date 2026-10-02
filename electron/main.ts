@@ -25,6 +25,13 @@ import { existsSync, promises as fsp } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { autoUpdater } from 'electron-updater'
+import {
+  buscarViaIa,
+  classificarViaIa,
+  encerrarIaService,
+  iniciarIaService,
+  statusIa,
+} from './ia/ia-service.cjs'
 
 /** URL do servidor Vite, definida pelo script `dev:electron` (cross-env). */
 const URL_DEV = process.env.VITE_DEV_SERVER_URL ?? ''
@@ -394,6 +401,32 @@ function registrarIpc(): void {
     autoUpdater.quitAndInstall(false, true)
     return { ok: true }
   })
+
+  // -----------------------------------------------------------------------
+  // IA offline (Phase 6 / IA-05 — tracer 06-05)
+  // -----------------------------------------------------------------------
+
+  /**
+   * `ia:classificar` — sugere um NCM via worker `utilityProcess` isolado.
+   * Delega ao `ia-service`; sem worker vivo o próprio service responde com
+   * o mock local (`fallback:'main'`) — a UI nunca trava esperando o modelo.
+   */
+  ipcMain.handle(
+    'ia:classificar',
+    async (
+      _evento,
+      descricao: string,
+      candidatos?: { codigo: string; descricao: string }[],
+    ) => classificarViaIa(descricao, candidatos),
+  )
+
+  /** `ia:buscar` — Top-k RAG lexical via worker (para a tela DebugIA). */
+  ipcMain.handle('ia:buscar', async (_evento, consulta: string, k?: number) =>
+    buscarViaIa(consulta, typeof k === 'number' ? k : 5),
+  )
+
+  /** `ia:status` — estado do worker (`desligado`/`mock`/`modelo`). */
+  ipcMain.handle('ia:status', () => statusIa())
 }
 
 /** Extrai texto das notas de release (string | array de releases). */
@@ -682,6 +715,16 @@ if (!instanciaUnica) {
       criarMenu()
       await criarJanela()
       configurarAtualizador()
+      // IA offline (06-05): spawn do worker isolado; falha aqui não impede
+      // a UI — o service degrada para mock e sinaliza no `ia:status`.
+      iniciarIaService(app)
+        .then((s) => {
+          if (!s.pronto) console.warn(`[ia] worker indisponível: ${s.erro ?? 'motivo desconhecido'}`)
+          else console.log(`[ia] worker pronto (modo=${s.modo})`)
+        })
+        .catch((erro) => {
+          console.warn(`[ia] falha ao iniciar worker: ${mensagemDeErro(erro)}`)
+        })
     })
     .catch((erro) => {
       console.error(`Falha ao iniciar o Aurum Tax NCM: ${mensagemDeErro(erro)}`)
@@ -696,6 +739,12 @@ if (!instanciaUnica) {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+// IA offline (06-05): o worker `utilityProcess` deve morrer com o app —
+// kill síncrono de segurança, sem órfãos (critério do tracer).
+app.on('before-quit', () => {
+  encerrarIaService()
 })
 
 export {}

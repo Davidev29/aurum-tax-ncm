@@ -36,6 +36,7 @@ import {
 } from '@/application/nfe-insights'
 import { apurarIbsCbs, type ApuracaoIbsCbs } from '@/infrastructure/nfe/apuracao'
 import { exportarNfeCSV, exportarNfePDF } from '@/infrastructure/exporters/relatorios'
+import { ModalRelatorioNfe, type EscolhaRelatorio } from './ModalRelatorioNfe'
 import { registrarExportador } from '@/infrastructure/pdf/menu-exportacao'
 import { creditoDaNota, creditoIbsCbsDaNota, creditoIbsCbsDoItem, divergenciaXmlSistema } from '@/infrastructure/nfe/credito'
 import { REGIME_LABELS, regimeDoEmitente, transfereCreditoIbsCbs } from '@/infrastructure/nfe/regime'
@@ -45,7 +46,7 @@ import { useNfe } from '@/store/nfe'
 import { ModalItemNfeDetalhe, Olho } from '@/ui/detalhes'
 import { toast, useUi } from '@/store/ui'
 import { CartaoStat } from '@/ui/cartoes'
-import { Btn, IconeBadge, Modal, Painel, Pill, Texto } from '@/ui/kit'
+import { Btn, IconeBadge, Modal, Painel, Pill, Texto, useAcaoTatil } from '@/ui/kit'
 import { EscudoAurum } from '@/ui/Marca'
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, LinearScale, LineElement, PointElement, Tooltip, Legend)
@@ -452,6 +453,13 @@ function PainelHistorico() {
   // DANFE única no topo da página (irmã dos demais modais, nunca aninhada):
   // abrir a nota não fecha mais o detalhe nem some da tela.
   const [danfeNota, setDanfeNota] = useState<NotaXml | null>(null)
+  // Modal "Gerar relatório" (no início da seção) + trava do botão Gerar PDF.
+  const [modalRelatorio, setModalRelatorio] = useState(false)
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+  // Giro nos botões de ação (reaplicar/vincular percorrem as notas filtradas).
+  const acaoReaplicar = useAcaoTatil(reaplicarVigentes)
+  const acaoVincular = useAcaoTatil(vincularProdutos)
+  const filtrosTela = useNfe((s) => s.filtros)
 
   const fecharFornecedor = () => {
     setFiltros({ fornecedor: '', direcao: 'todas' })
@@ -478,6 +486,22 @@ function PainelHistorico() {
         <Item><CartaoStat rotulo="IBS + CBS" valor={fmtMoeda(tot.trib)} cor="text-brand-700 dark:text-aurum-200" /></Item>
         <Item><CartaoStat rotulo="Carga média" valor={fmtCarga(tot.carga)} /></Item>
       </Lista>
+
+      <Painel className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 text-sm font-bold">
+            <IconeBadge nome="nota" tom="brand" tamanho="sm" />
+            Relatório das notas
+          </h3>
+          <p className="mt-1 pl-8 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+            Monte o PDF sob medida: produtos, lojas que geram crédito, Simples,
+            período, compras/vendas e conta final.
+          </p>
+        </div>
+        <Btn variante="primary" className="shrink-0" onClick={() => setModalRelatorio(true)}>
+          📕 Gerar relatório
+        </Btn>
+      </Painel>
 
       <Secao id="xml-filtros">
         <Filtros />
@@ -526,16 +550,21 @@ function PainelHistorico() {
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Btn onClick={() => void exportarPdf(notas)}>📕 PDF</Btn>
+              <Btn onClick={() => setModalRelatorio(true)}>📕 PDF</Btn>
               <Btn onClick={() => exportarCsv(notas)}>📊 CSV</Btn>
               <Btn
                 title="Recalcular as notas filtradas pela classificação vigente (base oficial › manual › regra geral) — use após uma reclassificação manual"
-                onClick={() => void reaplicarVigentes()}
+                carregando={acaoReaplicar.carregando}
+                onClick={acaoReaplicar.executar}
               >
-                ↻ Reaplicar vigentes
+                {acaoReaplicar.carregando ? 'Reaplicando…' : '↻ Reaplicar vigentes'}
               </Btn>
-              <Btn variante="primary" onClick={() => void vincularProdutos()}>
-                📦 Vincular produtos ao cadastro
+              <Btn
+                variante="primary"
+                carregando={acaoVincular.carregando}
+                onClick={acaoVincular.executar}
+              >
+                {acaoVincular.carregando ? 'Vinculando…' : '📦 Vincular produtos ao cadastro'}
               </Btn>
             </div>
           </div>
@@ -570,30 +599,72 @@ function PainelHistorico() {
 
       <ModalDetalheNfe onVerDanfe={setDanfeNota} />
       {danfeNota ? <DanfeModal nota={danfeNota} onFechar={() => setDanfeNota(null)} /> : null}
+      <ModalRelatorioNfe
+        aberto={modalRelatorio}
+        onFechar={() => {
+          if (!gerandoRelatorio) setModalRelatorio(false)
+        }}
+        onGerar={(escolha) => void exportarPdf(notas, escolha)}
+        gerando={gerandoRelatorio}
+        notas={notas}
+        inicioPadrao={filtrosTela.inicio}
+        fimPadrao={filtrosTela.fim}
+      />
       </div>
       )}
     </div>
   )
 
-  async function exportarPdf(lista: NotaXml[]) {
+  async function exportarPdf(lista: NotaXml[], escolha?: EscolhaRelatorio) {
     try {
+      if (!lista.length) {
+        toast('Nenhuma nota no filtro para gerar o relatório.', 'warn')
+        return
+      }
+      // Recorte do modal (período + movimento) aplicado sobre a lista da tela.
+      const recorte = escolha
+        ? lista.filter((n) => {
+            if (escolha.inicio && n.dataEmissao < escolha.inicio) return false
+            if (escolha.fim && n.dataEmissao > escolha.fim) return false
+            if (escolha.opcoes.direcao !== 'todas' && n.direcao !== escolha.opcoes.direcao) return false
+            return true
+          })
+        : lista
+      if (!recorte.length) {
+        toast('Nenhuma nota entra neste recorte — ajuste o período ou as notas.', 'warn')
+        return
+      }
       const st = useNfe.getState()
+      if (escolha) setGerandoRelatorio(true)
+      else toast('A Aurum AI está conferindo suas notas na lei de hoje…', 'warn')
+      const { prepararRelatorioNfeComIA } = await import('@/application/nfe-relatorio-ia')
+      const pacote = await prepararRelatorioNfeComIA(recorte, st.ranking)
       const { carregarEmitente } = await import('@/application/emitente')
       const salvo = await carregarEmitente().catch(() => null)
       const emitente = salvo ?? useSessao.getState().emitente ?? EMITENTE_PADRAO
-      const periodo = st.filtros.inicio || st.filtros.fim
-        ? `${st.filtros.inicio || '…'} a ${st.filtros.fim || '…'}`
-        : `${MESES[st.mesMes - 1]}/${st.mesAno}`
+      const periodo = escolha
+        ? `${escolha.inicio || '…'} a ${escolha.fim || '…'}`
+        : st.filtros.inicio || st.filtros.fim
+          ? `${st.filtros.inicio || '…'} a ${st.filtros.fim || '…'}`
+          : `${MESES[st.mesMes - 1]}/${st.mesAno}`
       await exportarNfePDF({
-        notas: lista,
-        ranking: st.ranking,
+        notas: pacote.notas,
+        ranking: pacote.rankingEfetivo,
         emitente,
         empresaNome: useSessao.getState().ativa?.razaoSocial ?? '—',
         periodo,
+        verificacao: pacote.verificacao,
+        insights: pacote.insights,
+        confronto: pacote.confronto,
+        duplicadasIgnoradas: pacote.duplicadasIgnoradas,
+        opcoes: escolha?.opcoes,
       })
-      toast('PDF das notas gerado.', 'ok')
+      if (escolha) setModalRelatorio(false)
+      toast('PDF pronto — a Aurum AI conferiu tudo na lei de hoje.', 'ok')
     } catch (e) {
       toast(`Erro ao gerar PDF: ${e instanceof Error ? e.message : String(e)}`, 'err')
+    } finally {
+      setGerandoRelatorio(false)
     }
   }
 

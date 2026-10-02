@@ -23,7 +23,7 @@ interface BaseState {
 
   iniciar: () => Promise<void>
   recarregar: () => Promise<void>
-  importar: (json: unknown, nomeArquivo: string) => Promise<boolean>
+  importar: (json: unknown, nomeArquivo: string, sistema?: string) => Promise<boolean>
   resemear: () => Promise<void>
   restaurar: () => Promise<void>
   apagar: () => Promise<void>
@@ -59,17 +59,22 @@ export const useBase = create<BaseState>((set, get) => {
       set({ status })
     },
 
-    importar: async (json, nomeArquivo) => {
+    importar: async (json, nomeArquivo, sistema) => {
       try {
-        const formato = await importarArquivoBase(json, nomeArquivo, onProgress)
+        const formato = await importarArquivoBase(json, nomeArquivo, onProgress, { sistema })
         await get().recarregar()
         set({ progresso: null })
-        toast(
+        const rotulo =
           formato.formato === 'nomenclatura'
             ? `Nomenclatura NCM importada: ${formato.total} códigos.`
-            : `Base da Reforma importada: ${formato.total} NCMs.`,
-          'ok',
-        )
+            : formato.formato === 'classprod-cff'
+              ? `Produtos ${formato.sistema} importados: ${formato.total} itens.`
+              : formato.formato === 'anexos-cff'
+                ? `Anexos importados: ${formato.total} linhas.`
+                : formato.formato === 'classtrib-cff'
+                  ? `Classificação tributária (CFF) importada: ${formato.total} referências.`
+                  : `Base importada (${formato.formato}): ${formato.total} registros.`
+        toast(rotulo, 'ok')
         return true
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)

@@ -220,3 +220,103 @@ export interface ResumoImportacaoXml {
   quarentena: number
   erros: { arquivo: string; motivo: string }[]
 }
+
+/* --------------------------------------- relatório XML + RAG/IA (v4) --- */
+
+/** Alerta da verificação RAG pré-relatório (coerência com a legislação). */
+export interface AlertaRagNfe {
+  ncm: string
+  tipo: 'erro' | 'alerta' | 'info'
+  mensagem: string
+}
+
+/**
+ * Selo de verificação RAG do relatório XML.
+ * Gerado por `verificarCoerenciaRag` ANTES do PDF: confere cada NCM do filtro
+ * contra a base oficial (nomenclatura vigente + vínculos CST×cClassTrib +
+ * vigência), sem afirmar o que o dado não prova.
+ */
+export interface VerificacaoRagNfe {
+  em: string
+  ncmsVerificados: number
+  ncmsConformes: number
+  /** 0–100, null quando nada a verificar. */
+  taxaConformidade: number | null
+  itensRegraGeral: number
+  itensManuais: number
+  itensExtintos: number
+  itensAmbiguos: number
+  /** Top enxuto para o PDF (ordenado: erro → alerta → info, máx. 8). */
+  alertas: AlertaRagNfe[]
+  fontes: string[]
+}
+
+/** Pequeno insight gerado rigorosamente a partir dos dados do filtro. */
+export interface InsightNfe {
+  chave: string
+  titulo: string
+  /** Texto com números do filtro (sem especulação, sem promessa fiscal). */
+  texto: string
+  tom: 'info' | 'alerta' | 'oportunidade' | 'sucesso'
+}
+
+/** Confronto regime antigo (ICMS+PIS+COFINS) × novo (IBS+CBS). */
+export interface ConfrontoRegimesNfe {
+  antigo: number
+  novo: number
+  icms: number
+  pisCofins: number
+  ibs: number
+  cbs: number
+  delta: number
+  variacaoPct: number | null
+}
+
+/* --------------------------- relatório XML sob medida (modal Gerar PDF) --- */
+
+/** Recorte de movimento do relatório. */
+export type DirecaoRelatorioNfe = 'todas' | 'entrada' | 'saida'
+
+/** Conta final do relatório. */
+export type ResumoRelatorioNfe = 'completo' | 'credito' | 'debito'
+
+/**
+ * O que entra no relatório — escolhido no modal "Gerar PDF".
+ * O layout se adapta: só os blocos marcados são renderizados.
+ */
+export interface OpcoesRelatorioNfe {
+  /** Produtos com nome, NCM e imposto de cada um (com particularidades). */
+  produtos: boolean
+  /** Listas de compras e vendas (itens por movimento). */
+  itensFluxo: boolean
+  /** Lojas que geram crédito (com o produto que mais ajudou). */
+  lojas: boolean
+  /** Lojas do Simples + verificação de crédito disponível. */
+  simples: boolean
+  /** Recorte de notas. */
+  direcao: DirecaoRelatorioNfe
+  /** Conta final. */
+  resumo: ResumoRelatorioNfe
+}
+
+/** Padrão = relatório cheio (equivale ao comportamento sem modal). */
+export const OPCOES_RELATORIO_CHEIO: OpcoesRelatorioNfe = {
+  produtos: true,
+  itensFluxo: true,
+  lojas: true,
+  simples: true,
+  direcao: 'todas',
+  resumo: 'completo',
+}
+
+/** Disponibilidade de crédito de uma loja de entrada. */
+export type DisponibilidadeCredito = 'com-credito' | 'sem-credito' | 'a-confirmar'
+
+/** Linha da verificação de crédito (seção Simples do relatório). */
+export interface CreditoLoja {
+  nome: string
+  cnpj: string
+  qtdNotas: number
+  total: number
+  disponibilidade: DisponibilidadeCredito
+}

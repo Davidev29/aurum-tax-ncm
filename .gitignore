@@ -7,8 +7,10 @@ electron/dist/
 *.local
 
 # Logs
-logs/
+logs/*
+!logs/.gitkeep
 *.log
+logs/*.jsonl
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -52,3 +54,23 @@ temp/
 # *.json
 # !src/**/*.json
 # !**/seeds*.json
+
+# IA offline — Phase 6 (plan 06-01): binários/artefatos gerados nunca versionados
+*.gguf
+recursos-ia/indice-ncm/*
+recursos-ia/embedding/*
+!recursos-ia/README.md
+!recursos-ia/CHECKSUMS.txt
+!recursos-ia/.gitkeep
+!recursos-ia/*/.gitkeep
+# 06-03: gatilho de rebuild + fallback lexical (pequeno, versionado p/ 06-05)
+!recursos-ia/indice-ncm/.manifest-hash
+!recursos-ia/indice-ncm/indice-lexical.json
+
+# IA offline — Phase 6 (plan 06-08): artefatos PROTEGIDOS nunca versionados
+# (modelo cifrado + índice renomeado; chave jamais em disco versionado)
+assets/aux.dat
+assets/aux.dat.sha256
+assets/idx/*
+!assets/.gitkeep
+!assets/*/.gitkeep

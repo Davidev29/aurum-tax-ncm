@@ -40,6 +40,9 @@ export function Produtos() {
   const [textoFiltro, setTextoFiltro] = useState(filtro)
   // 👁 Detalhe compacto de tributos (tabela minimalista — resto vai ao modal).
   const [detalhe, setDetalhe] = useState<ProdutoLinha | null>(null)
+  // PDF (pdfMake + download): giro no botão enquanto monta — sem ele o
+  // usuário clica no vazio entre o toque e o download.
+  const [gerandoPdf, setGerandoPdf] = useState(false)
 
   // Filtro com debounce de 180 ms (paridade com a v1).
   const aplicarFiltro = useDebounce((t: string) => setFiltro(t), 180)
@@ -71,6 +74,7 @@ export function Produtos() {
   }
   const exportarPdf = async () => {
     if (!cache.length) return toast('Nenhum produto para exportar.', 'warn')
+    setGerandoPdf(true)
     try {
       const ref = await obterAliquotasRefDinamica()
       await exportarProdutosPDF({
@@ -83,6 +87,8 @@ export function Produtos() {
       toast('PDF gerado.', 'ok')
     } catch (e) {
       toast(`Erro ao gerar PDF: ${e instanceof Error ? e.message : String(e)}`, 'err')
+    } finally {
+      setGerandoPdf(false)
     }
   }
 
@@ -119,8 +125,8 @@ export function Produtos() {
             </div>
             <Btn onClick={exportarCsv}>📊 CSV</Btn>
             <Btn onClick={exportarJson}>🧾 JSON</Btn>
-            <Btn variante="primary" onClick={() => void exportarPdf()}>
-              📕 PDF
+            <Btn variante="primary" carregando={gerandoPdf} onClick={() => void exportarPdf()}>
+              {gerandoPdf ? 'Gerando…' : '📕 PDF'}
             </Btn>
           </div>
         </div>

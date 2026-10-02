@@ -18,7 +18,7 @@
  */
 
 import { build } from 'esbuild'
-import { rmSync } from 'node:fs'
+import { copyFileSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -37,7 +37,10 @@ const opcoesComuns = {
   charset: 'utf8',
   sourcemap: true,
   minify: false,
-  external: ['electron', 'electron-updater'],
+  // `electron`/`electron-updater` são fornecidos pelo runtime; `node-llama-cpp`
+  // (nativo + ESM-only) e o futuro stack vetorial NUNCA são bundlados —
+  // o worker IA os carrega via `import()` dinâmico (achado C2 do spike).
+  external: ['electron', 'electron-updater', 'node-llama-cpp', '@xenova/transformers', 'vectra'],
 }
 
 async function compilar() {
@@ -59,9 +62,32 @@ async function compilar() {
     outfile: saidaPreload,
   })
 
+  // Worker IA (06-05): forkado em runtime via `utilityProcess.fork()` —
+  // deve ser COPIADO, nunca bundlado (o fork precisa de um arquivo real).
+  // `caminhos-ia.cjs` (06-07) vai junto: o worker o carrega via
+  // `require('./caminhos-ia.cjs')` relativo, tanto na fonte (`electron/ia/`)
+  // quanto no `dist/`. (`ia-service.cjs`, ao contrário, é BUNDLADO no
+  // main.js — o esbuild resolve o `require` dele para dentro do bundle.)
+  const workerOrigem = path.join(raizElectron, 'ia', 'ia-worker.cjs')
+  const workerDestino = path.join(pastaSaida, 'ia-worker.cjs')
+  copyFileSync(workerOrigem, workerDestino)
+  const caminhosOrigem = path.join(raizElectron, 'ia', 'caminhos-ia.cjs')
+  const caminhosDestino = path.join(pastaSaida, 'caminhos-ia.cjs')
+  copyFileSync(caminhosOrigem, caminhosDestino)
+  // Modelo seguro (06-08): helper CJS da leitura cifrada em memória —
+  // copiado como o worker (o `require('./modelo-seguro.cjs')` do worker
+  // resolve no `dist/`; ausência em packs antigos NÃO quebra o worker,
+  // que faz try/catch no require e cai para o GGUF legado).
+  const seguroOrigem = path.join(raizElectron, 'ia', 'modelo-seguro.cjs')
+  const seguroDestino = path.join(pastaSaida, 'modelo-seguro.cjs')
+  copyFileSync(seguroOrigem, seguroDestino)
+
   console.log('✔ Electron compilado com sucesso:')
   console.log(`   ${saidaMain}`)
   console.log(`   ${saidaPreload}`)
+  console.log(`   ${workerDestino} (copiado, sem bundle)`)
+  console.log(`   ${caminhosDestino} (copiado, sem bundle)`)
+  console.log(`   ${seguroDestino} (copiado, sem bundle — 06-08)`)
 }
 
 compilar().catch((erro) => {

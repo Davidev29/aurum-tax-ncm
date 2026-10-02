@@ -76,7 +76,12 @@ export const AUX_META: Record<TipoAux, MetaAux> = {
       { nome: 'tipoAliquota', label: 'Tipo de alíquota', tipo: 'text' },
       { nome: 'pRedIBS', label: 'Redução IBS (%)', tipo: 'number' },
       { nome: 'pRedCBS', label: 'Redução CBS (%)', tipo: 'number' },
+      { nome: 'indTribRegular', label: 'Tributação regular (1/0)', tipo: 'number' },
+      { nome: 'indCredPres', label: 'Crédito presumido (1/0)', tipo: 'number' },
       { nome: 'descricao', label: 'Descrição', tipo: 'textarea', colSpan: 2 },
+      { nome: 'creditoPara', label: 'Crédito para', tipo: 'text', colSpan: 2 },
+      { nome: 'inicioVigencia', label: 'Início de vigência', tipo: 'text' },
+      { nome: 'fimVigencia', label: 'Fim de vigência', tipo: 'text' },
       { nome: 'lcRef', label: 'Referência legal', tipo: 'text', colSpan: 2 },
       { nome: 'lcRedacao', label: 'Redação da LC', tipo: 'textarea', colSpan: 2 },
     ],
@@ -94,10 +99,11 @@ export const AUX_META: Record<TipoAux, MetaAux> = {
       { nome: 'codigo', label: 'Código NCM', tipo: 'text', mask: 'ncm', required: true, mono: true, readOnlyOnEdit: true },
       { nome: 'descricao', label: 'Descrição', tipo: 'textarea', required: true, colSpan: 2 },
       { nome: 'dataInicio', label: 'Início de vigência', tipo: 'text' },
-      { nome: 'dataFim', label: 'Fim de vigência', tipo: 'text' },
-      { nome: 'ato', label: 'Ato', tipo: 'text', colSpan: 2 },
+      { nome: 'dataFim', label: 'Fim de vigência (vazio = vigente)', tipo: 'text' },
+      { nome: 'ato', label: 'Ato de criação', tipo: 'text', colSpan: 2 },
+      { nome: 'atoFim', label: 'Ato de extinção (vazio = vigente)', tipo: 'text', colSpan: 2 },
     ],
-    texto: (r) => `${str(r.codigo)} ${str(r.descricao)} ${str(r.ato)}`.toLowerCase(),
+    texto: (r) => `${str(r.codigo)} ${str(r.codigoOriginal)} ${str(r.descricao)} ${str(r.ato)} ${str(r.atoFim)}`.toLowerCase(),
     chave: (r) => str(r.codigo),
   },
 
@@ -113,10 +119,12 @@ export const AUX_META: Record<TipoAux, MetaAux> = {
       { nome: 'cClassTrib', label: 'cClassTrib', tipo: 'text', required: true, mono: true, maxLength: 6 },
       { nome: 'baseLegal', label: 'Base legal', tipo: 'text' },
       { nome: 'descricao', label: 'Descrição', tipo: 'textarea', colSpan: 2 },
+      { nome: 'reducao', label: 'Redução (%)', tipo: 'number' },
       { nome: 'aliquotaIBS', label: 'Alíquota IBS (%)', tipo: 'number' },
       { nome: 'aliquotaCBS', label: 'Alíquota CBS (%)', tipo: 'number' },
+      { nome: 'documentos', label: 'Documentos fiscais relacionados', tipo: 'text', colSpan: 2 },
     ],
-    texto: (r) => `${norm(r.codigo)} ${str(r.cst)} ${str(r.cClassTrib)} ${str(r.descricao)}`.toLowerCase(),
+    texto: (r) => `${norm(r.codigo)} ${str(r.cst)} ${str(r.cClassTrib)} ${str(r.descricao)} ${str(r.baseLegal)}`.toLowerCase(),
     chave: (r) => str(r.id),
   },
 
@@ -181,15 +189,32 @@ export const AUX_META: Record<TipoAux, MetaAux> = {
 
 export const TIPOS_AUX: TipoAux[] = ['cst', 'cstct', 'ncm', 'ncmnomen', 'cfop', 'csticms', 'cstpiscofins', 'cest']
 
-/** Formata uma célula de listagem conforme o tipo de tabela. */
+/** Formata uma célula de listagem conforme o tipo de tabela. Nunca lança. */
 export function celulaAux(tipo: TipoAux, campo: string, valor: unknown): string {
-  if (valor == null) return '—'
-  if (campo === 'codigo' && (tipo === 'ncm' || tipo === 'ncmnomen')) return fmtNcm(valor)
-  if (typeof valor === 'boolean') return valor ? 'Sim' : 'Não'
-  if (campo === 'docs') return docsHabilitados(valor)
-  if (typeof valor === 'object') return Array.isArray(valor) ? String(valor.length) : '—'
-  const s = String(valor)
-  return s.length > 160 ? `${s.slice(0, 160)}…` : s
+  try {
+    if (valor == null) return '—'
+    if (campo === 'codigo' && (tipo === 'ncm' || tipo === 'ncmnomen')) {
+      try {
+        return fmtNcm(valor)
+      } catch {
+        return String(valor)
+      }
+    }
+    if (typeof valor === 'boolean') return valor ? 'Sim' : 'Não'
+    if (typeof valor === 'number') {
+      if (campo === 'aliquotaIBS' || campo === 'aliquotaCBS' || campo === 'reducao' || campo === 'pRedIBS' || campo === 'pRedCBS') {
+        return `${String(valor).replace('.', ',')}%`
+      }
+      return String(valor)
+    }
+    if (campo === 'docs') return docsHabilitados(valor)
+    if (typeof valor === 'object') return Array.isArray(valor) ? String(valor.length) : '—'
+    const s = String(valor)
+    if (!s.trim()) return '—'
+    return s.length > 160 ? `${s.slice(0, 160)}…` : s
+  } catch {
+    return '—'
+  }
 }
 
 /** `docs` → relação de documentos habilitados (`NFe · CTe`), como na v1. */
@@ -204,9 +229,9 @@ function docsHabilitados(valor: unknown): string {
 /** Ordem das colunas exibidas em cada listagem. */
 export const COLUNAS_AUX: Record<TipoAux, string[]> = {
   cst: ['codigo', 'descricao', 'indIBSCBS', 'indReducao', 'indDiferimento', 'docs'],
-  cstct: ['cst', 'cClassTrib', 'nome', 'tipoAliquota', 'pRedIBS', 'pRedCBS'],
-  ncm: ['codigo', 'cst', 'cClassTrib', 'baseLegal', 'descricao'],
-  ncmnomen: ['codigo', 'descricao', 'dataInicio', 'ato'],
+  cstct: ['cst', 'cClassTrib', 'nome', 'tipoAliquota', 'pRedIBS', 'pRedCBS', 'inicioVigencia'],
+  ncm: ['codigo', 'cst', 'cClassTrib', 'descricao', 'aliquotaIBS', 'aliquotaCBS'],
+  ncmnomen: ['codigo', 'descricao', 'dataInicio', 'dataFim', 'ato'],
   cfop: ['codigo', 'tipo', 'descricao'],
   csticms: ['codigo', 'descricao'],
   cstpiscofins: ['codigo', 'descricao'],
@@ -227,9 +252,17 @@ export const ROTULOS_COLUNA: Record<string, string> = {
   pRedIBS: 'Red. IBS',
   pRedCBS: 'Red. CBS',
   baseLegal: 'Base legal',
+  reducao: 'Redução',
+  aliquotaIBS: 'Alíq. IBS',
+  aliquotaCBS: 'Alíq. CBS',
+  documentos: 'Documentos',
   tipo: 'Tipo',
   dataInicio: 'Início',
+  dataFim: 'Fim',
   ato: 'Ato',
+  atoFim: 'Ato fim',
+  inicioVigencia: 'Vigência',
+  creditoPara: 'Crédito p/',
   ncm: 'NCM',
 }
 

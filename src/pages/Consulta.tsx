@@ -1,15 +1,18 @@
 /**
- * Tela **Consulta NCM** — busca unificada (SPEC §5, revisão input único).
+ * Tela **Consulta NCM** — busca unificada com **resposta única da Aurum AI**.
  *
  * Um único input orquestra 3 workers em paralelo (fan-out por intenção):
- * - dígitos (≥2) → seção **Exata · via número** (`sugerirNomenclatura` +
+ * - dígitos (≥2) → **Base oficial · número** (`sugerirNomenclatura` +
  *   `resolverClassificacoes` quando 8 dígitos);
- * - texto (≥2 chars) → seção **Por nome** (`buscarNomenclaturaPorTexto`);
- * - frase expressiva → seção **Predição assistiva** (`classificarPorDescricao`).
+ * - texto (≥2 chars) → **Base oficial · por nome** (`buscarNomenclaturaPorTexto`);
+ * - frase expressiva → **✨ Aurum AI · resposta** (`classificarPorDescricao` /
+ *   fallback `classificarComIA`).
  *
- * Cada seção tem skeleton próprio enquanto seu worker resolve — sensação de
- * processamento contínuo, sem "piscar" vazio. Escolher qualquer resultado
- * ancora no painel oficial (0/1/N + regra geral).
+ * Para não confundir, há UM protagonista por intenção (preferindo a IA no
+ * texto): entrada numérica exata ancora no painel oficial; entrada textual
+ * mostra a resposta da IA em destaque (borda animada ouro) e rebaixa as
+ * listas oficiais para alternativas compactas/colapsáveis. Escolher qualquer
+ * resultado ancora no painel oficial (0/1/N + regra geral).
  *
  * Regras preservadas da v1:
  * - NCM precisa de exatamente 8 dígitos (`avisoInvalido`);
@@ -20,30 +23,40 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Classificacao } from '@/domain/entities'
-import { MASK, norm } from '@/domain/services/format'
+import { NOME_IA, ROTULO_FALLBACK, fmtConfiancaAurumAI, nivelDeConfianca } from '@/domain/aurum-ai'
+import { fmtMoeda, fmtNcm, MASK, norm } from '@/domain/services/format'
 import { detectarIntencaoConsulta } from '@/domain/services/detector-consulta'
-import { normalizarBusca, tokenizarBusca } from '@/domain/services/busca-texto'
+import { normalizarBusca, tokensRelevantes } from '@/domain/services/busca-texto'
 import { ModalSalvarClass } from '@/modais/pagina'
 import { ModalReclassificacao } from '@/modais/reclassificacao'
 import { useBase } from '@/store/base'
 import { useConsulta } from '@/store/consulta'
 import { toast, useUi } from '@/store/ui'
-import { CartaoClassificacao, CartaoTributacaoIntegral, type BloqueioSistema } from '@/ui/cartoes'
+import { type BloqueioSistema } from '@/ui/cartoes'
+import { CartaoEnxuto, CartaoForaDeEscopo } from '@/ui/consulta-enxuta'
+import { BarraConfiancaAurumAI, CarregandoAurumAI, IconeAurumPremium, MolduraAurumAI, SeloAurumAI, StatusAurumAI } from '@/ui/aurum-ai'
+import {
+  BotaoDetalhePremium,
+  ModalAuditoriaIA,
+  ModalNcmsAnalisados,
+  ModalRaciocinioIA,
+  ModalSimulacaoIA,
+} from '@/ui/consulta-premium'
 import { Btn, Painel, Texto, Vazio } from '@/ui/kit'
 import {
   SecaoCarregando,
   SkeletonCartaoClassificacao,
   SkeletonListaSugestoes,
-  SkeletonPredicao,
 } from '@/ui/skeleton'
 import { SUGGEST_LIMITS } from '@/domain/constants'
 import type { ResultadoBuscaTexto } from '@/infrastructure/base/classificacao-repo'
+import { VALOR_BASE_IA } from '@/infrastructure/ia/classificacao-ia-repo'
 import { bloqueiosParaCcts } from '@/application/cff-sync'
 
-/** Debounce do fan-out leve (prefixo NCM + nome) — paridade com os 150 ms da v1. */
-const DEBOUNCE_RAPIDO = 150
-/** Debounce da predição assistiva (worker mais caro — evita disparo a cada tecla). */
-const DEBOUNCE_DESCRICAO = 600
+/** Debounce do fan-out leve (prefixo NCM + nome) — 3 s para o usuário digitar sem travar. */
+const DEBOUNCE_RAPIDO = 3000
+/** Debounce da predição assistiva (worker mais caro) — 3 s, mesma janela do leve. */
+const DEBOUNCE_DESCRICAO = 3000
 
 export function Consulta() {
   const codigo = useConsulta((s) => s.codigo)
@@ -57,8 +70,16 @@ export function Consulta() {
   const avisoInvalido = useConsulta((s) => s.avisoInvalido)
   const carregando = useConsulta((s) => s.carregando)
 
-  const entrada = useConsulta((s) => s.entrada)
-  const setEntrada = useConsulta((s) => s.setEntrada)
+  const entradaStore = useConsulta((s) => s.entrada)
+  const setEntradaStore = useConsulta((s) => s.setEntrada)
+  /**
+   * Input local reativo: o texto aparece na hora (0 ms visual) e só commita
+   * para a store + fan-out após 3 s parado. Sem isso, cada tecla publicava no
+   * Zustand global → re-render de ~20 subscriptions + Dexie/RAG na main thread
+   * → sensação de "trava/engole letra".
+   */
+  const [entrada, setEntradaLocal] = useState(entradaStore)
+  const ultimoCommit = useRef(entradaStore)
   const consultarUnificada = useConsulta((s) => s.consultarUnificada)
   const escolherUnificada = useConsulta((s) => s.escolherUnificada)
   const buscarTexto = useConsulta((s) => s.buscarTexto)
@@ -75,6 +96,9 @@ export function Consulta() {
   const sugestao = useConsulta((s) => s.sugestao)
   const classificando = useConsulta((s) => s.classificandoDescricao)
   const classificarDescricao = useConsulta((s) => s.classificarDescricao)
+  const codigoIaAtual = useConsulta((s) => s.codigoIa)
+  /** Camada IA (06-06): `ia` = fallback acionou; `deterministico` = primário venceu sem worker. */
+  const via = useConsulta((s) => s.via)
 
   const abrirCalc = useUi((s) => s.abrirCalc)
   const nomenclaturaBase = useBase((s) => s.status?.nomenclatura ?? 0)
@@ -85,7 +109,7 @@ export function Consulta() {
   const setPrefillSalvar = useConsulta((s) => s.setPrefillSalvar)
   const [reclassificando, setReclassificando] = useState(false)
   const [bloqueios, setBloqueios] = useState<Record<string, BloqueioSistema[]>>({})
-  const [ativoTexto, setAtivoTexto] = useState(0)
+  const [ativoTexto, setAtivoTexto] = useState(-1)
   const listaTextoRef = useRef<HTMLDivElement>(null)
   const timers = useRef<number[]>([])
 
@@ -95,26 +119,51 @@ export function Consulta() {
   const mostrarDescricao = intencao.deveBuscarDescricao || classificando || !!sugestao
 
   // Compat: fluxos legados (Produtos → Ver/Editar) chegam via `codigo`.
-  // Espelha no input único uma vez por navegação.
+  // Espelha no input único uma vez por navegação (escreve local + store).
   const codigoJaEspelhado = useRef('')
   useEffect(() => {
     const dig = norm(codigo)
     if (dig.length === 8 && dig !== norm(codigoJaEspelhado.current) && norm(entrada) !== dig) {
       codigoJaEspelhado.current = codigo
-      setEntrada(MASK.ncm(codigo))
+      const fmt = MASK.ncm(codigo)
+      ultimoCommit.current = fmt
+      setEntradaStore(fmt)
+      setEntradaLocal(fmt)
     }
-  }, [codigo, entrada, setEntrada])
+  }, [codigo, entrada, setEntradaStore])
 
-  // Fan-out com duplo debounce: leve (150 ms) para prefixo/nome/exato,
-  // pesado (600 ms) para a predição assistiva.
+  // Espelho externo → local (limpar, escolherUnificada, navegar): quando a
+  // store muda por outra via que não o commit debounced, reflete no input.
+  useEffect(() => {
+    if (entradaStore !== ultimoCommit.current && entradaStore !== entrada) {
+      ultimoCommit.current = entradaStore
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEntradaLocal(entradaStore)
+    }
+  }, [entradaStore, entrada])
+
+  // Fan-out com duplo debounce de 3 s: leve (prefixo/nome/exato) e pesado
+  // (predição assistiva). O input visual continua instantâneo (estado local);
+  // só a BUSCA espera 3 s após a última tecla. Enter/Buscar força imediato.
+  // Campo é BUSCA, não escolha: esvaziar o input limpa a tela na hora
+  // (invalida fan-outs pendentes) e aguarda a nova consulta.
   useEffect(() => {
     for (const t of timers.current) window.clearTimeout(t)
     timers.current = []
-    setAtivoTexto(0)
     const atual = entrada
-    if (!atual.trim()) return
+    if (!atual.trim()) {
+      ultimoCommit.current = ''
+      setEntradaStore('')
+      setAtivoTexto(-1)
+      // `consultarUnificada('')` limpa resultados/sugestões/IA E invalida
+      // workers em voo (seq++), então nenhum resultado velho repopula a tela.
+      void consultarUnificada('')
+      return
+    }
     const inten = detectarIntencaoConsulta(atual)
     const t1 = window.setTimeout(() => {
+      ultimoCommit.current = atual
+      setEntradaStore(atual)
       if (inten.deveBuscarExato && !inten.deveClassificarExato) void buscarSugestoes(inten.digitos)
       if (inten.deveClassificarExato) void consultar(inten.digitos)
       if (inten.deveBuscarNome) void buscarTexto(atual)
@@ -155,33 +204,73 @@ export function Consulta() {
     }
   }, [resultados])
 
-  const submeter = () => void consultarUnificada(entrada)
-  const aoEscolher = (c: string) => void escolherUnificada(c)
-  const aoEscolherTexto = (c: string) => void escolherUnificada(c)
+  const limparTudo = (anunciar = true) => {
+    for (const t of timers.current) window.clearTimeout(t)
+    timers.current = []
+    ultimoCommit.current = ''
+    setEntradaLocal('')
+    setAtivoTexto(-1)
+    limpar()
+    if (anunciar) toast('Consulta limpa.', 'warn')
+    window.requestAnimationFrame(() => document.getElementById('busca-unificada')?.focus())
+  }
+
+  const submeter = () => {
+    // Entrada vazia = tela limpa aguardando a nova consulta (sem buscar vazio).
+    if (!entrada.trim()) {
+      limparTudo(false)
+      return
+    }
+    // Nova busca invalida qualquer destaque anterior: nada fica "marcado"
+    // sem o usuário escolher explicitamente (clique).
+    setAtivoTexto(-1)
+    for (const t of timers.current) window.clearTimeout(t)
+    timers.current = []
+    ultimoCommit.current = entrada
+    setEntradaStore(entrada)
+    void consultarUnificada(entrada)
+  }
+  const aoEscolher = (c: string) => {
+    const fmt = c
+    ultimoCommit.current = fmt
+    setEntradaLocal(fmt)
+    void escolherUnificada(c)
+  }
+  const aoEscolherTexto = (c: string) => {
+    const fmt = c
+    ultimoCommit.current = fmt
+    setEntradaLocal(fmt)
+    void escolherUnificada(c)
+  }
 
   const aoTecla = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      // Com resultados por nome, Enter classifica o item ativo; senão, fan-out total.
-      if (mostrarNome && resultadosTexto.length) {
-        e.preventDefault()
-        const alvo = resultadosTexto[Math.min(ativoTexto, resultadosTexto.length - 1)]
-        if (alvo) aoEscolherTexto(alvo.codigo)
-      } else {
-        submeter()
-      }
+      // Campo é BUSCA, não escolha: Enter SEMPRE pesquisa o texto atual.
+      // Escolher um NCM é só por clique explícito (nunca automático).
+      e.preventDefault()
+      submeter()
     } else if (e.key === 'ArrowDown' && resultadosTexto.length) {
       e.preventDefault()
       setAtivoTexto((a) => Math.min(a + 1, resultadosTexto.length - 1))
     } else if (e.key === 'ArrowUp' && resultadosTexto.length) {
       e.preventDefault()
-      setAtivoTexto((a) => Math.max(a - 1, 0))
+      setAtivoTexto((a) => (a <= 0 ? -1 : a - 1))
     } else if (e.key === 'Escape') {
-      limpar()
-      toast('Consulta limpa.', 'warn')
+      e.preventDefault()
+      limparTudo()
     }
   }
 
+  // Sem seleção automática: a lista nova chega sem nada "marcado".
+  // Só a navegação por teclado (↑↓) destaca — Enter nunca escolhe sozinho.
   useEffect(() => {
+    setAtivoTexto(-1)
+  }, [resultadosTexto])
+
+  // Rolagem só para navegação explícita por teclado (ativo >= 0).
+  // Hover não move o scroll — antes isso "puxava" a tela enquanto digitava.
+  useEffect(() => {
+    if (ativoTexto < 0) return
     listaTextoRef.current
       ?.querySelector(`[data-indice="${ativoTexto}"]`)
       ?.scrollIntoView({ block: 'nearest' })
@@ -189,6 +278,27 @@ export function Consulta() {
 
   const exatoPronto = intencao.deveClassificarExato && resultados.length > 0
   const algumaCarga = carregando || buscandoTexto || classificando
+  // Texto atual ainda não pesquisado (usuário digitando a 2ª busca):
+  // a lista visível é da busca anterior — Enter pesquisa o texto novo.
+  const digitandoNovaBusca =
+    entrada.trim() !== entradaStore.trim() &&
+    (resultadosTexto.length > 0 || sugestoes.length > 0 || resultados.length > 0)
+
+  /**
+   * Protagonista da resposta (evita os 4 blocos empilhados que confundiam):
+   * - número exato → o painel oficial reina; a IA vira coadjuvante colapsada;
+   * - texto/frase → a ✨ Aurum AI responde primeiro (borda animada ouro); a
+   *   base oficial aparece abaixo como alternativa compacta.
+   */
+  const ehExatoNumerico = intencao.deveClassificarExato
+  const prioridadeIA = !ehExatoNumerico && mostrarDescricao
+  // Painel oficial ancorado a partir da IA (ex.: "Classificar oficialmente"):
+  // mantém a borda animada para deixar claro que foi a IA que classificou.
+  const digitosEntrada = norm(entrada)
+  const origemIAOficial =
+    digitosEntrada.length === 8 &&
+    (digitosEntrada === norm(codigoIaAtual ?? '') ||
+      (sugestao?.ncm_provavel ? digitosEntrada === norm(sugestao.ncm_provavel) : false))
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -198,8 +308,9 @@ export function Consulta() {
             <span className="text-lg">🔍</span> Consulta por NCM
           </h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Digite o NCM, o nome do produto ou descreva com suas palavras — o sistema roteia
-            automaticamente e mostra cada fonte em sua seção.
+            Digite o NCM, o nome do produto ou descreva com suas palavras — a ✨ Aurum AI
+            responde primeiro no texto; o número exato valida na base oficial abaixo.
+            A busca aguarda 3 s após você parar de digitar (Enter busca na hora).
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
@@ -207,23 +318,24 @@ export function Consulta() {
               <span className="field-icon">🔍</span>
               <Texto
                 grande
+                id="busca-unificada"
                 autoComplete="off"
+                spellCheck={false}
                 placeholder="0201.10.00 · queijo mozarela · boi vivo Nelore para reprodução…"
                 value={entrada}
-                onChange={(e) => setEntrada(e.target.value)}
+                onChange={(e) => {
+                  setEntradaLocal(e.target.value)
+                  // Nova digitação nunca herda destaque da busca anterior.
+                  setAtivoTexto(-1)
+                }}
                 onKeyDown={aoTecla}
-                aria-label="Busca unificada: NCM, nome do produto ou descrição"
+                aria-label="Busca unificada: NCM, nome do produto ou descrição. Enter pesquisa, escolher é só por clique."
               />
             </div>
             <Btn variante="primary" onClick={submeter}>
               Buscar
             </Btn>
-            <Btn
-              onClick={() => {
-                limpar()
-                toast('Consulta limpa.', 'warn')
-              }}
-            >
+            <Btn onClick={() => limparTudo()}>
               Limpar
             </Btn>
           </div>
@@ -236,7 +348,17 @@ export function Consulta() {
             >
               {intencao.rotulo}
             </span>
-            {algumaCarga ? (
+            {classificando ? (
+              <span className="flex items-center gap-1.5 font-semibold text-brand-600 dark:text-aurum-200" role="status" aria-live="polite">
+                <IconeAurumPremium tamanho="sm" />
+                {NOME_IA} pensando…
+                <span className="aurum-ai-pensando-pontos" aria-hidden="true">
+                  <span className="aurum-ai-pensando-ponto" />
+                  <span className="aurum-ai-pensando-ponto" />
+                  <span className="aurum-ai-pensando-ponto" />
+                </span>
+              </span>
+            ) : algumaCarga ? (
               <span className="flex items-center gap-1.5 font-semibold text-brand-600 dark:text-aurum-200">
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
                 Processando…
@@ -247,15 +369,28 @@ export function Consulta() {
                 {nomenclatura.codigoOriginal} — {nomenclatura.descricao}
               </span>
             ) : null}
+            {digitandoNovaBusca && !algumaCarga && !classificando ? (
+              <span
+                className="rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
+                role="status"
+                aria-live="polite"
+                title="A lista abaixo é da busca anterior — pressione Enter ou Buscar para pesquisar o texto atual"
+              >
+                ⌨️ digitando… Enter pesquisa “{entrada.trim().slice(0, 40)}”
+              </span>
+            ) : null}
           </div>
 
-          <details className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+          <details id="refino-predicao" className="mt-3 text-xs text-slate-500 dark:text-slate-400">
             <summary className="cursor-pointer font-semibold">
-              Refinar predição (destinação, composição, uso — opcional)
+              <span className="inline-flex items-center gap-1.5">
+                <IconeAurumPremium tamanho="sm" /> Refinar resposta da IA (destinação, composição, uso — opcional)
+              </span>
             </summary>
             <div className="mt-2 grid gap-2 sm:grid-cols-3">
               <div className="field-wrap">
                 <Texto
+                  id="refino-destinacao"
                   autoComplete="off"
                   placeholder="Destinação (opcional): abate, plantio…"
                   value={destinacao}
@@ -282,6 +417,20 @@ export function Consulta() {
                 />
               </div>
             </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Btn
+                tam="sm"
+                variante="primary"
+                disabled={!entrada.trim()}
+                carregando={classificando}
+                onClick={() => void classificarDescricao({ descricao: entrada, destinacao, composicao, uso: usoDescricao })}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <IconeAurumPremium tamanho="sm" /> Perguntar à {NOME_IA}
+                </span>
+              </Btn>
+              <span className="text-[11px]">A IA reavalia sozinha 3 s após parar de digitar; o botão força com o refino atual.</span>
+            </div>
           </details>
         </div>
       </Painel>
@@ -291,17 +440,58 @@ export function Consulta() {
           <Vazio
             icone="🔍"
             titulo="Busque por número, nome ou descrição"
-            texto="Ex.: 0201.10.00 (exato) · queijo mozarela (nome) · boi vivo Nelore para reprodução (predição assistiva). A base oficial da Reforma (LC 214/2025) retorna 0, 1 ou várias classificações por NCM."
+            texto="Ex.: 0201.10.00 (valida na base oficial) · queijo mozarela (a ✨ Aurum AI responde primeiro) · boi vivo Nelore para reprodução (a IA cruza descrição + vigência)."
           />
         </div>
       ) : (
-        <div className="mt-6 space-y-6">
-          {mostrarExata ? (
-            <section aria-label="Resultado exato via número" className="space-y-3">
-              <h3 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <span className="rounded bg-brand-100 px-1.5 py-0.5 text-brand-700 dark:bg-aurum-500/15 dark:text-aurum-200">
-                  🔢 Exato · via número
+        <div className="mt-6 space-y-4">
+          {/* UMA resposta protagonista por vez — resto colapsado. */}
+          {prioridadeIA ? (
+            <section aria-label={`Resposta da ${NOME_IA}`} className="space-y-3">
+              <h3 className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <span className="inline-flex items-center gap-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200">
+                  <IconeAurumPremium tamanho="sm" /> Resposta da {NOME_IA}
                 </span>
+                {via === 'ia' ? (
+                  <StatusAurumAI estado="pronto">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-brand-800 to-brand-600 px-2 py-0.5 text-[10px] font-black normal-case text-amber-100">
+                      <IconeAurumPremium tamanho="sm" /> {NOME_IA} ativa
+                    </span>
+                  </StatusAurumAI>
+                ) : via === 'deterministico' ? (
+                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black normal-case text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    determinístico · sem worker
+                  </span>
+                ) : null}
+                {classificando ? (
+                  <StatusAurumAI estado="processando">
+                    <span className="font-semibold normal-case text-brand-600 dark:text-aurum-200">
+                      analisando…
+                    </span>
+                  </StatusAurumAI>
+                ) : null}
+              </h3>
+              {classificando && !sugestao && via !== 'ia' ? (
+                <CarregandoAurumAI entrada={entrada} />
+              ) : (
+                <SecaoRespostaIA entrada={entrada} bloqueios={bloqueios} onSalvar={setParaSalvar} onAddCalc={abrirCalc} />
+              )}
+            </section>
+          ) : null}
+
+          {/* Painel oficial (0/1/N) — herói no número exato. */}
+          {mostrarExata && intencao.deveClassificarExato ? (
+            <section aria-label="Classificação oficial pela base" className="space-y-3">
+              <h3 className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <span className="rounded bg-brand-100 px-1.5 py-0.5 text-brand-700 dark:bg-aurum-500/15 dark:text-aurum-200">
+                  🔢 {prioridadeIA || origemIAOficial ? 'Classificação oficial' : 'Exato · via número'}
+                </span>
+                {origemIAOficial ? (
+                  <>
+                    <SeloAurumAI variante="compacto" />
+                    <span className="font-semibold normal-case">ancorada na sugestão da IA</span>
+                  </>
+                ) : null}
                 {carregando ? <span>Classificando…</span> : null}
               </h3>
               {carregando ? (
@@ -311,82 +501,86 @@ export function Consulta() {
                   </div>
                   <SkeletonCartaoClassificacao />
                 </SecaoCarregando>
-              ) : intencao.deveClassificarExato ? (
+              ) : (
                 <PainelExato
                   avisoInvalido={avisoInvalido}
                   resultados={resultados}
                   nomenclatura={nomenclatura}
                   regraGeral={regraGeral}
                   bloqueios={bloqueios}
+                  destaqueIA={origemIAOficial}
                   onSalvar={setParaSalvar}
                   onAddCalc={abrirCalc}
                   onReclassificar={() => setReclassificando(true)}
                 />
-              ) : (
-                <ListaSugestaoNcm
-                  sugestoes={sugestoes}
-                  texto={intencao.digitos}
-                  baseVazia={nomenclaturaBase === 0}
-                  carregandoBase={!basePronta}
-                  onEscolher={aoEscolher}
-                />
               )}
             </section>
           ) : null}
 
-          {mostrarNome ? (
-            <section aria-label="Resultados por nome do produto" className="space-y-3">
-              <h3 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
-                  📝 Por nome do produto
-                </span>
-                {buscandoTexto ? <span>Buscando…</span> : null}
-              </h3>
-              {buscandoTexto && !resultadosTexto.length ? (
-                <SecaoCarregando titulo="Buscando por nome…">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-2 dark:border-slate-800 dark:bg-slate-950/40">
-                    <SkeletonListaSugestoes linhas={5} comSelo />
-                  </div>
-                </SecaoCarregando>
-              ) : (
-                <ListaResultadoTexto
-                  resultados={resultadosTexto}
-                  buscando={buscandoTexto}
-                  termo={entrada}
-                  baseVazia={nomenclaturaBase === 0}
-                  carregandoBase={!basePronta}
-                  ativo={ativoTexto}
-                  listaRef={listaTextoRef}
-                  onAtivo={setAtivoTexto}
-                  onEscolher={aoEscolherTexto}
-                />
-              )}
-            </section>
+          {/* Outras correspondências: UMA seção colapsada (número + nome). */}
+          {(mostrarExata && !intencao.deveClassificarExato) || mostrarNome ? (
+            <details className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400">
+              <summary className="cursor-pointer font-bold">
+                🔎 Outras correspondências na base oficial
+                {sugestoes.length || resultadosTexto.length ? ` (${sugestoes.length + resultadosTexto.length})` : ''}
+              </summary>
+              <div className="mt-2 space-y-2">
+                {mostrarExata && !intencao.deveClassificarExato ? (
+                  <ListaSugestaoNcm
+                    sugestoes={sugestoes}
+                    texto={intencao.digitos}
+                    baseVazia={nomenclaturaBase === 0}
+                    carregandoBase={!basePronta}
+                    onEscolher={aoEscolher}
+                  />
+                ) : null}
+                {mostrarNome ? (
+                  buscandoTexto && !resultadosTexto.length ? (
+                    <SecaoCarregando titulo="Buscando por nome…">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-2 dark:border-slate-800 dark:bg-slate-950/40">
+                        <SkeletonListaSugestoes linhas={5} comSelo />
+                      </div>
+                    </SecaoCarregando>
+                  ) : (
+                    <ListaResultadoTexto
+                      resultados={resultadosTexto}
+                      buscando={buscandoTexto}
+                      termo={entrada}
+                      baseVazia={nomenclaturaBase === 0}
+                      carregandoBase={!basePronta}
+                      ativo={ativoTexto}
+                      listaRef={listaTextoRef}
+                      onEscolher={aoEscolherTexto}
+                    />
+                  )
+                ) : null}
+              </div>
+            </details>
           ) : null}
 
-          {mostrarDescricao ? (
-            <section aria-label="Predição assistiva por descrição" className="space-y-3">
-              <h3 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <span className="rounded bg-violet-100 px-1.5 py-0.5 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200">
-                  ✨ Predição assistiva · por descrição
+          {/* Número exato digitado junto de texto: a IA vira coadjuvante colapsada. */}
+          {!prioridadeIA && mostrarDescricao ? (
+            <details className="rounded-xl border border-violet-200 bg-violet-50/40 px-3 py-2 text-xs text-slate-600 dark:border-violet-900 dark:bg-violet-950/20 dark:text-slate-300">
+              <summary className="cursor-pointer font-bold">
+                <span className="inline-flex items-center gap-1.5">
+                  <IconeAurumPremium tamanho="sm" /> Ver resposta da {NOME_IA} para este texto
                 </span>
-                {classificando ? <span>Analisando…</span> : null}
-              </h3>
-              {classificando && !sugestao ? (
-                <SecaoCarregando titulo="Prevendo NCM…">
-                  <SkeletonPredicao />
-                </SecaoCarregando>
-              ) : (
-                <SecaoPredicao entrada={entrada} />
-              )}
-            </section>
+              </summary>
+              <div className="mt-2">
+                {classificando && !sugestao && via !== 'ia' ? (
+                  <CarregandoAurumAI entrada={entrada} />
+                ) : (
+                  <SecaoRespostaIA entrada={entrada} bloqueios={bloqueios} onSalvar={setParaSalvar} onAddCalc={abrirCalc} />
+                )}
+              </div>
+            </details>
           ) : null}
 
           {!mostrarExata && !mostrarNome && !mostrarDescricao ? (
             <Vazio
               icone="⌨️"
-              titulo="Continue digitando para ver as seções"
-              texto="Com 2+ dígitos mostramos o exato · com letras, o nome · com frase expressiva, a predição assistiva."
+              titulo="Continue digitando para ver a resposta"
+              texto="Com 2+ dígitos validamos o número · com letras, a ✨ Aurum AI responde primeiro · a base oficial confirma abaixo."
             />
           ) : null}
         </div>
@@ -426,6 +620,7 @@ function PainelExato({
   nomenclatura,
   regraGeral,
   bloqueios,
+  destaqueIA = false,
   onSalvar,
   onAddCalc,
   onReclassificar,
@@ -435,6 +630,8 @@ function PainelExato({
   nomenclatura: ReturnType<typeof useConsulta.getState>['nomenclatura']
   regraGeral: boolean
   bloqueios: Record<string, BloqueioSistema[]>
+  /** Borda animada ouro: este painel foi ancorado a partir da sugestão da IA. */
+  destaqueIA?: boolean
   onSalvar: (c: Classificacao) => void
   onAddCalc: ReturnType<typeof useUi.getState>['abrirCalc']
   onReclassificar: () => void
@@ -459,7 +656,7 @@ function PainelExato({
   return (
     <>
       {nomenclatura ? (
-        <div className="rounded-2xl border border-brand-200 bg-gradient-to-r from-brand-50 to-white p-4 dark:border-aurum-900 dark:from-brand-950/40 dark:to-slate-900">
+        <div className="rounded-2xl border border-brand-200 bg-gradient-to-r from-brand-50 to-white p-3 dark:border-aurum-900 dark:from-brand-950/40 dark:to-slate-900">
           <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-brand-600 dark:text-aurum-200">
             <span>NCM {nomenclatura.codigoOriginal}</span>
             {nomenclatura.dataFim ? (
@@ -472,45 +669,37 @@ function PainelExato({
               </span>
             )}
           </div>
-          <div className="mt-1 text-sm font-semibold text-brand-900 dark:text-brand-100">
+          <div className="mt-0.5 text-sm font-semibold text-brand-900 dark:text-brand-100">
             {nomenclatura.descricao}
           </div>
-          {nomenclatura.ato ? (
-            <div className="mt-1 text-[10px] text-brand-700 dark:text-brand-300">
-              📎 {nomenclatura.ato}
-              {nomenclatura.dataInicio ? ` · desde ${nomenclatura.dataInicio}` : ''}
-              {nomenclatura.dataFim ? ` · até ${nomenclatura.dataFim}${nomenclatura.atoFim ? ` · ${nomenclatura.atoFim}` : ''}` : ''}
-            </div>
-          ) : null}
         </div>
       ) : null}
 
       {!regraGeral && resultados.length > 1 ? (
-        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-          <strong>⚡ Este NCM possui {resultados.length} classificações possíveis.</strong>{' '}
-          Compare as opções abaixo.
-        </div>
+        <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <strong>⚡ {resultados.length} classificações possíveis</strong> para este NCM — compare abaixo.
+        </p>
       ) : null}
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         {regraGeral ? (
-          <CartaoTributacaoIntegral
+          <CartaoEnxuto
             cl={resultados[0].classificacao}
             nomenclatura={nomenclatura}
             bloqueios={bloqueios[resultados[0].classificacao.cClassTrib] ?? null}
+            destaqueIA={destaqueIA}
             onSalvar={() => onSalvar(resultados[0].classificacao)}
             onAddCalc={() => onAddCalc({ tipo: 'classificacao', classificacao: resultados[0].classificacao })}
             onReclassificar={onReclassificar}
           />
         ) : (
-          resultados.map((r, i) => (
-            <CartaoClassificacao
+          resultados.map((r) => (
+            <CartaoEnxuto
               key={r.__uid}
               cl={r.classificacao}
-              indice={i}
-              total={resultados.length}
               nomenclatura={nomenclatura}
               bloqueios={bloqueios[r.classificacao.cClassTrib] ?? null}
+              destaqueIA={destaqueIA}
               onSalvar={() => onSalvar(r.classificacao)}
               onAddCalc={() => onAddCalc({ tipo: 'classificacao', classificacao: r.classificacao })}
               onReclassificar={r.manual ? onReclassificar : undefined}
@@ -522,16 +711,31 @@ function PainelExato({
   )
 }
 
-/* --------------------------------------- predição assistiva (seção) -- */
+/* ------------------------------ resposta única da Aurum AI (herói) -- */
 
 /**
- * Seção **✨ Predição assistiva**: exibe o JSON ancorado da
- * `classificarPorDescricao` e ancora no painel oficial via `usarSugestao`.
+ * **✨ Resposta da Aurum AI**: UM bloco protagonista que funde a predição
+ * assistiva (`sugestao`) e a decisão validada do fallback (`via === 'ia'`).
+ * A decisão validada tem precedência; a predição aparece quando o
+ * determinístico venceu sem worker. Tudo dentro da `MolduraAurumAI` (borda
+ * animada ouro) para deixar claro que **foi a IA que classificou**.
  */
-function SecaoPredicao({ entrada }: { entrada: string }) {
+function SecaoRespostaIA({
+  entrada,
+  bloqueios,
+  onSalvar,
+  onAddCalc,
+}: {
+  entrada: string
+  bloqueios: Record<string, BloqueioSistema[]>
+  onSalvar: (c: Classificacao) => void
+  onAddCalc: ReturnType<typeof useUi.getState>['abrirCalc']
+}) {
   const sugestao = useConsulta((s) => s.sugestao)
   const classificando = useConsulta((s) => s.classificandoDescricao)
   const usarSugestao = useConsulta((s) => s.usarSugestao)
+  const via = useConsulta((s) => s.via)
+  const escolher = useConsulta((s) => s.escolherUnificada)
 
   const jsonPedido = sugestao
     ? {
@@ -552,24 +756,62 @@ function SecaoPredicao({ entrada }: { entrada: string }) {
         ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200'
         : 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-200'
 
+  // Barreira anti-alucinação na UI: fora de escopo exibe SÓ o cartão de
+  // recusa fixa — sem NCM, sem cálculo, sem candidatos, sem trilha expandida.
+  if (sugestao?.foraDeEscopo) {
+    return (
+      <MolduraAurumAI detalhe="recusa de escopo · sem consulta à base">
+        <CartaoForaDeEscopo mensagem={sugestao.justificativa} />
+      </MolduraAurumAI>
+    )
+  }
+
+  // Decisão validada do fallback tem precedência sobre a predição simples.
+  if (via === 'ia') {
+    return (
+      <div className="space-y-2">
+        {classificando ? (
+          <div className="flex items-center gap-2 text-xs font-semibold text-brand-600 dark:text-aurum-200">
+            <span className="aurum-ai-pensando-pontos" aria-hidden="true">
+              <span className="aurum-ai-pensando-ponto" />
+              <span className="aurum-ai-pensando-ponto" />
+              <span className="aurum-ai-pensando-ponto" />
+            </span>
+            Reavaliando com a {NOME_IA}…
+          </div>
+        ) : null}
+        <MolduraAurumAI detalhe={`${ROTULO_FALLBACK} · decisão validada`}>
+          <RespostaIaValidada onSalvar={onSalvar} onAddCalc={onAddCalc} bloqueios={bloqueios} />
+        </MolduraAurumAI>
+      </div>
+    )
+  }
+
   if (classificando && sugestao) {
     // Troca de frase com resultado anterior visível: mostra o anterior +
     // indicador de reprocessamento (sem piscar vazio).
     return (
       <div className="space-y-2">
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
-          Refinando predição para “{entrada.trim()}”…
+        <div className="flex items-center gap-2 text-xs font-semibold text-brand-600 dark:text-aurum-200">
+          <span className="aurum-ai-pensando-pontos" aria-hidden="true">
+            <span className="aurum-ai-pensando-ponto" />
+            <span className="aurum-ai-pensando-ponto" />
+            <span className="aurum-ai-pensando-ponto" />
+          </span>
+          Refinando resposta para “{entrada.trim()}”…
         </div>
-        <ConteudoSugestao
-          sugestao={sugestao}
-          jsonPedido={jsonPedido}
-          corConfianca={corConfianca}
-          onUsar={() => {
-            void usarSugestao()
-            toast('NCM sugerido enviado para classificação oficial.', 'ok')
-          }}
-        />
+        <MolduraAurumAI detalhe="predição assistiva · reavaliando">
+          <ConteudoSugestao
+            sugestao={sugestao}
+            jsonPedido={jsonPedido}
+            corConfianca={corConfianca}
+            onUsar={() => {
+              void usarSugestao()
+              toast('NCM sugerido enviado para classificação oficial.', 'ok')
+            }}
+            onEscolherAlternativa={(codigo) => void escolher(codigo)}
+          />
+        </MolduraAurumAI>
       </div>
     )
   }
@@ -577,22 +819,25 @@ function SecaoPredicao({ entrada }: { entrada: string }) {
   if (!sugestao) {
     return (
       <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/40">
-        Descreva com mais contexto (ex.: “vivo”, “para plantio”, “com sal”) para a predição
-        assistiva sugerir o NCM — sempre ancorada na nomenclatura vigente.
+        Descreva com mais contexto (ex.: “vivo”, “para plantio”, “com sal”) para a {NOME_IA}{' '}
+        sugerir o NCM — sempre ancorada na nomenclatura vigente.
       </div>
     )
   }
 
   return (
-    <ConteudoSugestao
-      sugestao={sugestao}
-      jsonPedido={jsonPedido}
-      corConfianca={corConfianca}
-      onUsar={() => {
-        void usarSugestao()
-        toast('NCM sugerido enviado para classificação oficial.', 'ok')
-      }}
-    />
+    <MolduraAurumAI detalhe="predição assistiva · ancorada na base oficial">
+      <ConteudoSugestao
+        sugestao={sugestao}
+        jsonPedido={jsonPedido}
+        corConfianca={corConfianca}
+        onUsar={() => {
+          void usarSugestao()
+          toast('NCM sugerido enviado para classificação oficial.', 'ok')
+        }}
+        onEscolherAlternativa={(codigo) => void escolher(codigo)}
+      />
+    </MolduraAurumAI>
   )
 }
 
@@ -601,92 +846,341 @@ function ConteudoSugestao({
   jsonPedido,
   corConfianca,
   onUsar,
+  onEscolherAlternativa,
 }: {
   sugestao: NonNullable<ReturnType<typeof useConsulta.getState>['sugestao']>
   jsonPedido: Record<string, unknown> | null
   corConfianca: string
   onUsar: () => void
+  /** Classifica direto uma alternativa (toque fino: sem voltar ao topo). */
+  onEscolherAlternativa?: (codigo: string) => void
 }) {
+  const [modal, setModal] = useState<'ncms' | 'raciocinio' | null>(null)
+  const abrirRefino = () => {
+    document.getElementById('refino-predicao')?.setAttribute('open', '')
+    window.requestAnimationFrame(() => document.getElementById('refino-destinacao')?.focus())
+    toast('Complete o refino — a IA reavalia automaticamente.', 'warn')
+  }
+  const alternativas = sugestao.alternativas.slice(0, 8)
   return (
-    <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+    <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+      {/* Herói comportado: NCM + confiança + 1 justificativa curta + CTA primário. */}
       <div className="flex flex-wrap items-center gap-2">
         {sugestao.ncm_provavel ? (
-          <span className="font-mono text-sm font-black text-brand-700 dark:text-aurum-200">
+          <span className="consulta-hero-ncm text-brand-700 dark:text-aurum-200">
             {sugestao.ncm_provavel}
           </span>
         ) : (
           <span className="text-sm font-bold text-slate-500">Sem sugestão segura</span>
         )}
         <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${corConfianca}`}>
-          confiança {sugestao.confianca}
+          {sugestao.confianca}
         </span>
-        {sugestao.excecao_enquadravel ? (
-          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-black text-violet-800 dark:bg-violet-950/60 dark:text-violet-200">
-            ⚡ {sugestao.tipo_excecao}
+        {sugestao.excecao_enquadravel && sugestao.tipo_excecao ? (
+          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-black text-violet-800 dark:bg-violet-950/60 dark:text-violet-200" title={sugestao.tipo_excecao}>
+            ⚡ benefício
+          </span>
+        ) : null}
+      </div>
+
+      <p className="consulta-justificativa-clamp text-slate-600 dark:text-slate-300" title={sugestao.justificativa}>
+        {sugestao.justificativa}
+      </p>
+
+      {sugestao.ncm_provavel ? (
+        <div className="flex flex-wrap gap-2">
+          <Btn variante="primary" tam="sm" onClick={onUsar}>
+            Classificar {sugestao.ncm_provavel} oficialmente
+          </Btn>
+        </div>
+      ) : null}
+
+      {/* Excesso em botões premium → modais glass padrão. */}
+      <div className="aurum-ai-acoes" role="group" aria-label="Explorar resposta da IA">
+        {alternativas.length ? (
+          <BotaoDetalhePremium
+            icone="🔎"
+            rotulo="NCMs analisados"
+            contagem={alternativas.length}
+            variante="ia"
+            titulo="Ver as hipóteses confrontadas — a preferida ganha selo + linha espectro"
+            onClick={() => setModal('ncms')}
+          />
+        ) : null}
+        <BotaoDetalhePremium
+          icone="🧠"
+          rotulo="Por que este NCM?"
+          titulo="Raciocínio auditável + JSON — abre em modal glass"
+          onClick={() => setModal('raciocinio')}
+        />
+      </div>
+
+      {sugestao.perguntasComplementares.length ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <strong>❓ Para refinar:</strong>{' '}
+          <button type="button" onClick={abrirRefino} className="font-semibold underline" title="Abrir o refino para responder — a IA reavalia sozinha">
+            {sugestao.perguntasComplementares[0].length > 90 ? `${sugestao.perguntasComplementares[0].slice(0, 90)}…` : sugestao.perguntasComplementares[0]}
+          </button>
+        </div>
+      ) : null}
+
+      <ModalNcmsAnalisados
+        aberto={modal === 'ncms'}
+        onFechar={() => setModal(null)}
+        itens={[
+          ...(sugestao.ncm_provavel
+            ? [{ codigo: sugestao.ncm_provavel, titulo: sugestao.ncm_provavel, subtitulo: sugestao.descricao_ncm || 'Hipótese preferida' }]
+            : []),
+          ...alternativas
+            .filter((a) => a !== sugestao.ncm_provavel)
+            .map((a) => ({ codigo: a, titulo: a, subtitulo: 'Hipótese confrontada' })),
+        ]}
+        codigoPreferido={sugestao.ncm_provavel}
+        subtitulo={`A ${NOME_IA} confrontou ${alternativas.length + (sugestao.ncm_provavel ? 1 : 0)} hipótese(s) — a preferida está com selo + linha espectro.`}
+        onEscolher={(codigo) => onEscolherAlternativa?.(codigo)}
+      />
+      <ModalRaciocinioIA
+        aberto={modal === 'raciocinio'}
+        onFechar={() => setModal(null)}
+        justificativa={sugestao.justificativa}
+        trilha={sugestao.trilha}
+        json={jsonPedido}
+        perguntas={sugestao.perguntasComplementares}
+        onRefinar={abrirRefino}
+      />
+    </div>
+  )
+}
+
+/* --------------------------------- sugerido por Aurum AI (fallback 06-06) -- */
+
+/**
+ * Conteúdo da decisão validada do fallback (`via === 'ia'`): herói comportado
+ * DENTRO da `MolduraAurumAI` — barra de confiança + veredito compacto + cartão
+ * enxuto + CTA primário. Excesso (NCMs analisados, simulação, auditoria) em
+ * botões premium → modais glass padrão.
+ */
+function RespostaIaValidada({
+  onSalvar,
+  onAddCalc,
+  bloqueios,
+}: {
+  onSalvar: (c: Classificacao) => void
+  onAddCalc: ReturnType<typeof useUi.getState>['abrirCalc']
+  bloqueios: Record<string, BloqueioSistema[]>
+}) {
+  const candidatos = useConsulta((s) => s.candidatosIa)
+  const decisao = useConsulta((s) => s.decisaoIa)
+  const nomenclaturaIa = useConsulta((s) => s.nomenclaturaIa)
+  const calculo = useConsulta((s) => s.calculoIa)
+  const codigoIa = useConsulta((s) => s.codigoIa)
+  const confianca = useConsulta((s) => s.confiancaIa)
+  const mock = useConsulta((s) => s.mockIa)
+  const veredito = useConsulta((s) => s.vereditoIa)
+  const fontes = useConsulta((s) => s.fontesIa)
+  const feedbackEnviado = useConsulta((s) => s.feedbackIaEnviado)
+  const usarSugestaoIa = useConsulta((s) => s.usarSugestaoIa)
+  const feedbackNegativo = useConsulta((s) => s.feedbackIaNegativo)
+  const escolher = useConsulta((s) => s.escolherUnificada)
+  const [modal, setModal] = useState<'ncms' | 'simulacao' | 'auditoria' | null>(null)
+
+  const top = candidatos.slice(0, 8)
+  const nivel = nivelDeConfianca(confianca)
+
+  return (
+    <div
+      className="space-y-2"
+      role="status"
+      aria-live="polite"
+      aria-label={`${NOME_IA} · sugestão com confiança ${nivel} ${fmtConfiancaAurumAI(confianca)}`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <BarraConfiancaAurumAI valor={confianca} compact />
+        {mock ? (
+          <span
+            className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+            title={`${NOME_IA} rodando em modo local (worker indisponível) — mesma validação pelo resolvedor oficial`}
+          >
+            modo local
           </span>
         ) : (
-          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-            sem exceção enquadrável
+          <span
+            className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
+            title={`${NOME_IA} com modelo/worker ativo — decisão validada pelo resolvedor oficial`}
+          >
+            <IconeAurumPremium tamanho="sm" /> {NOME_IA} ativa
           </span>
         )}
       </div>
 
-      <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-300">{sugestao.justificativa}</p>
+      {codigoIa && decisao ? (
+        <>
+          {veredito && veredito.exigeVerificacao ? (
+            <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <strong>Hipótese a verificar:</strong> {veredito.mensagemHipotese ?? 'condição legal a comprovar antes de escriturar.'}
+            </p>
+          ) : null}
+          <CartaoEnxuto
+            cl={decisao}
+            nomenclatura={nomenclaturaIa}
+            bloqueios={bloqueios[decisao.cClassTrib] ?? null}
+            destaqueIA
+            onSalvar={() => onSalvar(decisao)}
+            onAddCalc={() => onAddCalc({ tipo: 'classificacao', classificacao: decisao })}
+          />
 
-      {sugestao.descricao_ncm ? (
-        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-          Descrição oficial: <strong>{sugestao.descricao_ncm}</strong>
-          {sugestao.cst && sugestao.cClassTrib ? (
-            <> · vínculo oficial {sugestao.cst}/{sugestao.cClassTrib}</>
-          ) : (
-            <> · sem vínculo — tributação integral (regra geral)</>
-          )}
-        </p>
-      ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Btn
+              variante="primary"
+              tam="sm"
+              onClick={() => {
+                void usarSugestaoIa()
+                toast(`Sugestão da ${NOME_IA} enviada para classificação oficial.`, 'ok')
+              }}
+            >
+              Classificar {fmtNcm(codigoIa)} oficialmente
+            </Btn>
+            <Btn
+              tam="sm"
+              disabled={feedbackEnviado}
+              onClick={() => {
+                void feedbackNegativo()
+                toast('Obrigado — registramos que não era esse NCM.', 'warn')
+              }}
+            >
+              {feedbackEnviado ? '✓ Feedback registrado' : '👎 Não é esse'}
+            </Btn>
+          </div>
 
-      {sugestao.alternativas.length ? (
-        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-          Alternativas: <span className="font-mono">{sugestao.alternativas.join(' · ')}</span>
-        </p>
-      ) : null}
+          <div className="aurum-ai-acoes" role="group" aria-label="Explorar decisão da IA">
+            {top.length ? (
+              <BotaoDetalhePremium
+                icone="🔎"
+                rotulo="NCMs analisados"
+                contagem={top.length}
+                variante="ia"
+                titulo="Ver as pistas avaliadas — a referência preferida ganha selo + linha espectro"
+                onClick={() => setModal('ncms')}
+              />
+            ) : null}
+            {calculo ? (
+              <BotaoDetalhePremium
+                icone="🧮"
+                rotulo="Simulação"
+                titulo={`Simulação exemplificativa sobre ${fmtMoeda(VALOR_BASE_IA)} — abre em modal glass`}
+                onClick={() => setModal('simulacao')}
+              />
+            ) : null}
+            <BotaoDetalhePremium
+              icone="📚"
+              rotulo="Bases e auditoria"
+              titulo="Fontes lidas + trilha de auditoria — abre em modal glass"
+              onClick={() => setModal('auditoria')}
+            />
+          </div>
 
-      {sugestao.ncm_provavel ? (
-        <Btn variante="primary" tam="sm" onClick={onUsar}>
-          Classificar {sugestao.ncm_provavel} oficialmente
-        </Btn>
-      ) : null}
-
-      {sugestao.perguntasComplementares.length ? (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-          <strong>❓ Para refinar:</strong>
-          <ul className="mt-1 list-disc space-y-0.5 pl-4">
-            {sugestao.perguntasComplementares.map((p, i) => (
-              <li key={i}>{p}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      <details className="text-[11px] text-slate-500 dark:text-slate-400">
-        <summary className="cursor-pointer font-semibold">Ver raciocínio (etapas) e JSON</summary>
-        <ol className="mt-1 list-decimal space-y-0.5 pl-4">
-          {sugestao.trilha.map((t, i) => (
-            <li key={i}>
-              <strong>{t.etapa}:</strong> {t.detalhe}
-            </li>
-          ))}
-        </ol>
-        {jsonPedido ? (
-          <pre className="mt-2 overflow-x-auto rounded-lg bg-slate-900 p-2.5 font-mono text-[10px] leading-relaxed text-emerald-100 dark:bg-black">
-            {JSON.stringify(jsonPedido, null, 2)}
-          </pre>
-        ) : null}
-      </details>
-
-      <p className="text-[10px] text-slate-400">
-        Sugestão assistiva ancorada na nomenclatura vigente + vínculos da LC 214/2025. A classificação fiscal
-        vale pelo painel oficial — use “Classificar oficialmente”.
-      </p>
+          <ModalNcmsAnalisados
+            aberto={modal === 'ncms'}
+            onFechar={() => setModal(null)}
+            itens={top.map((c) => ({
+              codigo: c.codigo,
+              titulo: fmtNcm(c.codigo),
+              subtitulo: c.descricao,
+            }))}
+            codigoPreferido={codigoIa}
+            subtitulo={`A ${NOME_IA} avaliou ${top.length} pista(s) — “${fmtNcm(codigoIa)}” foi a referência preferida (selo + linha espectro).`}
+            onEscolher={(codigo) => void escolher(codigo)}
+          />
+          <ModalSimulacaoIA
+            aberto={modal === 'simulacao'}
+            onFechar={() => setModal(null)}
+            titulo={`Simulação exemplificativa (${fmtMoeda(VALOR_BASE_IA)})`}
+            nota={veredito?.exigeVerificacao ? 'Cálculo com a redução vigente (0% — alíquota cheia). A hipótese NÃO foi aplicada.' : undefined}
+          >
+            {calculo ? (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">IBS</div>
+                  <div className="font-mono font-bold">{fmtMoeda(calculo.vIBS)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">CBS</div>
+                  <div className="font-mono font-bold">{fmtMoeda(calculo.vCBS)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Tributos</div>
+                  <div className="font-mono font-bold">{fmtMoeda(calculo.total)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Total c/ tributos</div>
+                  <div className="font-mono font-bold">{fmtMoeda(calculo.base + calculo.total)}</div>
+                </div>
+              </div>
+            ) : null}
+          </ModalSimulacaoIA>
+          <ModalAuditoriaIA
+            aberto={modal === 'auditoria'}
+            onFechar={() => setModal(null)}
+            fontes={fontes}
+            nota={`Decisão validada pelo resolvedor oficial; cálculo sobre ${fmtMoeda(VALOR_BASE_IA)} — trilha em \`audit_log\` + \`logs/consultas-ia.jsonl\`.`}
+          />
+        </>
+      ) : (
+        <>
+          <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+            <strong>{NOME_IA} sem decisão segura — e prefiro ser honesto a chutar.</strong>{' '}
+            Não encontrei lastro suficiente na base oficial para afirmar um NCM. Para me ajudar a acertar:
+            1) descreva o produto com 1–2 detalhes (material, uso, estado);
+            2) confira as pistas abaixo; 3) ou use a busca por nome.
+            <div className="mt-2">
+              <Btn
+                tam="sm"
+                disabled={feedbackEnviado}
+                onClick={() => {
+                  void feedbackNegativo()
+                  toast('Obrigado — registramos a ausência de decisão.', 'warn')
+                }}
+              >
+                {feedbackEnviado ? '✓ Feedback registrado' : '👎 Não é esse'}
+              </Btn>
+            </div>
+          </div>
+          {veredito ? (
+            <details className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-2.5 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300">
+              <summary className="cursor-pointer font-bold">
+                🔎 Melhor pista (não é uma decisão)
+              </summary>
+              <p className="mt-1 leading-relaxed">{veredito.mensagemVigente}</p>
+            </details>
+          ) : null}
+          {top.length ? (
+            <div className="aurum-ai-acoes" role="group" aria-label="Pistas avaliadas">
+              <BotaoDetalhePremium
+                icone="🔎"
+                rotulo="Pistas avaliadas"
+                contagem={top.length}
+                variante="ia"
+                titulo="Ver as pistas avaliadas em modal glass"
+                onClick={() => setModal('ncms')}
+              />
+            </div>
+          ) : null}
+          <ModalNcmsAnalisados
+            aberto={modal === 'ncms'}
+            onFechar={() => setModal(null)}
+            itens={top.map((c) => ({ codigo: c.codigo, titulo: fmtNcm(c.codigo), subtitulo: c.descricao }))}
+            codigoPreferido={codigoIa}
+            subtitulo="Melhores pistas encontradas — nenhuma com lastro suficiente para decisão."
+            onEscolher={(codigo) => void escolher(codigo)}
+          />
+          <ModalAuditoriaIA
+            aberto={modal === 'auditoria'}
+            onFechar={() => setModal(null)}
+            fontes={fontes}
+            nota={`Sem decisão segura — trilha em \`audit_log\` + \`logs/consultas-ia.jsonl\`.`}
+          />
+        </>
+      )}
     </div>
   )
 }
@@ -782,7 +1276,7 @@ function ListaSugestaoNcm({
 
 /** Destaca as palavras que casam com o termo (insensível a acento/caixa). */
 function Destacar({ texto, termo }: { texto: string; termo: string }) {
-  const tokens = tokenizarBusca(termo)
+  const tokens = tokensRelevantes(termo)
   if (!tokens.length) return <>{texto}</>
   const palavras = texto.split(/(\s+)/)
   return (
@@ -814,7 +1308,6 @@ function ListaResultadoTexto({
   carregandoBase,
   ativo,
   listaRef,
-  onAtivo,
   onEscolher,
 }: {
   resultados: ResultadoBuscaTexto[]
@@ -824,7 +1317,6 @@ function ListaResultadoTexto({
   carregandoBase: boolean
   ativo: number
   listaRef: React.RefObject<HTMLDivElement | null>
-  onAtivo: (n: number) => void
   onEscolher: (codigo: string) => void
 }) {
   if (carregandoBase && baseVazia) {
@@ -848,7 +1340,7 @@ function ListaResultadoTexto({
   if (termo.trim().length < 2) {
     return (
       <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/40">
-        Digite pelo menos 2 letras — use ↑ ↓ para navegar e Enter para classificar.
+        Digite pelo menos 2 letras — a busca é por texto livre; escolher um NCM é só por clique.
       </div>
     )
   }
@@ -867,7 +1359,7 @@ function ListaResultadoTexto({
       ) : resultados.length ? (
         <>
           <div className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            {resultados.length} resultado{resultados.length > 1 ? 's' : ''} — clique ou Enter para classificar
+            {resultados.length} resultado{resultados.length > 1 ? 's' : ''} — clique para classificar · Enter pesquisa o texto atual
           </div>
           {resultados.map((n, i) => (
             <button
@@ -876,8 +1368,6 @@ function ListaResultadoTexto({
               role="option"
               aria-selected={i === ativo}
               data-indice={i}
-              onMouseEnter={() => onAtivo(i)}
-              onFocus={() => onAtivo(i)}
               onClick={() => onEscolher(n.codigo)}
               className={`flex w-full cursor-pointer items-start gap-2 rounded-lg px-3 py-1.5 text-left text-xs transition ${
                 i === ativo ? 'bg-brand-50 dark:bg-brand-900/30' : 'hover:bg-brand-50 dark:hover:bg-brand-900/30'

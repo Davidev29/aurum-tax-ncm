@@ -1,6 +1,10 @@
 import type {
+  AnexoNcm,
+  CreditoPresumido,
   DocumentosHabilitados,
+  LocalOperacao,
   NomenclaturaNcm,
+  ProdutoDfe,
   ReferenciaCClassTrib,
   TabelaCst,
   TabelaCstClassTrib,
@@ -390,7 +394,7 @@ const parsePermitido = (v: unknown): boolean | undefined => {
   return undefined
 }
 
-const ehBooleano = (v: unknown): boolean => {
+export const ehBooleano = (v: unknown): boolean => {
   if (typeof v === 'boolean' || typeof v === 'number') return true
   const s = String(v ?? '').trim().toLowerCase()
   return ['sim', 'não', 'nao', 's', 'n', '1', '0', 'true', 'false'].includes(s)
@@ -458,4 +462,302 @@ export function normalizarClassificacaoProduto(
   }
 
   return [...vistos.values()]
+}
+
+/* --------------------------------------------------------------------------
+   Formato E — API CFF `classTrib` (CSTs com `classificacoesTributarias`
+   aninhadas). É a mesma referência dos 164 em serialização nativa da API:
+   achata para os 3 registros canônicos (referência + CST + CST×cClassTrib),
+   com o mesmo shape dos normalizadores DFe para que o resolvedor e a
+   revalidação funcionem sem bifurcação.
+   -------------------------------------------------------------------------- */
+
+/** Mapeia os 9 documentos do `DocumentosHabilitados` a partir dos flags `Ind*` do CFF. */
+function docsDoCctCff(n: Record<string, unknown>): DocumentosHabilitados {
+  const docs = vazioDocs()
+  const mapa: Array<[keyof DocumentosHabilitados, string]> = [
+    ['NFe', 'IndNFe'], ['NFCe', 'IndNFCe'], ['CTe', 'IndCTe'],
+    ['CTeOS', 'IndCTeOS'], ['BPe', 'IndBPe'], ['BPeTM', 'IndBPeTM'],
+    ['NF3e', 'IndNF3e'], ['NFCom', 'IndNFCom'], ['NFSe', 'IndNFSE'],
+  ]
+  for (const [canon, chave] of mapa) docs[canon] = toBool(n[chave])
+  return docs
+}
+
+/** Booleano CFF → 1/0, preservando `null` quando a fonte não informa. */
+const boolNum = (v: unknown): number | null =>
+  v === null || v === undefined || v === '' ? null : toBool(v) ? 1 : 0
+
+export interface ReferenciaCffAchatada {
+  referencia: ReferenciaCClassTrib[]
+  cst: TabelaCst[]
+  cstClassTrib: TabelaCstClassTrib[]
+}
+
+export function normalizarClassTribCff(bruto: unknown): ReferenciaCffAchatada {
+  const lista = Array.isArray(bruto) ? bruto : []
+  const referencia: ReferenciaCClassTrib[] = []
+  const cst: TabelaCst[] = []
+  const cstClassTrib: TabelaCstClassTrib[] = []
+
+  for (const raw of lista) {
+    if (!raw || typeof raw !== 'object') continue
+    const pai = raw as Record<string, unknown>
+    const codigo = padCst(pai.CST)
+    const linhas = pai.classificacoesTributarias
+    if (!codigo || !Array.isArray(linhas)) continue
+
+    const docsCst = vazioDocs()
+    let temReducao = false
+    for (const item of linhas) {
+      if (!item || typeof item !== 'object') continue
+      const n = item as Record<string, unknown>
+      const cct = padCct(n.cClassTrib)
+      if (!cct) continue
+      const docs = docsDoCctCff(n)
+      for (const k of Object.keys(docsCst) as (keyof DocumentosHabilitados)[]) {
+        docsCst[k] = docsCst[k] || docs[k]
+      }
+      const pRedIBS = toNum(n.pRedIBS) ?? 0
+      const pRedCBS = toNum(n.pRedCBS) ?? 0
+      if (pRedIBS > 0 || pRedCBS > 0) temReducao = true
+      const descricao = str(n.DescricaoClassTrib)
+      referencia.push({
+        id: `${codigo}|${cct}`,
+        cst: codigo,
+        cstDescricao: str(pai.DescricaoCST),
+        cClassTrib: cct,
+        descricao,
+        pRedIBS,
+        pRedCBS,
+        tipoAliquota: str(n.TipoAliquota) || null,
+        anexo: n.Anexo === null || n.Anexo === undefined || n.Anexo === '' ? null : String(n.Anexo),
+        urlLegislacao: str(n.Link) || null,
+        exigeTributacao: toBool(pai.IndIBSCBS),
+        reducaoBC: toBool(pai.IndRedBC),
+        reducaoAliquota: toBool(pai.IndRedAliq),
+        transferenciaCredito: toBool(pai.IndTransfCred),
+        diferimento: toBool(pai.IndDif),
+        monofasica: toBool(pai.IndIBSCBSMono),
+        creditoPresumidoZFM: toBool(pai.IndCredPresIBSZFM),
+        ajusteCompetencia: toBool(pai.IndAjusteCompet),
+        tributacaoRegular: toBool(n.IndTribRegular),
+        creditoPresumido: toBool(n.IndCredPresOper),
+        estornoCredito: toBool(n.IndEstornoCred),
+        monoNormal: toBool(n.MonofasiaPadrao),
+        monoRetencao: toBool(n.MonofasiaSujeitaRetencao),
+        monoRetida: toBool(n.MonofasiaRetidaAnt),
+        monoDiferimentoCombustivel: toBool(n.MonofasiaDiferimento),
+        simplesReceitaBruta: str(n.TipoReceitaBrutaSN) || null,
+        regimeContribuicaoSocial: null,
+        impostoBensServicos: null,
+        docs,
+      })
+      cstClassTrib.push({
+        id: `${codigo}|${cct}`,
+        cst: codigo,
+        cClassTrib: cct,
+        nome: descricao,
+        descricao,
+        lcRedacao: null,
+        lcRef: null,
+        tipoAliquota: str(n.TipoAliquota) || null,
+        pRedIBS: toNum(n.pRedIBS),
+        pRedCBS: toNum(n.pRedCBS),
+        indRedutorBC: null,
+        indTribRegular: boolNum(n.IndTribRegular),
+        indCredPres: boolNum(n.IndCredPresOper),
+        indMono: boolNum(n.MonofasiaPadrao),
+        indMonoReten: boolNum(n.MonofasiaSujeitaRetencao),
+        indMonoRet: boolNum(n.MonofasiaRetidaAnt),
+        indMonoDif: boolNum(n.MonofasiaDiferimento),
+        creditoPara: null,
+        inicioVigencia: str(n.InicioVigencia) || null,
+        fimVigencia: str(n.FimVigencia) || null,
+        atualizadoEm: str(n.Publicacao) || null,
+      })
+    }
+    cst.push({
+      codigo,
+      descricao: str(pai.DescricaoCST),
+      indIBSCBS: toBool(pai.IndIBSCBS),
+      indIBSCBSMono: toBool(pai.IndIBSCBSMono),
+      indReducao: toBool(pai.IndRedAliq) || toBool(pai.IndRedBC) || temReducao,
+      indDiferimento: toBool(pai.IndDif),
+      indTransferenciaCredito: toBool(pai.IndTransfCred),
+      docs: docsCst,
+    })
+  }
+
+  return { referencia, cst, cstClassTrib }
+}
+
+/* --------------------------------------------------------------------------
+   Formato F — API CFF `anexos` (NCM/NBS × anexo × permissão).
+   -------------------------------------------------------------------------- */
+
+/** `Permitido` → permitido · `Não Permitido` → negado · resto/nulo → null. */
+function permissaoAnexo(v: unknown): 'permitido' | 'negado' | null {
+  const letras = String(v ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[^\p{L}]/gu, '')
+  if (!letras) return null
+  if (letras.includes('naopermitido')) return 'negado'
+  if (letras.includes('permitido')) return 'permitido'
+  return null
+}
+
+const ehSemCodigo = (v: unknown): boolean => {
+  const s = String(v ?? '').trim().toLowerCase()
+  return !s || s === 'sem código' || s === 'sem codigo'
+}
+
+export function normalizarAnexosCff(bruto: unknown): AnexoNcm[] {
+  const b = bruto as Record<string, unknown> | unknown[] | null
+  const lista = Array.isArray(b)
+    ? b
+    : (['itens', 'data', 'anexos', 'lista', 'result', 'registros']
+      .map((k) => (b as Record<string, unknown>)?.[k])
+      .find((v) => Array.isArray(v)) as unknown[] | undefined) ?? []
+  if (!Array.isArray(lista)) return []
+
+  return (lista as unknown[])
+    .map((raw, i) => {
+      if (!raw || typeof raw !== 'object') return null
+      const r = raw as Record<string, unknown>
+      const nroAnexo = toNum(r.nroAnexo)
+      if (nroAnexo === null) return null
+      const semCodigo = ehSemCodigo(r.codNcmNbs)
+      const dig = semCodigo ? '' : digits(r.codNcmNbs)
+      const codigo = dig || null
+      return {
+        id: `${codigo ?? 'sem-codigo'}|${nroAnexo}|${i}`,
+        codigo,
+        tipo: !codigo ? null : codigo.length === 8 ? 'NCM' : codigo.length === 9 ? 'NBS' : null,
+        permissao: permissaoAnexo(r.TipoPermissao),
+        nroAnexo,
+        nroItemAnexoLei: toNum(r.nroItemAnexoLei),
+        descrAnexo: str(r.descrAnexo),
+        descrItemAnexo: str(r.descrItemAnexo) || null,
+        descrCondicao: str(r.descrCondicao) || null,
+        descrExcecao: str(r.descrExcecao) || null,
+        observacao: str(r.texObservacao) || null,
+        inicioVigencia: str(r.dthIniVig) || null,
+        fimVigencia: str(r.dthFimVig) || null,
+      } satisfies AnexoNcm
+    })
+    .filter((a): a is AnexoNcm => a !== null)
+}
+
+/* --------------------------------------------------------------------------
+   Formato G — API CFF `ConsultaClassificacaoProduto` (formato real: catálogo
+   por `codClassProd` de 7 dígitos). O sistema de origem NÃO vem no arquivo
+   (o mesmo código existe em sistemas diferentes com descrições diferentes),
+   por isso `sistema` é parâmetro obrigatório.
+   -------------------------------------------------------------------------- */
+
+export function normalizarProdutoDfe(
+  bruto: unknown,
+  sistema: string,
+  agora = new Date().toISOString(),
+): ProdutoDfe[] {
+  const sist = String(sistema ?? '').trim()
+  if (!sist) throw new Error('Sistema de origem não informado (NFCom, NFAg, NF3e ou NFGas).')
+  const b = bruto as Record<string, unknown> | unknown[] | null
+  const lista = Array.isArray(b)
+    ? b
+    : (['itens', 'data', 'produtos', 'tabela', 'lista', 'result', 'registros']
+      .map((k) => (b as Record<string, unknown>)?.[k])
+      .find((v) => Array.isArray(v)) as unknown[] | undefined) ?? []
+  if (!Array.isArray(lista)) return []
+
+  const vistos = new Map<string, ProdutoDfe>()
+  for (const raw of lista) {
+    if (!raw || typeof raw !== 'object') continue
+    const r = raw as Record<string, unknown>
+    const cod = digits(r.codClassProd)
+    if (!cod) continue
+    const flags: Record<string, boolean> = {}
+    for (const [k, v] of Object.entries(r)) {
+      if (['codClassProd', 'codGrupoClass', 'descrGrupoProd', 'descrClassProd', 'tipoPrestServico'].includes(k)) continue
+      if (ehBooleano(v)) flags[k] = toBool(v)
+    }
+    const id = `${sist}|${cod}`
+    vistos.set(id, {
+      id,
+      sistema: sist,
+      codClassProd: cod,
+      codGrupo: str(r.codGrupoClass) || null,
+      descrGrupo: str(r.descrGrupoProd) || null,
+      descricao: str(r.descrClassProd),
+      tipoPrestacao: str(r.tipoPrestServico) || null,
+      flags,
+      sincronizadoEm: agora,
+    })
+  }
+  return [...vistos.values()]
+}
+
+/* --------------------------------------------------------------------------
+   Formatos H/I — CFF `credPresumido` e `indOper` (conversão tipada real).
+   Sem chave com NCM/cClassTrib: viram tabelas de referência versionadas
+   (informação adicional + consulta nas tabelas oficiais).
+   -------------------------------------------------------------------------- */
+
+function extrairLista(bruto: unknown): unknown[] {
+  const b = bruto as Record<string, unknown> | unknown[] | null
+  const lista = Array.isArray(b)
+    ? b
+    : (['itens', 'data', 'lista', 'result', 'registros']
+      .map((k) => (b as Record<string, unknown>)?.[k])
+      .find((v) => Array.isArray(v)) as unknown[] | undefined) ?? []
+  return Array.isArray(lista) ? lista : []
+}
+
+export function normalizarCreditoPresumido(bruto: unknown): CreditoPresumido[] {
+  return extrairLista(bruto)
+    .map((raw) => {
+      if (!raw || typeof raw !== 'object') return null
+      const r = raw as Record<string, unknown>
+      const cod = toNum(r.codCredPres)
+      if (cod === null) return null
+      return {
+        cod,
+        descricao: str(r.descrCredPres),
+        indIbs: toBool(r.indIbs),
+        indCbs: toBool(r.indCbs),
+        apropriaDfe: toBool(r.indApropriaDfe),
+        apropriaEvento: toBool(r.indApropriaEvento),
+        condSuspensiva: toBool(r.indCondSuspensiva),
+        deduz: toBool(r.indDeduzCredPres),
+        iniVigIbs: str(r.dthIniVigIbs) || null,
+        fimVigIbs: str(r.dthFimVigIbs) || null,
+        iniVigCbs: str(r.dthIniVigCbs) || null,
+        fimVigCbs: str(r.dthFimVigCbs) || null,
+      } satisfies CreditoPresumido
+    })
+    .filter((c): c is CreditoPresumido => c !== null)
+}
+
+export function normalizarLocaisOperacao(bruto: unknown): LocalOperacao[] {
+  return extrairLista(bruto)
+    .map((raw) => {
+      if (!raw || typeof raw !== 'object') return null
+      const r = raw as Record<string, unknown>
+      const cod = str(r.codOperacao)
+      if (!cod) return null
+      return {
+        cod,
+        nome: str(r.nomeOperacao),
+        dispLegal: str(r.texDispLegal) || null,
+        localOperacao: str(r.texLocalOperacao) || null,
+        localFornec: str(r.texLocalFornec) || null,
+        caractFornec: str(r.texCaractFornec) || null,
+        publicacao: str(r.dthPublicacao) || null,
+        iniVig: str(r.dthIniVig) || null,
+        fimVig: str(r.dthFimVig) || null,
+      } satisfies LocalOperacao
+    })
+    .filter((l): l is LocalOperacao => l !== null)
 }

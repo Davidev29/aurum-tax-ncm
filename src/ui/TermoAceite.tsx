@@ -395,8 +395,8 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
               {passo === 0 ? 'Começar →' : 'Continuar →'}
             </Btn>
           ) : (
-            <Btn variante="primary" onClick={() => void concluir()}>
-              {salvando ? '⏳ Salvando…' : '✓ Concluir instalação'}
+            <Btn variante="primary" carregando={salvando} onClick={() => void concluir()}>
+              {salvando ? 'Salvando…' : '✓ Concluir instalação'}
             </Btn>
           )}
         </div>

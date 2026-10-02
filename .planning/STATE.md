@@ -2,9 +2,9 @@
 gsd_state_version: '1.0'
 status: planning
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 0
-  total_plans: 22
+  total_plans: 33
   completed_plans: 0
   percent: 0
 ---
@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-09-29)
 Phase: 1 of 5 (Foundation & Data Layer)
 Plan: 0 of 4 in current phase
 Status: Ready to plan
-Last activity: 2026-09-29 — Project initialized, planning structure created
+Last activity: 2026-09-30 — Phase 6 plan 06-10 docs entregues (arquitetura/manual/troubleshooting/dossiê), tsc 0 + npm test 41/433 verdes; aceite UAT pendente
 
 Progress: [░░░░░░░░░░] 0%
 

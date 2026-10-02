@@ -22,6 +22,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -361,6 +362,53 @@ function escrever(nome, dados) {
   return { arquivo: nome, bytes: buf.length, sha256: sha256(buf) };
 }
 
+// ---------------------------------------------------------------------------
+// Gatilho 06-03/IA-03: rebuild do índice IA se a base tributária mudou
+// ---------------------------------------------------------------------------
+// Compara o hash SEMÂNTICO do MANIFEST (contagens + sha256 dos artefatos,
+// ignorando `geradoEm`) com `recursos-ia/indice-ncm/.manifest-hash`. Se
+// divergir, regenera via `scripts/gerar-indice-ia.mjs`. NUNCA falha o build
+// da base: qualquer problema aqui vira aviso e o build segue exit 0.
+
+async function gatilhoIndiceIA(manifest, arquivosSaida) {
+  try {
+    const INDICE_DIR = path.join(PROJECT_ROOT, 'recursos-ia', 'indice-ncm');
+    const HASH_FILE = path.join(INDICE_DIR, '.manifest-hash');
+    const GERADOR = path.join(PROJECT_ROOT, 'scripts', 'gerar-indice-ia.mjs');
+    const BASE_IA = path.join(PROJECT_ROOT, 'recursos-ia', 'dados-brutos', 'ncm-para-ia.json');
+
+    let hashAtual = null;
+    try {
+      const { calcularHashManifest } = await import('./gerar-indice-ia.mjs');
+      hashAtual = calcularHashManifest(OUT_DIR);
+    } catch {
+      console.log('   índice IA: gerador 06-03 ilegível — gatilho ignorado.');
+      return;
+    }
+    if (!hashAtual) {
+      console.log('   índice IA: MANIFEST ilegível — gatilho ignorado.');
+      return;
+    }
+
+    const anterior = fs.existsSync(HASH_FILE) ? fs.readFileSync(HASH_FILE, 'utf8').trim() : null;
+    if (anterior === hashAtual) {
+      console.log('   índice IA: em dia (hash MANIFEST inalterado) — rebuild ignorado.');
+      return;
+    }
+    if (!fs.existsSync(GERADOR) || !fs.existsSync(BASE_IA)) {
+      console.log('   índice IA: gerador ou base 06-02 ausente — gatilho ignorado (rode 06-02/06-03).');
+      return;
+    }
+    console.log('   índice IA: MANIFEST mudou — regenerando índice...');
+    execFileSync(process.execPath, [GERADOR], { stdio: 'inherit', cwd: PROJECT_ROOT });
+    fs.mkdirSync(INDICE_DIR, { recursive: true });
+    fs.writeFileSync(HASH_FILE, hashAtual + '\n');
+    console.log('   índice IA: rebuild OK.');
+  } catch (err) {
+    console.log(`   índice IA: gatilho ignorado (${String(err.message).split('\n')[0]}). Build da base preservado.`);
+  }
+}
+
 async function main() {
   console.log(' Aurum Tax NCM — compilação da base tributária');
   console.log(`   origem: ${SOURCE_DIR}`);
@@ -458,6 +506,8 @@ async function main() {
     arquivos: arquivosSaida,
   };
   escrever('MANIFEST.json', manifest);
+
+  await gatilhoIndiceIA(manifest, arquivosSaida);
 
   const totalBytes = arquivosSaida.reduce((s, a) => s + a.bytes, 0);
   console.log('\n Resultado:');

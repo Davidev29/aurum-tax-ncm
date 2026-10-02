@@ -6,7 +6,7 @@
  * completa (escudo + "AURUM TAX NCM" em marinho) só é usada sobre fundo
  * claro, onde o texto marinho tem contraste.
  */
-export function EscudoAurum({ tamanho = 68 }: { tamanho?: number }) {
+export function EscudoAurum({ tamanho = 44 }: { tamanho?: number }) {
   // Escudo puro, sem moldura: a arte em ouro vive direto no fundo do sidebar
   // (a sombra suave é só para dar relevo, sem caixa nem borda).
   const largura = Math.round(tamanho * 0.59)
@@ -21,18 +21,23 @@ export function EscudoAurum({ tamanho = 68 }: { tamanho?: number }) {
   )
 }
 
-/** Cabeçalho da barra lateral: escudo + wordmark HTML (tema-agnóstico). */
-export function MarcaSidebar() {
+/** Cabeçalho da barra lateral: escudo + wordmark.
+ *
+ * Recolhido, renderiza literalmente só o escudo (sem `.marca-texto` no DOM —
+ * nada para "sumir" com fade). O nome só existe quando o menu está aberto.
+ * Alinhamento sempre à esquerda (`justify-start` + `.marca-caixa`), nos dois
+ * estados, para acompanhar o hambúrguer e os ícones do menu. */
+export function MarcaSidebar({ expandida = true }: { expandida?: boolean }) {
   return (
-    // `items-stretch` + `justify-center`: o bloco de texto herda a altura do
-    // escudo e centraliza nela — imagem e texto sempre alinhados.
-    <div className="flex w-full min-w-0 items-stretch justify-center gap-3">
-      <EscudoAurum tamanho={104} />
-      <div className="flex min-w-0 flex-col justify-center leading-tight">
-        <div className="marca-nome truncate text-[26px]">AURUM</div>
-        <div className="marca-sub truncate text-[13px]">TAX · NCM</div>
-        <div className="marca-filete mt-1.5 w-full" aria-hidden="true" />
-      </div>
+    <div className="marca-caixa flex w-full min-w-0 items-center justify-start gap-3 text-left">
+      <EscudoAurum tamanho={expandida ? 60 : 56} />
+      {expandida ? (
+        <div className="marca-texto flex min-w-0 flex-col justify-center leading-tight">
+          <div className="marca-nome truncate">AURUM</div>
+          <div className="marca-sub truncate">TAX · NCM</div>
+          <div className="marca-filete mt-1 w-full" aria-hidden="true" />
+        </div>
+      ) : null}
     </div>
   )
 }

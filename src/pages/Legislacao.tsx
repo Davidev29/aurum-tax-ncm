@@ -11,8 +11,8 @@
  * por norma): o card aponta para o portal e indica o termo exato de busca.
  */
 import { useMemo, useState } from 'react'
-import { GRUPOS_LEGISLACAO, LEGISLACOES, type ItemLegislacao } from '@/domain/legislacao'
-import { Painel, Pill, Vazio } from '@/ui/kit'
+import { FONTES_BASES, GRUPOS_LEGISLACAO, LEGISLACOES, type FonteBase, type ItemLegislacao } from '@/domain/legislacao'
+import { Modal, Painel, Pill, Vazio } from '@/ui/kit'
 import { ModalLegislacao, type DestinoLegislacao } from '@/ui/ModalLegislacao'
 
 const COR_TIPO: Record<ItemLegislacao['tipo'], 'brand' | 'emerald' | 'amber' | 'slate'> = {
@@ -34,6 +34,7 @@ const ICONE_TIPO: Record<ItemLegislacao['tipo'], string> = {
 export function Legislacao() {
   const [filtro, setFiltro] = useState('')
   const [destino, setDestino] = useState<DestinoLegislacao | null>(null)
+  const [fonteAtiva, setFonteAtiva] = useState<FonteBase | null>(null)
 
   const grupos = useMemo(() => {
     const termo = filtro.trim().toLowerCase()
@@ -84,6 +85,62 @@ export function Legislacao() {
         </div>
       </Painel>
 
+      <section aria-label="Portais para atualização das bases de dados">
+        <div className="mb-2 px-1">
+          <h3 className="text-sm font-black">🌐 Portais para atualização</h3>
+          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+            Fontes oficiais para buscar as bases de dados. Baixe o arquivo no portal e
+            importe no card correspondente da aba <strong>Configurações → Bases</strong>.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {FONTES_BASES.map((fonte) => (
+            <article key={fonte.id} className="panel animate-fade-up card-hover flex flex-col p-5">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <Pill cor="emerald">🗂 {fonte.rotuloBase}</Pill>
+              </div>
+              <h3 className="text-sm font-black leading-snug">{fonte.titulo}</h3>
+              <p className="mt-2 flex-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                {fonte.descricao}
+              </p>
+              <p className="mt-2 rounded-xl bg-slate-50 p-2.5 font-mono text-[11px] leading-relaxed text-slate-500 dark:bg-slate-950/40 dark:text-slate-400">
+                📄 {fonte.arquivo}
+              </p>
+              <p className="mt-2 rounded-xl border border-dashed border-brand-300 bg-brand-50/60 p-2.5 text-[11px] leading-relaxed text-brand-800 dark:border-brand-800 dark:bg-brand-950/30 dark:text-brand-200">
+                👣 {fonte.passo}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="btn btn-press btn-primary btn-sm"
+                  onClick={() => setFonteAtiva(fonte)}
+                  title={`Ver como obter ${fonte.titulo}`}
+                >
+                  🧭 Como obter
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-press btn-ghost btn-sm"
+                  onClick={() => {
+                    try {
+                      void navigator.clipboard?.writeText(fonte.url)?.catch?.(() => undefined)
+                    } catch {
+                      /* clipboard indisponível — ignora */
+                    }
+                  }}
+                  title="Copiar link oficial"
+                >
+                  🔗 Copiar link
+                </button>
+              </div>
+              <div className="mt-2 truncate font-mono text-[10px] text-slate-400" title={fonte.url}>
+                {fonte.url}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
       {grupos.length ? (
         grupos.map((grupo) => (
           <section key={grupo.id} aria-label={grupo.titulo}>
@@ -111,7 +168,86 @@ export function Legislacao() {
       )}
 
       <ModalLegislacao destino={destino} onFechar={() => setDestino(null)} />
+      <ModalFonteBase fonte={fonteAtiva} onFechar={() => setFonteAtiva(null)} />
     </div>
+  )
+}
+
+function ModalFonteBase({ fonte, onFechar }: { fonte: FonteBase | null; onFechar: () => void }) {
+  return (
+    <Modal
+      aberto={fonte !== null}
+      onFechar={onFechar}
+      titulo={fonte ? `Como obter — ${fonte.titulo}` : 'Como obter'}
+      subtitulo={fonte?.rotuloBase}
+      largura="max-w-xl"
+      rodape={
+        <>
+          <button type="button" className="btn btn-press btn-ghost btn-sm" onClick={onFechar}>
+            Fechar
+          </button>
+          {fonte ? (
+            <a
+              className="btn btn-press btn-primary btn-sm"
+              href={fonte.url}
+              target="_blank"
+              rel="noreferrer"
+              title={`Abrir ${fonte.titulo} no navegador`}
+            >
+              ✅ Entendi, abrir portal
+            </a>
+          ) : null}
+        </>
+      }
+    >
+      {fonte ? (
+        <div className="space-y-3 text-xs leading-relaxed">
+          <p className="text-slate-600 dark:text-slate-300">{fonte.descricao}</p>
+          <ol className="list-decimal space-y-1.5 pl-5 text-slate-600 dark:text-slate-300">
+            <li>
+              Clique em <strong>“Entendi, abrir portal”</strong> abaixo para abrir o portal
+              oficial no navegador.
+            </li>
+            {fonte.exigeCert ? (
+              <li>
+                Se o navegador pedir, selecione seu <strong>certificado digital e-CNPJ
+                (ICP-Brasil)</strong> e autorize — sem ele o portal retorna 401/403.
+              </li>
+            ) : null}
+            <li>
+              Baixe e <strong>salve</strong> o arquivo no seu computador (
+              <span className="font-mono">{fonte.arquivo}</span>).
+            </li>
+            <li>
+              Volte ao sistema em <strong>Configurações → Bases de dados</strong> e importe o
+              arquivo no card correspondente ({fonte.rotuloBase}).
+            </li>
+            <li>
+              Clique em <strong>Atualizar bases de dados</strong> para validar e importar.
+            </li>
+          </ol>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-press btn-ghost btn-sm"
+              onClick={() => {
+                try {
+                  void navigator.clipboard?.writeText(fonte.url)?.catch?.(() => undefined)
+                } catch {
+                  /* clipboard indisponível — ignora */
+                }
+              }}
+              title="Copiar link oficial"
+            >
+              🔗 Copiar link
+            </button>
+            <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-slate-400" title={fonte.url}>
+              {fonte.url}
+            </span>
+          </div>
+        </div>
+      ) : null}
+    </Modal>
   )
 }
 

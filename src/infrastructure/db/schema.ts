@@ -5,11 +5,13 @@ import {
   STORES,
 } from '@/domain/constants'
 import type {
+  AnexoNcm,
   AuditLog,
   ClassificacaoProdutoSistema,
   Empresa,
   NomenclaturaNcm,
   Produto,
+  ProdutoDfe,
   ReclassificacaoManual,
   TabelaAuxiliarSimples,
   TabelaCest,
@@ -21,6 +23,18 @@ import type {
 } from '@/domain/entities'
 import type { NotaXml } from '../nfe/tipos'
 import { buildDocs, toBool, toNum } from '../base/normalizacao'
+
+/** Feedback "Não é esse" da Sugestão IA (Phase 6 / 06-06, Dexie v9). */
+export interface IaFeedback {
+  id?: number
+  quando: string
+  descricao: string
+  via: string
+  decisao: string | null
+  confianca: number
+  motivo?: string | null
+  mock?: boolean
+}
 
 /** Registro genérico da store `meta`. */
 export interface MetaRecord {
@@ -188,11 +202,20 @@ export class AurumDatabase extends Dexie {
   /** Classificação de Produtos por DFe (CFF — permitido × negado por sistema). */
   classificacaoProduto!: Table<ClassificacaoProdutoSistema, string>
 
+  /** Anexos por NCM/NBS (CFF `anexos`, formato real da API). */
+  anexos!: Table<AnexoNcm, string>
+
+  /** Catálogo de produtos por DFe (CFF `ConsultaClassificacaoProduto`, formato real). */
+  produtosDfe!: Table<ProdutoDfe, string>
+
   /** Log imutável de auditoria (append-only, nunca atualizado pela UI). */
   auditLog!: Table<AuditLog, number>
 
   /** CEST — tabela informativa (7 dígitos, opcional por produto). */
   cest!: Table<TabelaCest, string>
+
+  /** Feedback "Não é esse" da Sugestão IA (Dexie v9, Phase 6 / 06-06). */
+  iaFeedback!: Table<IaFeedback, number>
 
   constructor() {
     super(DB_NAME)
@@ -216,6 +239,51 @@ export class AurumDatabase extends Dexie {
         [STORES.RECLASS]: 'ncm',
       })
       .upgrade((trans) => migrarBancoLegado(trans))
+    // v8 congelada (Phase 5): sem `ia_feedback`. Mantida para que bancos
+    // já em v8 migrem para v9 sem perder `audit_log`/`reclassificacoesManuais`.
+    this.version(8).stores({
+      [STORES.NCM]: 'id, codigo, cst, cClassTrib',
+      [STORES.NBS]: 'id, codigo, cClassTrib',
+      [STORES.CST]: 'codigo',
+      [STORES.CSTCT]: 'id, cst, cClassTrib',
+      [STORES.REFERENCIA]: 'id, cst, cClassTrib',
+      [STORES.NCMNOM]: 'codigo, descricao',
+      [STORES.EMPRESAS]: '++id, razaoSocial, cnpj',
+      [STORES.PRODUTOS]: '++id, empresaId, ncm, codigo, cstReforma',
+      [STORES.META]: 'chave',
+      [STORES.CFOP]: 'codigo',
+      [STORES.CSTICMS]: 'codigo',
+      [STORES.CSTPISCOFINS]: 'codigo',
+      [STORES.NFENOTAS]: '++id, empresaId, dataEmissao, direcao, emitCnpj, chave, &[empresaId+chave]',
+      [STORES.RECLASS]: 'ncm',
+      [STORES.CLASSPROD]: 'id, sistema, cClassTrib',
+      [STORES.AUDIT]: '++id, quando, tabela, chave, autor',
+      [STORES.CEST]: 'codigo, ncm',
+    })
+    // v9 (Phase 6 / 06-06): adiciona `ia_feedback`; demais stores intactas.
+    // Congelada: bancos em v9 sobem para v10 sem perder dados.
+    this.version(9)
+      .stores({
+        [STORES.NCM]: 'id, codigo, cst, cClassTrib',
+        [STORES.NBS]: 'id, codigo, cClassTrib',
+        [STORES.CST]: 'codigo',
+        [STORES.CSTCT]: 'id, cst, cClassTrib',
+        [STORES.REFERENCIA]: 'id, cst, cClassTrib',
+        [STORES.NCMNOM]: 'codigo, descricao',
+        [STORES.EMPRESAS]: '++id, razaoSocial, cnpj',
+        [STORES.PRODUTOS]: '++id, empresaId, ncm, codigo, cstReforma',
+        [STORES.META]: 'chave',
+        [STORES.CFOP]: 'codigo',
+        [STORES.CSTICMS]: 'codigo',
+        [STORES.CSTPISCOFINS]: 'codigo',
+        [STORES.NFENOTAS]: '++id, empresaId, dataEmissao, direcao, emitCnpj, chave, &[empresaId+chave]',
+        [STORES.RECLASS]: 'ncm',
+        [STORES.CLASSPROD]: 'id, sistema, cClassTrib',
+        [STORES.AUDIT]: '++id, quando, tabela, chave, autor',
+        [STORES.CEST]: 'codigo, ncm',
+        [STORES.IAFEEDBACK]: '++id, quando, via, decisao',
+      })
+    // v10 (bases CFF reais): adiciona `anexos` + `produtosDfe`; demais intactas.
     this.version(DB_VERSION)
       .stores({
         [STORES.NCM]: 'id, codigo, cst, cClassTrib',
@@ -235,6 +303,9 @@ export class AurumDatabase extends Dexie {
         [STORES.CLASSPROD]: 'id, sistema, cClassTrib',
         [STORES.AUDIT]: '++id, quando, tabela, chave, autor',
         [STORES.CEST]: 'codigo, ncm',
+        [STORES.IAFEEDBACK]: '++id, quando, via, decisao',
+        [STORES.ANEXOS]: 'id, codigo, nroAnexo',
+        [STORES.PRODUTOSDFE]: 'id, sistema, codClassProd',
       })
   }
 }
@@ -262,7 +333,8 @@ export async function bulkPut<T, K>(
 export async function contarTodos(): Promise<Record<string, number>> {
   const [
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
-    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest,
+    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
+    anexos, produtosDfe,
   ] = await Promise.all([
     db.ncm.count(),
     db.nbs.count(),
@@ -280,9 +352,13 @@ export async function contarTodos(): Promise<Record<string, number>> {
     db.classificacaoProduto.count(),
     db.auditLog.count().catch(() => 0),
     db.cest.count().catch(() => 0),
+    db.iaFeedback.count().catch(() => 0),
+    db.anexos.count().catch(() => 0),
+    db.produtosDfe.count().catch(() => 0),
   ])
   return {
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
-    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest,
+    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
+    anexos, produtosDfe,
   }
 }

@@ -301,6 +301,89 @@ export const LEGISLACOES: ItemLegislacao[] = [
   },
 ]
 
+/**
+ * Fontes oficiais para buscar as bases de dados (bloco fixo no topo da tela
+ * Legislação, acima de todos os grupos).
+ *
+ * Espelha os 3 cards da aba "Bases" (Configurações): cada fonte indica qual
+ * base alimenta, qual arquivo baixar e o passo para importar.
+ */
+export interface FonteBase {
+  id: string
+  titulo: string
+  base: 'referencia' | 'reforma' | 'nomenclatura'
+  rotuloBase: string
+  descricao: string
+  arquivo: string
+  passo: string
+  url: string
+  /** Quando true, o modal avisa que o portal pode pedir certificado e-CNPJ. */
+  exigeCert: boolean
+}
+
+export const FONTES_BASES: FonteBase[] = [
+  {
+    id: 'fonte-ncm-siscomex',
+    titulo: 'Siscomex — NCM vigente',
+    base: 'nomenclatura',
+    rotuloBase: 'Alimenta: NCM vigente (Siscomex)',
+    descricao:
+      'Portal Único Siscomex (módulo Classif): tabela NCM vigente com descrições, vigências e extintos. Arquivo regenerado diariamente.',
+    arquivo: 'Tabela_NCM_Vigente_*.json',
+    passo: 'No portal Classif, abra Nomenclatura/Tabela ou use o download JSON público, salve o arquivo e importe no card “NCM vigente (Siscomex)” da aba Bases.',
+    url: 'https://portalunico.siscomex.gov.br/classif/',
+    exigeCert: false,
+  },
+  {
+    id: 'fonte-classificacao-dfe',
+    titulo: 'Portal DFe — Classificação Tributária',
+    base: 'referencia',
+    rotuloBase: 'Alimenta: Classificação tributária',
+    descricao:
+      'Portal DFe (SEFAZ-RS): referência oficial CST × cClassTrib com reduções, anexos e documentos habilitados (164 registros).',
+    arquivo: 'classificacao_tributaria.json',
+    passo: 'No portal DFe, abra Classificação Tributária, baixe o JSON oficial e importe no card “Classificação tributária” da aba Bases.',
+    url: 'https://dfe-portal.svrs.rs.gov.br/DFE/ClassificacaoTributaria',
+    exigeCert: true,
+  },
+  {
+    id: 'fonte-reforma-cff',
+    titulo: 'Conformidade Fácil — planilha Reforma por NCM (Excel)',
+    base: 'reforma',
+    rotuloBase: 'Alimenta: Reforma por NCM / NBS',
+    descricao:
+      'Planilha “Reforma Tributaria consulta por NCM” gerada pela Conformidade Fácil (2345 NCM + 137 NBS com CST e cClassTrib). Traz só 132 pares CST×cClassTrib — o dicionário completo (164) vem da base de Classificação Tributária acima.',
+    arquivo: 'reforma_tributaria_por_ncm.json (via Excel original)',
+    passo: 'Use a planilha Excel da Conformidade Fácil, converta para reforma_tributaria_por_ncm.json e importe no card “Reforma por NCM / NBS” da aba Bases. Confira a redação vigente na página da RFB.',
+    url: LINK_RFB_LEGISLACAO_REFORMA,
+    exigeCert: false,
+  },
+  {
+    id: 'fonte-api-cff-tribs',
+    titulo: 'API CFF — classTrib e anexos',
+    base: 'referencia',
+    rotuloBase: 'Alimenta: Classificação tributária e anexos',
+    descricao:
+      'Endpoints oficiais da Conformidade Fácil: classTrib (164 referências em formato nativo), anexos (NCM/NBS × anexo × permissão), credPresumido e indOper. Exigem certificado digital e-CNPJ.',
+    arquivo: 'classTrib.json, anexos.json, credPresumido.json, indOper.json',
+    passo: 'Acesse um dos endpoints (…/classTrib, …/anexos, …/credPresumido, …/indOper) com o certificado, salve cada JSON e importe todos de uma vez na aba Bases — o sistema reconhece cada um.',
+    url: 'https://cff.svrs.rs.gov.br/api/v1/consultas/classTrib',
+    exigeCert: true,
+  },
+  {
+    id: 'fonte-api-cff-produtos',
+    titulo: 'API CFF — produtos por DFe',
+    base: 'reforma',
+    rotuloBase: 'Alimenta: Produtos por DFe',
+    descricao:
+      'Endpoint ConsultaClassificacaoProduto por sistema (NFCom, NFAg, NF3e, NFGas): catálogo de produtos de cada documento fiscal. Exige certificado; o arquivo não declara o sistema.',
+    arquivo: 'ConsultaClassificacaoProduto.json (+ sistema)',
+    passo: 'Acesse …/ConsultaClassificacaoProduto?sistema=NFCom (troque o sistema para cada um dos 4), salve os JSONs, importe todos e informe o sistema de cada arquivo na aba Bases.',
+    url: 'https://cff.svrs.rs.gov.br/api/v1/consultas/ConsultaClassificacaoProduto?sistema=NFCom',
+    exigeCert: true,
+  },
+]
+
 /** Extrai `art128` de textos como "Art. 128 — Redução…", "art133", "Artigo 137". */
 export function ancoraParaArtigo(texto?: string | null): string | null {
   if (!texto) return null

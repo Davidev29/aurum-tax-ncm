@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from 'react'
 import { rotuloDestino } from '@/domain/legislacao'
 import { toast } from '@/store/ui'
 import { Btn, Modal } from './kit'
+import { OURO_AURUM, fundoMarcaDagua } from '@/infrastructure/pdf/marca-dagua'
 import {
   buscarTextoLegislacao,
   destacarArtigo,
@@ -228,6 +229,33 @@ export function ModalLegislacao({
       const data = new Date().toLocaleDateString('pt-BR')
       await baixar(
         {
+          pageMargins: [40, 76, 40, 56] as [number, number, number, number],
+          background: fundoMarcaDagua(260, 0.08),
+          header: {
+            margin: [40, 12, 40, 0] as [number, number, number, number],
+            stack: [
+              {
+                canvas: [
+                  { type: 'rect', x: 0, y: 0, w: 515, h: 2.2, color: OURO_AURUM },
+                  { type: 'rect', x: 0, y: 3.4, w: 515, h: 6, color: '#0f215c' },
+                ],
+                margin: [0, 0, 0, 6] as [number, number, number, number],
+              },
+              {
+                columns: [
+                  { text: 'AURUM TAX NCM · LEGISLAÇÃO', fontSize: 7, bold: true, color: '#0f215c' },
+                  { text: 'LC 214/2025 · fonte oficial', fontSize: 7, color: '#94a3b8', alignment: 'right' as const },
+                ],
+              },
+            ],
+          },
+          footer: (pagina: number, total: number) => ({
+            margin: [40, 0, 40, 24] as [number, number, number, number],
+            columns: [
+              { text: 'Aurum Tax NCM · conferência de enquadramento', fontSize: 7, color: '#8c96a5' },
+              { text: `Página ${pagina} de ${total}`, fontSize: 7, bold: true, color: '#334155', alignment: 'right' as const },
+            ],
+          }),
           content: [
             { text: integra ? 'Aurum Tax NCM — Legislação' : 'Aurum Tax NCM — Trecho de legislação', style: 'cab' },
             { text: titulo, style: 'titulo' },
@@ -360,8 +388,8 @@ export function ModalLegislacao({
               </>
             ) : null}
             <span className="mx-1 hidden h-5 w-px bg-slate-200 sm:inline dark:bg-slate-700" />
-            <Btn tam="sm" disabled={!trechoPdf || gerando} onClick={() => void baixarPdf()} title={integra ? 'Baixar o início do documento em PDF' : 'Baixar a ficha do trecho citado em PDF'}>
-              ⬇ {gerando ? 'Gerando…' : 'Baixar PDF'}
+            <Btn tam="sm" carregando={gerando} disabled={!trechoPdf} onClick={() => void baixarPdf()} title={integra ? 'Baixar o início do documento em PDF' : 'Baixar a ficha do trecho citado em PDF'}>
+              {gerando ? 'Gerando…' : '⬇ Baixar PDF'}
             </Btn>
             <Btn tam="sm" disabled={!trechoPdf} onClick={imprimir} title={integra ? 'Imprimir o início do documento' : 'Imprimir a ficha do trecho citado'}>
               🖨 Imprimir

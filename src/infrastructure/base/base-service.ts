@@ -1,4 +1,5 @@
 import { META_KEYS, REF_DEFAULT } from '@/domain/constants'
+import { SISTEMAS_CFF } from '@/domain/constants/cff-apis'
 import type {
   NomenclaturaNcm,
   ReferenciaCClassTrib,
@@ -9,12 +10,18 @@ import type {
 import { lerArquivoBase } from '../bridge'
 import { bulkPut, db, type MetaRecord } from '../db/schema'
 import { invalidarCacheBuscaTexto } from './classificacao-repo'
+import { fingerprintBase, type TipoBase } from './formatos'
 import {
+  normalizarAnexosCff,
+  normalizarClassTribCff,
+  normalizarCreditoPresumido,
   normalizarCst,
   normalizarCstClassTrib,
+  normalizarLocaisOperacao,
   normalizarNcm,
   normalizarNomenclatura,
   normalizarNbs,
+  normalizarProdutoDfe,
   normalizarReferencia,
 } from './normalizacao'
 
@@ -24,6 +31,24 @@ export type FormatoBase =
   | { formato: 'nomenclatura'; total: number }
   | { formato: 'reforma'; total: number }
   | { formato: 'referencia'; total: number }
+  | { formato: 'classtrib-cff'; total: number }
+  | { formato: 'anexos-cff'; total: number }
+  | { formato: 'credito-presumido-cff'; total: number }
+  | { formato: 'indoper-cff'; total: number }
+  | { formato: 'classprod-cff'; total: number; sistema: string }
+
+export interface OpcoesImportacao {
+  /** Obrigatório para `classprod-cff` (o arquivo não declara o próprio sistema). */
+  sistema?: string
+}
+
+/** Chaves de `meta` das bases CFF versionadas. */
+export const META_BASES_CFF = {
+  ANEXOS: 'importacao_anexos',
+  CRED_PRESUMIDO: 'base_credPresumido',
+  IND_OPER: 'base_indOper',
+  PRODUTOS_DFE: 'importacao_produtosDfe',
+} as const
 
 export interface StatusBase {
   ncm: number
@@ -32,6 +57,10 @@ export interface StatusBase {
   referencia: number
   nomenclatura: number
   nbs: number
+  anexos: number
+  produtosDfe: number
+  credPresumido: number
+  indOper: number
   ultimaImportacao: MetaRecord | null
   ultimaNomenclatura: MetaRecord | null
   embutida: boolean
@@ -78,12 +107,16 @@ export async function importarBase(
   json: unknown,
   nomeArquivo: string,
   onProgress: Progresso,
+  opcoes: OpcoesImportacao = {},
 ): Promise<FormatoBase> {
   if (!json || typeof json !== 'object') throw new Error('JSON inválido.')
-  const formato = detectarFormato(json)
+  // Reconhecimento pelo conteúdo (formatos): nomes de arquivo de download
+  // (`ConsultaClassificacaoProduto (1).json`) não carregam a origem.
+  const tipo: TipoBase = fingerprintBase(json)
+  const formatoLegado = detectarFormato(json)
   const agora = new Date().toISOString()
 
-  if (formato === 'nomenclatura') {
+  if (tipo === 'nomenclatura') {
     onProgress('Mapeando nomenclatura', 5)
     const itens = normalizarNomenclatura(json)
     if (!itens.length) throw new Error('Base de nomenclatura sem itens válidos.')
@@ -101,10 +134,10 @@ export async function importarBase(
     })
     invalidarCacheBuscaTexto()
     onProgress('Finalizado', 100)
-    return { formato, total: itens.length }
+    return { formato: 'nomenclatura', total: itens.length }
   }
 
-  if (formato === 'reforma') {
+  if (tipo === 'reforma') {
     const j = json as Record<string, unknown>
     const ncmBruto = (Array.isArray(j.NCM) ? j.NCM : Array.isArray(j.ncm) ? j.ncm : []) as unknown[]
     if (!ncmBruto.length) throw new Error('Formato não reconhecido.')
@@ -137,10 +170,10 @@ export async function importarBase(
 
     await db.meta.put({ chave: META_KEYS.IMPORTACAO, data: agora, arquivo: nomeArquivo })
     onProgress('Finalizado', 100)
-    return { formato, total: ncm.length }
+    return { formato: 'reforma', total: ncm.length }
   }
 
-  if (formato === 'referencia') {
+  if (tipo === 'referencia-dfe') {
     onProgress('Mapeando referência tributária', 10)
     const itens = normalizarReferencia(json)
     if (!itens.length) throw new Error('Referência sem registros válidos.')
@@ -152,10 +185,85 @@ export async function importarBase(
     )
     await db.meta.put({ chave: 'importacao_referencia', data: agora, arquivo: nomeArquivo, total: itens.length })
     onProgress('Finalizado', 100)
-    return { formato, total: itens.length }
+    return { formato: 'referencia', total: itens.length }
   }
 
-  throw new Error('Formato não reconhecido.')
+  // API CFF `classTrib`: mesma referência dos 164 em serialização nativa —
+  // achata para referência + CST + CST×cClassTrib (shape canônico).
+  if (tipo === 'classtrib-cff') {
+    onProgress('Mapeando classificação tributária (CFF)', 5)
+    const { referencia, cst, cstClassTrib } = normalizarClassTribCff(json)
+    if (!referencia.length) throw new Error('Classificação tributária (CFF) sem registros válidos.')
+    onProgress('Limpando referência/CST', 10)
+    await Promise.all([db.referencia.clear(), db.cst.clear(), db.cstClassTrib.clear()])
+    onProgress('Gravando referência', 20)
+    await bulkPut(db.referencia, referencia, (f, t) =>
+      onProgress('Gravando referência', 20 + Math.round((f / t) * 40)),
+    )
+    if (cst.length) await bulkPut(db.cst, cst)
+    if (cstClassTrib.length) await bulkPut(db.cstClassTrib, cstClassTrib)
+    await db.meta.put({ chave: META_KEYS.IMPORTACAO, data: agora, arquivo: nomeArquivo, total: referencia.length })
+    await db.meta.put({ chave: 'importacao_referencia', data: agora, arquivo: nomeArquivo, total: referencia.length })
+    invalidarCacheBuscaTexto()
+    onProgress('Finalizado', 100)
+    return { formato: 'classtrib-cff', total: referencia.length }
+  }
+
+  // API CFF `anexos`: NCM/NBS × anexo × permissão (store própria).
+  if (tipo === 'anexos-cff') {
+    onProgress('Mapeando anexos', 10)
+    const itens = normalizarAnexosCff(json)
+    if (!itens.length) throw new Error('Tabela de anexos sem registros válidos.')
+    onProgress('Limpando anexos', 15)
+    await db.anexos.clear()
+    onProgress('Gravando anexos', 20)
+    await bulkPut(db.anexos, itens, (f, t) =>
+      onProgress('Gravando anexos', 20 + Math.round((f / t) * 75)),
+    )
+    await db.meta.put({ chave: META_BASES_CFF.ANEXOS, data: agora, arquivo: nomeArquivo, total: itens.length })
+    onProgress('Finalizado', 100)
+    return { formato: 'anexos-cff', total: itens.length }
+  }
+
+  // API CFF `credPresumido` / `indOper`: sem store dedicada — conversão tipada
+  // versionada em `meta` (informação adicional + tabelas oficiais).
+  if (tipo === 'credito-presumido-cff' || tipo === 'indoper-cff') {
+    onProgress('Convertendo tabela CFF', 20)
+    const dados =
+      tipo === 'credito-presumido-cff' ? normalizarCreditoPresumido(json) : normalizarLocaisOperacao(json)
+    if (!dados.length) throw new Error('Tabela CFF sem registros válidos.')
+    const chave = tipo === 'credito-presumido-cff' ? META_BASES_CFF.CRED_PRESUMIDO : META_BASES_CFF.IND_OPER
+    await db.meta.put({ chave, data: agora, arquivo: nomeArquivo, total: dados.length, valor: { dados } })
+    onProgress('Finalizado', 100)
+    return { formato: tipo, total: dados.length }
+  }
+
+  // API CFF `ConsultaClassificacaoProduto` (formato real, por produto):
+  // exige o sistema (o arquivo não declara a própria origem).
+  if (tipo === 'classprod-cff') {
+    const sistema = String(opcoes.sistema ?? '').trim()
+    if (!sistema || !(SISTEMAS_CFF as readonly string[]).includes(sistema)) {
+      throw new Error('Informe o sistema de origem (NFCom, NFAg, NF3e ou NFGas) para este arquivo.')
+    }
+    onProgress(`Mapeando produtos (${sistema})`, 10)
+    const itens = normalizarProdutoDfe(json, sistema)
+    if (!itens.length) throw new Error(`Nenhum produto válido para ${sistema} no arquivo.`)
+    onProgress(`Limpando produtos (${sistema})`, 15)
+    await db.produtosDfe.where('sistema').equals(sistema).delete()
+    onProgress(`Gravando produtos (${sistema})`, 20)
+    await bulkPut(db.produtosDfe, itens, (f, t) =>
+      onProgress(`Gravando produtos (${sistema})`, 20 + Math.round((f / t) * 75)),
+    )
+    await db.meta.put({ chave: `${META_BASES_CFF.PRODUTOS_DFE}_${sistema}`, data: agora, arquivo: nomeArquivo, total: itens.length })
+    onProgress('Finalizado', 100)
+    return { formato: 'classprod-cff', total: itens.length, sistema }
+  }
+
+  throw new Error(
+    formatoLegado === 'desconhecido'
+      ? 'Formato não reconhecido. Selecione um JSON oficial (Siscomex, DFe, CFF ou Reforma).'
+      : 'Formato não reconhecido.',
+  )
 }
 
 /* -------------------------------------------------------------------------- */
@@ -284,7 +392,7 @@ export async function semearBaseEmbutida(
 }
 
 export async function statusBase(): Promise<StatusBase> {
-  const [ncm, cst, cstClassTrib, referencia, nomenclatura, nbs, ultima, ultimaNom] =
+  const [ncm, cst, cstClassTrib, referencia, nomenclatura, nbs, anexos, produtosDfe, metaCred, metaInd, ultima, ultimaNom] =
     await Promise.all([
       db.ncm.count(),
       db.cst.count(),
@@ -292,6 +400,10 @@ export async function statusBase(): Promise<StatusBase> {
       db.referencia.count(),
       db.ncmNomenclatura.count(),
       db.nbs.count(),
+      db.anexos.count().catch(() => 0),
+      db.produtosDfe.count().catch(() => 0),
+      db.meta.get(META_BASES_CFF.CRED_PRESUMIDO).catch(() => undefined),
+      db.meta.get(META_BASES_CFF.IND_OPER).catch(() => undefined),
       db.meta.get(META_KEYS.IMPORTACAO),
       db.meta.get(META_KEYS.IMPORTACAO_NOMENCLATURA),
     ])
@@ -304,6 +416,10 @@ export async function statusBase(): Promise<StatusBase> {
     referencia,
     nomenclatura,
     nbs,
+    anexos,
+    produtosDfe,
+    credPresumido: typeof metaCred?.total === 'number' ? metaCred.total : 0,
+    indOper: typeof metaInd?.total === 'number' ? metaInd.total : 0,
     ultimaImportacao: ultima ?? null,
     ultimaNomenclatura: ultimaNom ?? null,
     embutida: Boolean(embutida),
@@ -323,9 +439,14 @@ export async function apagarBaseImportada(): Promise<void> {
     db.referencia.clear(),
     db.ncmNomenclatura.clear(),
     db.nbs.clear(),
+    db.anexos.clear().catch(() => undefined),
+    db.produtosDfe.clear().catch(() => undefined),
     db.classificacaoProduto.clear(),
     db.meta.delete(META_KEYS.IMPORTACAO),
     db.meta.delete(META_KEYS.IMPORTACAO_NOMENCLATURA),
+    db.meta.delete(META_BASES_CFF.ANEXOS),
+    db.meta.delete(META_BASES_CFF.CRED_PRESUMIDO),
+    db.meta.delete(META_BASES_CFF.IND_OPER),
     db.meta.delete('base_embutida'),
   ])
   invalidarCacheBuscaTexto()

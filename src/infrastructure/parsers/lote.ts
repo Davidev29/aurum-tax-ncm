@@ -20,10 +20,14 @@
  * - os erros saem em `pt-BR` com a linha exata, em vez de "undefined";
  * - o resultado já traz os totais que a tela precisa (classificadas, regra
  *   geral, ambíguas, inválidas), evitando reprocessar na camada de UI.
+ * - a **Aurum AI assistida** (`analisarItemLoteIA`) ordena as opções oficiais
+ *   por aderência do **nome** (nome + NCM = tributação provável) e explica,
+ *   com dados da base, por que há N tributações + qual é a mais provável.
  */
 import * as XLSX from 'xlsx'
 import { fmtCnpj, norm, normalizeHeader } from '../../domain/services/format'
 import { interpretarEntradaNcm } from '../../domain/services/classificacao'
+import { analisarItemLoteIA, type AnaliseLoteIA } from '../../domain/services/analise-lote-ia'
 import type { Classificacao, Empresa, NomenclaturaNcm } from '../../domain/entities'
 import { resolverClassificacoes } from '../base/classificacao-repo'
 
@@ -179,6 +183,13 @@ export interface ItemLote {
   manual?: boolean
   /** Nomenclatura vigente — quando `dataFim` preenchida, o NCM está extinto. */
   nomenclatura?: NomenclaturaNcm | null
+  /**
+   * Análise assistida da Aurum AI (nome + NCM = tributação provável).
+   * Sempre presente após `processarArquivoLote` — inclusive para NCM
+   * inválido (situação `invalida`, sem opções). A `escolhida` inicial já é
+   * a `maisProvavel` desta análise (escolha assistida pré-selecionada).
+   */
+  analiseIA?: AnaliseLoteIA | null
 }
 
 export interface ResumoLote {
@@ -189,6 +200,12 @@ export interface ResumoLote {
   manuais: number
   semNcm: number
   ambiguos: number
+  /** Linhas com sugestão forte da IA (múltiplas + nome desempatou). */
+  assistidas?: number
+  /** Linhas cujo nome diverge do NCM (revisar o NCM antes de salvar). */
+  divergentes?: number
+  /** Linhas com tributação única confirmada. */
+  unicas?: number
 }
 
 /**
@@ -252,16 +269,43 @@ export async function processarArquivoLote(
         cache.set(chave, veredito)
       }
       item.classificacoes = veredito.lista
-      item.escolhida = veredito.lista[0] ?? null
       item.regraGeral = veredito.regraGeral
       item.manual = veredito.manual || veredito.lista.some((c) => c.manual != null)
       item.nomenclatura = veredito.nomenclatura
+      // Aurum AI assistida: nome + NCM = tributação provável. O nome só
+      // ordena as opções oficiais (nunca cria tributação); a sugestão já
+      // nasce pré-selecionada (escolha assistida — o usuário confirma/troca).
+      const analise = analisarItemLoteIA({
+        nome: item.nome,
+        ncm: chave,
+        classificacoes: veredito.lista,
+        regraGeral: veredito.regraGeral,
+        manual: item.manual ?? false,
+        extinto: veredito.extinto,
+        nomenclaturaDescricao: veredito.nomenclatura?.descricao ?? null,
+      })
+      item.analiseIA = analise
+      const sugerida = veredito.lista[analise.maisProvavelIndice] ?? veredito.lista[0] ?? null
+      item.escolhida = sugerida
+    } else {
+      // Sem veredito do motor (NCM inválido): a IA ainda explica o que
+      // fazer — sem inventar tributação (lista vazia, situação `invalida`).
+      item.analiseIA = analisarItemLoteIA({
+        nome: item.nome,
+        ncm: item.ncm,
+        classificacoes: [],
+        regraGeral: false,
+        manual: false,
+        extinto: false,
+        nomenclaturaDescricao: null,
+      })
     }
 
     itens.push(item)
     if (onProgress && (d % 25 === 0 || d === dados.length - 1)) onProgress(d + 1, dados.length)
   }
 
+  const comAnalise = (s: string) => itens.filter((i) => i.analiseIA?.situacao === s).length
   return {
     itens,
     nomeArquivo: file.name,
@@ -270,6 +314,9 @@ export async function processarArquivoLote(
     manuais: itens.filter((i) => i.manual).length,
     semNcm: itens.filter((i) => i.ncm.length !== 8).length,
     ambiguos: itens.filter((i) => i.classificacoes.length > 1).length,
+    assistidas: itens.filter((i) => i.analiseIA?.situacao === 'multipla' && (i.analiseIA?.confianca ?? 0) >= 0.6).length,
+    divergentes: itens.filter((i) => i.analiseIA?.divergenciaNome).length,
+    unicas: comAnalise('unica'),
   }
 }
 

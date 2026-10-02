@@ -112,10 +112,38 @@ Plans:
 - [ ] 05-04: Atualização automática de bases oficiais na inicialização (NCM, nomenclatura, classificação)
 - [ ] 05-05: Testes de integração e UAT para validação completa do fluxo
 
+### Phase 6: Módulo IA Offline para Classificação NCM
+**Goal**: IA como camada superior ao `classificarPorDescricao` existente — sugere NCM (somente 8 dígitos, sem NBS) só quando o determinístico retorna null/baixa; LLM local como seletor Top-5 RAG e `resolverClassificacoes` como única verdade, falha segura NÃO SEI
+**Depends on**: Phase 5
+**Requirements**: [IA-00, IA-01, IA-02, IA-03, IA-04, IA-05, IA-06, IA-07, IA-08, IA-09, IA-10]
+**Success Criteria** (what must be TRUE):
+  1. Consulta fácil resolve no determinístico sem acionar worker IA (`via: deterministico`)
+  2. Consulta difícil aciona IA com candidatos auditáveis e validação determinística 100% (`via: ia`)
+  3. Baixa confiança retorna NÃO SEI sem alucinar código; `taxa_uso_ia` <30%
+  4. Funciona 100% offline (CPU, sem GPU) nos 3 instaladores ≤300MB; spike 06-00 GO
+  5. Trilha completa em Dexie `audit_log` + `logs/*.jsonl` com campo `via`
+  6. ≥85% acerto em massa de controle + 37 suítes legadas verdes
+**Plans**: 11 plans
+
+Plans:
+- [ ] 06-00: Spike viabilidade (`node-llama-cpp` + `utilityProcess`, GO/NO-GO 3 OS)
+- [ ] 06-01: Diagnóstico e Preparação (`recursos-ia/`, CHECKSUMS, .gitignore)
+- [ ] 06-02: Curadoria NCM-only (`ncm-para-ia.json` 2335 NCMs, validador)
+- [ ] 06-03: Índice Vectra RAG (<200MB, rebuild por MANIFEST)
+- [ ] 06-04: Modelo AILO-152M-v2 q4_k_m (prompt restrito, <5s)
+- [ ] 06-05: Worker Electron tracer (`utilityProcess`, IPC, DebugIA Ctrl+Shift+D)
+- [ ] 06-06: Fluxo Consulta fallback (determinístico→IA→resolver→cálculo→audit com `via`)
+- [ ] 06-07: Empacotamento offline (NSIS/DMG/AppImage)
+- [ ] 06-08: Proteção (ofuscação + cifragem GGUF)
+- [ ] 06-09: Testes e observabilidade (30+10+5 + bypass, perf, dashboard `taxa_uso_ia`)
+- [ ] 06-10: Docs e entrega (arquitetura, manual, troubleshooting, dossiê)
+
+**Scope note**: Somente NCM. NBS explicitamente fora de escopo neste módulo.
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -123,3 +151,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 2. Classification Engine | 0/4 | Not started | - |
 | 3. Search & UI | 0/5 | Not started | - |
 | 4. Reporting & Export | 0/4 | Not started | - |
+| 5. Calculadora Tributária & Validação Avançada | 0/5 | Not started | - |
+| 6. Módulo IA Offline NCM | 0/11 | Not started | - |

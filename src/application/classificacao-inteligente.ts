@@ -25,13 +25,40 @@ import {
   type Confianca,
   type EntradaDescricao,
 } from '@/domain/services/classificador-descricao'
-import { fmtNcm } from '@/domain/services/format'
+import { fmtNcm, norm } from '@/domain/services/format'
 import {
+  buscarNomenclatura,
   buscarNomenclaturaPorTexto,
   resolverClassificacoes,
+  sugerirNomenclatura,
   type ResultadoBuscaTexto,
 } from '@/infrastructure/base/classificacao-repo'
+import { buscarNoDicionarioComercial } from '@/domain/constants/dicionario-comercial'
+import { pareceCodigoNcm } from '@/domain/services/busca-texto'
+import { detectarForaDeEscopo, MENSAGEM_FORA_DE_ESCOPO } from '@/domain/services/escopo-consulta'
 import { db } from '@/infrastructure/db/schema'
+
+/**
+ * NCM parcial digitado como texto ("0406", "10.05", "2309.10"): 2–7 dígitos,
+ * só dígitos/pontuação, sem letras. Retorna os dígitos ou `null`.
+ */
+export function hipoteseNcmParcial(descricao: unknown): string | null {
+  const cru = String(descricao ?? '')
+  if (!cru.trim() || !pareceCodigoNcm(cru)) return null
+  if (/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(cru)) return null
+  const dig = norm(cru)
+  if (dig.length >= 2 && dig.length <= 7) return dig
+  return null
+}
+
+async function sugerirNomenclaturaPrefixo(prefixo: string, limite = 5) {
+  try {
+    const lista = await sugerirNomenclatura(prefixo, limite)
+    return lista.filter((n) => !n.dataFim).slice(0, limite)
+  } catch {
+    return []
+  }
+}
 
 export type { EntradaDescricao, Confianca }
 
@@ -56,6 +83,12 @@ export interface SugestaoNcmJson {
   urlLegislacao: string | null
   perguntasComplementares: string[]
   trilha: EtapaTrilha[]
+  /**
+   * Pedido fora do escopo do sistema (conhecimento geral, tarefas externas,
+   * jailbreak…). Quando `true`, a `justificativa` é a mensagem fixa de
+   * escopo e a UI exibe o cartão de recusa — sem worker, sem chute.
+   */
+  foraDeEscopo?: boolean
 }
 
 /** Bônus de desempate quando o capítulo do candidato é prioritário. */
@@ -140,8 +173,63 @@ function montarTipoExcecao(cl: Classificacao): { tipo: string; anexo: string | n
  */
 export async function classificarPorDescricao(
   entrada: EntradaDescricao,
-  limiteCandidatos = 6,
+  limiteCandidatos = 12,
 ): Promise<SugestaoNcmJson> {
+  // Barreira anti-alucinação (primeira coisa): pedido fora do escopo do
+  // sistema NÃO é classificado, NÃO acorda worker e NÃO ganha chute —
+  // retorna a mensagem fixa de escopo. Sem lastro fiscal + com marcador
+  // externo, qualquer "resposta" seria invenção.
+  const textoPedido = [entrada.descricao, entrada.destinacao ?? '', entrada.composicao ?? '', entrada.uso ?? ''].join(' ').trim()
+  if (detectarForaDeEscopo(textoPedido)) {
+    return {
+      ncm_provavel: null,
+      descricao_ncm: null,
+      excecao_enquadravel: false,
+      tipo_excecao: null,
+      justificativa: MENSAGEM_FORA_DE_ESCOPO,
+      confianca: 'baixa',
+      alternativas: [],
+      cst: null,
+      cClassTrib: null,
+      anexo: null,
+      baseLegal: null,
+      urlLegislacao: null,
+      perguntasComplementares: [],
+      trilha: [{ etapa: 'Escopo', detalhe: 'pedido fora do âmbito de classificação de NCM — recusa fixa, sem consulta à base' }],
+      foraDeEscopo: true,
+    }
+  }
+  // Hipótese de NCM parcial (2–7 dígitos): a entrada JÁ é um começo de
+  // código, não uma descrição. Retorna os filhos vigentes como alternativas
+  // navegáveis em vez de NÃO SEI seco — autonomia sem inventar NCM.
+  const parcial = hipoteseNcmParcial(entrada.descricao)
+  if (parcial) {
+    const sugestoes = await sugerirNomenclaturaPrefixo(parcial, 5)
+    const analiseParcial = analisarDescricao(entrada)
+    const trilhaParcial: EtapaTrilha[] = [
+      { etapa: 'Análise da descrição', detalhe: `NCM parcial "${parcial}" (${parcial.length} dígitos) — hipótese de capítulo/posição` },
+      { etapa: 'RGIs aplicadas', detalhe: analiseParcial.rgiAplicaveis.join(' · ') },
+    ]
+    if (sugestoes.length) {
+      const alts = sugestoes.map((s) => fmtNcm(s.codigo))
+      return {
+        ncm_provavel: null,
+        descricao_ncm: `${sugestoes.length} NCM(s) começando por ${parcial} (ex.: ${sugestoes[0].descricao})`,
+        excecao_enquadravel: false,
+        tipo_excecao: null,
+        justificativa: `NCM incompleto (${parcial.length}/8 dígitos): refine até 8 dígitos para classificar. Abaixo, os primeiros NCMs vigentes com esse prefixo — toque para classificar oficialmente.`,
+        confianca: 'baixa',
+        alternativas: alts,
+        cst: null,
+        cClassTrib: null,
+        anexo: null,
+        baseLegal: null,
+        urlLegislacao: null,
+        perguntasComplementares: ['Complete os 8 dígitos do NCM (ex.: escolha uma alternativa abaixo).'],
+        trilha: [...trilhaParcial, { etapa: 'Candidatos (prefixo vigente)', detalhe: alts.join(' · ') }],
+      }
+    }
+  }
   const analise = analisarDescricao(entrada)
   const trilha: EtapaTrilha[] = [
     { etapa: 'Análise da descrição', detalhe: `tokens úteis: ${analise.tokens.join(', ') || '—'} · sinais: ${analise.sinais.join(', ') || '—'}` },
@@ -156,7 +244,7 @@ export async function classificarPorDescricao(
       excecao_enquadravel: false,
       tipo_excecao: null,
       justificativa:
-        'Descrição insuficiente para uma classificação segura: sem ao menos 2 termos úteis não há como aplicar a RGI 1 sobre a nomenclatura vigente.',
+        'Ainda não tenho o suficiente para classificar com segurança — e prefiro pedir mais detalhes a chutar um NCM. Me diga mais 1 ou 2 características do produto: é vivo ou abatido? Para plantio, consumo ou ração? De que material é feito (algodão, aço, plástico)? Quanto mais específico, melhor a resposta.',
       confianca: 'baixa',
       alternativas: [],
       cst: null,
@@ -170,11 +258,14 @@ export async function classificarPorDescricao(
   }
 
   // Etapa 2 — candidatos: agrega resultados de cada consulta efetiva.
+  // ESTRITO aqui (`tolerante: false`): match fraco não pode virar "alta".
+  // A tolerância do determinístico é só via `consultasTolerantes` (drop-1 com
+  // trilha auditável). O RAG tolerante (fuzzy/OR) vive no fallback IA + Por nome.
   const agregados = new Map<string, CandidatoRanckeado>()
   const efetivas = consultasEfetivas(analise)
   async function agregar(consultas: string[]): Promise<void> {
     for (const consulta of consultas) {
-      const achados = await buscarNomenclaturaPorTexto(consulta, 30)
+      const achados = await buscarNomenclaturaPorTexto(consulta, 30, { tolerante: false })
       for (const item of achados) {
         let score = item.score
         if (analise.capitulosPrioritarios.includes(capituloDe(item.codigo))) score += BONUS_CAPITULO
@@ -199,6 +290,40 @@ export async function classificarPorDescricao(
       })
     }
   }
+  // Etapa 2b — dicionário comercial (nomes populares → NCM exato).
+  // Cobre o que o léxico oficial jamais contém ("parmesão" ∉ TEC). O pin
+  // curado supera o lexical por construção (conhecimento > inferência), mas a
+  // confiança continua gated por `calcularConfianca` e cada código passa pelo
+  // resolvedor abaixo — pin errado/extinto morre na validação.
+  const acertosDict = buscarNoDicionarioComercial(analise.textoNormalizado).slice(0, 6)
+  const pinsAplicados: string[] = []
+  for (const acerto of acertosDict) {
+    const scoreDict = 500 + acerto.termo.length
+    const atual = agregados.get(acerto.ncm)
+    if (atual) {
+      // O léxico pode já ter o código (ex.: "queijo" casa no caminho): o pin
+      // curado SOBE o score em vez de ser ignorado (conhecimento > inferência).
+      if (scoreDict > atual.score) {
+        agregados.set(acerto.ncm, { ...atual, score: scoreDict })
+        pinsAplicados.push(`“${acerto.termo}” → ${fmtNcm(acerto.ncm)}`)
+      }
+      continue
+    }
+    const nom = await buscarNomenclatura(acerto.ncm)
+    if (!nom || nom.dataFim) continue
+    const item: ResultadoBuscaTexto = {
+      ...nom,
+      caminho: [],
+      caminhoTexto: nom.descricao,
+      totalClassificacoes: 0,
+      score: scoreDict,
+    }
+    agregados.set(acerto.ncm, { item, score: item.score, capitulos: analise.capitulosPrioritarios.join(',') || '—' })
+    pinsAplicados.push(`“${acerto.termo}” → ${fmtNcm(acerto.ncm)}`)
+  }
+  if (pinsAplicados.length) {
+    trilha.push({ etapa: 'Dicionário comercial', detalhe: pinsAplicados.join(' · ') })
+  }
   const ranckeados = [...agregados.values()]
     .sort((a, b) => {
       const vig = Number(Boolean(a.item.dataFim)) - Number(Boolean(b.item.dataFim))
@@ -221,7 +346,7 @@ export async function classificarPorDescricao(
       excecao_enquadravel: false,
       tipo_excecao: null,
       justificativa:
-        'Nenhum NCM da nomenclatura vigente corresponde à descrição. Tente sinônimos do vocabulário oficial (ex.: "bovino" em vez de "boi", "semeadura" em vez de "plantio").',
+        'Não encontrei nenhum NCM da nomenclatura vigente que corresponda a essa descrição — e prefiro dizer isso claramente a inventar um código. Tente de outro jeito: use sinônimos do vocabulário oficial (ex.: "bovino" em vez de "boi", "semeadura" em vez de "plantio"), informe a espécie, o estado (fresco, congelado, cozido?) ou o uso (consumo, plantio, ração?).',
       confianca: 'baixa',
       alternativas: [],
       cst: null,

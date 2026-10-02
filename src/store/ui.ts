@@ -23,6 +23,7 @@ export type ViewId =
   | 'produtos'
   | 'auxiliares'
   | 'legislacao'
+  | 'debugia'
 
 export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = {
   calculadora: {
@@ -52,6 +53,12 @@ export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = 
   legislacao: {
     titulo: 'Legislação',
     subtitulo: 'Leia as normas dentro do sistema — base federal, decretos, RICMS-CE e portais',
+  },
+  // View oculta de diagnóstico (Phase 6 / IA-05): fora da paridade SPEC das
+  // 7 telas e do menu lateral — acessível só por `Ctrl+Shift+D`.
+  debugia: {
+    titulo: 'Diagnóstico IA',
+    subtitulo: 'Worker offline · candidatos RAG · decisão validada · taxa_uso_ia',
   },
 }
 
@@ -107,6 +114,17 @@ export function rolarParaTopo(): void {
 
 type Tema = 'dark' | 'light'
 
+/** Colapso da sidebar no desktop — persistido para respeitar a preferência. */
+const CHAVE_RECOLHIDA = 'aurum:sidebar-recolhida'
+
+function recolhidaInicial(): boolean {
+  try {
+    return localStorage.getItem(CHAVE_RECOLHIDA) === '1'
+  } catch {
+    return false
+  }
+}
+
 function temaInicial(): Tema {
   const salvo = localStorage.getItem(TEMA_KEY)
   if (salvo === 'dark' || salvo === 'light') return salvo
@@ -123,7 +141,10 @@ interface UiState {
   tema: Tema
   toasts: Toast[]
   modal: ModalId | null
+  /** Drawer móvel (overlay) — só faz sentido abaixo de `lg`. */
   sidebarAberta: boolean
+  /** Colapso no desktop (`lg+`): fechada exibe só os ícones. */
+  sidebarRecolhida: boolean
   /** Item que está sendo levado ao modal da calculadora (`null` = fechado). */
   fonteCalc: FonteCalc | null
   /** Abre/fecha um modal (`null` fecha). */
@@ -133,6 +154,8 @@ interface UiState {
   trocarView: (v: ViewId) => void
   alternarTema: () => void
   toggleSidebar: () => void
+  /** Alterna o colapso no desktop (abre/fecha, com transição elástica). */
+  toggleRecolhida: () => void
   /** Fecha o menu móvel (usado por `Escape` e pelo fundo escuro). */
   fecharSidebar: () => void
   toast: (texto: string, tipo?: TipoToast) => void
@@ -147,6 +170,7 @@ export const useUi = create<UiState>((set, get) => ({
   toasts: [],
   modal: null,
   sidebarAberta: false,
+  sidebarRecolhida: recolhidaInicial(),
   fonteCalc: null,
 
   /**
@@ -172,6 +196,16 @@ export const useUi = create<UiState>((set, get) => ({
   },
 
   toggleSidebar: () => set((s) => ({ sidebarAberta: !s.sidebarAberta })),
+
+  toggleRecolhida: () => {
+    const proxima = !get().sidebarRecolhida
+    try {
+      localStorage.setItem(CHAVE_RECOLHIDA, proxima ? '1' : '0')
+    } catch {
+      // Armazenamento indisponível (ex.: modo privado): só vale na sessão.
+    }
+    set({ sidebarRecolhida: proxima })
+  },
 
   fecharSidebar: () => set({ sidebarAberta: false }),
 

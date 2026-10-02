@@ -5,8 +5,8 @@
 
 /** Nome/versão do IndexedDB legado (paridade com a v1). */
 export const DB_NAME = 'aurum_tax_ncm_v1'
-/** Versão do IndexedDB. A v8 adiciona `audit_log` (log imutável) + `cest`. */
-export const DB_VERSION = 8
+/** Versão do IndexedDB. A v10 adiciona `anexos` + `produtos_dfe` (formatos reais CFF). */
+export const DB_VERSION = 10
 
 /** Itens por página nas listagens. */
 export const PAGE_SIZE = 10
@@ -90,8 +90,14 @@ export const STORES = {
   NFENOTAS: 'nfeNotas',
   RECLASS: 'reclassificacoesManuais',
   CLASSPROD: 'classificacaoProduto',
+  /** Anexos por NCM/NBS (CFF `anexos`, formato real). */
+  ANEXOS: 'anexos',
+  /** Catálogo de produtos por DFe (CFF `ConsultaClassificacaoProduto`, formato real). */
+  PRODUTOSDFE: 'produtosDfe',
   AUDIT: 'audit_log',
   CEST: 'cest',
+  /** Feedback "Não é esse" da Sugestão IA (Phase 6 / 06-06, Dexie v9). */
+  IAFEEDBACK: 'ia_feedback',
 } as const
 
 export type StoreName = (typeof STORES)[keyof typeof STORES]

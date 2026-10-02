@@ -32,12 +32,18 @@ describe('detector da busca unificada', () => {
     expect(exato.digitos).toBe('02011000')
   })
 
-  it('nome curto busca por nome, sem predição assistiva', () => {
+  it('nome curto já acende nome + predição assistiva (RAG proativo)', () => {
     const r = detectarIntencaoConsulta('queijo')
     expect(r.tipo).toBe('textual')
     expect(r.deveBuscarExato).toBe(false)
     expect(r.deveBuscarNome).toBe(true)
-    // 1 token curto: nome sim, predição ainda não (threshold anti-custo).
+    // 1 palavra relevante basta: "queijo", "celular", "camiseta" já mostram
+    // a predição assistiva (antes exigia frase expressiva e a IA "nunca sabia").
+    expect(r.deveBuscarDescricao).toBe(true)
+  })
+
+  it('stopword pura não acende a predição', () => {
+    const r = detectarIntencaoConsulta('para')
     expect(r.deveBuscarDescricao).toBe(false)
   })
 

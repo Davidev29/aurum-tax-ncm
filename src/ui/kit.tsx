@@ -6,6 +6,7 @@
  * de modo que o design tokens da v1 continuam sendo a única fonte de verdade.
  */
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -35,11 +36,66 @@ const VARIANTE: Record<VarianteBtn, string> = {
 export function Btn({
   variante = 'ghost',
   tam = 'md',
+  carregando = false,
+  disabled,
   className = '',
+  children,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variante?: VarianteBtn; tam?: TamBtn }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  variante?: VarianteBtn
+  tam?: TamBtn
+  /**
+   * Ação em andamento: desabilita, anuncia `busy` às tecnologias assistivas
+   * e exibe o giro — o usuário nunca fica sem feedback tátil/visual.
+   */
+  carregando?: boolean
+}) {
   const t = tam === 'sm' ? 'btn-sm' : tam === 'lg' ? 'btn-lg' : ''
-  return <button type="button" className={`btn btn-press ${VARIANTE[variante]} ${t} ${className}`} {...props} />
+  const ocupado = carregando || disabled
+  return (
+    <button
+      type="button"
+      className={`btn btn-press ${VARIANTE[variante]} ${t} ${className}`}
+      disabled={ocupado}
+      aria-busy={carregando || undefined}
+      {...props}
+    >
+      {carregando ? <span className="btn-spinner" aria-hidden="true" /> : null}
+      {children}
+    </button>
+  )
+}
+
+/**
+ * Envolve uma ação assíncrona com estado de loading para o `Btn`.
+ *
+ * Uso: `const pdf = useAcaoTatil(exportarPdf)` →
+ * `<Btn carregando={pdf.carregando} onClick={pdf.executar}>📕 PDF</Btn>`.
+ * Ignora cliques repetidos enquanto a ação anterior não concluiu; a ação
+ * mantém seu próprio `try/catch` + toast — aqui só vai e volta o giro.
+ */
+export function useAcaoTatil<A extends unknown[]>(acao: (...args: A) => Promise<unknown> | unknown): {
+  carregando: boolean
+  executar: (...args: A) => void
+} {
+  const [carregando, setCarregando] = useState(false)
+  const acaoRef = useRef(acao)
+  acaoRef.current = acao
+  const ocupadoRef = useRef(false)
+  const executar = useCallback((...args: A) => {
+    if (ocupadoRef.current) return
+    const r = acaoRef.current(...args)
+    if (r != null && typeof (r as Promise<unknown>).then === 'function') {
+      ocupadoRef.current = true
+      setCarregando(true)
+      const concluir = () => {
+        ocupadoRef.current = false
+        setCarregando(false)
+      }
+      void (r as Promise<unknown>).then(concluir, concluir)
+    }
+  }, [])
+  return { carregando, executar }
 }
 
 /* -------------------------------------------------------------- campos --- */
