@@ -93,7 +93,7 @@ export function CartaoEnxuto({
           icone="📋"
           rotulo="Detalhes fiscais"
           contagem={obs.length || undefined}
-          titulo="Chips, documentos, DFe, observações, simulação e redação — abre em modal glass"
+          titulo="Ficha completa do produto: NCM, enquadramento, condições, documentos, DFe, observações, simulação e redação — abre em modal glass"
           onClick={() => setFiscalAberto(true)}
         />
         {url ? (

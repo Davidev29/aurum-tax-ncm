@@ -14,16 +14,32 @@
  * |------------------------------------------|--------------|---------------------------|
  * | trocar de menu                           | walking→waving | "Vamos lá!" + destino     |
  * | focar/digitar em campo de busca          | reading      | "Farejando NCMs…"         |
+ * | digitar na busca unificada (≥3 letras)     | reading      | "Farejando 'camiseta'…" + palpite |
+ * | busca concluída (resultado oficial)        | celebrating  | "Achei! 'X' é NCM …!"   |
+ * | busca com N candidatos de texto            | celebrating  | "N candidatos pra 'X'!" |
+ * | busca zerada                               | curious      | "Nada pra 'X'… tenta outra?" |
+ * | NCM inválido                               | angry        | "Hmm, 'X' não é válido…" |
+ * | focar/digitar na Calculadora               | calculating  | "Deixa eu conferir com a lupinha…" |
+ * | adicionar item na Calculadora              | calculating  | "Mais um na conta!"     |
  * | classificar/buscar (loading)             | thinking     | "Deixa eu conferir…"      |
- * | resultado encontrado                     | celebrating  | "Achei! 🎉" (sem emoji*)  |
+ * | resultado encontrado                     | celebrating  | "Achei a classificação!"  |
  * | toast ok / PDF ou Excel exportado        | happy        | "Boa!"                    |
  * | toast err / NCM inválido                 | angry        | "Hmm, esse NCM…"          |
  * | toast warn                               | curious      | "Opa, olha isso!"         |
- * | clicar em botão primário                 | happy (ping) | — (só bounce)             |
+ * | exportar PDF/Excel/relatório              | celebrating  | "Relatório prontinho!"  |
+ * | copiar NCM/conterúdo                       | happy        | "Copiado! Farejei tudinho!" |
  * | passar o mouse / clicar na pet (carinho) | love/happy   | frases fofas aleatórias  |
+ * | segurar a pet (pré-arrasto)              | curious      | "Ei, pra onde vamos?"     |
+ * | arrastar a pet para fora                 | voando *     | "Wheee! Me solta!"        |
+ * | soltar longe (volta de paraquedas)       | retornando * | "Voltando pra caminha!"   |
+ * | pouso do paraquedas                      | waving       | "De volta! Sentiu falta?" |
  * | 75 s sem interagir                       | sleeping     | "Zzz…"                    |
  * | qualquer interação após dormir           | waving       | "Voltei!"                 |
- * (* sem emoji no balão — o charme vem do SVG.)
+ * (* humores de voo são pegajosos — o fluxo de arrasto controla a saída.)
+ *
+ * Sidebar recolhida: a mesma Aurinha em modo sentinela (rostinho compacto,
+ * balão vira tooltip à direita, pupilas patrulham o menu no `idle`).
+ * Rotinas da mini-IA local vivem em `store/pet-ia.ts`.
  */
 import { create } from 'zustand'
 
@@ -39,6 +55,9 @@ export type PetMood =
   | 'celebrating'
   | 'curious'
   | 'love'
+  | 'voando'
+  | 'retornando'
+  | 'calculating'
 
 /** Quanto tempo cada humor fica no palco antes de voltar ao `idle`. */
 const DURACAO: Record<PetMood, number> = {
@@ -53,6 +72,9 @@ const DURACAO: Record<PetMood, number> = {
   celebrating: 3200,
   curious: 2800,
   love: 2600,
+  voando: 0, // pegajoso: o fluxo de arrasto controla a saída
+  retornando: 0, // pegajoso: termina no pouso
+  calculating: 5200,
 }
 
 interface PetState {
@@ -106,6 +128,14 @@ const CARINHOS = [
   'Ron-ron-ron…',
   'Você é meu humano favorito!',
   'Farejei carinho por aqui!',
+]
+
+/** Frases da lupinha — a pet "confere as contas" na Calculadora. */
+export const FRASES_CALCULANDO = [
+  'Deixa eu conferir com a lupinha…',
+  'Somando tim-tim por tim-tim…',
+  'Lupinha a postos, bora somar!',
+  'IBS mais CBS… farejando o total…',
 ]
 
 /** Dá cafuné: nunca brava, sempre derrete. */

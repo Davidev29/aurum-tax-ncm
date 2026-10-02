@@ -55,7 +55,10 @@ Tudo roda **localmente** (IndexedDB via Dexie, sem servidor, sem enviar dados fi
 | 📚 **Tabelas auxiliares** | CST IBS/CBS, cClassTrib, Nomenclatura NCM vigente, vínculo NCM × Classificação, CFOP, CST ICMS, CST PIS/COFINS — todas **editáveis** (criar/editar/excluir). |
 | ⚖️ **Legislação** | LC 214/2025, Decreto 12.955/2026 (CBS), Resolução CGIBS nº 6/2026 (IBS) e Portal Conformidade Fácil. Na consulta, *“Visualizar legislação”* abre o artigo exato (`#art128`, `#art137`…). |
 | 🖨️ **Emitente timbrado** | Configure razão social, CNPJ, logo, cor e rodapé — sai no cabeçalho de todos os PDFs. |
-| 🌙 **UX** | Tema claro/escuro, responsivo, atalhos, toasts, modo offline total. |
+| 🤖 **IA offline (assistida)** | Sugestão de NCM por descrição em linguagem natural (índice lexical embutido, 100% local). Roda em **modo mock/lexical** sem baixar nada; aceita modelo local `.gguf` quando disponível. Tela de diagnóstico em `Ctrl+Shift+D`. |
+| 🔄 **Atualização automática** | Verificação via GitHub Releases (aba **Configurações → Atualização**). As bases tributárias viajam **embutidas no programa** — cada atualização do app renova NCM, CST, cClassTrib e nomenclatura. Sem servidor, sem sincronização avulsa. |
+| 🐾 **Aurinha** | Pet-assistente da interface: reage às telas, celebra exportações e sugere sem atrapalhar. |
+| 🌙 **UX** | Tema claro/escuro, responsivo, atalhos, toasts, modo offline total. Primeiro uso com assistente de aceite local. |
 
 ---
 
@@ -63,9 +66,9 @@ Tudo roda **localmente** (IndexedDB via Dexie, sem servidor, sem enviar dados fi
 
 ### Requisitos
 
-- **Node.js 20+** e **npm 10+**
-- Windows 10/11, macOS 12+ ou Linux (para o instalador desktop)
-- ~400 MB livres (dependências + build)
+- **Node.js 20+** e **npm 10+** (só para desenvolver/compilar — o usuário final só precisa do instalador)
+- Windows 10/11 64-bit, macOS 12+ ou Linux (para o instalador desktop)
+- ~1 GB livre para compilar; o instalador Windows tem ~120 MB e **não exige administrador** (instalação por usuário)
 
 ### 1. Instalar
 
@@ -87,7 +90,7 @@ npm run dev:web
 # Só checagem de tipos
 npm run typecheck
 
-# Testes (Vitest, 20+ suítes)
+# Testes (Vitest, 57 suítes / 575 testes)
 npm test
 ```
 
@@ -106,7 +109,19 @@ npm run dist:win   # NSIS (.exe) + Portable
 npm run dist:mac   # DMG + ZIP (x64 + arm64)
 ```
 
-Os artefatos saem em `./release/` (ex.: `AurumTaxNCM-1.0.0-win-x64.exe`).
+Os artefatos saem em `./release/`:
+
+| Arquivo | O quê |
+|---|---|
+| `AurumTaxNCM-Setup-<versão>-win-x64.exe` | Instalador NSIS (PT-BR, por usuário, com atalho + desinstalador) |
+| `AurumTaxNCM-Portatil-<versão>-win-x64.exe` | Versão portátil (sem instalar) |
+
+O instalador leva **só o app**: interface + base tributária embutida + índice da IA.
+`.planning/`, `docs/`, `tests/`, `scripts/` e artefatos de modelo/embedding ficam de fora por regra explícita no `build.files` do `package.json`.
+Os dados do usuário (XMLs importados, IndexedDB) vivem em `%APPDATA%` — fora da pasta do programa — e sobrevivem a atualizações/desinstalações.
+
+> `npm run base` regenera `public/base/` a partir dos JSONs-fonte da pasta pai, mas o build **não depende deles**:
+> a base compilada é versionada no git, então `git clone + npm ci + npm run dist:win` funciona em qualquer máquina.
 
 ---
 
@@ -244,24 +259,26 @@ Observações legais automáticas: `100` → Alíquota Zero · `60` → Art. 128
 
 ```
 aurum-tax-ncm/
-├── electron/            # main.ts, preload.ts, esbuild.mjs (processo main)
+├── electron/            # main.ts, preload.ts, esbuild.mjs
+│   └── ia/              # worker IA offline (utilityProcess isolado, modo mock/lexical)
 ├── src/
-│   ├── App.tsx          # troca de views (shell)
+│   ├── App.tsx          # shell: Calculadora, Consulta, Lote, NfeXml,
+│   │                    #  Produtos, Auxiliares, Legislacao (+ DebugIA oculta)
 │   ├── main.tsx         # bootstrap React
-│   ├── pages/           # Calculadora, Consulta, Classificar, Lote, Sped,
-│   │                    #  NfeXml, Produtos, Auxiliares, Legislacao
-│   ├── domain/          # entidades, constants, capitulos, legislacao, seeds
+│   ├── pages/           # telas (apresentação sobre stores)
+│   ├── domain/          # entidades, constants, capitulos, legislacao, seeds, contrato
 │   │   └── services/    # cálculo, classificação, observações legais
-│   ├── application/     # casos de uso (produtos, empresas, lote, backup…)
-│   ├── infrastructure/  # Dexie/IndexedDB, parsers SPED, NFe, PDF, CSV, Receita
-│   ├── store/           # Zustand (ui, sessão, empresa ativa, alíquotas)
-│   ├── ui/              # Layout, modais, TermoAceite
-│   └── modais/
-├── scripts/             # build-base.mjs, gen-seeds.cjs, gen-capitulos.cjs…
-├── tests/               # 20+ suítes Vitest (cálculo, SPED, NFe, lote, PDF…)
-├── docs/                # SPEC-LOGICA-NEGOCIO.md + contratos
-├── public/              # assets estáticos + base JSON embutida
-├── build/               # ícones, LICENCA.txt (instalador NSIS em PT-BR)
+│   ├── application/     # casos de uso (produtos, empresas, lote, backup, atualização…)
+│   ├── infrastructure/  # Dexie/IndexedDB, parsers SPED, NFe, PDF, CSV, Receita, bridge IPC
+│   ├── store/           # Zustand (ui, sessão, empresa ativa, alíquotas, pet)
+│   ├── ui/              # Layout, Marca, PetAurum (Aurinha), kit
+│   └── modais/          # globais (Configurações: emitente/bases/backup/atualização…)
+├── recursos-ia/         # base NCM p/ IA + índice lexical + conhecimento (embarcado)
+├── scripts/             # build-base.mjs, gerar-indice-ia.mjs, after-pack-ia.cjs…
+├── tests/               # 57 suítes Vitest (cálculo, SPED, NFe, lote, PDF, IA…)
+├── docs/                # SPEC-LOGICA-NEGOCIO.md, diagnósticos, manuais (fora do instalador)
+├── public/              # assets estáticos + base JSON embutida (versionada)
+├── build/               # icon.ico/png, LICENCA.rtf/txt (instalador NSIS em PT-BR)
 └── release/             # instaladores gerados (ignorado no git)
 ```
 
@@ -296,13 +313,22 @@ Na Consulta você vê os N cards; na Classificação e no Lote você escolhe no 
 **Posso usar no navegador sem instalar?**
 Sim: `npm run dev:web` ou sirva a pasta `dist/` após `npm run build`. O Electron só adiciona janela nativa, menu e instalador.
 
+**A IA funciona sem internet / sem baixar modelo?**
+Sim. O app embarca o índice lexical e opera em modo assistido local (mock/lexical). Um modelo `.gguf` local é opcional e, quando presente, habilita o modo real — nada é baixado sozinho.
+
+**Onde ficam meus XMLs e meu banco?**
+XMLs importados vão para `%APPDATA%/Aurum Tax NCM/xml/<cnpj>/<chave>.xml`; o banco (empresas, produtos, auxiliares) fica no IndexedDB local. Nada sai da máquina e nada se perde ao atualizar.
+
+**Como recebo tabelas novas (NCM, CST, alíquotas)?**
+Junto com a atualização do programa (**Configurações → Atualização**): as bases são embutidas e versionadas com o app. Não há sincronização avulsa.
+
 ---
 
 ## 📄 Licença
 
-Distribuído sob **MIT** — ver [LICENSE](./LICENSE).
+Ver [LICENSE](./LICENSE) (MIT).
 
-© Aurum Bit Labs & Studios LTDA — Todos os direitos reservados.
+© Aurum Bit Labs & Studios LTDA.
 Base legal: [LC 214/2025](https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp214.htm) · [Decreto 12.955/2026](https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2026/decreto/d12955.htm) · [Res. CGIBS nº 6/2026](https://www.cgibs.gov.br/upload/arquivos/202604/30084927-res-cgibs-n-6-30-abr-2026-regulamenta-o-ibs.pdf)
 
 <div align="center">

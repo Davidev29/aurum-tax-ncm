@@ -89,7 +89,15 @@
     "files": [
       "dist/**/*",
       "electron/dist/**/*",
-      "package.json"
+      "package.json",
+      "!**/*.map",
+      "!**/.planning/**",
+      "!**/docs/**",
+      "!**/tests/**",
+      "!**/scripts/**",
+      "!**/electron/spike/**",
+      "!**/recursos-ia/modelo/**",
+      "!**/recursos-ia/embedding/**"
     ],
     "asar": true,
     "afterPack": "scripts/after-pack-ia.cjs",
@@ -122,11 +130,9 @@
       }
     ],
     "asarUnpack": [
-      "**/node-llama-cpp/**",
-      "**/@xenova/transformers/**",
-      "**/vectra/**",
       "electron/dist/ia-worker.cjs",
-      "electron/dist/caminhos-ia.cjs"
+      "electron/dist/caminhos-ia.cjs",
+      "electron/dist/modelo-seguro.cjs"
     ],
     "win": {
       "target": [

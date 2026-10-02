@@ -42,6 +42,7 @@ Thumbs.db
 # Testes / cobertura
 coverage/
 .nyc_output/
+.vitest/
 
 # Temporários
 *.tmp

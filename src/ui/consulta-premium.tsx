@@ -11,14 +11,17 @@
  */
 import { useState, type ReactNode } from 'react'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
-import { fmtNcm } from '@/domain/services/format'
+import { fmtNcm, fmtPct } from '@/domain/services/format'
 import { NOME_IA } from '@/domain/aurum-ai'
-import { Modal } from './kit'
+import { Modal, Pill } from './kit'
 import { FontesAurumAI, IconeAurumPremium, LinhaPreferidaAurumAI } from './aurum-ai'
-import { observacoesFiscais } from '@/domain/services/calculo'
-import { SecaoInformacoesAdicionais } from './detalhes'
+import { anexoOficial, observacoesFiscais } from '@/domain/services/calculo'
+import { rotuloAnexoOficial } from '@/domain/constants/tributarios'
+import { Campo, Secao, SecaoInformacoesAdicionais } from './detalhes'
 import {
+  AvisoManual,
   AvisoNcmExtinto,
+  AvisoVigenciaCct,
   BotaoVerLegislacao,
   ChipCondicao,
   DocsHabilitados,
@@ -249,6 +252,14 @@ export function ModalAuditoriaIA({
 
 /* -------------------------------------------------- detalhe fiscal (modal) -- */
 
+/**
+ * Ficha fiscal completa do produto (modal "Detalhes fiscais").
+ *
+ * Visão detalhada de quem clicou para inspecionar: identificação do NCM,
+ * enquadramento da Reforma, condições tributárias, documentos/DFe,
+ * informações adicionais, simulação, redação legal e observações.
+ * Apresentação pura — nenhum dado aqui altera a `Classificacao` resolvida.
+ */
 export function ModalDetalheFiscal({
   aberto,
   onFechar,
@@ -265,13 +276,27 @@ export function ModalDetalheFiscal({
   titulo?: string
 }) {
   const r = cl.resumo
+  const cst = cl.cstDetalhes
   const cct = cl.cstClassTribDetalhes
+  const ref = cl.referencia
+  const vinc = cl.vinculo
   const redIBS = Number(r.percentualReducaoIBS ?? cct?.pRedIBS ?? 0)
   const redCBS = Number(r.percentualReducaoCBS ?? cct?.pRedCBS ?? 0)
   const url = r.urlLegislacao ?? cl.referencia?.urlLegislacao ?? null
   const baseLegal = cct?.lcRef || cl.baseLegal || null
   const redacao = cct?.lcRedacao ?? null
   const obsFiscais = observacoesFiscais(cl.codigo, cl, nomenclatura ?? null)
+  const digitos = String(cl.codigo ?? '').replace(/\D+/g, '')
+  const capitulo = digitos.length >= 2 ? digitos.slice(0, 2) : '—'
+  const posicao = digitos.length >= 4 ? digitos.slice(0, 4) : '—'
+  const anexo = anexoOficial(cl)
+  const descricaoNcm = nomenclatura?.descricao || cl.descricao || '—'
+  const extinto = Boolean(nomenclatura?.dataFim)
+  const origem = cl.manual ? 'Manual (usuário)' : cl.regraGeral ? 'Regra geral' : 'Base oficial'
+  const vigenciaCct =
+    cct?.inicioVigencia || cct?.fimVigencia
+      ? `${cct?.inicioVigencia ?? '—'} → ${cct?.fimVigencia ?? 'vigente'}`
+      : '—'
   return (
     <Modal
       aberto={aberto}
@@ -280,13 +305,112 @@ export function ModalDetalheFiscal({
       subtitulo={`${fmtNcm(cl.codigo)} · CST ${cl.cst || '000'} · cClassTrib ${cl.cClassTrib || '000001'}`}
       largura="max-w-2xl"
     >
-      <div className="space-y-3 text-xs">
+      <div className="space-y-4 text-xs">
         {nomenclatura?.dataFim ? <AvisoNcmExtinto nomenclatura={nomenclatura} /> : null}
+        {cl.manual ? (
+          <AvisoManual
+            compact
+            fonteDescricao={cl.manual?.fonteDescricao}
+            fonteUrl={cl.manual?.fonteUrl}
+          />
+        ) : null}
+        {cct?.inicioVigencia || cct?.fimVigencia ? <AvisoVigenciaCct cct={cct} /> : null}
+
         <div className="flex flex-wrap gap-1.5">
-          <ChipCondicao rotulo="Redução alíquota" valor={cl.referencia?.reducaoAliquota ?? cl.cstDetalhes?.indReducao} />
-          <ChipCondicao rotulo="Monofásica" valor={cl.referencia?.monofasica ?? (cct?.indMono === 1 ? 1 : 0)} />
-          <ChipCondicao rotulo="Crédito presumido" valor={cl.referencia?.creditoPresumido ?? (cct?.indCredPres === 1 ? 1 : 0)} />
+          <Pill cor={cl.regraGeral ? 'amber' : 'brand'}>
+            {cl.regraGeral ? '⚠ Regra geral' : '✓ Enquadramento oficial'}
+          </Pill>
+          {cl.manual ? <Pill cor="amber">👤 Manual</Pill> : null}
+          {cl.revogado ? <Pill cor="red">⛔ Revogado</Pill> : null}
+          {extinto ? <Pill cor="red">⛔ NCM extinto</Pill> : <Pill cor="emerald">✓ NCM vigente</Pill>}
         </div>
+
+        <Secao titulo="Produto / NCM" icone="📦">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4">
+            <Campo rotulo="NCM" valor={fmtNcm(cl.codigo)} mono forte />
+            <Campo rotulo="Código (dígitos)" valor={digitos || '—'} mono />
+            <Campo rotulo="Capítulo" valor={capitulo} mono />
+            <Campo rotulo="Posição" valor={posicao} mono />
+            <Campo rotulo="Situação" valor={extinto ? `Extinto em ${nomenclatura?.dataFim}` : 'Vigente'} />
+            <Campo rotulo="Origem" valor={origem} />
+            <Campo rotulo="Início vigência NCM" valor={nomenclatura?.dataInicio ?? '—'} mono />
+            <Campo rotulo="Fim vigência NCM" valor={nomenclatura?.dataFim ?? '—'} mono />
+          </div>
+          <p className="mt-3 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200" title={descricaoNcm}>
+            {descricaoNcm}
+          </p>
+          {nomenclatura?.ato ? (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-slate-400" title={nomenclatura.ato}>
+              📎 {nomenclatura.ato}
+            </p>
+          ) : null}
+          {nomenclatura?.atoFim ? (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-slate-400" title={nomenclatura.atoFim}>
+              ⛔ Ato de extinção: {nomenclatura.atoFim}
+            </p>
+          ) : null}
+        </Secao>
+
+        <Secao titulo="Enquadramento — Reforma (LC 214/2025)" icone="💠">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-4 md:grid-cols-3">
+            <Campo rotulo="CST" valor={cl.cst || '000'} mono forte titulo={cst?.descricao} />
+            <Campo rotulo="cClassTrib" valor={cl.cClassTrib || '000001'} mono forte titulo={cct?.nome ?? cct?.descricao ?? undefined} />
+            <Campo rotulo="Tipo alíquota" valor={cct?.tipoAliquota ?? '—'} />
+            <Campo rotulo="Redução IBS" valor={fmtPct(redIBS)} mono />
+            <Campo rotulo="Redução CBS" valor={fmtPct(redCBS)} mono />
+            <Campo rotulo="Vigência cClassTrib" valor={vigenciaCct} mono />
+            <Campo largo rotulo="Anexo oficial" valor={anexo ? `${anexo} · ${rotuloAnexoOficial(anexo)}` : '—'} titulo={anexo ?? undefined} />
+            <Campo largo rotulo="Base legal" valor={baseLegal ?? '—'} titulo={baseLegal ?? undefined} />
+            <Campo largo rotulo="Crédito para" valor={cct?.creditoPara ?? '—'} />
+            <Campo rotulo="Atualizado em" valor={cct?.atualizadoEm ?? '—'} mono />
+          </div>
+          {cst?.descricao || cct?.nome || cct?.descricao || r.descricaoCClassTrib || vinc ? (
+            <div className="mt-3 space-y-2 border-t border-dashed border-slate-200 pt-3 dark:border-slate-700">
+              {cst?.descricao ? (
+                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400" title={cst.descricao}>
+                  <strong>CST:</strong> {cst.descricao}
+                </p>
+              ) : null}
+              {cct?.nome || cct?.descricao ? (
+                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400" title={[cct?.nome, cct?.descricao].filter(Boolean).join(' — ')}>
+                  <strong>cClassTrib:</strong> {[cct?.nome, cct?.descricao].filter(Boolean).join(' — ') || '—'}
+                </p>
+              ) : null}
+              {r.descricaoCClassTrib ? (
+                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400" title={r.descricaoCClassTrib}>
+                  <strong>Classificação:</strong> {r.descricaoCClassTrib}
+                </p>
+              ) : null}
+              {vinc ? (
+                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400" title={vinc.descricao || vinc.baseLegal}>
+                  <strong>Vínculo oficial:</strong> {vinc.descricao || vinc.baseLegal || '—'}
+                  {vinc.reducao != null ? ` · redução ${fmtPct(vinc.reducao)}` : ''}
+                  {vinc.aliquotaIBS != null || vinc.aliquotaCBS != null
+                    ? ` · alíq. IBS ${vinc.aliquotaIBS ?? '—'} / CBS ${vinc.aliquotaCBS ?? '—'}`
+                    : ''}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </Secao>
+
+        <Secao titulo="Condições tributárias" icone="🏷️">
+          <div className="flex flex-wrap gap-2">
+            <ChipCondicao rotulo="Redução alíquota" valor={ref?.reducaoAliquota ?? cst?.indReducao} />
+            <ChipCondicao rotulo="Redução BC" valor={ref?.reducaoBcCst ?? cct?.indRedutorBC} />
+            <ChipCondicao rotulo="Monofásica" valor={ref?.monofasica ?? (cct?.indMono === 1 ? 1 : 0)} />
+            <ChipCondicao rotulo="Mono retenção" valor={cct?.indMonoReten} />
+            <ChipCondicao rotulo="Mono retida" valor={cct?.indMonoRet} />
+            <ChipCondicao rotulo="Mono diferimento" valor={cct?.indMonoDif} />
+            <ChipCondicao rotulo="Crédito presumido" valor={ref?.creditoPresumido ?? (cct?.indCredPres === 1 ? 1 : 0)} />
+            <ChipCondicao rotulo="Diferimento" valor={ref?.diferimento ?? cst?.indDiferimento} />
+            <ChipCondicao rotulo="Trib. regular" valor={cct?.indTribRegular} />
+            <ChipCondicao rotulo="Transf. crédito" valor={cst?.indTransferenciaCredito} />
+            <ChipCondicao rotulo="IBS/CBS" valor={cst?.indIBSCBS} />
+            <ChipCondicao rotulo="IBS/CBS mono" valor={cst?.indIBSCBSMono} />
+          </div>
+        </Secao>
+
         <DocsHabilitados docs={r.documentosHabilitados ?? cl.referencia?.documentos} />
         <SelosPorSistema bloqueios={bloqueios} />
         <SecaoInformacoesAdicionais

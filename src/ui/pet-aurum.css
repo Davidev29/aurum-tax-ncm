@@ -1,0 +1,414 @@
+/* ---------------------------------------------------------------------------
+   Aurinha — pet pixel-art 26×29 (pet-sprite.ts). Simétrica, travada por teste.
+   Camadas (de fora p/ dentro): .pet-palco > .pet-passeio > .pet-salto > SVG.
+   Tamanho: 4.5rem (aberta) / 2.4rem (recolhida). Pixel crocante.
+   --------------------------------------------------------------------------- */
+.pet-aurum {
+  --pet-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.55rem 0.5rem 0.35rem;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Balão de fala — pop elástico via key={seq} */
+.pet-balao {
+  max-width: 11.5rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 0.9rem 0.9rem 0.9rem 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--color-brand-700);
+  background: linear-gradient(135deg, #fffdf4, #fbf7ea);
+  border: 1px solid var(--color-aurum-300);
+  box-shadow: 0 4px 14px -6px rgb(154 119 31 / 0.45);
+  animation: pet-balao-in 0.35s var(--pet-bounce);
+}
+.dark .pet-balao { color: var(--color-aurum-200); background: linear-gradient(135deg, #1e2f4d, #101c2e); border-color: var(--color-aurum-800); }
+@keyframes pet-balao-in { 0% { opacity: 0; transform: translateY(6px) scale(0.85); } 60% { opacity: 1; transform: translateY(-2px) scale(1.04); } 100% { opacity: 1; transform: none; } }
+
+/* Botão base na doca */
+.pet-palco {
+  position: relative;
+  width: 4.5rem;
+  cursor: grab;
+  background: none; border: 0; padding: 0;
+  border-radius: 1rem;
+  transition: transform 0.25s var(--pet-bounce);
+  touch-action: none; /* essencial para pointer events no mobile */
+}
+.pet-palco:hover { transform: scale(1.05); }
+.pet-palco:active { transform: scale(0.94); cursor: grabbing; }
+.pet-palco:focus-visible { outline: 2px solid var(--color-aurum-500); outline-offset: 3px; }
+
+.pet-passeio, .pet-salto { display: block; }
+.pet-salto { position: relative; }
+
+.pet-svg {
+  display: block; width: 100%; height: auto; overflow: visible;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 4px 8px rgb(16 28 46 / 0.22));
+}
+
+/* Origens de transform dos grupos do sprite */
+.pet-px-cabeca { transform-box: fill-box; transform-origin: 50% 88%; }
+.pet-px-corpo  { transform-box: fill-box; transform-origin: 50% 100%; }
+.pet-px-rabo   { transform-box: fill-box; transform-origin: 88% 22%; }
+.pet-px-lupa-giro { transform-box: fill-box; transform-origin: 50% 45%; }
+
+/* Overlays escondidos por padrão (controlados por data-mood) */
+.pet-px-pes-b, .pet-px-braco-alto, .pet-px-lids,
+.pet-px-bravas, .pet-px-boca-brava, .pet-px-boca-aberta { opacity: 0; }
+
+/* Rabinho: ação atrasada tipo pêndulo */
+.pet-px-rabo { animation: pet-rabo 1.9s ease-in-out infinite; }
+@keyframes pet-rabo { 0%,100% { transform: rotate(7deg); } 50% { transform: rotate(-9deg); } }
+
+/* Cabeça: micro-bob sutil */
+.pet-px-cabeca { animation: pet-cabeca-viva 3.6s ease-in-out infinite; }
+@keyframes pet-cabeca-viva { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-0.6px); } }
+
+/* ======================== PATRULHA (idle, sidebar aberta) ========================
+   Desliza inclinando o corpo para o lado do movimento (sem flip horizontal).
+   Pausa nas bordas — leitura natural, sem efeito "papel virando". */
+.pet-aurum[data-recolhida='false'][data-mood='idle'][data-fase='doca'] .pet-passeio {
+  animation: pet-patrulha 7s ease-in-out infinite;
+}
+@keyframes pet-patrulha {
+  0%   { transform: translateX(-11px) rotate(-4deg); }
+  10%  { transform: translateX(-6px)  rotate(-2deg); }
+  36%  { transform: translateX(8px)   rotate(3deg);  }
+  44%,54% { transform: translateX(11px)  rotate(4deg);  }
+  62%  { transform: translateX(6px)   rotate(1deg);  }
+  88%  { transform: translateX(-8px)  rotate(-3deg); }
+  96%,100% { transform: translateX(-11px) rotate(-4deg); }
+}
+/* Trote vertical (1px) */
+.pet-aurum[data-recolhida='false'][data-mood='idle'][data-fase='doca'] .pet-salto {
+  animation: pet-trote 0.36s ease-in-out infinite;
+}
+@keyframes pet-trote { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1px); } }
+/* Marcha: pés alternados em steps() */
+.pet-aurum[data-mood='idle'] .pet-px-pes-a,
+.pet-voo[data-mood='idle'] .pet-px-pes-a { animation: pet-passo-a 0.36s steps(1,end) infinite; }
+.pet-aurum[data-mood='idle'] .pet-px-pes-b,
+.pet-voo[data-mood='idle'] .pet-px-pes-b { animation: pet-passo-b 0.36s steps(1,end) infinite; }
+@keyframes pet-passo-a { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+@keyframes pet-passo-b { 0%,49% { opacity: 0; } 50%,100% { opacity: 1; } }
+/* Piscada pixel-perfeita */
+.pet-aurum[data-mood='idle'] .pet-px-lids,
+.pet-voo[data-mood='idle'] .pet-px-lids { animation: pet-piscada 4.4s steps(1,end) infinite; }
+@keyframes pet-piscada { 0%,91% { opacity: 0; } 92%,96% { opacity: 1; } 97%,100% { opacity: 0; } }
+
+/* -------------------------- HUMORES (microinterações) ------------------------ */
+/* READING: cabeça fareja, lupa varre */
+.pet-aurum[data-mood='reading'] .pet-passeio,
+.pet-voo[data-mood='reading'] .pet-passeio { animation: none; }
+.pet-aurum[data-mood='reading'] .pet-px-cabeca { animation: pet-farejar 1.2s ease-in-out infinite; }
+@keyframes pet-farejar { 0%,100% { transform: rotate(-3deg) translateY(0); } 50% { transform: rotate(3deg) translateY(0.8px); } }
+.pet-aurum[data-mood='reading'] .pet-px-lupa-giro { animation: pet-lupa-varrer 1.2s ease-in-out infinite; }
+@keyframes pet-lupa-varrer { 0%,100% { transform: translateX(-1.6px) rotate(-9deg); } 50% { transform: translateX(1.6px) rotate(9deg); } }
+.pet-aurum[data-mood='reading'] .pet-salto { animation: pet-ler-bob 1.2s ease-in-out infinite; }
+@keyframes pet-ler-bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-1px); } }
+
+/* THINKING: cabeça tombada + lupa em órbita */
+.pet-aurum[data-mood='thinking'] .pet-px-cabeca { animation: pet-pensar 2.4s ease-in-out infinite; }
+@keyframes pet-pensar { 0%,100% { transform: rotate(-7deg); } 50% { transform: rotate(-4deg) translateY(0.6px); } }
+.pet-aurum[data-mood='thinking'] .pet-px-lupa-giro { animation: pet-lupa-orbita 2.4s ease-in-out infinite; }
+@keyframes pet-lupa-orbita { 0%,100% { transform: rotate(-18deg); } 50% { transform: rotate(18deg); } }
+
+/* CALCULATING: na Calculadora a pet empunha a lupinha — varredura ampla com
+   a lente crescida e brilhante, cabeça acompanhando o vaivém, corpinho em
+   balanço. Vale na doca e no portal de voo. */
+.pet-aurum[data-mood='calculating'] .pet-passeio,
+.pet-voo[data-mood='calculating'] .pet-passeio { animation: none; }
+.pet-aurum[data-mood='calculating'] .pet-px-cabeca,
+.pet-voo[data-mood='calculating'] .pet-px-cabeca { animation: pet-calc-cabeca 1.6s ease-in-out infinite; }
+@keyframes pet-calc-cabeca { 0%,100% { transform: rotate(-5deg) translateY(0); } 50% { transform: rotate(5deg) translateY(0.8px); } }
+.pet-aurum[data-mood='calculating'] .pet-px-lupa-giro,
+.pet-voo[data-mood='calculating'] .pet-px-lupa-giro { animation: pet-lupa-calculadora 1.6s ease-in-out infinite; }
+@keyframes pet-lupa-calculadora {
+  0%,100% { transform: translateX(-3px) rotate(-24deg) scale(1.18); }
+  50% { transform: translateX(3px) rotate(24deg) scale(1.3); }
+}
+.pet-aurum[data-mood='calculating'] .pet-px-lupa,
+.pet-voo[data-mood='calculating'] .pet-px-lupa { filter: drop-shadow(0 0 3px rgb(42 181 181 / 0.8)); }
+.pet-aurum[data-mood='calculating'] .pet-salto,
+.pet-voo[data-mood='calculating'] .pet-salto { animation: pet-calc-bob 1.6s ease-in-out infinite; }
+@keyframes pet-calc-bob { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-2px) rotate(1deg); } }
+.pet-aurum[data-mood='calculating'] .pet-px-lids,
+.pet-voo[data-mood='calculating'] .pet-px-lids { animation: none; opacity: 0; }
+
+/* WALKING: troca de menu — trote rápido */
+.pet-aurum[data-mood='walking'] .pet-passeio { animation: pet-patrulha 1.5s ease-in-out 1; }
+.pet-aurum[data-mood='walking'] .pet-salto { animation: pet-trote 0.22s ease-in-out 7; }
+.pet-aurum[data-mood='walking'] .pet-px-pes-a { animation: pet-passo-a 0.22s steps(1,end) 7; }
+.pet-aurum[data-mood='walking'] .pet-px-pes-b { animation: pet-passo-b 0.22s steps(1,end) 7; }
+.pet-aurum[data-mood='walking'] .pet-px-rabo { animation: pet-rabo-rapido 0.3s ease-in-out infinite; }
+@keyframes pet-rabo-rapido { 0%,100% { transform: rotate(10deg); } 50% { transform: rotate(-14deg); } }
+
+/* WAVING: agacha → salta → tchauzinho (braco troca) */
+.pet-aurum[data-mood='waving'] .pet-salto { animation: pet-tchau-pulo 0.55s var(--pet-bounce) 2; }
+@keyframes pet-tchau-pulo {
+  0% { transform: translateY(0) scale(1,1); }
+  25% { transform: translateY(1px) scale(1.1,0.88); }
+  55% { transform: translateY(-9px) scale(0.94,1.08); }
+  80% { transform: translateY(0) scale(1.05,0.93); }
+  100% { transform: none; }
+}
+.pet-aurum[data-mood='waving'] .pet-px-braco-baixo { animation: pet-braco-some 0.55s steps(1,end) 2; }
+.pet-aurum[data-mood='waving'] .pet-px-braco-alto { animation: pet-braco-acena 0.55s steps(1,end) 2; }
+@keyframes pet-braco-some { 0%,20% { opacity: 1; } 21%,100% { opacity: 0; } }
+@keyframes pet-braco-acena { 0%,20% { opacity: 0; } 21%,100% { opacity: 1; } }
+.pet-aurum[data-mood='waving'] .pet-px-braco-alto {
+  transform-box: fill-box; transform-origin: 50% 90%;
+  animation: pet-braco-acena 0.55s steps(1,end) 2, pet-aceno 0.3s ease-in-out 4;
+}
+@keyframes pet-aceno { 0%,100% { transform: rotate(-8deg); } 50% { transform: rotate(10deg); } }
+
+/* SLEEPING: olhos fecham, balanço lento, Zzz */
+.pet-aurum[data-mood='sleeping'] .pet-passeio { animation: none; }
+.pet-aurum[data-mood='sleeping'] .pet-px-lids { animation: none; opacity: 1; }
+.pet-aurum[data-mood='sleeping'] .pet-px-pes-a { animation: none; opacity: 1; }
+.pet-aurum[data-mood='sleeping'] .pet-salto { animation: pet-dormir 4.2s ease-in-out infinite; }
+@keyframes pet-dormir { 0%,100% { transform: translateY(0) rotate(-1.5deg) scale(1,1); } 50% { transform: translateY(1px) rotate(1.5deg) scale(1.015,1.03); } }
+.pet-aurum[data-mood='sleeping'] .pet-px-cabeca { animation: pet-cabeca-dorme 4.2s ease-in-out infinite; }
+@keyframes pet-cabeca-dorme { 0%,100% { transform: rotate(3deg) translateY(0.6px); } 50% { transform: rotate(5deg) translateY(1px); } }
+.pet-aurum[data-mood='sleeping'] .pet-zzz { opacity: 1; }
+.pet-zzz span:nth-child(1) { left: 78%; top: 6%; animation: pet-zzz 2.4s ease-out infinite; }
+.pet-zzz span:nth-child(2) { left: 84%; top: 2%; font-size: 1.1rem; animation: pet-zzz 2.4s 0.4s ease-out infinite; }
+.pet-zzz span:nth-child(3) { left: 90%; top: -2%; font-size: 0.8rem; animation: pet-zzz 2.4s 0.8s ease-out infinite; }
+@keyframes pet-zzz { 0% { opacity: 0; transform: translateY(8px) scale(0.7); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px) scale(1.1); } }
+
+/* ANGRY: antecipa no alto e soca o chão */
+.pet-aurum[data-mood='angry'] .pet-salto { animation: pet-bravo 0.45s linear 3; }
+@keyframes pet-bravo { 0%,100% { transform: translateY(0) scale(1,1); } 20% { transform: translateY(-5px) scale(0.96,1.05); } 45% { transform: translateY(1px) scale(1.12,0.86); } 60% { transform: translateX(-2px); } 75% { transform: translateX(2px) scale(1.05,0.94); } }
+.pet-aurum[data-mood='angry'] .pet-px-bravas { opacity: 1; }
+.pet-aurum[data-mood='angry'] .pet-px-boca-brava { opacity: 1; }
+.pet-aurum[data-mood='angry'] .pet-px-cabeca { animation: pet-cabeca-brava 0.45s linear 3; }
+@keyframes pet-cabeca-brava { 0%,100% { transform: rotate(0); } 45% { transform: rotate(-4deg) translateY(1px); } }
+
+/* HAPPY / LOVE: agacha → estica no ar → acomoda + corações */
+.pet-aurum[data-mood='happy'] .pet-salto,
+.pet-aurum[data-mood='love'] .pet-salto { animation: pet-alegria 0.55s var(--pet-bounce) 2; }
+@keyframes pet-alegria { 0% { transform: translateY(0) scale(1,1); } 25% { transform: translateY(1px) scale(1.1,0.87); } 55% { transform: translateY(-10px) scale(0.93,1.09); } 80% { transform: translateY(0) scale(1.06,0.92); } 100% { transform: none; } }
+.pet-aurum[data-mood='love'] .pet-coracoes,
+.pet-aurum[data-mood='happy'] .pet-coracoes { opacity: 1; }
+.pet-coracoes span:nth-child(1) { left: 12%; top: 30%; animation: pet-coracao 1.4s ease-out infinite; }
+.pet-coracoes span:nth-child(2) { left: 82%; top: 26%; animation: pet-coracao 1.4s 0.3s ease-out infinite; }
+.pet-coracoes span:nth-child(3) { left: 68%; top: 8%; font-size: 0.7rem; animation: pet-coracao 1.4s 0.6s ease-out infinite; }
+@keyframes pet-coracao { 0% { opacity: 0; transform: translateY(6px) scale(0.6); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateY(-16px) scale(1.15); } }
+
+/* CELEBRATING: 3 pulos + lupa girando + confete */
+.pet-aurum[data-mood='celebrating'] .pet-salto { animation: pet-festa 0.6s var(--pet-bounce) 4; }
+@keyframes pet-festa { 0% { transform: translateY(0) rotate(0) scale(1,1); } 25% { transform: translateY(1px) rotate(0) scale(1.1,0.87); } 55% { transform: translateY(-12px) rotate(-3deg) scale(0.94,1.08); } 80% { transform: translateY(0) rotate(2deg) scale(1.05,0.93); } 100% { transform: none; } }
+.pet-aurum[data-mood='celebrating'] .pet-px-lupa-giro { animation: pet-lupa-festa 0.6s ease-in-out 4; }
+@keyframes pet-lupa-festa { 0%,100% { transform: rotate(-22deg); } 50% { transform: rotate(26deg); } }
+.pet-aurum[data-mood='celebrating'] .pet-px-pes-a { animation: pet-passo-a 0.25s steps(1,end) 8; }
+.pet-aurum[data-mood='celebrating'] .pet-px-pes-b { animation: pet-passo-b 0.25s steps(1,end) 8; }
+.pet-aurum[data-mood='celebrating'] .pet-confete { opacity: 1; }
+.pet-confete span:nth-child(1) { left: 10%; top: 0; background: #2ab5b5; animation: pet-confete 1.1s ease-in infinite; }
+.pet-confete span:nth-child(2) { left: 30%; top: 0; background: #d2a94e; animation: pet-confete 1.1s 0.15s ease-in infinite; }
+.pet-confete span:nth-child(3) { left: 55%; top: 0; background: #e2608a; animation: pet-confete 1.1s 0.3s ease-in infinite; }
+.pet-confete span:nth-child(4) { left: 75%; top: 0; background: #6e84a6; animation: pet-confete 1.1s 0.45s ease-in infinite; }
+.pet-confete span:nth-child(5) { left: 90%; top: 0; background: #34d399; animation: pet-confete 1.1s 0.6s ease-in infinite; }
+@keyframes pet-confete { 0% { opacity: 1; transform: translateY(-6px) rotate(0); } 100% { opacity: 0; transform: translateY(70px) rotate(220deg); } }
+
+/* CURIOUS: inclina cabeça e espicha corpo */
+.pet-aurum[data-mood='curious'] .pet-passeio { animation: none; }
+.pet-aurum[data-mood='curious'] .pet-px-cabeca { animation: pet-curioso 0.6s var(--pet-bounce) 2; }
+@keyframes pet-curioso { 0%,100% { transform: rotate(0) translateX(0); } 50% { transform: rotate(8deg) translateX(1.5px); } }
+.pet-aurum[data-mood='curious'] .pet-salto { animation: pet-espichar 0.6s var(--pet-bounce) 2; }
+@keyframes pet-espichar { 0%,100% { transform: scale(1,1); } 50% { transform: scale(0.97,1.05) translateY(-2px); } }
+
+/* VOANDO / RETORNANDO: boca em "o", braço erguido */
+.pet-aurum[data-mood='voando'] .pet-px-boca-aberta,
+.pet-voo[data-mood='voando'] .pet-px-boca-aberta,
+.pet-aurum[data-mood='retornando'] .pet-px-boca-aberta,
+.pet-voo[data-mood='retornando'] .pet-px-boca-aberta { opacity: 1; }
+.pet-aurum[data-mood='voando'] .pet-px-braco-baixo,
+.pet-voo[data-mood='voando'] .pet-px-braco-baixo { animation: pet-braco-some 0.2s steps(1,end) forwards; }
+.pet-aurum[data-mood='voando'] .pet-px-braco-alto,
+.pet-voo[data-mood='voando'] .pet-px-braco-alto { animation: pet-braco-acena 0.2s steps(1,end) forwards; }
+.pet-voo[data-mood='retornando'] .pet-px-braco-baixo { opacity: 1; }
+
+/* Plaquinha */
+.pet-nome { display: flex; align-items: center; gap: 0.35rem; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; color: var(--ink-soft, #5a6a84); }
+.pet-nome-ponto { width: 6px; height: 6px; border-radius: 9999px; background: linear-gradient(135deg, var(--color-aurum-400), var(--color-aurum-600)); box-shadow: 0 0 6px rgb(190 148 51 / 0.7); animation: pet-online 2s ease-in-out infinite; }
+@keyframes pet-online { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+/* Sidebar recolhida → sentinela */
+.pet-aurum[data-recolhida='true'] { padding: 0.4rem 0.2rem; }
+.pet-aurum[data-recolhida='true'] .pet-palco { width: 2.4rem; }
+.pet-aurum[data-recolhida='true'] .pet-balao:not(.pet-balao-tooltip), .pet-aurum[data-recolhida='true'] .pet-nome { display: none; }
+.pet-balao-tooltip { display: block; position: absolute; left: calc(100% + 10px); bottom: 6px; width: max-content; max-width: 11rem; z-index: 60; text-align: left; }
+.pet-aurum[data-recolhida='true'][data-mood='idle'] .pet-px-cabeca { animation: pet-sentinela 6s ease-in-out infinite; }
+@keyframes pet-sentinela { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-6deg); } 50% { transform: rotate(5deg); } 75% { transform: rotate(-2deg); } }
+.pet-aurum[data-recolhida='true'][data-mood='idle'] .pet-px-lids { animation: pet-piscada 4.4s steps(1,end) infinite; }
+
+/* ================================ VOO ======================================
+   Portal fixed (`.pet-voo`) + sombra projetada (`.pet-sombra-chao`).
+   A lógica imperativa (useVoo) escreve `transform` no DOM a cada frame. */
+.pet-casa { display: contents; }
+
+/* Caminha vazia — só contorno sutil, sem texto */
+.pet-caminha-vazia {
+  display: grid; place-items: center;
+  width: 4.5rem; min-height: 4rem;
+  border-radius: 1rem;
+  border: 2px dashed color-mix(in srgb, var(--color-aurum-500) 40%, transparent);
+  background: color-mix(in srgb, var(--color-aurum-500) 5%, transparent);
+}
+.pet-aurum[data-recolhida='true'] .pet-caminha-vazia { width: 2.4rem; min-height: 2.2rem; }
+
+/* Segurando (breve, antes de arrastar) */
+.pet-aurum[data-fase='segurando'] .pet-salto {
+  animation: pet-segurar 0.3s ease-in-out infinite; cursor: grabbing;
+}
+@keyframes pet-segurar { 0%,100% { transform: scale(1.08,0.94); } 50% { transform: scale(1.1,0.92) rotate(-1deg); } }
+
+/* Portal fixo na viewport — left:0/top:0 porque o JS posiciona com
+   coordenadas ABSOLUTAS (translate = canto superior-esquerdo). A largura é
+   travada via JS no tamanho real da doca (1:1); 4.5rem é só o fallback. */
+.pet-voo {
+  position: fixed; left: 0; top: 0; width: 4.5rem; z-index: 200; pointer-events: none; margin: 0;
+}
+.pet-voo-move { will-change: transform; width: 100%; transform-origin: 50% 40%; }
+.pet-voo-pendulo { transform-origin: 50% 0; width: 100%; } /* ponto de fixação das linhas */
+.pet-voo-boneco { position: relative; width: 100%; }
+.pet-voo-boneco .pet-svg { width: 100%; height: auto; }
+
+/* Sombra projetada no "chão" — elipse que encolhe com a altura.
+   Sem transition de posição/tamanho: o JS já interpola por frame (transition
+   aqui criaria lag duplo). Só a opacidade tem fade. */
+.pet-sombra-chao {
+  position: fixed; z-index: 199; pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgb(16 28 46 / 0.35) 0%, transparent 70%);
+  filter: blur(2px);
+  transition: opacity 0.15s ease;
+}
+
+/* Nuvem de poeira do pouso — grãos de areia + anel de impacto.
+   O container nasce exatamente no ponto de toque (via inline left/top) e
+   morre sozinho em ~1.1s (o React desmonta). */
+.pet-poeira {
+  position: fixed; z-index: 201; pointer-events: none;
+  width: 0; height: 0; margin: 0;
+}
+.pet-poeira-anel {
+  position: absolute; left: -34px; top: -9px;
+  width: 68px; height: 18px; border-radius: 50%;
+  border: 2px solid rgb(210 169 78 / 0.55);
+  animation: pet-poeira-anel 0.7s ease-out forwards;
+}
+.pet-poeira-anel--2 { animation-delay: 0.12s; border-color: rgb(227 200 120 / 0.4); }
+@keyframes pet-poeira-anel {
+  0% { opacity: 0.7; transform: scale(0.35); }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+.pet-poeira-nuvem {
+  position: absolute; left: 0; top: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(243 235 214 / 0.9) 0%, rgb(210 169 78 / 0) 70%);
+  filter: blur(3px);
+  opacity: 0;
+  animation: pet-poeira-nuvem 1.15s ease-out forwards;
+  animation-delay: var(--atraso, 0s);
+}
+@keyframes pet-poeira-nuvem {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.5); }
+  25% { opacity: 0.85; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-30% + var(--dy))) scale(1.25); }
+}
+.pet-poeira-grao {
+  position: absolute; left: -3px; top: -6px;
+  border-radius: 50%;
+  filter: blur(0.4px);
+  opacity: 0;
+  animation: pet-poeira-voar 1s cubic-bezier(0.15, 0.7, 0.3, 1) forwards;
+  animation-delay: var(--atraso, 0s);
+}
+@keyframes pet-poeira-voar {
+  0% { opacity: 0; transform: translate(0, 0) scale(1); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(0.3); }
+}
+
+/* Paraquedas SVG (o visual vem do componente; aqui só ajustes de fase) */
+.pet-paraquedas {
+  display: block;
+  width: 160%;              /* maior que o boneco para abraçar a copa */
+  margin: 0 -30% -15px;     /* centraliza e sobrepõe o boneco */
+  transform-origin: 50% 20%; /* pivô nas linhas de suspensão */
+  opacity: 0;
+  transform: scale(0.6) translateY(15px);
+}
+.pet-voo[data-fase='arrastando'] .pet-paraquedas { opacity: 0; } /* escondido no arrasto */
+.pet-voo[data-fase='retornando'] .pet-paraquedas {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.25s ease, transform 0.45s var(--pet-bounce);
+  animation: pet-paraquedas-respirar 2.8s ease-in-out infinite;
+  filter: drop-shadow(0 8px 16px rgb(16 28 46 / 0.4));
+}
+@keyframes pet-paraquedas-respirar {
+  0%,100% { transform: scaleX(1) scaleY(1); }
+  50% { transform: scaleX(1.02) scaleY(0.99); }
+}
+
+/* Balanço do pêndulo (corpo balança sob a copa) — amplitude contida para não
+   brigar com a rotação que o JS já aplica no .pet-voo-move. */
+.pet-voo[data-fase='retornando'] .pet-voo-pendulo {
+  animation: pet-pendulo-retorno 1.8s ease-in-out infinite;
+}
+@keyframes pet-pendulo-retorno {
+  0%,100% { transform: rotate(-3.5deg); }
+  50% { transform: rotate(3.5deg); }
+}
+/* Flutuação do boneco no retorno — soma ao glide do JS, sem conflito. */
+.pet-voo[data-fase='retornando'] .pet-voo-boneco {
+  animation: pet-voo-bob-retorno 1.8s ease-in-out infinite;
+}
+@keyframes pet-voo-bob-retorno {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-2.5px); }
+}
+/* Assentamento: a copa recolhe para cima e some; o squash do corpo vem do JS. */
+.pet-voo[data-pouso='true'] .pet-paraquedas {
+  opacity: 0;
+  transform: scale(1.12) translateY(-12px);
+  transition: opacity 0.22s ease, transform 0.28s ease;
+  animation: none;
+}
+.pet-voo[data-pouso='true'] .pet-voo-pendulo,
+.pet-voo[data-pouso='true'] .pet-voo-boneco { animation: none; }
+
+/* No arrasto: pernas pedalando + flutuação viva no boneco (o tilt fica no JS,
+   então o CSS só soma bob/roll suaves na camada interna). */
+.pet-voo[data-fase='arrastando'] .pet-px-pes-a { animation: pet-passo-a 0.18s steps(1,end) infinite; }
+.pet-voo[data-fase='arrastando'] .pet-px-pes-b { animation: pet-passo-b 0.18s steps(1,end) infinite; }
+.pet-voo[data-fase='arrastando'] .pet-voo-boneco {
+  animation: pet-voo-flutuar 0.9s ease-in-out infinite;
+}
+@keyframes pet-voo-flutuar {
+  0%,100% { transform: translateY(0) rotate(-1.1deg); }
+  50% { transform: translateY(-2.6px) rotate(1.1deg); }
+}
+.pet-voo[data-fase='arrastando'] .pet-px-rabo { animation: pet-rabo-rapido 0.3s ease-in-out infinite; }
+
+/* Movimento reduzido: desliga tudo, só troca balão */
+@media (prefers-reduced-motion: reduce) {
+  .pet-aurum *, .pet-aurum *::before, .pet-aurum *::after,
+  .pet-voo *, .pet-voo *::before, .pet-voo *::after,
+  .pet-sombra-chao, .pet-poeira, .pet-poeira * { animation: none !important; transition: none !important; }
+  .pet-balao { animation: none; }
+  .pet-sombra-chao { display: none; }
+  .pet-poeira { display: none; }
+}

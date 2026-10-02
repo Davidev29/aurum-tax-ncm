@@ -14,6 +14,7 @@ import { useSessao } from '@/store/sessao'
 import { useUi, VIEW_META, type ViewId } from '@/store/ui'
 import { Btn, Icone, Toasts, type NomeIcone } from './kit'
 import { MarcaSidebar } from './Marca'
+import { PetAurum } from './PetAurum'
 import { DialogoGlass } from './dialogos'
 import { ModaisGlobais } from '@/modais/globais'
 
@@ -198,6 +199,13 @@ function Sidebar() {
             </div>
           ))}
         </nav>
+
+        {/* Aurinha, a pet oficial da Aurum Bit: cantinho entre o menu e o
+            rodapé. `aria-hidden` parcial — o botão interno tem seu próprio
+            rótulo acessível. */}
+        <div className="shrink-0 border-t border-[var(--line)] px-2 pt-1">
+          <PetAurum recolhida={ehDesktop && recolhida} />
+        </div>
 
         <div className="sidebar-rodape shrink-0 border-t border-[var(--line)] px-4 py-3 text-[10px] leading-relaxed text-slate-400">
           <div className="sidebar-rodape-detalhe">

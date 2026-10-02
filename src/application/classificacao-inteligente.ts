@@ -21,10 +21,12 @@ import {
   calcularConfianca,
   consultasEfetivas,
   consultasTolerantes,
+  expandirSinonimo,
   perguntasComplementares,
   type Confianca,
   type EntradaDescricao,
 } from '@/domain/services/classificador-descricao'
+import { qualificadoresNaoComprovados } from '@/domain/services/palavra-unica'
 import { fmtNcm, norm } from '@/domain/services/format'
 import {
   buscarNomenclatura,
@@ -379,7 +381,40 @@ export async function classificarPorDescricao(
 
   // Escolha: melhor score textual; vínculo oficial enriquece, não filtra.
   // (Um NCM vigente sem vínculo é resposta válida: tributação integral.)
-  const [topo, segundo] = resolvidos
+  // Trava de especificidade sem lastro — palavra única sem contexto (ex.:
+  // "chocolate" prefere o genérico "Chocolate" ao específico "Chocolate
+  // branco"). Com 2+ palavras ou refino, a especificidade está comprovada e
+  // a trava não se aplica. Pin do dicionário é curadoria, nunca bloqueado.
+  // (Palavra única nunca alcança `alta` — `calcularConfianca` exige ≥2 tokens
+  // — então a decisão final cai no fallback, que aplica a trava completa;
+  // aqui só alinhamos a sugestão/trilha.)
+  let ordenados = resolvidos
+  const semContextoExtra =
+    analise.tokens.length <= 1 &&
+    !((entrada.destinacao ?? '').trim() || (entrada.composicao ?? '').trim() || (entrada.uso ?? '').trim())
+  if (semContextoExtra && resolvidos.length > 1) {
+    const primeiro = resolvidos[0]
+    if (primeiro && !acertosDict.some((a) => norm(a.ncm) === norm(primeiro.cand.item.codigo))) {
+      const conjuntoDet = [
+        ...new Set([...analise.tokens, ...analise.tokens.map((t) => expandirSinonimo(t) ?? t)]),
+      ]
+      const puraDet = (desc: unknown): string => String(desc ?? '').split(' (')[0]
+      if (qualificadoresNaoComprovados(puraDet(primeiro.cand.item.descricao), conjuntoDet).length > 0) {
+        const genericosDet = resolvidos.filter(
+          (r) => qualificadoresNaoComprovados(puraDet(r.cand.item.descricao), conjuntoDet).length === 0,
+        )
+        if (genericosDet.length === 1 && genericosDet[0] && genericosDet[0] !== primeiro) {
+          const generico = genericosDet[0]
+          ordenados = [generico, ...resolvidos.filter((r) => r !== generico)]
+          trilha.push({
+            etapa: 'Palavra única sem contexto',
+            detalhe: `preferido o genérico ${fmtNcm(generico.cand.item.codigo)} ao específico ${fmtNcm(primeiro.cand.item.codigo)} (qualificador sem comprovação na entrada)`,
+          })
+        }
+      }
+    }
+  }
+  const [topo, segundo] = ordenados
   const margem = segundo ? topo.cand.score - segundo.cand.score : 999
   const principal = topo.lista[0]
   const temVinculo = !topo.regraGeral
@@ -429,7 +464,7 @@ export async function classificarPorDescricao(
     justificativa += ''
   }
 
-  const alternativas = resolvidos.slice(1, 4).map((r) => fmtNcm(r.cand.item.codigo))
+  const alternativas = ordenados.slice(1, 4).map((r) => fmtNcm(r.cand.item.codigo))
 
   trilha.push({
     etapa: 'Validação de contexto',

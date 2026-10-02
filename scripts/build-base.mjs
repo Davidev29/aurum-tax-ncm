@@ -421,6 +421,16 @@ async function main() {
 
   const ausentes = Object.entries(arquivos).filter(([, v]) => !v).map(([k]) => k);
   if (ausentes.length) {
+    // Tolera fontes ausentes quando a saída versionada já existe: `public/base/`
+    // é commitado no repo, então `npm run build`/`dist` funciona em qualquer
+    // máquina com só `git clone + npm ci` (sem os JSONs brutos da pasta pai).
+    const saidasVersionadas = ['classificacao-tributaria.json', 'reforma.json', 'nomenclatura.json', 'MANIFEST.json'];
+    const saidasOk = saidasVersionadas.every((f) => fs.existsSync(path.join(OUT_DIR, f)));
+    if (saidasOk) {
+      console.warn(`\n⚠ Fontes ausentes (${ausentes.join(', ')}) — usando public/base/ versionado.`);
+      console.warn('  Para regenerar, defina AURUM_BASE_DIR com as bases de origem.');
+      return;
+    }
     console.error(`\n✖ Arquivos de origem ausentes: ${ausentes.join(', ')}`);
     console.error('  Defina AURUM_BASE_DIR apontando para a pasta que contém as bases.');
     process.exit(1);

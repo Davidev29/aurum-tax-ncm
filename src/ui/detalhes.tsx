@@ -85,8 +85,8 @@ export function Secao({
   children: ReactNode
 }) {
   return (
-    <section className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-slate-700/60 dark:bg-slate-950/30">
-      <h4 className="mb-2 flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+    <section className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 dark:border-slate-700/60 dark:bg-slate-950/30">
+      <h4 className="mb-3 flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
         <span aria-hidden>{icone}</span> {titulo}
       </h4>
       {children}
@@ -101,18 +101,26 @@ export function Campo({
   mono,
   forte,
   titulo,
+  largo,
+  className = '',
 }: {
   rotulo: string
   valor: string
   mono?: boolean
   forte?: boolean
   titulo?: string
+  /** Ocupa 2 colunas da grade — para valores longos (anexo, base legal). */
+  largo?: boolean
+  className?: string
 }) {
   return (
-    <div className="min-w-0" title={titulo ?? (typeof valor === 'string' ? valor : undefined)}>
+    <div
+      className={`min-w-0 space-y-0.5 ${largo ? 'col-span-2' : ''} ${className}`}
+      title={titulo ?? (typeof valor === 'string' ? valor : undefined)}
+    >
       <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{rotulo}</div>
       <div
-        className={`truncate text-xs ${mono ? 'font-mono' : ''} ${forte ? 'font-black' : 'font-semibold text-slate-700 dark:text-slate-200'}`}
+        className={`break-words text-xs leading-snug ${mono ? 'font-mono' : ''} ${forte ? 'font-black' : 'font-semibold text-slate-700 dark:text-slate-200'}`}
       >
         {valor}
       </div>

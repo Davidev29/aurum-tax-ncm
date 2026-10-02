@@ -29,6 +29,13 @@ import { buscarNoDicionarioComercial } from '@/domain/constants/dicionario-comer
 import { bridge, type CandidatoIa } from '@/infrastructure/bridge'
 import { LIMIAR_NAO_SEI } from '@/domain/aurum-ai'
 import {
+  ehVerboProvavel,
+  MOTIVO_PALAVRA_UNICA_EMPATE,
+  MOTIVO_PALAVRA_UNICA_QUALIFICADOR,
+  MOTIVO_PALAVRA_UNICA_VERBO,
+  qualificadoresNaoComprovados,
+} from '@/domain/services/palavra-unica'
+import {
   analisarFichaAbsoluta,
   montarFichaAbsoluta,
   pontuarFichaAbsoluta,
@@ -175,8 +182,11 @@ async function selecionarAurumAILocal(
     pontuados.push({ c, pontosTexto, pontosProprios, scoreAbsoluto, ficha, dict: temPinDict })
   }
   pontuados.sort((a, b) => b.scoreAbsoluto - a.scoreAbsoluto || a.c.codigo.localeCompare(b.c.codigo))
-  const [topo, segundo] = pontuados
-  const vereditoTopo = topo?.ficha ? analisarFichaAbsoluta(topo.ficha) : null
+  let topo = pontuados[0]
+  let segundo: (typeof pontuados)[number] | undefined = pontuados[1]
+  let vereditoTopo = topo?.ficha ? analisarFichaAbsoluta(topo.ficha) : null
+  /** Sufixo de auditoria quando a trava de palavra única preferiu o genérico. */
+  let sufixoMotivo = ''
   if (!topo || topo.pontosTexto <= 0) {
     return { codigo: 'NÃO SEI', confianca: 0, motivo: 'similaridade-insuficiente', ficha: topo?.ficha ?? null, veredito: vereditoTopo }
   }
@@ -188,6 +198,63 @@ async function selecionarAurumAILocal(
   if (relevantes.length <= 1 && topo.pontosProprios <= 0 && !topo.dict) {
     return { codigo: 'NÃO SEI', confianca: 0, motivo: 'similaridade-insuficiente', ficha: topo.ficha, veredito: vereditoTopo }
   }
+  // Trava de especificidade sem lastro — palavra única sem contexto (ex.:
+  // "chocolate" não pode virar "Chocolate branco"; verbo isolado como
+  // "plantar" não vira produto). Com 2+ tokens ou refino preenchido, o
+  // contexto comprova a especificidade e a trava não se aplica. Pin do
+  // dicionário é conhecimento curado (inequívoco sozinho), nunca bloqueado.
+  if (relevantes.length <= 1 && topo && !topo.dict) {
+    const unico = relevantes[0] ?? ''
+    const puraDe = (cand: CandidatoIa): string => String(cand.descricao || '').split(' (')[0]
+    const conjuntoLista = [...conjunto]
+    // Verbo provável sem lastro literal na base: a ação não comprova o
+    // produto — pede contexto em vez de inferir o substantivo.
+    if (unico && ehVerboProvavel(unico)) {
+      const { normalizarBusca: normalizar } = await import('@/domain/services/busca-texto')
+      let temLiteral = false
+      for (const p of pontuados) {
+        const toks = normalizar(puraDe(p.c)).split(' ').filter(Boolean)
+        if (toks.some((o) => casaToken(unico, o))) {
+          temLiteral = true
+          break
+        }
+      }
+      if (!temLiteral) {
+        return { codigo: 'NÃO SEI', confianca: 0, motivo: MOTIVO_PALAVRA_UNICA_VERBO, ficha: topo.ficha, veredito: vereditoTopo }
+      }
+    }
+    // Específico com qualificador não comprovado + genérico concorrente com
+    // lastro: prefere o genérico ("retorna só ele"). Sem desempate entre
+    // genéricos (ex.: recheado × não recheado), NÃO SEI — sem contexto não
+    // há como escolher a qualidade.
+    const extrasTopo = qualificadoresNaoComprovados(puraDe(topo.c), conjuntoLista)
+    if (extrasTopo.length > 0) {
+      const genericos = pontuados.filter(
+        (p) => p.pontosTexto > 0 && qualificadoresNaoComprovados(puraDe(p.c), conjuntoLista).length === 0,
+      )
+      if (genericos.length > 1) {
+        const [g1, g2] = genericos
+        if (g1 && g2 && Math.abs(g1.pontosTexto - g2.pontosTexto) < 0.01) {
+          return { codigo: 'NÃO SEI', confianca: 0, motivo: MOTIVO_PALAVRA_UNICA_QUALIFICADOR, ficha: g1.ficha, veredito: g1.ficha ? analisarFichaAbsoluta(g1.ficha) : vereditoTopo }
+        }
+        if (g1) {
+          topo = g1
+          segundo = genericos[1]
+          vereditoTopo = topo.ficha ? analisarFichaAbsoluta(topo.ficha) : vereditoTopo
+          sufixoMotivo = '/palavra-unica-generico'
+        }
+      } else if (genericos.length === 1 && genericos[0] && genericos[0] !== topo) {
+        topo = genericos[0]
+        // Específicos descartados da disputa (eram chute): sem segundo, sem
+        // empate — o genérico decide sozinho.
+        segundo = undefined
+        vereditoTopo = topo.ficha ? analisarFichaAbsoluta(topo.ficha) : vereditoTopo
+        sufixoMotivo = '/palavra-unica-generico'
+      }
+      // Sem genérico concorrente: mantém o topo (único lastro — ex.: "gatos",
+      // "semeadura"). A especificidade aparente é o próprio nome oficial.
+    }
+  }
   // Empate textual puro no topo (ignorando bônus de vínculo): sem margem
   // textual, sem decisão — o bônus oficial desempataria um chute (precisão >
   // cobertura). Ex.: "milho" empata entre 10051000/10059010 no texto.
@@ -198,6 +265,14 @@ async function selecionarAurumAILocal(
   }
   if (segundo && Math.abs(topo.pontosTexto - segundo.pontosTexto) < 0.01 && topo.pontosTexto <= 1) {
     return { codigo: 'NÃO SEI', confianca: 0, motivo: 'similaridade-insuficiente', ficha: topo.ficha, veredito: vereditoTopo }
+  }
+  // Palavra única sem contexto: qualquer empate textual no topo é NÃO SEI —
+  // sem a 2ª palavra não há como desempatar nem entre genéricos (ex.:
+  // "Chocolate" recheado × não recheado). Pin curado é exceção (curadoria).
+  if (relevantes.length <= 1 && topo && segundo && !topo.dict) {
+    if (Math.abs(topo.pontosTexto - segundo.pontosTexto) < 0.01) {
+      return { codigo: 'NÃO SEI', confianca: 0, motivo: MOTIVO_PALAVRA_UNICA_EMPATE, ficha: topo.ficha, veredito: vereditoTopo }
+    }
   }
   let confianca = Math.round((topo.pontosTexto / teto) * 100) / 100
   confianca = Math.max(0, Math.min(1, confianca))
@@ -216,7 +291,7 @@ async function selecionarAurumAILocal(
   return {
     codigo: topo.c.codigo,
     confianca: Math.round(confianca * 100) / 100,
-    motivo: topo.dict ? 'dicionario-comercial' : topo.ficha ? 'aurum-ai-ficha-absoluta' : 'mock-overlap',
+    motivo: topo.dict ? 'dicionario-comercial' : topo.ficha ? `aurum-ai-ficha-absoluta${sufixoMotivo}` : `mock-overlap${sufixoMotivo}`,
     ficha: topo.ficha,
     veredito,
   }
