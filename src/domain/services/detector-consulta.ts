@@ -75,7 +75,9 @@ export function detectarIntencaoConsulta(entrada: unknown): IntencaoConsulta {
   const ehMista = temLetras && digitos.length >= LIMITES_ENTRADA_UNIFICADA.digitosMinimos
 
   if (ehNumerica) {
-    const completa = digitos.length === 8
+    const completaNcm = digitos.length === 8
+    const completaNbs = digitos.length === 9
+    const completa = completaNcm || completaNbs
     return {
       tipo: 'numerica',
       digitos,
@@ -84,7 +86,7 @@ export function detectarIntencaoConsulta(entrada: unknown): IntencaoConsulta {
       deveClassificarExato: completa,
       deveBuscarNome: false,
       deveBuscarDescricao: false,
-      rotulo: completa ? '🔢 NCM exato' : '🔢 Buscando por número…',
+      rotulo: completaNbs ? '🔢 NBS exato' : completaNcm ? '🔢 NCM exato' : '🔢 Buscando por número…',
     }
   }
 
@@ -102,7 +104,7 @@ export function detectarIntencaoConsulta(entrada: unknown): IntencaoConsulta {
       digitos,
       temLetras: true,
       deveBuscarExato: true,
-      deveClassificarExato: digitos.length === 8,
+      deveClassificarExato: digitos.length === 8 || digitos.length === 9,
       deveBuscarNome,
       deveBuscarDescricao,
       rotulo: '🔀 Número + texto',

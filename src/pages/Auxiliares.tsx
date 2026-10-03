@@ -31,6 +31,7 @@ import {
 } from '@/application/aux-meta'
 import { abrirEdicaoAux } from '@/modais/globais'
 import { confirmar } from '@/store/dialogo'
+import { useUi } from '@/store/ui'
 import { itensVisiveis, totalFiltrado, useAuxiliares, type RegistroAux } from '@/store/auxiliares'
 import { Btn, Painel, Texto, Vazio, useDebounce } from '@/ui/kit'
 
@@ -1191,7 +1192,15 @@ function PainelNbs() {
       <div className="p-5">
         <p className="mb-3 text-[11px] text-slate-500 dark:text-slate-400">
           Vínculos oficiais de serviços (NBS de 9 dígitos). Somente leitura — entram via
-          Configurações → Bases junto com os vínculos de NCM.
+          Configurações → Bases junto com os vínculos de NCM. Para classificar, use a{' '}
+          <button
+            type="button"
+            className="font-bold text-brand-700 underline dark:text-aurum-200"
+            onClick={() => useUi.getState().trocarView('servicos')}
+          >
+            Consulta Serviços (NBS)
+          </button>
+          .
         </p>
         {erro ? (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">

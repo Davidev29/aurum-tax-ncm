@@ -1,5 +1,10 @@
 /**
- * Gate determinístico → fallback Aurum AI — Phase 6 / IA-05 (tracer 06-05).
+ * Gate determinístico → modelo real Aurum AI — Phase 6 / IA-05 (tracer 06-05).
+ *
+ * AI-FIRST no Electron: a decisão do fallback VEM do GGUF real
+ * (`window.aurum.ia.classificar`); sem modelo ou IPC quebrado, falha FECHADA
+ * com erro explícito — nunca fallback silencioso para o seletor local.
+ * Sem bridge (web/testes), o seletor local responde com `mock:true`.
  *
  * A Aurum AI é camada SUPERIOR, nunca substituta:
  * 1. `classificarPorDescricao()` roda primeiro (tokenização + RGI +
@@ -12,8 +17,10 @@
  *    worker (`window.aurum.ia.classificar` no Electron; seletor Aurum AI local
  *    fora do Electron) e valida a escolha com `resolverClassificacoes`
  *    — nenhuma saída IA chega à UI sem o resolvedor (princípio 2).
- * 3. Falha segura: escolha `NÃO SEI` → `codigoEscolhido: null`, sem código
- *    fictício (princípio 3). Empate no topo também é NÃO SEI (sem chute).
+ * 3. Falha segura: `NÃO SEI` → `codigoEscolhido: null`, sem código
+ *    fictício (princípio 3). NÃO SEI vale SÓ sem lastro oficial (zero
+ *    candidatos ou overlap zero); com correspondência na base oficial, a IA
+ *    sugere hipótese provisória baixa ancorada (a verificar), nunca 0% seco.
  */
 import {
   classificarPorDescricao,
@@ -38,11 +45,21 @@ import {
 import {
   analisarFichaAbsoluta,
   montarFichaAbsoluta,
+  montarFichasAbsolutas,
   pontuarFichaAbsoluta,
   type FichaAbsoluta,
   type VereditoAurumAI,
 } from './aurum-ai-contexto'
 import type { ViaClassificacao } from '@/store/ia'
+import {
+  normalizarBusca,
+  tokensRelevantes,
+} from '@/domain/services/busca-texto'
+import {
+  casaToken,
+  expandirSinonimoFiscal,
+} from '@/domain/services/vocabulario'
+import { calibrarConfiancaFinal } from '@/domain/aurum-ai'
 
 export type { ViaClassificacao }
 
@@ -78,35 +95,48 @@ function combinarContextoIa(entrada: EntradaDescricao): string {
  * Seletor Aurum AI local (fora do Electron ou worker ausente).
  *
  * Lê o conjunto absoluto: descrição + caminho hierárquico + ficha (vínculo,
- * capítulo, vigência) + sinônimos/fuzzy. Regras:
- * - empate no topo → NÃO SEI (não chuta entre iguais), MAS com ficha/veredito
- *   do topo para a UI explicar e dar opções (proativo sem chutar);
- * - confiança < 0.2 → NÃO SEI (idem, enriquecido);
+ * capítulo, vigência) + sinônimos/fuzzy. Política de cobertura ancorada:
+ * - NÃO SEI **só** quando não há nenhuma referência interna (zero candidatos
+ *   ou overlap textual zero) — sem lastro, sem chute;
+ * - quando a base oficial TEM correspondências (overlap > 0), a IA SEMPRE
+ *   decide por uma hipótese provisória ancorada (confiança baixa, a verificar),
+ *   nunca 0% seco — mesmo com palavra única, empate ou caminho-hierárquico.
+ *   O resolvedor valida o código ao final (sem alucinação) e a UI pede refino.
  * - regra geral com hipótese condicional tem o teto em 0.60 (média): a IA
- *   sugere, mas nunca afirma "alta" sem vínculo oficial.
+ *   sugere, mas nunca afirma "alta" sem vínculo oficial;
+ * - hipótese provisória por ambiguidade tem o teto em 0.35 (baixa): sugere o
+ *   melhor lastro oficial, mas sinaliza que precisa de 1–2 detalhes.
  */
 async function selecionarAurumAILocal(
   descricao: string,
   candidatos: CandidatoIa[],
 ): Promise<{ codigo: string; confianca: number; motivo: string; ficha: FichaAbsoluta | null; veredito: VereditoAurumAI | null }> {
-  const { tokensRelevantes } = await import('@/domain/services/busca-texto')
-  const { expandirSinonimoFiscal, casaToken } = await import('@/domain/services/vocabulario')
   // Contexto LIMPO: só tokens relevantes (sem "de", "para", "com") + sinônimos.
   // Stopwords no conjunto inflavam todos os candidatos por igual e apagavam a
   // diferença entre o certo e o errado.
+  // v2: imports estáticos (sem `await import` por chamada) + expansão em lote.
   const relevantes = tokensRelevantes(descricao)
   const expandidos = relevantes.map((t) => expandirSinonimoFiscal(t) ?? t)
   const conjunto = new Set([...relevantes, ...expandidos])
   const teto = Math.max(1, relevantes.length)
 
-  // Fichas absolutas em lote (best-effort: sem ficha, avalia só pelo texto).
+  // Fichas absolutas em lote e em paralelo (1 toArray partilhado, não 10
+  // sequenciais). Best-effort: sem ficha, avalia só pelo texto.
   const fichas = new Map<string, FichaAbsoluta>()
-  for (const c of candidatos.slice(0, 10)) {
-    try {
-      fichas.set(c.codigo, await montarFichaAbsoluta(c.codigo))
-    } catch {
-      /* sem ficha: segue pelo texto */
+  try {
+    const lote = await montarFichasAbsolutas(candidatos.slice(0, 10).map((c) => c.codigo))
+    for (const f of lote) fichas.set(String(f.codigo).replace(/\D+/g, ''), f)
+    for (const c of candidatos.slice(0, 10)) {
+      if (!fichas.has(c.codigo) && !fichas.has(String(c.codigo).replace(/\D+/g, ''))) {
+        try {
+          fichas.set(c.codigo, await montarFichaAbsoluta(c.codigo))
+        } catch {
+          /* sem ficha: segue pelo texto */
+        }
+      }
     }
+  } catch {
+    /* sem fichas: segue pelo texto */
   }
 
   const pontuados: { c: CandidatoIa; pontosTexto: number; pontosProprios: number; scoreAbsoluto: number; ficha: FichaAbsoluta | null; dict: boolean }[] = []
@@ -119,12 +149,11 @@ async function selecionarAurumAILocal(
   )
   // Aprendizado com feedback: NCMs que o usuário já rejeitou ("Não é esse")
   // para a MESMA descrição perdem força — a IA não repete o erro.
-  // Best-effort: sem Dexie, segue sem demote.
+  // Best-effort: sem Dexie, segue sem demote. v2: import estático do schema.
   const rejeitados = new Set<string>()
   try {
     const { db } = await import('@/infrastructure/db/schema')
     const fb = await db.table('ia_feedback').orderBy('quando').reverse().limit(30).toArray().catch(() => [])
-    const { normalizarBusca } = await import('@/domain/services/busca-texto')
     const alvoNorm = normalizarBusca(descricao)
     for (const r of fb as { descricao?: unknown; decisao?: unknown }[]) {
       if (r?.decisao && normalizarBusca(r.descricao) === alvoNorm) {
@@ -134,17 +163,21 @@ async function selecionarAurumAILocal(
   } catch {
     /* sem feedback: segue sem demote */
   }
+  // Normalização ÚNICA por candidato (antes: 2 normalizarBusca + 4 splits por
+  // candidato por consulta). Conjuntos pré-computados fora do loop de `q`.
+  const normPorCodigo = new Map<string, { toksRico: Set<string>; toksProprios: Set<string> }>()
   for (const c of candidatos) {
-    const ficha = fichas.get(c.codigo) ?? null
-    // Texto rico = descrição do item + hierarquia + capítulo (a IA lê tudo),
-    // mas o match no item próprio vale mais que o do caminho (precisão).
-    // `c.descricao` aqui é a descrição pura do item (sem caminho — o caminho
-    // vem da ficha). Assim, "milho"/"bovina" (só no caminho) não viram decisão.
+    const ficha = fichas.get(c.codigo) ?? fichas.get(String(c.codigo).replace(/\D+/g, '')) ?? null
     const descricaoPura = String(c.descricao || '').split(' (')[0]
     const textoRico = [c.descricao, ficha?.caminhoTexto ?? '', ficha?.capitulo.nome ?? ''].join(' ')
-    const ctNorm = (await import('@/domain/services/busca-texto')).normalizarBusca(textoRico)
-    const toksRico = new Set(ctNorm.split(' ').filter(Boolean))
-    const toksProprios = new Set((await import('@/domain/services/busca-texto')).normalizarBusca(descricaoPura).split(' ').filter(Boolean))
+    normPorCodigo.set(c.codigo, {
+      toksRico: new Set(normalizarBusca(textoRico).split(' ').filter(Boolean)),
+      toksProprios: new Set(normalizarBusca(descricaoPura).split(' ').filter(Boolean)),
+    })
+  }
+  for (const c of candidatos) {
+    const ficha = fichas.get(c.codigo) ?? fichas.get(String(c.codigo).replace(/\D+/g, '')) ?? null
+    const { toksRico, toksProprios } = normPorCodigo.get(c.codigo) ?? { toksRico: new Set<string>(), toksProprios: new Set<string>() }
     let pontos = 0
     for (const q of conjunto) {
       if (toksRico.has(q)) pontos += 1
@@ -175,7 +208,11 @@ async function selecionarAurumAILocal(
       pontosProprios += 1
     }
     const pontosTexto = pontosProprios > 0 ? pontosProprios + pontos * 0.5 : pontos * 0.5
-    let scoreAbsoluto = ficha ? pontuarFichaAbsoluta(ficha, pontosTexto) : pontosTexto
+    // Pensamento v2: bônus de capítulo coerente + pin entram no score absoluto
+    // (antes só o vínculo contava) — evidências convergentes se somam.
+    let scoreAbsoluto = ficha
+      ? pontuarFichaAbsoluta(ficha, pontosTexto, { bonusPin: temPinDict ? 10 : 0 })
+      : pontosTexto
     // Feedback negativo exato: já rejeitado para esta descrição → perde força
     // (mas continua como pista auditável no Top, nunca some da lista).
     if (rejeitados.has(String(c.codigo).replace(/\D+/g, ''))) scoreAbsoluto -= 500
@@ -190,13 +227,30 @@ async function selecionarAurumAILocal(
   if (!topo || topo.pontosTexto <= 0) {
     return { codigo: 'NÃO SEI', confianca: 0, motivo: 'similaridade-insuficiente', ficha: topo?.ficha ?? null, veredito: vereditoTopo }
   }
-  // Precisão máxima para termo único genérico: match SÓ no caminho/capítulo
-  // (ex.: "milho" só em "Milho.", "bovina" só em "espécie bovina") não decide
-  // entre semente/grão ou reprodução/abate — falta contexto. Exige o termo no
-  // item próprio (ex.: "gatos" em "Alimentos para cães ou gatos…").
+  // Cobertura ancorada: match SÓ no caminho/capítulo (ex.: "cavalo" em
+  // "Cavalos, asininos e muares, vivos.") É lastro oficial real — a IA decide
+  // por hipótese provisória (baixa, a verificar) em vez de 0% seco. Prefere o
+  // genérico ("Outros") ao específico sem lastro quando houver; senão, o topo.
   // Pin do dicionário conta como presença no item (conhecimento curado).
+  // NÃO SEI aqui só quando não há overlap algum (caso acima).
   if (relevantes.length <= 1 && topo.pontosProprios <= 0 && !topo.dict) {
-    return { codigo: 'NÃO SEI', confianca: 0, motivo: 'similaridade-insuficiente', ficha: topo.ficha, veredito: vereditoTopo }
+    const puraDeCaminho = (cand: CandidatoIa): string => String(cand.descricao || '').split(' (')[0]
+    const conjuntoListaCaminho = [...conjunto]
+    const genericosCaminho = pontuados.filter(
+      (p) => p.pontosTexto > 0 && qualificadoresNaoComprovados(puraDeCaminho(p.c), conjuntoListaCaminho).length === 0,
+    )
+    const escolhidoCaminho = genericosCaminho[0] ?? topo
+    const vereditoCaminho = escolhidoCaminho.ficha ? analisarFichaAbsoluta(escolhidoCaminho.ficha) : vereditoTopo
+    if (escolhidoCaminho.ficha?.extinto) {
+      return { codigo: 'NÃO SEI', confianca: 0, motivo: 'ncm-extinto', ficha: escolhidoCaminho.ficha, veredito: vereditoCaminho }
+    }
+    return {
+      codigo: escolhidoCaminho.c.codigo,
+      confianca: escolhidoCaminho.ficha && !escolhidoCaminho.ficha.regraGeral ? 0.35 : 0.3,
+      motivo: `pista-ancorada-base-oficial/caminho-hierarquico${genericosCaminho.length ? '/palavra-unica-generico' : ''}`,
+      ficha: escolhidoCaminho.ficha,
+      veredito: vereditoCaminho,
+    }
   }
   // Trava de especificidade sem lastro — palavra única sem contexto (ex.:
   // "chocolate" não pode virar "Chocolate branco"; verbo isolado como
@@ -210,10 +264,9 @@ async function selecionarAurumAILocal(
     // Verbo provável sem lastro literal na base: a ação não comprova o
     // produto — pede contexto em vez de inferir o substantivo.
     if (unico && ehVerboProvavel(unico)) {
-      const { normalizarBusca: normalizar } = await import('@/domain/services/busca-texto')
       let temLiteral = false
       for (const p of pontuados) {
-        const toks = normalizar(puraDe(p.c)).split(' ').filter(Boolean)
+        const toks = normalizarBusca(puraDe(p.c)).split(' ').filter(Boolean)
         if (toks.some((o) => casaToken(unico, o))) {
           temLiteral = true
           break
@@ -224,9 +277,11 @@ async function selecionarAurumAILocal(
       }
     }
     // Específico com qualificador não comprovado + genérico concorrente com
-    // lastro: prefere o genérico ("retorna só ele"). Sem desempate entre
-    // genéricos (ex.: recheado × não recheado), NÃO SEI — sem contexto não
-    // há como escolher a qualidade.
+    // lastro: prefere o genérico ("retorna só ele"). Entre genéricos empatados
+    // (ex.: recheado × não recheado, "Outros" × "Outros"), sem contexto não há
+    // como escolher a qualidade — mas há lastro oficial, então a IA sugere o
+    // primeiro genérico como hipótese provisória (baixa, a verificar) em vez
+    // de NÃO SEI seco. NÃO SEI fica só para o sem-lastro (caso acima).
     const extrasTopo = qualificadoresNaoComprovados(puraDe(topo.c), conjuntoLista)
     if (extrasTopo.length > 0) {
       const genericos = pontuados.filter(
@@ -235,7 +290,17 @@ async function selecionarAurumAILocal(
       if (genericos.length > 1) {
         const [g1, g2] = genericos
         if (g1 && g2 && Math.abs(g1.pontosTexto - g2.pontosTexto) < 0.01) {
-          return { codigo: 'NÃO SEI', confianca: 0, motivo: MOTIVO_PALAVRA_UNICA_QUALIFICADOR, ficha: g1.ficha, veredito: g1.ficha ? analisarFichaAbsoluta(g1.ficha) : vereditoTopo }
+          const vereditoEmpate = g1.ficha ? analisarFichaAbsoluta(g1.ficha) : vereditoTopo
+          if (g1.ficha?.extinto) {
+            return { codigo: 'NÃO SEI', confianca: 0, motivo: 'ncm-extinto', ficha: g1.ficha, veredito: vereditoEmpate }
+          }
+          return {
+            codigo: g1.c.codigo,
+            confianca: 0.3,
+            motivo: `${MOTIVO_PALAVRA_UNICA_QUALIFICADOR}/pista-ancorada-base-oficial/empate-genericos`,
+            ficha: g1.ficha,
+            veredito: vereditoEmpate,
+          }
         }
         if (g1) {
           topo = g1
@@ -255,29 +320,83 @@ async function selecionarAurumAILocal(
       // "semeadura"). A especificidade aparente é o próprio nome oficial.
     }
   }
-  // Empate textual puro no topo (ignorando bônus de vínculo): sem margem
-  // textual, sem decisão — o bônus oficial desempataria um chute (precisão >
-  // cobertura). Ex.: "milho" empata entre 10051000/10059010 no texto.
-  // Dois pins distintos empatados também recusam (ex.: "provolone parmesão").
+  // Empate no topo: há lastro oficial empatado (ex.: "milho" entre 10051000/
+  // 10059010, "cavalo" entre os 4 do cap. 01). Em vez de NÃO SEI seco, a IA
+  // pensa com os dados do sistema (ficha/vínculo/capítulo já ranquearam no
+  // score absoluto) e sugere o topo como hipótese provisória baixa, a
+  // verificar com 1–2 detalhes. Dois pins distintos empatados também sugerem
+  // (ex.: "provolone parmesão" → primeiro pin, a verificar).
   const empateDict = Boolean(segundo && topo.dict && segundo.dict && Math.abs(topo.pontosTexto - segundo.pontosTexto) < 0.01)
   if (empateDict) {
-    return { codigo: 'NÃO SEI', confianca: 0, motivo: 'similaridade-insuficiente', ficha: topo.ficha, veredito: vereditoTopo }
-  }
-  if (segundo && Math.abs(topo.pontosTexto - segundo.pontosTexto) < 0.01 && topo.pontosTexto <= 1) {
-    return { codigo: 'NÃO SEI', confianca: 0, motivo: 'similaridade-insuficiente', ficha: topo.ficha, veredito: vereditoTopo }
-  }
-  // Palavra única sem contexto: qualquer empate textual no topo é NÃO SEI —
-  // sem a 2ª palavra não há como desempatar nem entre genéricos (ex.:
-  // "Chocolate" recheado × não recheado). Pin curado é exceção (curadoria).
-  if (relevantes.length <= 1 && topo && segundo && !topo.dict) {
-    if (Math.abs(topo.pontosTexto - segundo.pontosTexto) < 0.01) {
-      return { codigo: 'NÃO SEI', confianca: 0, motivo: MOTIVO_PALAVRA_UNICA_EMPATE, ficha: topo.ficha, veredito: vereditoTopo }
+    if (topo.ficha?.extinto) {
+      return { codigo: 'NÃO SEI', confianca: 0, motivo: 'ncm-extinto', ficha: topo.ficha, veredito: vereditoTopo }
+    }
+    return {
+      codigo: topo.c.codigo,
+      confianca: 0.3,
+      motivo: 'empate-pins-ancorado/pista-ancorada-base-oficial',
+      ficha: topo.ficha,
+      veredito: vereditoTopo,
     }
   }
-  let confianca = Math.round((topo.pontosTexto / teto) * 100) / 100
-  confianca = Math.max(0, Math.min(1, confianca))
+  if (segundo && Math.abs(topo.pontosTexto - segundo.pontosTexto) < 0.01 && topo.pontosTexto <= 1) {
+    if (topo.ficha?.extinto) {
+      return { codigo: 'NÃO SEI', confianca: 0, motivo: 'ncm-extinto', ficha: topo.ficha, veredito: vereditoTopo }
+    }
+    return {
+      codigo: topo.c.codigo,
+      confianca: 0.3,
+      motivo: 'empate-textual-ancorado/pista-ancorada-base-oficial',
+      ficha: topo.ficha,
+      veredito: vereditoTopo,
+    }
+  }
+  // Palavra única sem contexto empatada (ex.: "Chocolate" recheado × não
+  // recheado): sugere o topo como provisória baixa em vez de NÃO SEI — o
+  // lastro oficial existe, a UI lista as alternativas e pede o detalhe.
+  // Pin curado continua exceção (curadoria decide sozinho, sem teto extra).
+  if (relevantes.length <= 1 && topo && segundo && !topo.dict) {
+    if (Math.abs(topo.pontosTexto - segundo.pontosTexto) < 0.01) {
+      if (topo.ficha?.extinto) {
+        return { codigo: 'NÃO SEI', confianca: 0, motivo: 'ncm-extinto', ficha: topo.ficha, veredito: vereditoTopo }
+      }
+      return {
+        codigo: topo.c.codigo,
+        confianca: 0.3,
+        motivo: `${MOTIVO_PALAVRA_UNICA_EMPATE}/pista-ancorada-base-oficial`,
+        ficha: topo.ficha,
+        veredito: vereditoTopo,
+      }
+    }
+  }
+  // Confiança calibrada multi-fator (meta ≥0.85 nos casos claros, sem contar
+  // exceções/hipóteses). Antes: overlap puro `pontosTexto/teto` — um único
+  // sinal, sem convergir vínculo/pin/margem. Agora: base textual (55%) +
+  // margem de desempate + vínculo oficial + pin curado + contexto rico.
+  const baseTexto = topo.pontosTexto / teto
+  const margemTopo = segundo ? Math.max(0, topo.pontosTexto - segundo.pontosTexto) : 999
+  let confianca = calibrarConfiancaFinal({
+    baseTexto,
+    margem: margemTopo >= 999 ? 30 : margemTopo * 10,
+    temVinculo: Boolean(topo.ficha && !topo.ficha.regraGeral),
+    temPin: topo.dict,
+    tokens: relevantes.length,
+  })
   if (confianca < LIMIAR_NAO_SEI) {
-    return { codigo: 'NÃO SEI', confianca: 0, motivo: 'similaridade-insuficiente', ficha: topo.ficha, veredito: vereditoTopo }
+    // Cobertura ancorada: overlap existe (lastro oficial), mas a calibragem
+    // ficou abaixo do corte. Em vez de NÃO SEI seco, sugere o topo com o piso
+    // (0,20) como hipótese fraca a verificar — NÃO SEI fica só para o
+    // sem-overlap (caso lá de cima).
+    if (topo.ficha?.extinto) {
+      return { codigo: 'NÃO SEI', confianca: 0, motivo: 'ncm-extinto', ficha: topo.ficha, veredito: vereditoTopo }
+    }
+    return {
+      codigo: topo.c.codigo,
+      confianca: LIMIAR_NAO_SEI,
+      motivo: `similaridade-fraca-ancorada/pista-ancorada-base-oficial${sufixoMotivo}`,
+      ficha: topo.ficha,
+      veredito: vereditoTopo,
+    }
   }
   const veredito = vereditoTopo
   // Teto de precisão: regra geral com hipótese nunca é "alta" — é sugestão
@@ -358,7 +477,21 @@ export async function classificarComIa(
   // caminho/hierarquia a Aurum AI lê via ficha absoluta).
   opts?.aoWorker?.(true)
   const contextoRico = combinarContextoIa(entrada)
-  const achados = await buscarNomenclaturaPorTexto(contextoRico || entrada.descricao, 20)
+  // Tradução fiscal em tempo real (EN→PT): consulta em inglês ancora também
+  // no vocabulário oficial da TEC. Best-effort via worker; sem bridge
+  // (web/testes) ou falha, segue só o original — nunca quebra a consulta.
+  let textoBusca = contextoRico || entrada.descricao
+  if (bridge?.ia && typeof bridge.ia.traduzir === 'function') {
+    try {
+      const t = await bridge.ia.traduzir(textoBusca, 'pt')
+      if (t && t.ok && t.texto && t.texto.trim() && t.texto.trim() !== textoBusca.trim()) {
+        textoBusca = `${textoBusca} ${t.texto.trim()}`
+      }
+    } catch {
+      /* tradução é enriquecimento; o original basta */
+    }
+  }
+  const achados = await buscarNomenclaturaPorTexto(textoBusca, 20)
   const candidatos: CandidatoIa[] = achados.map((a) => ({
     codigo: a.codigo,
     descricao: a.descricao,
@@ -366,7 +499,7 @@ export async function classificarComIa(
   }))
   // Dicionário comercial: pins curados entram no Top mesmo quando o RAG
   // lexical não os encontra ("parmesão" ∉ TEC). O resolvedor valida abaixo.
-  for (const acerto of buscarNoDicionarioComercial(contextoRico || entrada.descricao).slice(0, 6)) {
+  for (const acerto of buscarNoDicionarioComercial(textoBusca).slice(0, 6)) {
     if (candidatos.some((c) => c.codigo === acerto.ncm)) continue
     let descricaoPin = `Dicionário comercial (“${acerto.termo}”)`
     try {
@@ -387,25 +520,46 @@ export async function classificarComIa(
   let mock = true
   if (candidatos.length) {
     if (bridge?.ia) {
-      try {
-        const r = await bridge.ia.classificar(contextoRico || entrada.descricao, candidatos)
-        mock = r.mock
-        if (r.codigo === 'NÃO SEI') {
+      // AI-first no Electron: a decisão VEM do modelo real. Sem modelo
+      // (`ok:false`) ou IPC quebrado, falha FECHADA com erro explícito —
+      // nunca fallback silencioso para o seletor local.
+      const r = await bridge.ia.classificar(contextoRico || entrada.descricao, candidatos).catch((e) => {
+        throw new Error(`Modelo IA obrigatório indisponível: ${e instanceof Error ? e.message : String(e)}`)
+      })
+      if (!r.ok) {
+        throw new Error(`Modelo IA obrigatório indisponível: ${r.erro}`)
+      }
+      mock = r.mock
+      if (r.codigo === 'NÃO SEI') {
+        // Pensamento criterioso com os dados do sistema: o worker real
+        // recusou, mas a base oficial TEM candidatos. Em vez de 0% seco, a
+        // Aurum AI reavalia o Top com o seletor ancorado (ficha absoluta +
+        // vínculo + capítulo + vigência) — nem que demore instantes, a
+        // decisão provisória usa tudo que o sistema já leu.
+        try {
+          const segundaOpiniao = await selecionarAurumAILocal(contextoRico || entrada.descricao, candidatos)
+          if (segundaOpiniao.codigo !== 'NÃO SEI') {
+            escolha = {
+              ...segundaOpiniao,
+              motivo: `${r.motivo}/segunda-opiniao-${segundaOpiniao.motivo}`,
+            }
+          } else {
+            const fichaTopo = await montarFichaAbsoluta(candidatos[0].codigo).catch(() => null)
+            escolha = { codigo: 'NÃO SEI', confianca: 0, motivo: r.motivo, ficha: fichaTopo, veredito: fichaTopo ? analisarFichaAbsoluta(fichaTopo) : null }
+          }
+        } catch {
           const fichaTopo = await montarFichaAbsoluta(candidatos[0].codigo).catch(() => null)
           escolha = { codigo: 'NÃO SEI', confianca: 0, motivo: r.motivo, ficha: fichaTopo, veredito: fichaTopo ? analisarFichaAbsoluta(fichaTopo) : null }
-        } else {
-          // Mesmo com worker real, a ficha absoluta é lida aqui (precisão
-          // máxima): o worker escolhe entre candidatos, a Aurum AI valida e
-          // calibra com o conjunto absoluto antes do resolvedor.
-          const ficha = await montarFichaAbsoluta(r.codigo).catch(() => null)
-          const veredito = ficha ? analisarFichaAbsoluta(ficha) : null
-          let confianca = Math.max(0, Math.min(1, Number(r.confianca) || 0))
-          if (veredito?.exigeVerificacao && confianca > 0.6) confianca = 0.6
-          escolha = { codigo: r.codigo, confianca: Math.round(confianca * 100) / 100, motivo: r.motivo, ficha, veredito }
         }
-      } catch {
-        escolha = await selecionarAurumAILocal(contextoRico || entrada.descricao, candidatos)
-        mock = true
+      } else {
+        // Mesmo com worker real, a ficha absoluta é lida aqui (precisão
+        // máxima): o worker escolhe entre candidatos, a Aurum AI valida e
+        // calibra com o conjunto absoluto antes do resolvedor.
+        const ficha = await montarFichaAbsoluta(r.codigo).catch(() => null)
+        const veredito = ficha ? analisarFichaAbsoluta(ficha) : null
+        let confianca = Math.max(0, Math.min(1, Number(r.confianca) || 0))
+        if (veredito?.exigeVerificacao && confianca > 0.6) confianca = 0.6
+        escolha = { codigo: r.codigo, confianca: Math.round(confianca * 100) / 100, motivo: r.motivo, ficha, veredito }
       }
     } else {
       escolha = await selecionarAurumAILocal(contextoRico || entrada.descricao, candidatos)
@@ -437,13 +591,34 @@ export async function classificarComIa(
           candidatos2.push({ codigo: acerto.ncm, descricao: descricaoPin, score: 999 })
         }
         if (candidatos2.length) {
-          const escolha2 = await selecionarAurumAILocal(textoCorrigido, candidatos2)
-          if (escolha2.codigo !== 'NÃO SEI') {
-            escolha = {
-              ...escolha2,
-              motivo: `${escolha2.motivo}/correcao-ortografica(${correcoes.join(',')})`,
+          // AI-first: com bridge (Electron), a segunda chance também é do
+          // modelo real; sem bridge (web/testes), seletor local.
+          if (bridge?.ia) {
+            const r2 = await bridge.ia.classificar(textoCorrigido, candidatos2).catch(() => null)
+            if (r2 && r2.ok && r2.codigo !== 'NÃO SEI') {
+              const ficha2 = await montarFichaAbsoluta(r2.codigo).catch(() => null)
+              const veredito2 = ficha2 ? analisarFichaAbsoluta(ficha2) : null
+              let confianca2 = Math.max(0, Math.min(1, Number(r2.confianca) || 0))
+              if (veredito2?.exigeVerificacao && confianca2 > 0.6) confianca2 = 0.6
+              mock = r2.mock
+              escolha = {
+                codigo: r2.codigo,
+                confianca: Math.round(confianca2 * 100) / 100,
+                motivo: `${r2.motivo}/correcao-ortografica(${correcoes.join(',')})`,
+                ficha: ficha2,
+                veredito: veredito2,
+              }
+              candidatos.push(...candidatos2.filter((c) => !candidatos.some((x) => x.codigo === c.codigo)))
             }
-            candidatos.push(...candidatos2.filter((c) => !candidatos.some((x) => x.codigo === c.codigo)))
+          } else {
+            const escolha2 = await selecionarAurumAILocal(textoCorrigido, candidatos2)
+            if (escolha2.codigo !== 'NÃO SEI') {
+              escolha = {
+                ...escolha2,
+                motivo: `${escolha2.motivo}/correcao-ortografica(${correcoes.join(',')})`,
+              }
+              candidatos.push(...candidatos2.filter((c) => !candidatos.some((x) => x.codigo === c.codigo)))
+            }
           }
         }
       }
@@ -457,8 +632,13 @@ export async function classificarComIa(
     'Vínculos oficiais da Reforma (CST × cClassTrib)',
     'Capítulos NCM + flags in natura (Art. 137) e alimentos (Art. 135)',
     'Vigência (NCM extinto · cClassTrib · revogação CFF)',
+    'Base oficial · correspondências por nome (NCMs avaliados no Top)',
     ...(escolha.motivo === 'dicionario-comercial' ? ['Dicionário comercial (nomes populares → NCM)'] : []),
+    ...(escolha.motivo.includes('pista-ancorada-base-oficial') || escolha.motivo.includes('ancorado')
+      ? ['Hipótese provisória ancorada — lastro oficial com confiança baixa, a verificar com 1–2 detalhes']
+      : []),
     ...(escolha.motivo.includes('correcao-ortografica') ? ['Correção ortográfica (segunda chance)'] : []),
+    ...(escolha.motivo.includes('segunda-opiniao') ? ['Segunda opinião ancorada (worker recusou, seletor reavaliou o Top oficial)'] : []),
   ]
 
   if (escolha.codigo === 'NÃO SEI') {

@@ -37,7 +37,7 @@ export interface EntradaDicionarioComercial {
   /** Termos normalizados que disparam este pin (frase ou palavra inequívoca). */
   termos: string[]
   /** Prateleira para auditoria/organização. */
-  categoria: 'queijos' | 'carnes-embutidos' | 'eletronicos' | 'alimentos-bebidas' | 'vestuario-calcados' | 'casa-ferramentas' | 'higiene-farmacia' | 'papelaria-brinquedos' | 'autopecas' | 'metalurgia' | 'textil' | 'construcao' | 'moveis'
+  categoria: 'queijos' | 'carnes-embutidos' | 'eletronicos' | 'alimentos-bebidas' | 'vestuario-calcados' | 'casa-ferramentas' | 'higiene-farmacia' | 'papelaria-brinquedos' | 'autopecas' | 'metalurgia' | 'textil' | 'construcao' | 'moveis' | 'quimicos-farma' | 'plasticos-borracha' | 'madeira-papel' | 'maquinas-equipamentos' | 'instrumentos-otica' | 'esporte-lazer'
 }
 
 export const DICIONARIO_COMERCIAL: EntradaDicionarioComercial[] = [
@@ -124,6 +124,43 @@ export const DICIONARIO_COMERCIAL: EntradaDicionarioComercial[] = [
   { ncm: '33051000', categoria: 'higiene-farmacia', termos: ['shampoo', 'shampoo anticaspa'] },
   { ncm: '34011190', categoria: 'higiene-farmacia', termos: ['sabonete', 'sabonete em barra'] },
   { ncm: '34013000', categoria: 'higiene-farmacia', termos: ['sabonete liquido', 'sabao liquido'] },
+  // --- farmácia / químicos (nome comercial → NCM vigente; curadoria 2026-10) ---
+  { ncm: '30041011', categoria: 'quimicos-farma', termos: ['amoxicilina', 'amoxilina'] },
+  { ncm: '30045090', categoria: 'quimicos-farma', termos: ['vitamina', 'polivitaminico', 'suplemento vitaminico'] },
+  { ncm: '30049099', categoria: 'quimicos-farma', termos: ['paracetamol', 'tylenol', 'medicamento generico'] },
+  { ncm: '29331111', categoria: 'quimicos-farma', termos: ['dipirona', 'novalgina'] },
+  { ncm: '29242912', categoria: 'quimicos-farma', termos: ['paracetamol insumo', 'acetaminofeno'] },
+  { ncm: '29051100', categoria: 'quimicos-farma', termos: ['metanol', 'alcool metilico'] },
+  { ncm: '33049910', categoria: 'quimicos-farma', termos: ['protetor solar', 'filtro solar', 'creme hidratante'] },
+  { ncm: '34029039', categoria: 'quimicos-farma', termos: ['detergente concentrado', 'sabao em po'] },
+  { ncm: '31052000', categoria: 'quimicos-farma', termos: ['adubo npk', 'fertilizante npk'] },
+  { ncm: '32061110', categoria: 'quimicos-farma', termos: ['pigmento titanio', 'dioxido de titanio'] },
+  // --- plásticos / borracha ---
+  { ncm: '39011020', categoria: 'plasticos-borracha', termos: ['polietileno com carga', 'granulado de polietileno'] },
+  { ncm: '40011000', categoria: 'plasticos-borracha', termos: ['latex natural', 'borracha natural'] },
+  // --- madeira / papel ---
+  { ncm: '44071100', categoria: 'madeira-papel', termos: ['tabua de pinus', 'madeira de pinus serrada'] },
+  { ncm: '48025510', categoria: 'madeira-papel', termos: ['papel sulfite', 'papel para impressao'] },
+  // --- máquinas / equipamentos ---
+  { ncm: '84151011', categoria: 'maquinas-equipamentos', termos: ['ar condicionado split', 'arcondicionado split'] },
+  { ncm: '85044010', categoria: 'maquinas-equipamentos', termos: ['carregador de celular', 'fonte chaveada'] },
+  { ncm: '85176241', categoria: 'maquinas-equipamentos', termos: ['roteador wifi', 'roteador wireless'] },
+  { ncm: '84713011', categoria: 'maquinas-equipamentos', termos: ['notebook ultrafino', 'laptop ultrafino'] },
+  { ncm: '85171431', categoria: 'maquinas-equipamentos', termos: ['celular basico', 'telefone celular portatil'] },
+  { ncm: '87089990', categoria: 'maquinas-equipamentos', termos: ['peca de carro', 'autopeca original'] },
+  // --- instrumentos / ótica / médico ---
+  { ncm: '90211010', categoria: 'instrumentos-otica', termos: ['aparelho ortopedico', 'ortese'] },
+  { ncm: '90181100', categoria: 'instrumentos-otica', termos: ['eletrocardiografo', 'aparelho de ecg'] },
+  { ncm: '90049090', categoria: 'instrumentos-otica', termos: ['oculos de sol', 'oculos de grau'] },
+  // --- móveis / esporte / lazer ---
+  { ncm: '94036000', categoria: 'moveis', termos: ['guarda roupa', 'roupeiro', 'armario de quarto'] },
+  { ncm: '95069900', categoria: 'esporte-lazer', termos: ['bola de futebol', 'bola esportiva'] },
+  { ncm: '96032100', categoria: 'esporte-lazer', termos: ['escova de dentes', 'escova dental'] },
+  // --- metalurgia complementar ---
+  { ncm: '73041100', categoria: 'metalurgia', termos: ['tubo inox', 'tubo de aco inoxidavel'] },
+  { ncm: '73181100', categoria: 'metalurgia', termos: ['tirafundo', 'parafuso tirafundo'] },
+  { ncm: '76041010', categoria: 'metalurgia', termos: ['barra chata de aluminio'] },
+  { ncm: '52081100', categoria: 'textil', termos: ['tecido tafeta de algodao', 'tecido tafeta'] },
 ]
 
 export interface AcertoDicionario {

@@ -44,6 +44,11 @@ export type SinalFiscal =
   | 'VEICULO'
   | 'COZIDO'
   | 'IN_NATURA'
+  | 'QUIMICO'
+  | 'PLASTICO_BORRACHA'
+  | 'MADEIRA_PAPEL'
+  | 'MAQUINA_EQUIPAMENTO'
+  | 'INSTRUMENTO_OTICA'
 
 export interface AnaliseDescricao {
   /** Texto combinado (descrição + contexto), normalizado. */
@@ -124,9 +129,18 @@ const REGRAS_SINAL: { sinal: SinalFiscal; gatilhos: string[]; capitulos: string[
   { sinal: 'CALCADO', gatilhos: ['calcado', 'sapato', 'tenis', 'chinelo', 'sandalia', 'bota', 'couro', 'bolsa', 'mochila', 'mala', 'cinto'], capitulos: ['41', '42', '64'] },
   { sinal: 'ELETRONICO', gatilhos: ['telefone', 'tablet', 'computador', 'monitor', 'teclado', 'impressora', 'televisao', 'radio', 'audio', 'fone', 'carregador', 'bateria', 'lampada', 'led', 'refrigerador', 'congelador', 'fogao', 'forno', 'microondas', 'condicionador', 'ventilador'], capitulos: ['84', '85'] },
   { sinal: 'MOVEIS', gatilhos: ['assento', 'mesa', 'cama', 'armario', 'estante', 'colchao', 'panela', 'talher', 'copo', 'prato', 'moveis', 'mobilia'], capitulos: ['44', '73', '82', '94'] },
-  { sinal: 'VEICULO', gatilhos: ['veiculo', 'motocicleta', 'caminhao', 'onibus', 'bicicleta', 'pneu', 'retrovisor', 'farol', 'automovel', 'carro', 'moto'], capitulos: ['86', '87'] },
+  { sinal: 'VEICULO', gatilhos: ['veiculo', 'motocicleta', 'caminhao', 'onibus', 'bicicleta', 'pneu', 'retrovisor', 'farol', 'automovel', 'carro', 'moto', 'pneumatico', 'amortecedor', 'embreagem', 'reboque', 'barco', 'aviao', 'helicoptero', 'locomotiva', 'vagao'], capitulos: ['86', '87', '88', '89'] },
   { sinal: 'COZIDO', gatilhos: ['cozido', 'cozida', 'cozidos', 'cozimento', 'precozido'], capitulos: [] },
   { sinal: 'IN_NATURA', gatilhos: ['natura', 'fresco', 'fresca', 'cru', 'crua', 'resfriado', 'congelado'], capitulos: [] },
+  // --- contexto preditivo v2: químicos / plásticos / madeira / máquinas / instrumentos ---
+  // Cada sinal novo carrega capítulos prioritários para o desempate + perguntas
+  // de refino. Gatilhos já normalizados (sem acento) e expandidos via
+  // SINONIMOS_FISCAIS — a prova continua sendo o match oficial + resolvedor.
+  { sinal: 'QUIMICO', gatilhos: ['acido', 'oxido', 'sulfato', 'cloreto', 'nitrato', 'fosfato', 'carbonato', 'hidroxido', 'amonio', 'potassio', 'metanol', 'etanol', 'ureia', 'acetato', 'fertilizante', 'adubo', 'herbicida', 'inseticida', 'fungicida', 'pesticida', 'tinta', 'verniz', 'pigmento', 'corante', 'solvente', 'resina', 'vitamina', 'dipirona', 'paracetamol', 'amoxicilina', 'quimico', 'farmaco'], capitulos: ['28', '29', '30', '31', '32', '33', '34', '38'] },
+  { sinal: 'PLASTICO_BORRACHA', gatilhos: ['plastico', 'etileno', 'propileno', 'pvc', 'acrilico', 'silicone', 'borracha', 'latex', 'polietileno', 'embalagem', 'mangueira'], capitulos: ['39', '40'] },
+  { sinal: 'MADEIRA_PAPEL', gatilhos: ['madeira', 'tabua', 'compensado', 'fibra', 'palete', 'lenha', 'carvao', 'cortica', 'papel', 'papelao', 'cartolina', 'envelope', 'etiqueta', 'livro', 'revista', 'jornal'], capitulos: ['44', '45', '46', '47', '48', '49'] },
+  { sinal: 'MAQUINA_EQUIPAMENTO', gatilhos: ['maquina', 'motor', 'bomba', 'valvula', 'rolamento', 'engrenagem', 'torno', 'fresa', 'prensa', 'furar', 'gerador', 'transformador', 'caldeira', 'compressor', 'trator', 'colheitadeira', 'empilhadeira', 'elevador', 'condicionador', 'roteador', 'servidor', 'transmissao'], capitulos: ['84', '85'] },
+  { sinal: 'INSTRUMENTO_OTICA', gatilhos: ['oculos', 'lente', 'armacao', 'termometro', 'microscopio', 'relogio', 'bussola', 'navegacao', 'ortese', 'protese', 'eletrocardiografo', 'ultrassom', 'tomografo', 'piano', 'violao', 'guitarra'], capitulos: ['90', '91', '92'] },
 ]
 
 /** Expande um token para o vocabulário da nomenclatura (ou `null`). */
@@ -157,6 +171,22 @@ export function expandirConsultas(tokensUteis: string[]): string[] {
   const expandida = [...new Set(expandidos.join(' ').split(' '))].join(' ')
   if (expandida && expandida !== base) consultas.push(expandida)
   return [...new Set(consultas)].slice(0, 2)
+}
+
+/**
+ * Núcleo forte (fallback, NUNCA na rodada primária): os 2 tokens mais
+ * específicos (mais longos) quando há 3+. Descrições reais trazem ruído
+ * ("linha", "novo", "original") que dilui a margem do determinístico — por
+ * isso o núcleo só entra quando a rodada primária + tolerantes deram vazio.
+ */
+export function expandirConsultasNucleoForte(tokensUteis: string[]): string[] {
+  if (tokensUteis.length < 3) return []
+  const nucleo = [...tokensUteis].sort((a, b) => b.length - a.length).slice(0, 2).join(' ')
+  if (!nucleo) return []
+  const out = [nucleo]
+  const nucleoExp = [...new Set(nucleo.split(' ').map((t) => expandirSinonimo(t) ?? t))].join(' ')
+  if (nucleoExp && nucleoExp !== nucleo) out.push(nucleoExp)
+  return [...new Set(out)].slice(0, 2)
 }
 
 /** Tokens de condição de risco: saem da consulta-núcleo (o match é no
@@ -302,6 +332,21 @@ export function perguntasComplementares(analise: AnaliseDescricao): string[] {
   }
   if (analise.sinais.includes('CALCADO')) {
     perguntas.push('Qual o material predominante (couro, têxtil, borracha?) e o tipo (tênis, sapato, bota?)?')
+  }
+  if (analise.sinais.includes('QUIMICO')) {
+    perguntas.push('É princípio ativo, medicamento pronto, fertilizante ou tinta? Informe a composição/concentração e a forma (pó, líquido, comprimido?).')
+  }
+  if (analise.sinais.includes('PLASTICO_BORRACHA')) {
+    perguntas.push('É de plástico ou borracha? Informe o polímero (polietileno, PVC, látex?) e a forma (chapa, tubo, embalagem?).')
+  }
+  if (analise.sinais.includes('MADEIRA_PAPEL')) {
+    perguntas.push('É de madeira ou papel? Informe a espécie/gramatura e a forma (tábua serrada, sulfite, embalagem?).')
+  }
+  if (analise.sinais.includes('MAQUINA_EQUIPAMENTO')) {
+    perguntas.push('Qual a função da máquina (bombear, gerar energia, refrigerar, processar dados?) e suas características (potência, tensão, capacidade?).')
+  }
+  if (analise.sinais.includes('INSTRUMENTO_OTICA')) {
+    perguntas.push('É instrumento médico, ótica ou musical? Informe o uso (diagnóstico, medição, correção visual?) e o tipo.')
   }
   if (!perguntas.length && analise.tokens.length <= 2) {
     perguntas.push('Descreva com mais 1–2 detalhes (material, uso, estado) para a Aurum AI desempatar entre os candidatos.')

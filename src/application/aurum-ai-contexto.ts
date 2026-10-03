@@ -100,11 +100,12 @@ export async function montarFichaAbsoluta(codigo: unknown): Promise<FichaAbsolut
   const redCBS = Number(principal?.resumo?.percentualReducaoCBS ?? 0) || 0
 
   // Caminho hierárquico (capítulo → … → item) para a IA "ler" o contexto.
+  // 1 toArray partilhado por sessão (mapaNomenclatura com cache) em vez de
+  // 1 toArray por candidato — o fallback avaliava 10 fichas sequenciais.
   let caminho: string[] = []
   try {
-    const todas = await db.ncmNomenclatura.toArray()
-    const porCodigo = new Map(todas.map((n) => [n.codigo, n.descricao]))
-    caminho = comporCaminho(c, (p) => porCodigo.get(p))
+    const porCodigo = await mapaNomenclatura()
+    if (porCodigo.size) caminho = comporCaminho(c, (p) => porCodigo.get(p))
   } catch {
     caminho = []
   }
@@ -129,15 +130,39 @@ export async function montarFichaAbsoluta(codigo: unknown): Promise<FichaAbsolut
   }
 }
 
+/** Cache sessão do mapa código→descrição (1 toArray partilhado pelo lote). */
+let _cacheNomenclaturaPorCodigo: Map<string, string> | null = null
+async function mapaNomenclatura(): Promise<Map<string, string>> {
+  if (!_cacheNomenclaturaPorCodigo) {
+    try {
+      const todas = await db.ncmNomenclatura.toArray()
+      _cacheNomenclaturaPorCodigo = new Map(todas.map((n) => [n.codigo, n.descricao]))
+    } catch {
+      _cacheNomenclaturaPorCodigo = new Map()
+    }
+  }
+  return _cacheNomenclaturaPorCodigo
+}
+
+/** Invalida o cache de nomenclatura (chamar após importar/apagar a base). */
+export function invalidarCacheFichaAbsoluta(): void {
+  _cacheNomenclaturaPorCodigo = null
+}
+
 /** Monta fichas em lote (Top-5 do fallback) com tolerância a falha isolada. */
 export async function montarFichasAbsolutas(codigos: string[]): Promise<FichaAbsoluta[]> {
+  // Pré-aquece o mapa partilhado UMA vez para o lote inteiro (1 toArray, não N).
+  try {
+    await mapaNomenclatura()
+  } catch {
+    /* segue sem cache */
+  }
+  const alvos = codigos.slice(0, 10)
+  const resultados = await Promise.allSettled(alvos.map((c) => montarFichaAbsoluta(c)))
   const out: FichaAbsoluta[] = []
-  for (const c of codigos.slice(0, 5)) {
-    try {
-      out.push(await montarFichaAbsoluta(c))
-    } catch {
-      /* candidato sem ficha continua avaliável pelo texto */
-    }
+  for (const r of resultados) {
+    if (r.status === 'fulfilled') out.push(r.value)
+    /* candidato sem ficha continua avaliável pelo texto */
   }
   return out
 }
@@ -237,10 +262,22 @@ export function analisarFichaAbsoluta(ficha: FichaAbsoluta): VereditoAurumAI {
  * texto (0–140) + vínculo oficial (+50) + capítulo coerente (+15) −
  * extinto (1000) − genérico (−20). Usada pelo fallback Aurum AI para ordenar
  * o Top-5 antes da seleção — o resolvedor continua sendo a única verdade.
+ *
+ * Calibragem v2: bônus de vínculo (+50) e capítulo (+15) garantem que o
+ * candidato com fato oficial convergente supere o chute textual puro; o
+ * `scoreTexto` já vem normalizado pelo seletor (0–teto). Mantém a escala
+ * legada para não quebrar o ranqueamento existente.
  */
-export function pontuarFichaAbsoluta(ficha: FichaAbsoluta, scoreTexto: number): number {
+export function pontuarFichaAbsoluta(
+  ficha: FichaAbsoluta,
+  scoreTexto: number,
+  opts?: { capituloCoerente?: boolean; bonusPin?: number },
+): number {
   let s = Number(scoreTexto) || 0
   if (!ficha.regraGeral) s += 50
+  if (opts?.capituloCoerente) s += 15
+  if (opts?.bonusPin) s += Number(opts.bonusPin) || 0
+  if (ficha.manual) s += 25
   if (ficha.extinto) s -= 1000
   if (ficha.revogado) s -= 200
   if (/^\s*(--\s*)?outros?\b/i.test(ficha.nomenclatura?.descricao ?? '')) s -= 20

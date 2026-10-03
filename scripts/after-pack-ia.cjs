@@ -9,8 +9,7 @@
  *   1. Worker copiado (`electron/dist/ia-worker.cjs` + `caminhos-ia.cjs`) — FALHA se ausente.
  *   2. Índice lexical RAG + `.manifest-hash` — FALHA se ausentes.
  *   3. Base `ncm-para-ia.json` (06-02) + `CHECKSUMS.txt` — FALHA se ausentes.
- *   4. GGUF `ailo-152m-v2-q4_k_m.gguf` — só AVISA (modo mock 06-05; o
- *      instalador sai sem modelo e a IA opera em mock/lexical).
+ *   4. GGUF `ailo-152m-v2-q4_k_m.gguf` — OBRIGATÓRIO (AI-first; FALHA se ausente).
  *   5. Se `appOutDir/resources/` já existir, confere que `extraResources`
  *      (`recursos-ia/...`) aterrissou — AVISA se não (não falha: layout varia
  *      por alfo NSIS/DMG/AppImage).
@@ -69,13 +68,14 @@ async function afterPackIa(contexto = {}) {
     }
   }
 
-  // GGUF: aviso, nunca falha (modo mock 06-05).
+  // GGUF: OBRIGATÓRIO em produção (AI-first, modelo embutido nativo).
+  // Sem o modelo o instalador sairia sem IA real — falha o pack.
   const gguf = path.join(raiz, 'recursos-ia', 'modelo', GGUF)
   if (!existe(gguf)) {
-    console.warn(
-      `[afterPack:ia] AVISO: modelo ${GGUF} ausente — instalador sai em modo MOCK ` +
-        '(seletor lexical + overlap). Adquira o GGUF (06-04) e refaça o pack para o modo real.',
+    falhas.push(
+      `recursos-ia/modelo/${GGUF} — modelo IA embutido obrigatório (AI-first); coloque o .gguf em recursos-ia/modelo/ antes do dist`,
     )
+    console.error(`[afterPack:ia] FALTA: recursos-ia/modelo/${GGUF} (modelo IA embutido obrigatório)`)
   } else {
     console.log(`[afterPack:ia] ok: recursos-ia/modelo/${GGUF} (${tamanho(gguf)} bytes)`)
   }
@@ -130,7 +130,14 @@ async function afterPackIa(contexto = {}) {
 
   // Artefatos deliberadamente EXCLUÍDOS do instalador: confirma que o
   // `extraResources` não os puxa por acidente via glob amplo.
-  for (const rel of ['recursos-ia/embedding', 'recursos-ia/modelo']) {
+  // Modelo GGUF: EMBUTIDO nativamente via extraResources (package.json).
+  const ggufEmb = path.join(raiz, 'recursos-ia', 'modelo', GGUF)
+  if (existe(ggufEmb)) {
+    console.log(
+      `[afterPack:ia] ok: modelo embutido nativamente (${tamanho(ggufEmb)} bytes -> resources/recursos-ia/modelo/${GGUF})`,
+    )
+  }
+  for (const rel of ['recursos-ia/embedding']) {
     const abs = path.join(raiz, rel)
     let conteudo = []
     try {

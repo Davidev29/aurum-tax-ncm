@@ -1,76 +1,880 @@
 {
-  "versao": "conhecimento-v1",
-  "geradoEm": "2026-10-02",
-  "descricao": "Pins nome popular → NCM exato (8 dígitos vigentes). Espelho curado de src/domain/constants/dicionario-comercial.ts. FONTE DE CANDIDATOS, nunca decisão: cada pin passa pelo resolvedor. Ver NORMAS-CURADORIA.md antes de adicionar.",
-  "pins": [
-    { "ncm": "04061010", "categoria": "queijos", "termos": ["mussarela", "mozzarella", "queijo mussarela"] },
-    { "ncm": "04061090", "categoria": "queijos", "termos": ["requeijao", "ricota", "cottage", "minas frescal"] },
-    { "ncm": "04062000", "categoria": "queijos", "termos": ["queijo ralado", "parmesao ralado"] },
-    { "ncm": "04063000", "categoria": "queijos", "termos": ["queijo fundido", "polenguinho"] },
-    { "ncm": "04064000", "categoria": "queijos", "termos": ["gorgonzola", "roquefort", "queijo azul"] },
-    { "ncm": "04069010", "categoria": "queijos", "termos": ["parmesao", "parmeggiano", "grana padano"] },
-    { "ncm": "04069020", "categoria": "queijos", "termos": ["provolone", "queijo provolone", "queijo prato", "meia cura"] },
-    { "ncm": "02101100", "categoria": "carnes-embutidos", "termos": ["presunto", "presunto parma"] },
-    { "ncm": "02101200", "categoria": "carnes-embutidos", "termos": ["bacon", "toucinho"] },
-    { "ncm": "02102000", "categoria": "carnes-embutidos", "termos": ["charque", "carne seca", "carne de sol"] },
-    { "ncm": "16010000", "categoria": "carnes-embutidos", "termos": ["mortadela", "linguica calabresa", "salsicha", "salame"] },
-    { "ncm": "85171300", "categoria": "eletronicos", "termos": ["smartphone", "iphone", "telefone inteligente"] },
-    { "ncm": "85182100", "categoria": "eletronicos", "termos": ["alexa", "echo dot", "soundbar", "alto falante inteligente"] },
-    { "ncm": "85183000", "categoria": "eletronicos", "termos": ["headset", "headphone", "airpods", "fone bluetooth"] },
-    { "ncm": "95045000", "categoria": "eletronicos", "termos": ["playstation", "xbox", "nintendo switch", "videogame"] },
-    { "ncm": "21069030", "categoria": "alimentos-bebidas", "termos": ["whey", "whey protein", "creatina"] },
-    { "ncm": "22030000", "categoria": "alimentos-bebidas", "termos": ["cerveja", "cerveja pilsen", "cerveja latao"] },
-    { "ncm": "61091000", "categoria": "vestuario-calcados", "termos": ["camiseta de algodao", "babylook de algodao"] },
-    { "ncm": "64041100", "categoria": "vestuario-calcados", "termos": ["tenis de corrida", "tenis esportivo", "tenis nike"] },
-    { "ncm": "96190000", "categoria": "higiene-farmacia", "termos": ["fralda", "fralda descartavel"] },
-    { "ncm": "40111000", "categoria": "casa-ferramentas", "termos": ["pneu de carro", "pneu aro 14"] },
-    { "ncm": "96081000", "categoria": "papelaria-brinquedos", "termos": ["caneta esferografica", "caneta bic"] },
-    { "ncm": "95030060", "categoria": "papelaria-brinquedos", "termos": ["lego", "blocos de montar"] },
-    { "ncm": "95030022", "categoria": "papelaria-brinquedos", "termos": ["barbie", "boneca barbie", "boneca"] },
-    { "ncm": "40112010", "categoria": "autopecas", "termos": ["pneu de caminhao", "pneu de onibus", "pneu aro 22"] },
-    { "ncm": "68138110", "categoria": "autopecas", "termos": ["pastilha de freio", "pastilha freio"] },
-    { "ncm": "87088000", "categoria": "autopecas", "termos": ["amortecedor", "amortecedor dianteiro", "kit amortecedor"] },
-    { "ncm": "70091000", "categoria": "autopecas", "termos": ["retrovisor", "retrovisor externo", "espelho retrovisor"] },
-    { "ncm": "85122011", "categoria": "autopecas", "termos": ["farol", "farol dianteiro", "farol de milha"] },
-    { "ncm": "85071090", "categoria": "autopecas", "termos": ["bateria automotiva", "bateria de carro", "bateria 60 amperes"] },
-    { "ncm": "84212300", "categoria": "autopecas", "termos": ["filtro de oleo", "filtro de combustivel", "filtro de ar"] },
-    { "ncm": "40103500", "categoria": "autopecas", "termos": ["correia dentada", "correia sincronizadora", "correia do alternador"] },
-    { "ncm": "73181500", "categoria": "metalurgia", "termos": ["parafuso", "parafuso sextavado", "parafuso para madeira"] },
-    { "ncm": "73181600", "categoria": "metalurgia", "termos": ["porca sextavada", "porca de pressao", "porca borboleta"] },
-    { "ncm": "73182100", "categoria": "metalurgia", "termos": ["arruela de pressao"] },
-    { "ncm": "73182200", "categoria": "metalurgia", "termos": ["arruela", "arruela lisa"] },
-    { "ncm": "72142000", "categoria": "metalurgia", "termos": ["vergalhao", "vergalhao de aco", "barra de aco nervurada"] },
-    { "ncm": "73041900", "categoria": "metalurgia", "termos": ["tubo de aco", "tubo de ferro", "cano de aco"] },
-    { "ncm": "73130000", "categoria": "metalurgia", "termos": ["arame farpado"] },
-    { "ncm": "72171090", "categoria": "metalurgia", "termos": ["arame", "arame galvanizado", "arame recozido"] },
-    { "ncm": "76041010", "categoria": "metalurgia", "termos": ["barra de aluminio"] },
-    { "ncm": "76042100", "categoria": "metalurgia", "termos": ["perfil de aluminio", "cantoneira de aluminio"] },
-    { "ncm": "52085200", "categoria": "textil", "termos": ["tecido de algodao", "tricoline", "tecido plano de algodao"] },
-    { "ncm": "60062100", "categoria": "textil", "termos": ["malha de algodao", "tecido de malha"] },
-    { "ncm": "52051200", "categoria": "textil", "termos": ["fio de algodao", "linha de algodao"] },
-    { "ncm": "52094210", "categoria": "textil", "termos": ["tecido jeans", "denim", "tecido denim"] },
-    { "ncm": "62034200", "categoria": "textil", "termos": ["calca jeans", "calca de brim"] },
-    { "ncm": "62044200", "categoria": "textil", "termos": ["vestido de algodao"] },
-    { "ncm": "63026000", "categoria": "textil", "termos": ["toalha de banho", "toalha de algodao"] },
-    { "ncm": "63023100", "categoria": "textil", "termos": ["lencol de algodao", "jogo de cama algodao"] },
-    { "ncm": "69041000", "categoria": "construcao", "termos": ["tijolo", "tijolo de barro", "bloco ceramico"] },
-    { "ncm": "25232910", "categoria": "construcao", "termos": ["cimento", "cimento portland", "saco de cimento"] },
-    { "ncm": "32081010", "categoria": "construcao", "termos": ["tinta de parede", "tinta acrilica", "tinta latex", "lata de tinta"] },
-    { "ncm": "82052000", "categoria": "casa-ferramentas", "termos": ["martelo", "marreta", "martelo de unha"] },
-    { "ncm": "82054000", "categoria": "casa-ferramentas", "termos": ["chave de fenda", "chave philips"] },
-    { "ncm": "82032010", "categoria": "casa-ferramentas", "termos": ["alicate", "alicate universal", "alicate de corte"] },
-    { "ncm": "82021000", "categoria": "casa-ferramentas", "termos": ["serra", "serra manual", "serrote"] },
-    { "ncm": "73239100", "categoria": "casa-ferramentas", "termos": ["panela de ferro", "panela de ferro fundido"] },
-    { "ncm": "76151000", "categoria": "casa-ferramentas", "termos": ["panela de pressao", "panela de aluminio"] },
-    { "ncm": "94031000", "categoria": "moveis", "termos": ["mesa de escritorio", "estante de aco", "arquivo de escritorio"] },
-    { "ncm": "94013900", "categoria": "moveis", "termos": ["cadeira de escritorio", "cadeira gamer", "cadeira giratoria"] },
-    { "ncm": "94042100", "categoria": "moveis", "termos": ["colchao", "colchao de espuma", "colchao casal"] },
-    { "ncm": "96091000", "categoria": "papelaria-brinquedos", "termos": ["lapis", "lapis de cor", "lapis preto"] },
-    { "ncm": "48202000", "categoria": "papelaria-brinquedos", "termos": ["caderno", "caderno espiral", "caderno universitario"] },
-    { "ncm": "42021220", "categoria": "papelaria-brinquedos", "termos": ["mochila", "mochila escolar", "mochila infantil"] },
-    { "ncm": "64039990", "categoria": "vestuario-calcados", "termos": ["sapato social", "sapato de couro"] },
-    { "ncm": "33051000", "categoria": "higiene-farmacia", "termos": ["shampoo", "shampoo anticaspa"] },
-    { "ncm": "34011190", "categoria": "higiene-farmacia", "termos": ["sabonete", "sabonete em barra"] },
-    { "ncm": "34013000", "categoria": "higiene-farmacia", "termos": ["sabonete liquido", "sabao liquido"] }
-  ]
+ "versao": "conhecimento-v2",
+ "geradoEm": "2026-10-03",
+ "descricao": "Pins nome popular → NCM exato (8 dígitos vigentes). Espelho curado de src/domain/constants/dicionario-comercial.ts (expansão máxima v2). FONTE DE CANDIDATOS, nunca decisão: cada pin passa pelo resolvedor. Ver NORMAS-CURADORIA.md antes de adicionar.",
+ "pins": [
+  {
+   "ncm": "04061010",
+   "categoria": "queijos",
+   "termos": [
+    "mussarela",
+    "mozarrela",
+    "mozzarella",
+    "mucarela",
+    "musarela",
+    "mozarela",
+    "queijo mussarela"
+   ]
+  },
+  {
+   "ncm": "04061090",
+   "categoria": "queijos",
+   "termos": [
+    "requeijao",
+    "ricota",
+    "cottage",
+    "queijo cottage",
+    "minas frescal",
+    "queijo minas frescal"
+   ]
+  },
+  {
+   "ncm": "04062000",
+   "categoria": "queijos",
+   "termos": [
+    "queijo ralado",
+    "parmesao ralado",
+    "queijo parmesao ralado"
+   ]
+  },
+  {
+   "ncm": "04063000",
+   "categoria": "queijos",
+   "termos": [
+    "queijo fundido",
+    "polenguinho",
+    "queijo polenguinho"
+   ]
+  },
+  {
+   "ncm": "04064000",
+   "categoria": "queijos",
+   "termos": [
+    "gorgonzola",
+    "roquefort",
+    "queijo azul",
+    "queijo gorgonzola",
+    "queijo roquefort"
+   ]
+  },
+  {
+   "ncm": "04069010",
+   "categoria": "queijos",
+   "termos": [
+    "parmesao",
+    "parmeggiano",
+    "grana padano",
+    "queijo parmesao"
+   ]
+  },
+  {
+   "ncm": "04069020",
+   "categoria": "queijos",
+   "termos": [
+    "provolone",
+    "queijo provolone",
+    "queijo prato",
+    "minas padrao",
+    "queijo minas padrao",
+    "meia cura",
+    "queijo meia cura"
+   ]
+  },
+  {
+   "ncm": "02101100",
+   "categoria": "carnes-embutidos",
+   "termos": [
+    "presunto",
+    "presunto cozido",
+    "presunto cru",
+    "presunto parma"
+   ]
+  },
+  {
+   "ncm": "02101200",
+   "categoria": "carnes-embutidos",
+   "termos": [
+    "bacon",
+    "bacon defumado",
+    "toucinho"
+   ]
+  },
+  {
+   "ncm": "02102000",
+   "categoria": "carnes-embutidos",
+   "termos": [
+    "charque",
+    "carne seca",
+    "carne de sol"
+   ]
+  },
+  {
+   "ncm": "16010000",
+   "categoria": "carnes-embutidos",
+   "termos": [
+    "mortadela",
+    "linguica",
+    "linguica calabresa",
+    "salsicha",
+    "salsichao",
+    "paio",
+    "salame"
+   ]
+  },
+  {
+   "ncm": "85171300",
+   "categoria": "eletronicos",
+   "termos": [
+    "smartphone",
+    "iphone",
+    "celular smartphone",
+    "telefone inteligente"
+   ]
+  },
+  {
+   "ncm": "85182100",
+   "categoria": "eletronicos",
+   "termos": [
+    "alexa",
+    "echo dot",
+    "echo show",
+    "soundbar",
+    "caixa jbl",
+    "alto falante inteligente"
+   ]
+  },
+  {
+   "ncm": "85183000",
+   "categoria": "eletronicos",
+   "termos": [
+    "headset",
+    "headphone",
+    "airpods",
+    "fone bluetooth",
+    "fone de ouvido bluetooth"
+   ]
+  },
+  {
+   "ncm": "95045000",
+   "categoria": "eletronicos",
+   "termos": [
+    "playstation",
+    "xbox",
+    "nintendo switch",
+    "videogame"
+   ]
+  },
+  {
+   "ncm": "21069030",
+   "categoria": "alimentos-bebidas",
+   "termos": [
+    "whey",
+    "whey protein",
+    "creatina",
+    "suplemento whey"
+   ]
+  },
+  {
+   "ncm": "22030000",
+   "categoria": "alimentos-bebidas",
+   "termos": [
+    "cerveja",
+    "cerveja pilsen",
+    "cerveja latao",
+    "cerveja garrafa"
+   ]
+  },
+  {
+   "ncm": "61091000",
+   "categoria": "vestuario-calcados",
+   "termos": [
+    "camiseta de algodao",
+    "babylook de algodao",
+    "regata de algodao",
+    "cropped de algodao"
+   ]
+  },
+  {
+   "ncm": "64041100",
+   "categoria": "vestuario-calcados",
+   "termos": [
+    "tenis de corrida",
+    "tenis esportivo",
+    "tenis nike",
+    "tenis adidas"
+   ]
+  },
+  {
+   "ncm": "96190000",
+   "categoria": "higiene-farmacia",
+   "termos": [
+    "fralda",
+    "fralda descartavel",
+    "fralda infantil"
+   ]
+  },
+  {
+   "ncm": "40111000",
+   "categoria": "casa-ferramentas",
+   "termos": [
+    "pneu de carro",
+    "pneu aro 13",
+    "pneu aro 14",
+    "pneu aro 15"
+   ]
+  },
+  {
+   "ncm": "96081000",
+   "categoria": "papelaria-brinquedos",
+   "termos": [
+    "caneta esferografica",
+    "caneta bic",
+    "caneta azul"
+   ]
+  },
+  {
+   "ncm": "95030060",
+   "categoria": "papelaria-brinquedos",
+   "termos": [
+    "lego",
+    "blocos de montar",
+    "brinquedo de montar"
+   ]
+  },
+  {
+   "ncm": "95030022",
+   "categoria": "papelaria-brinquedos",
+   "termos": [
+    "barbie",
+    "boneca barbie",
+    "boneca"
+   ]
+  },
+  {
+   "ncm": "40112010",
+   "categoria": "autopecas",
+   "termos": [
+    "pneu de caminhao",
+    "pneu de onibus",
+    "pneu aro 22"
+   ]
+  },
+  {
+   "ncm": "68138110",
+   "categoria": "autopecas",
+   "termos": [
+    "pastilha de freio",
+    "pastilha freio"
+   ]
+  },
+  {
+   "ncm": "87088000",
+   "categoria": "autopecas",
+   "termos": [
+    "amortecedor",
+    "amortecedor dianteiro",
+    "kit amortecedor"
+   ]
+  },
+  {
+   "ncm": "70091000",
+   "categoria": "autopecas",
+   "termos": [
+    "retrovisor",
+    "retrovisor externo",
+    "espelho retrovisor"
+   ]
+  },
+  {
+   "ncm": "85122011",
+   "categoria": "autopecas",
+   "termos": [
+    "farol",
+    "farol dianteiro",
+    "farol de milha"
+   ]
+  },
+  {
+   "ncm": "85071090",
+   "categoria": "autopecas",
+   "termos": [
+    "bateria automotiva",
+    "bateria de carro",
+    "bateria 60 amperes"
+   ]
+  },
+  {
+   "ncm": "84212300",
+   "categoria": "autopecas",
+   "termos": [
+    "filtro de oleo",
+    "filtro de combustivel",
+    "filtro de ar"
+   ]
+  },
+  {
+   "ncm": "40103500",
+   "categoria": "autopecas",
+   "termos": [
+    "correia dentada",
+    "correia sincronizadora",
+    "correia do alternador"
+   ]
+  },
+  {
+   "ncm": "73181500",
+   "categoria": "metalurgia",
+   "termos": [
+    "parafuso",
+    "parafuso sextavado",
+    "parafuso para madeira"
+   ]
+  },
+  {
+   "ncm": "73181600",
+   "categoria": "metalurgia",
+   "termos": [
+    "porca sextavada",
+    "porca de pressao",
+    "porca borboleta"
+   ]
+  },
+  {
+   "ncm": "73182100",
+   "categoria": "metalurgia",
+   "termos": [
+    "arruela de pressao"
+   ]
+  },
+  {
+   "ncm": "73182200",
+   "categoria": "metalurgia",
+   "termos": [
+    "arruela",
+    "arruela lisa"
+   ]
+  },
+  {
+   "ncm": "72142000",
+   "categoria": "metalurgia",
+   "termos": [
+    "vergalhao",
+    "vergalhao de aco",
+    "barra de aco nervurada"
+   ]
+  },
+  {
+   "ncm": "73041900",
+   "categoria": "metalurgia",
+   "termos": [
+    "tubo de aco",
+    "tubo de ferro",
+    "cano de aco"
+   ]
+  },
+  {
+   "ncm": "73130000",
+   "categoria": "metalurgia",
+   "termos": [
+    "arame farpado"
+   ]
+  },
+  {
+   "ncm": "72171090",
+   "categoria": "metalurgia",
+   "termos": [
+    "arame",
+    "arame galvanizado",
+    "arame recozido"
+   ]
+  },
+  {
+   "ncm": "76041010",
+   "categoria": "metalurgia",
+   "termos": [
+    "barra de aluminio"
+   ]
+  },
+  {
+   "ncm": "76042100",
+   "categoria": "metalurgia",
+   "termos": [
+    "perfil de aluminio",
+    "cantoneira de aluminio"
+   ]
+  },
+  {
+   "ncm": "52085200",
+   "categoria": "textil",
+   "termos": [
+    "tecido de algodao",
+    "tricoline",
+    "tecido plano de algodao"
+   ]
+  },
+  {
+   "ncm": "60062100",
+   "categoria": "textil",
+   "termos": [
+    "malha de algodao",
+    "tecido de malha"
+   ]
+  },
+  {
+   "ncm": "52051200",
+   "categoria": "textil",
+   "termos": [
+    "fio de algodao",
+    "linha de algodao"
+   ]
+  },
+  {
+   "ncm": "52094210",
+   "categoria": "textil",
+   "termos": [
+    "tecido jeans",
+    "denim",
+    "tecido denim"
+   ]
+  },
+  {
+   "ncm": "62034200",
+   "categoria": "textil",
+   "termos": [
+    "calca jeans",
+    "calca de brim"
+   ]
+  },
+  {
+   "ncm": "62044200",
+   "categoria": "textil",
+   "termos": [
+    "vestido de algodao"
+   ]
+  },
+  {
+   "ncm": "63026000",
+   "categoria": "textil",
+   "termos": [
+    "toalha de banho",
+    "toalha de algodao"
+   ]
+  },
+  {
+   "ncm": "63023100",
+   "categoria": "textil",
+   "termos": [
+    "lencol de algodao",
+    "jogo de cama algodao"
+   ]
+  },
+  {
+   "ncm": "69041000",
+   "categoria": "construcao",
+   "termos": [
+    "tijolo",
+    "tijolo de barro",
+    "bloco ceramico"
+   ]
+  },
+  {
+   "ncm": "25232910",
+   "categoria": "construcao",
+   "termos": [
+    "cimento",
+    "cimento portland",
+    "saco de cimento"
+   ]
+  },
+  {
+   "ncm": "32081010",
+   "categoria": "construcao",
+   "termos": [
+    "tinta de parede",
+    "tinta acrilica",
+    "tinta latex",
+    "lata de tinta"
+   ]
+  },
+  {
+   "ncm": "82052000",
+   "categoria": "casa-ferramentas",
+   "termos": [
+    "martelo",
+    "marreta",
+    "martelo de unha"
+   ]
+  },
+  {
+   "ncm": "82054000",
+   "categoria": "casa-ferramentas",
+   "termos": [
+    "chave de fenda",
+    "chave philips"
+   ]
+  },
+  {
+   "ncm": "82032010",
+   "categoria": "casa-ferramentas",
+   "termos": [
+    "alicate",
+    "alicate universal",
+    "alicate de corte"
+   ]
+  },
+  {
+   "ncm": "82021000",
+   "categoria": "casa-ferramentas",
+   "termos": [
+    "serra",
+    "serra manual",
+    "serrote"
+   ]
+  },
+  {
+   "ncm": "73239100",
+   "categoria": "casa-ferramentas",
+   "termos": [
+    "panela de ferro",
+    "panela de ferro fundido"
+   ]
+  },
+  {
+   "ncm": "76151000",
+   "categoria": "casa-ferramentas",
+   "termos": [
+    "panela de pressao",
+    "panela de aluminio"
+   ]
+  },
+  {
+   "ncm": "94031000",
+   "categoria": "moveis",
+   "termos": [
+    "mesa de escritorio",
+    "estante de aco",
+    "arquivo de escritorio"
+   ]
+  },
+  {
+   "ncm": "94013900",
+   "categoria": "moveis",
+   "termos": [
+    "cadeira de escritorio",
+    "cadeira gamer",
+    "cadeira giratoria"
+   ]
+  },
+  {
+   "ncm": "94042100",
+   "categoria": "moveis",
+   "termos": [
+    "colchao",
+    "colchao de espuma",
+    "colchao casal"
+   ]
+  },
+  {
+   "ncm": "96091000",
+   "categoria": "papelaria-brinquedos",
+   "termos": [
+    "lapis",
+    "lapis de cor",
+    "lapis preto"
+   ]
+  },
+  {
+   "ncm": "48202000",
+   "categoria": "papelaria-brinquedos",
+   "termos": [
+    "caderno",
+    "caderno espiral",
+    "caderno universitario"
+   ]
+  },
+  {
+   "ncm": "42021220",
+   "categoria": "papelaria-brinquedos",
+   "termos": [
+    "mochila",
+    "mochila escolar",
+    "mochila infantil"
+   ]
+  },
+  {
+   "ncm": "64039990",
+   "categoria": "vestuario-calcados",
+   "termos": [
+    "sapato social",
+    "sapato de couro"
+   ]
+  },
+  {
+   "ncm": "33051000",
+   "categoria": "higiene-farmacia",
+   "termos": [
+    "shampoo",
+    "shampoo anticaspa"
+   ]
+  },
+  {
+   "ncm": "34011190",
+   "categoria": "higiene-farmacia",
+   "termos": [
+    "sabonete",
+    "sabonete em barra"
+   ]
+  },
+  {
+   "ncm": "34013000",
+   "categoria": "higiene-farmacia",
+   "termos": [
+    "sabonete liquido",
+    "sabao liquido"
+   ]
+  },
+  {
+   "ncm": "30041011",
+   "categoria": "quimicos-farma",
+   "termos": [
+    "amoxicilina",
+    "amoxilina"
+   ]
+  },
+  {
+   "ncm": "30045090",
+   "categoria": "quimicos-farma",
+   "termos": [
+    "vitamina",
+    "polivitaminico",
+    "suplemento vitaminico"
+   ]
+  },
+  {
+   "ncm": "30049099",
+   "categoria": "quimicos-farma",
+   "termos": [
+    "paracetamol",
+    "tylenol",
+    "medicamento generico"
+   ]
+  },
+  {
+   "ncm": "29331111",
+   "categoria": "quimicos-farma",
+   "termos": [
+    "dipirona",
+    "novalgina"
+   ]
+  },
+  {
+   "ncm": "29242912",
+   "categoria": "quimicos-farma",
+   "termos": [
+    "paracetamol insumo",
+    "acetaminofeno"
+   ]
+  },
+  {
+   "ncm": "29051100",
+   "categoria": "quimicos-farma",
+   "termos": [
+    "metanol",
+    "alcool metilico"
+   ]
+  },
+  {
+   "ncm": "33049910",
+   "categoria": "quimicos-farma",
+   "termos": [
+    "protetor solar",
+    "filtro solar",
+    "creme hidratante"
+   ]
+  },
+  {
+   "ncm": "34029039",
+   "categoria": "quimicos-farma",
+   "termos": [
+    "detergente concentrado",
+    "sabao em po"
+   ]
+  },
+  {
+   "ncm": "31052000",
+   "categoria": "quimicos-farma",
+   "termos": [
+    "adubo npk",
+    "fertilizante npk"
+   ]
+  },
+  {
+   "ncm": "32061110",
+   "categoria": "quimicos-farma",
+   "termos": [
+    "pigmento titanio",
+    "dioxido de titanio"
+   ]
+  },
+  {
+   "ncm": "39011020",
+   "categoria": "plasticos-borracha",
+   "termos": [
+    "polietileno com carga",
+    "granulado de polietileno"
+   ]
+  },
+  {
+   "ncm": "40011000",
+   "categoria": "plasticos-borracha",
+   "termos": [
+    "latex natural",
+    "borracha natural"
+   ]
+  },
+  {
+   "ncm": "44071100",
+   "categoria": "madeira-papel",
+   "termos": [
+    "tabua de pinus",
+    "madeira de pinus serrada"
+   ]
+  },
+  {
+   "ncm": "48025510",
+   "categoria": "madeira-papel",
+   "termos": [
+    "papel sulfite",
+    "papel para impressao"
+   ]
+  },
+  {
+   "ncm": "84151011",
+   "categoria": "maquinas-equipamentos",
+   "termos": [
+    "ar condicionado split",
+    "arcondicionado split"
+   ]
+  },
+  {
+   "ncm": "85044010",
+   "categoria": "maquinas-equipamentos",
+   "termos": [
+    "carregador de celular",
+    "fonte chaveada"
+   ]
+  },
+  {
+   "ncm": "85176241",
+   "categoria": "maquinas-equipamentos",
+   "termos": [
+    "roteador wifi",
+    "roteador wireless"
+   ]
+  },
+  {
+   "ncm": "84713011",
+   "categoria": "maquinas-equipamentos",
+   "termos": [
+    "notebook ultrafino",
+    "laptop ultrafino"
+   ]
+  },
+  {
+   "ncm": "85171431",
+   "categoria": "maquinas-equipamentos",
+   "termos": [
+    "celular basico",
+    "telefone celular portatil"
+   ]
+  },
+  {
+   "ncm": "87089990",
+   "categoria": "maquinas-equipamentos",
+   "termos": [
+    "peca de carro",
+    "autopeca original"
+   ]
+  },
+  {
+   "ncm": "90211010",
+   "categoria": "instrumentos-otica",
+   "termos": [
+    "aparelho ortopedico",
+    "ortese"
+   ]
+  },
+  {
+   "ncm": "90181100",
+   "categoria": "instrumentos-otica",
+   "termos": [
+    "eletrocardiografo",
+    "aparelho de ecg"
+   ]
+  },
+  {
+   "ncm": "90049090",
+   "categoria": "instrumentos-otica",
+   "termos": [
+    "oculos de sol",
+    "oculos de grau"
+   ]
+  },
+  {
+   "ncm": "94036000",
+   "categoria": "moveis",
+   "termos": [
+    "guarda roupa",
+    "roupeiro",
+    "armario de quarto"
+   ]
+  },
+  {
+   "ncm": "95069900",
+   "categoria": "esporte-lazer",
+   "termos": [
+    "bola de futebol",
+    "bola esportiva"
+   ]
+  },
+  {
+   "ncm": "96032100",
+   "categoria": "esporte-lazer",
+   "termos": [
+    "escova de dentes",
+    "escova dental"
+   ]
+  },
+  {
+   "ncm": "73041100",
+   "categoria": "metalurgia",
+   "termos": [
+    "tubo inox",
+    "tubo de aco inoxidavel"
+   ]
+  },
+  {
+   "ncm": "73181100",
+   "categoria": "metalurgia",
+   "termos": [
+    "tirafundo",
+    "parafuso tirafundo"
+   ]
+  },
+  {
+   "ncm": "76041010",
+   "categoria": "metalurgia",
+   "termos": [
+    "barra chata de aluminio"
+   ]
+  },
+  {
+   "ncm": "52081100",
+   "categoria": "textil",
+   "termos": [
+    "tecido tafeta de algodao",
+    "tecido tafeta"
+   ]
+  }
+ ]
 }

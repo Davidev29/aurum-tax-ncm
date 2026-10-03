@@ -188,6 +188,17 @@ const GRUPOS_SINONIMOS_BASE = [
   ['shampoo', 'xampus', 'sabonete', 'sabao', 'saboes'],
   ['lapis', 'caderno', 'mochila', 'caneta'],
   ['sapato', 'calcado', 'tenis'],
+  ['acido', 'sulfurico', 'sulfato', 'cloreto', 'nitrato', 'fosfato', 'carbonato', 'hidroxido', 'oxido', 'potassio', 'magnesio'],
+  ['metanol', 'etanol', 'acetona', 'ureia', 'etileno', 'propileno', 'acetato', 'medicamento'],
+  ['comprimido', 'xarope', 'vacina', 'antibiotico', 'dipirona', 'paracetamol', 'amoxicilina', 'vitamina', 'farmaco'],
+  ['fertilizante', 'adubo', 'herbicida', 'inseticida', 'fungicida', 'pesticida', 'defensivo'],
+  ['tinta', 'verniz', 'pigmento', 'corante', 'solvente', 'resina'],
+  ['plastico', 'polietileno', 'borracha', 'latex', 'embalagem', 'mangueira'],
+  ['madeira', 'tabua', 'compensado', 'papel', 'papelao', 'etiqueta'],
+  ['torno', 'prensa', 'caldeira', 'gerador', 'compressor', 'maquina', 'motor', 'bomba', 'valvula', 'rolamento'],
+  ['oculos', 'lente', 'termometro', 'microscopio', 'relogio', 'protese', 'ultrassom'],
+  ['trator', 'reboque', 'barco', 'aviao', 'veiculo'],
+  ['carne', 'figado', 'coracao', 'camarao', 'peixe', 'fruta', 'legume'],
 ]
 
 /**
@@ -252,6 +263,112 @@ function buscarIndice(ind, consulta, k = 5) {
 }
 
 // ---------------------------------------------------------------------------
+// Tradutor fiscal PT-BR → EN (AI-first, 100% local/offline)
+// ---------------------------------------------------------------------------
+// O AILO-152M é EN-only (tokenizer GPT-2, sem template de chat): o prompt é
+// montado bilíngue — EN traduzido pelo glossário curado
+// (`recursos-ia/conhecimento/glossario-pt-en.json`, embutido no instalador)
+// + PT original. Desconhecido passa em PT (nunca inventa tradução).
+// Single-source: o JSON; aqui só o carregamento preguiçoso + matching guloso.
+
+let glossario = null // { frases, termos, enFrases, enPt } | { vazio: true, ... }
+
+function normalizarChave(chave) {
+  return normalizar(String(chave || '')).replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean).join(' ')
+}
+
+function carregarGlossario() {
+  if (glossario) return glossario
+  try {
+    const raiz = raizProjeto()
+    const p = path.join(raiz, 'recursos-ia', 'conhecimento', 'glossario-pt-en.json')
+    if (fs.existsSync(p)) {
+      const j = JSON.parse(fs.readFileSync(p, 'utf8'))
+      const frases = new Map()
+      for (const [k, v] of Object.entries(j.frases ?? {})) {
+        const nk = normalizarChave(k)
+        if (nk && v) frases.set(nk, String(v))
+      }
+      const termos = new Map()
+      for (const [k, v] of Object.entries(j.termos ?? {})) {
+        const nk = normalizarChave(k)
+        if (nk && v && !termos.has(nk)) termos.set(nk, String(v))
+      }
+      // EN→PT: inversão automática (PT→EN + frases) + curadoria explícita
+      // (`en_para_pt` vence — mapeia para o vocabulário oficial da TEC).
+      const enFrases = new Map()
+      for (const [k, v] of frases) {
+        const nk = normalizarChave(v)
+        if (nk && !enFrases.has(nk)) enFrases.set(nk, k)
+      }
+      const enPt = new Map()
+      for (const [k, v] of termos) {
+        const nk = normalizarChave(v)
+        if (nk && !enPt.has(nk)) enPt.set(nk, k)
+      }
+      for (const [k, v] of Object.entries(j.en_para_pt ?? {})) {
+        const nk = normalizarChave(k)
+        if (nk && v) enPt.set(nk, String(v))
+      }
+      glossario = { frases, termos, enFrases, enPt }
+      return glossario
+    }
+  } catch (_) {
+    // cai no vazio abaixo
+  }
+  glossario = { frases: new Map(), termos: new Map(), enFrases: new Map(), enPt: new Map(), vazio: true }
+  return glossario
+}
+
+function tokensNorm(texto) {
+  return normalizar(texto).replace(/[^a-z0-9]+/g, ' ').split(' ').filter((t) => t.length > 0)
+}
+
+function tokensBrutos(texto) {
+  return String(texto ?? '').replace(/[^A-Za-zÀ-ú0-9]+/g, ' ').split(' ').filter((t) => t.length > 0)
+}
+
+/**
+ * Tradução gulosa por dicionário (frases 3/2g + termos). Desconhecido passa
+ * no original — nunca inventa. `mapas`: [frases, termos].
+ */
+function traduzirComMapas(texto, frases, termos) {
+  const brutos = tokensBrutos(texto)
+  if (!brutos.length) return ''
+  const norms = brutos.map((t) => normalizarChave(t))
+  const out = []
+  let i = 0
+  while (i < brutos.length) {
+    let achou = null
+    for (const n of [3, 2]) {
+      if (i + n > norms.length) continue
+      const chave = norms.slice(i, i + n).join(' ')
+      const en = frases.get(chave)
+      if (en) { achou = { saida: en, n }; break }
+    }
+    if (!achou) {
+      const v = termos.get(norms[i])
+      achou = { saida: v || brutos[i], n: 1 }
+    }
+    out.push(achou.saida)
+    i += achou.n
+  }
+  return out.join(' ')
+}
+
+/** Traduz PT-BR → EN por glossário (frases de 3/2g guloso + termos). */
+function traduzirParaEN(texto) {
+  const g = carregarGlossario()
+  return traduzirComMapas(texto, g.frases, g.termos)
+}
+
+/** Traduz EN → PT-BR por glossário (tempo real; desconhecido passa original). */
+function traduzirParaPT(texto) {
+  const g = carregarGlossario()
+  return traduzirComMapas(texto, g.enFrases, g.enPt)
+}
+
+// ---------------------------------------------------------------------------
 // Índice / base IA (leitura local, preguiçosa)
 // ---------------------------------------------------------------------------
 
@@ -291,10 +408,17 @@ function carregarIndice() {
       for (const item of base.itens ?? []) {
         if (!mapaDescricoes.has(item.codigo)) {
           mapaDescricoes.set(item.codigo, {
-            // Descrição expandida (nomenclatura + capítulo + vínculo): contém
-            // os termos oficiais que o seletor mock usa no overlap.
+            // Ficha oficial completa do item: o prompt do modelo real lê o
+            // nome puro (nomenclatura) + capítulo + vínculo, não o
+            // boilerplate jurídico da descrição expandida.
             descricao: item.descricaoExpandida || item.nomenclatura || item.descricao || '',
+            nomenclatura: item.nomenclatura || '',
             capitulo: item.capitulo?.codigo ?? '',
+            capituloNome: item.capitulo?.descricao || '',
+            vinculo: item.descricaoCClassTrib || '',
+            reducao: (item.pRedIBS != null || item.pRedCBS != null)
+              ? `${item.pRedIBS ?? 0}/${item.pRedCBS ?? 0}`
+              : '',
           })
         }
       }
@@ -383,21 +507,128 @@ function montarPromptRigido(descricao, candidatos) {
   )
 }
 
-/** Seleção via LLM real (somente após `init {modelPath}` bem-sucedido). */
+/**
+ * Prompt bilíngue EN+PT para o AILO-152M (ctx 512, EN-only).
+ * Cada opção carrega o CONJUNTO da base oficial — nome puro (nomenclatura),
+ * capítulo e vínculo tributário — em EN traduzido + PT original:
+ * o modelo lê o inglês, o PT ancora o termo oficial exato.
+ * 6 opções cabem no contexto com folga (~300 tokens GPT-2).
+ */
+function montarPromptCurto(descricao, candidatos, maxCandidatos = 6) {
+  const limpa = (s, n) => String(s || '').replace(/\s+/g, ' ').replace(/<[^>]*>/g, '').trim().slice(0, n)
+  const ptProduto = limpa(descricao, 140)
+  const enProduto = traduzirParaEN(ptProduto).slice(0, 140)
+  const lista = (candidatos || []).slice(0, maxCandidatos).map((c, i) => {
+    const ficha = mapaDescricoes ? mapaDescricoes.get(String(c.codigo).replace(/\D+/g, '')) : undefined
+    const nomePT = limpa(ficha?.nomenclatura || String(c.descricao || '').split(' (')[0], 60)
+    const nomeEN = traduzirParaEN(nomePT).slice(0, 60)
+    const cap = ficha?.capitulo || String(c.capitulo || c.codigo || '').slice(0, 2)
+    const vinc = limpa(ficha?.vinculo, 40)
+    const extra = [cap ? `Ch ${cap}` : '', vinc].filter(Boolean).join(' · ')
+    return `${i + 1}. ${nomeEN} | ${nomePT}${extra ? ` [${extra}]` : ''}`
+  }).join('\n')
+  return (
+    'You are a fiscal classifier. Pick ONE number for the product, or 0 when none fits. Reply with the number only.\n' +
+    `Product: "${enProduto}" ("${ptProduto}")\n` +
+    `Options:\n${lista}\n` +
+    'Answer (number only):'
+  )
+}
+
+/** Gramática GBNF: só o índice (1..N) ou 0 (=NÃO SEI). Sem texto livre. */
+function gramaticaIndices(n) {
+  const alternativas = ['"0"']
+  for (let i = 1; i <= n; i++) alternativas.push(`"${i}"`)
+  return `root ::= (${alternativas.join(' | ')})`
+}
+
+/**
+ * Seleção via LLM real AI-FIRST (somente após `init {modelPath}`).
+ * Geração restrita por gramática (índice 1..N ou 0=NÃO SEI) + temperature 0:
+ * o modelo NUNCA emite texto livre nem inventa código — a resposta é sempre
+ * um índice válido, mapeado aqui para o NCM da lista.
+ */
 async function selecionarReal(descricao, candidatos) {
-  const prompt = montarPromptRigido(descricao, candidatos)
-  let texto = ''
+  const lista = (candidatos || []).slice(0, 6)
+  if (!lista.length) return { codigo: 'NÃO SEI', confianca: 0, motivo: 'sem-candidatos' }
+  if (!String(descricao ?? '').trim()) return { codigo: 'NÃO SEI', confianca: 0, motivo: 'descricao-vazia' }
+  if (!modelo || modelo.mock || !modelo.completion || !modelo.llamaModulo) {
+    return { codigo: 'NÃO SEI', confianca: 0, motivo: 'inferencia-falhou:modelo-real-nao-inicializado' }
+  }
+  // Trava de sanidade (fail-safe, princípio 3): sem NENHUM lastro lexical
+  // entre a descrição e as fichas oficiais, nem o LLM é acordado — NÃO SEI
+  // direto (gibberish, vazio, fora de escopo). O LLM decide AMONG plausíveis.
+  const baseQ = tokenizar(descricao)
+  if (baseQ.length) {
+    const conjuntoQ = new Set(baseQ)
+    for (const { token } of expandirConsulta(baseQ)) conjuntoQ.add(token)
+    // EN→PT em tempo real: consulta em inglês também ancora no PT oficial.
+    for (const t of tokenizar(traduzirParaPT(descricao))) conjuntoQ.add(t)
+    const tetoQ = Math.max(1, baseQ.length)
+    let melhorQ = 0
+    for (const c of lista) {
+      const fichaQ = mapaDescricoes ? mapaDescricoes.get(String(c.codigo).replace(/\D+/g, '')) : undefined
+      const textoFicha = [fichaQ?.nomenclatura || '', c.descricao || '', fichaQ?.capituloNome || '', fichaQ?.vinculo || ''].join(' ')
+      const toksF = tokenizar(textoFicha + ' ' + traduzirParaEN(textoFicha))
+      const setF = new Set(toksF)
+      let pontos = 0
+      for (const t of conjuntoQ) {
+        if (setF.has(t)) { pontos += 1; continue }
+        for (const o of toksF) {
+          if (casaToken(t, o)) { pontos += 0.8; break }
+        }
+      }
+      if (pontos > melhorQ) melhorQ = pontos
+    }
+    if (melhorQ / tetoQ < LIMIAR_NAO_SEI) {
+      return { codigo: 'NÃO SEI', confianca: 0, motivo: 'similaridade-insuficiente+pt-en' }
+    }
+  }
+  const { LlamaGrammar, LlamaText } = modelo.llamaModulo
+  const prompt = montarPromptCurto(descricao, lista)
+  const parada = []
   try {
-    texto = String(await modelo.session.prompt(prompt))
-  } catch (e) {
-    return { codigo: 'NÃO SEI', confianca: 0, motivo: `inferencia-falhou:${e && e.message ? e.message : e}` }
+    parada.push(typeof LlamaText === 'function' ? LlamaText('\n') : '\n')
+  } catch (_) {
+    parada.push('\n')
   }
-  const permitidos = new Set((candidatos || []).map((c) => String(c.codigo).replace(/\D+/g, '')))
-  const achado = (texto.match(/\d{8}/) || [])[0] || ''
-  if (/NÃO SEI/i.test(texto) || !achado || !permitidos.has(achado)) {
-    return { codigo: 'NÃO SEI', confianca: 0, motivo: 'llm-sem-match-ou-fora-da-lista', saidaBruta: texto.slice(0, 120) }
+  // Robustez produção: 2 tentativas (transiente de inferência não vira NÃO SEI
+  // sem tentar de novo). Gramática mantida nas duas — nunca texto livre.
+  let texto = ''
+  let erroFinal = null
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    let gramatica = null
+    try {
+      gramatica = new LlamaGrammar(modelo.llama, { grammar: gramaticaIndices(lista.length) })
+      texto = String(await modelo.completion.generateCompletion(prompt, {
+        maxTokens: 4,
+        temperature: 0,
+        topP: 1,
+        stopGenerationTriggers: parada,
+        grammar: gramatica,
+      }))
+      erroFinal = null
+      break
+    } catch (e) {
+      erroFinal = e
+      texto = ''
+    } finally {
+      try {
+        if (gramatica && typeof gramatica.dispose === 'function') gramatica.dispose()
+      } catch (_) { /* best-effort */ }
+    }
   }
-  return { codigo: achado, confianca: 0.7, motivo: 'llm-prompt-rigido' }
+  if (erroFinal) {
+    return { codigo: 'NÃO SEI', confianca: 0, motivo: `inferencia-falhou:${erroFinal && erroFinal.message ? erroFinal.message : erroFinal}` }
+  }
+  const digitos = String(texto).trim().match(/\d+/)
+  const idx = digitos ? Number(digitos[0]) : NaN
+  if (!Number.isFinite(idx) || idx < 0 || idx > lista.length) {
+    return { codigo: 'NÃO SEI', confianca: 0, motivo: 'llm-indice-invalido', saidaBruta: String(texto).slice(0, 120) }
+  }
+  if (idx === 0) return { codigo: 'NÃO SEI', confianca: 0, motivo: 'llm-nenhum-candidato+pt-en' }
+  const escolhido = lista[idx - 1]
+  return { codigo: String(escolhido.codigo).replace(/\D+/g, '') ? escolhido.codigo : 'NÃO SEI', confianca: 0.7, motivo: 'llm-indice-gramatica+pt-en' }
 }
 
 // ---------------------------------------------------------------------------
@@ -475,11 +706,11 @@ async function tratar(msg) {
       try {
         const llama = await llamaModulo.getLlama()
         const model = await llama.loadModel({ modelPath: alvo })
-        const context = await model.createContext()
+        const context = await model.createContext({ contextSize: 512 })
         const sequence = context.getSequence()
-        const { LlamaChatSession } = llamaModulo
-        const session = new LlamaChatSession({ contextSequence: sequence })
-        modelo = { mock: false, llama, model, context, session, modelPath: alvo }
+        const { LlamaCompletion } = llamaModulo
+        const completion = new LlamaCompletion({ contextSequence: sequence })
+        modelo = { mock: false, llama, llamaModulo, model, context, sequence, completion, modelPath: alvo }
         return { id, ok: true, cmd, mock: false, msLoad: agoraMs() - tIni, ramMB: ramMB(), transporte: canalTipo }
       } catch (e) {
         return { id, ok: false, cmd, erro: `falha ao carregar GGUF: ${e && e.message ? e.message : e}` }
@@ -489,8 +720,21 @@ async function tratar(msg) {
     if (cmd === 'buscar') {
       const k = Number(msg.k) > 0 ? Number(msg.k) : 15
       const ind = carregarIndice()
-      const resultados = enriquecer(buscarIndice(ind, String(msg.consulta ?? ''), k))
+      // EN→PT em tempo real: consulta em inglês busca também em PT oficial.
+      const consultaPT = traduzirParaPT(String(msg.consulta ?? ''))
+      const efetiva = consultaPT && normalizarChave(consultaPT) !== normalizarChave(String(msg.consulta ?? ''))
+        ? `${msg.consulta} ${consultaPT}`
+        : String(msg.consulta ?? '')
+      const resultados = enriquecer(buscarIndice(ind, efetiva, k))
       return { id, ok: true, cmd, candidatos: resultados, total: ind.totalDocs ?? ind.docs.length, ms: agoraMs() - tIni }
+    }
+
+    if (cmd === 'traduzir') {
+      // Tradução em tempo real por dicionário (sem modelo): `para: 'en'|'pt'`.
+      const para = String(msg.para || 'en').toLowerCase().startsWith('pt') ? 'pt' : 'en'
+      const texto = String(msg.texto ?? '')
+      const traduzido = para === 'pt' ? traduzirParaPT(texto) : traduzirParaEN(texto)
+      return { id, ok: true, cmd, para, texto: traduzido, ms: agoraMs() - tIni }
     }
 
     if (cmd === 'selecionar') {
@@ -524,6 +768,8 @@ async function tratar(msg) {
       const resposta = { id, ok: true, cmd, ramMB: ramMB() }
       if (modelo && !modelo.mock) {
         try {
+          if (modelo.completion && typeof modelo.completion.dispose === 'function') await modelo.completion.dispose()
+          else if (modelo.session && typeof modelo.session.dispose === 'function') await modelo.session.dispose()
           if (modelo.context && typeof modelo.context.dispose === 'function') await modelo.context.dispose()
           else if (modelo.model && typeof modelo.model.dispose === 'function') await modelo.model.dispose()
         } catch (_) {

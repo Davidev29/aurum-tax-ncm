@@ -202,7 +202,7 @@ export interface ResumoLote {
   ambiguos: number
   /** Linhas com sugestão forte da IA (múltiplas + nome desempatou). */
   assistidas?: number
-  /** Linhas cujo nome diverge do NCM (revisar o NCM antes de salvar). */
+  /** Mantido por compatibilidade — sempre 0 (alerta nome × NCM removido). */
   divergentes?: number
   /** Linhas com tributação única confirmada. */
   unicas?: number
@@ -315,7 +315,7 @@ export async function processarArquivoLote(
     semNcm: itens.filter((i) => i.ncm.length !== 8).length,
     ambiguos: itens.filter((i) => i.classificacoes.length > 1).length,
     assistidas: itens.filter((i) => i.analiseIA?.situacao === 'multipla' && (i.analiseIA?.confianca ?? 0) >= 0.6).length,
-    divergentes: itens.filter((i) => i.analiseIA?.divergenciaNome).length,
+    divergentes: 0,
     unicas: comAnalise('unica'),
   }
 }

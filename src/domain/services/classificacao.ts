@@ -9,9 +9,10 @@ import type {
   ResumoClassificacao,
   TabelaCst,
   TabelaCstClassTrib,
+  VinculoNbs,
   VinculoNcm,
 } from '../entities'
-import { fmtNcm, norm } from './format'
+import { fmtNbs, fmtNcm, norm } from './format'
 
 /** Peças resolvidas pelo repositório (join 3NF) antes de montar a classificação. */
 export interface ContextoClassificacao {
@@ -59,7 +60,7 @@ function unirDocs(
  * linhas do arquivo original (ver `docs/SPEC-LOGICA-NEGOCIO.md` §2.4).
  */
 export function montarClassificacao(
-  vinculo: VinculoNcm,
+  vinculo: VinculoNcm | VinculoNbs,
   ctx: ContextoClassificacao,
 ): Classificacao {
   const { cstDetalhes, cstClassTribDetalhes, referencia } = ctx
@@ -83,7 +84,10 @@ export function montarClassificacao(
   return {
     id: vinculo.id,
     codigo: vinculo.codigo,
-    codigoFormatado: vinculo.codigoFormatado,
+    codigoFormatado:
+      'codigoFormatado' in vinculo && vinculo.codigoFormatado
+        ? vinculo.codigoFormatado
+        : fmtNbs(vinculo.codigo),
     cst: vinculo.cst,
     cClassTrib: vinculo.cClassTrib,
     baseLegal: vinculo.baseLegal ?? '',

@@ -87,7 +87,7 @@ export function DebugIA() {
 
   const atualizarStatus = useCallback(async () => {
     if (!bridge?.ia) {
-      setConexao({ status: 'desligado', modo: 'desligado', mock: true, erro: 'fora do Electron (fallback local)' })
+      setConexao({ status: 'desligado', modo: 'desligado', mock: true, erro: 'Canal IA indisponível neste ambiente' })
       return
     }
     try {
@@ -169,8 +169,7 @@ export function DebugIA() {
           <h2 className="text-sm font-black">Worker {NOME_IA} (tracer 06-05)</h2>
           <SeloAurumAI variante="compacto" />
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-            status: {status} · modo: {modo}
-            {mock ? ' · modo local' : ' · modelo real'}
+            status: {status} · {modo === 'modelo' ? 'modelo embutido ativo' : modo === 'erro' ? 'IA indisponível' : `modo: ${modo}`}
           </span>
           {erro ? <span className="text-[11px] text-red-500">{erro}</span> : null}
           <button type="button" className="btn btn-press btn-ghost btn-sm ml-auto" onClick={() => void atualizarStatus()}>
@@ -216,7 +215,6 @@ export function DebugIA() {
             <h2 className="text-sm font-black">Última decisão · Sugerido por {NOME_IA}</h2>
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${seloVia(ultima.via)}`}>
               via: {ultima.via}
-              {ultima.mock ? ' · modo local' : ''}
             </span>
             <BarraConfiancaAurumAI valor={ultima.confiancaIa} compact />
             <span className="ml-auto text-[11px] text-slate-400">{ultima.ms} ms</span>

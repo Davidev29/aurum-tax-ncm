@@ -7,7 +7,8 @@
  * - "parmesao" (1 termo) → fallback IA decide 04069010 com
  *   `motivo: 'dicionario-comercial'`, carimbo do resolvedor e veredito de
  *   benefício (CST 200/cClassTrib 200003, redução 100%);
- * - dois pins distintos ("provolone parmesao") continuam NÃO SEI (empate);
+ * - dois pins distintos ("provolone parmesao") sugerem hipótese provisória
+ *   baixa ancorada (primeiro pin, a verificar) em vez de NÃO SEI seco;
  * - ambíguo sem pin ("prato de vidro") continua NÃO SEI.
  */
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
@@ -91,10 +92,14 @@ describe('dicionario no pipeline', () => {
     expect(r.fontes).toContain('Dicionário comercial (nomes populares → NCM)')
   })
 
-  it('dois pins distintos empatam: "provolone parmesao" é NÃO SEI', async () => {
+  it('dois pins distintos empatam: "provolone parmesao" vira hipótese provisória ancorada', async () => {
     const r = await classificarComIA('provolone parmesao')
-    expect(r.codigoEscolhido).toBeNull()
-    expect(r.decisao).toBeNull()
+    expect(r.codigoEscolhido).not.toBeNull()
+    expect(r.decisao).not.toBeNull()
+    expect(r.candidatos.length).toBeGreaterThan(0)
+    expect(r.confiancaIa).toBeGreaterThanOrEqual(0.2)
+    expect(r.confiancaIa).toBeLessThanOrEqual(0.6)
+    expect(r.motivo).toMatch(/pista-ancorada-base-oficial|ancorado/)
   })
 
   it('sem pin continua NÃO SEI: "prato de vidro"', async () => {

@@ -12,28 +12,36 @@
  * só `ia-worker.cjs` é external/copiado. `electron` e `node-llama-cpp` ficam
  * externos no build (ver `electron/esbuild.mjs`).
  *
- * Tracer 06-05: `init` em modo mock por padrão (sem GGUF no repo). Se
- * `AURUM_IA_MODEL` apontar para um `.gguf` existente, tenta o caminho real;
- * qualquer falha cai para o mock com `mock:true` sinalizado no status.
+ * AI-FIRST + embutido nativo: `init` tenta o GGUF empacotado
+ * (`recursos-ia/modelo/*.gguf` via extraResources) ou `AURUM_IA_MODEL`.
+ * Decisões (`classificar`) exigem o modelo real — sem fallback silencioso
+ * para mock: sem modelo, `classificarViaIa()` responde `ok:false` com o
+ * motivo, e o status expõe `modo:'erro'`. O worker em modo lexical segue
+ * ativo apenas para `buscar` (retrieval de candidatos, sem decisão).
+ * Defina `AURUM_AI_FIRST=0` para o comportamento legado (mock permitido).
  *
- * Fallback: se o worker não puder ser criado (ex.: renderer/web sem
- * Electron), `classificarViaIa()` responde com o seletor mock local e
- * `mock:true, fallback:'main'` — a UI nunca trava esperando o modelo.
+ * Fora do Electron (renderer/web sem worker), não há modelo: `classificarViaIa()`
+ * também responde `ok:false` — a camada de aplicação decide (web usa o
+ * seletor local e sinaliza `mock:true`; testes usam esse caminho).
  */
 
 const fs = require('node:fs')
 const {
   resolverWorkerPath: resolverWorkerPathCompartilhado,
+  resolverModeloEfetivo,
 } = require('./caminhos-ia.cjs')
 
 const TIMEOUT_MS = 30_000
 const MODELO_ENV = 'AURUM_IA_MODEL'
+/** AI-first padrão: decisões exigem o GGUF real. `AURUM_AI_FIRST=0` libera o mock legado. */
+const AI_FIRST = (process.env.AURUM_AI_FIRST ?? '1') !== '0'
 
 let proc = null
 let appRef = null
 let seq = 0
 let pronto = false
 let modoMock = true
+let realPronto = false
 let modeloPath = null
 let ultimoErro = null
 const pendentes = new Map()
@@ -142,25 +150,74 @@ async function iniciarIaService(app) {
     return statusIa()
   }
 
-  // Tracer: mock por padrão; caminho real só com GGUF explícito e existente.
-  const candidatoModelo = process.env[MODELO_ENV] || ''
-  const querReal = candidatoModelo.trim().length > 0 && fs.existsSync(candidatoModelo)
+  // Embutido nativo: env explícito primeiro, senão modelo empacotado
+  // (recursos-ia/modelo/*.gguf via extraResources, resolvido por caminhos-ia).
+  const candidatoEnv = process.env[MODELO_ENV] || ''
+  let candidatoModelo = candidatoEnv.trim().length > 0 && fs.existsSync(candidatoEnv) ? candidatoEnv : null
+  let formatoModelo = candidatoModelo ? 'gguf' : null
+  if (!candidatoModelo) {
+    try {
+      const ef = typeof resolverModeloEfetivo === 'function' ? resolverModeloEfetivo(app) : null
+      if (ef && ef.caminho && ef.formato === 'gguf' && fs.existsSync(ef.caminho)) {
+        candidatoModelo = ef.caminho
+        formatoModelo = 'gguf'
+      } else if (ef && ef.formato === 'cifrado') {
+        // Layout protegido 06-08 exige chave (safeStorage/env) + carga via
+        // buffer — pendência UAT documentada.
+        ultimoErro = `modelo cifrado sem carga em memória (UAT-06-08): ${ef.caminho}`
+      }
+    } catch (_) {
+      // resolução nunca quebra o boot
+    }
+  }
+  const querReal = !!candidatoModelo && formatoModelo === 'gguf'
+  const avisoPrevio = ultimoErro
   try {
-    const r = await rpc('init', querReal ? { mock: false, modelPath: candidatoModelo } : { mock: true })
-    if (r.ok) {
-      modoMock = r.mock !== false
-      modeloPath = modoMock ? null : candidatoModelo
-      ultimoErro = null
-    } else {
-      // GGUF/modelo falhou: degrada para mock em vez de quebrar a UI.
+    if (querReal) {
+      const r = await rpc('init', { mock: false, modelPath: candidatoModelo })
+      if (r.ok && r.mock === false) {
+        realPronto = true
+        modoMock = false
+        modeloPath = candidatoModelo
+        ultimoErro = null
+        return statusIa()
+      }
+      // Real falhou: sem fallback silencioso em AI-first.
+      ultimoErro = String(r.erro ?? 'init real falhou')
+      realPronto = false
+      modeloPath = null
+      if (!AI_FIRST) {
+        const r2 = await rpc('init', { mock: true })
+        modoMock = r2.mock !== false
+        ultimoErro = `${ultimoErro}; usando mock legado (AURUM_AI_FIRST=0)`
+        return statusIa()
+      }
+      // AI-first: mantém o worker vivo em modo lexical só para `buscar`;
+      // decisões continuam bloqueadas até o modelo carregar.
+      try {
+        await rpc('init', { mock: true })
+        modoMock = true
+      } catch (_) { /* worker segue sem init */ }
+      return statusIa()
+    }
+    // Sem GGUF: AI-first bloqueia decisões; legado permite mock.
+    realPronto = false
+    modeloPath = null
+    if (!AI_FIRST) {
       const r2 = await rpc('init', { mock: true })
       modoMock = r2.mock !== false
-      modeloPath = null
-      ultimoErro = String(r.erro ?? 'init real falhou; usando mock')
+      ultimoErro = avisoPrevio
+      return statusIa()
     }
+    ultimoErro = avisoPrevio ?? 'Modelo IA obrigatório ausente: recursos-ia/modelo/ailo-152m-v2-q4_k_m.gguf não encontrado.'
+    try {
+      await rpc('init', { mock: true })
+      modoMock = true
+    } catch (_) { /* worker segue sem init */ }
   } catch (e) {
     ultimoErro = e instanceof Error ? e.message : String(e)
-    modoMock = true
+    realPronto = false
+    if (!AI_FIRST) modoMock = true
   }
   return statusIa()
 }
@@ -172,10 +229,11 @@ function statusIa() {
   } catch (_) {
     pid = null
   }
+  const modo = !proc ? 'desligado' : realPronto ? 'modelo' : AI_FIRST ? 'erro' : modoMock ? 'mock' : 'modelo'
   return {
-    pronto,
-    mock: modoMock,
-    modo: !proc ? 'desligado' : modoMock ? 'mock' : 'modelo',
+    pronto: pronto && (realPronto || !AI_FIRST),
+    mock: !realPronto,
+    modo,
     modelPath: modeloPath,
     workerPath: proc ? resolverWorkerPath() : null,
     pid,
@@ -184,25 +242,39 @@ function statusIa() {
 }
 
 /**
- * Classificação via worker. Sem worker vivo, responde com o mock local
- * (`fallback:'main'`) — a UI nunca trava.
+ * Classificação via worker AI-FIRST. Exige o modelo real: sem `realPronto`,
+ * responde `ok:false` (nunca mock silencioso). `buscar` lexical segue
+ * disponível para montar candidatos.
  */
 async function classificarViaIa(descricao, candidatos) {
   if (!proc || !pronto) {
-    const sel = selecionarMockLocal(descricao, candidatos)
-    return { ok: true, mock: true, fallback: 'main', candidatos: candidatos ?? [], ...sel, ms: 0 }
-  }
-  try {
-    const r = await rpc('classificar', { descricao, candidatos })
-    return r
-  } catch (e) {
-    const sel = selecionarMockLocal(descricao, candidatos)
-    return {
-      ok: true, mock: true, fallback: 'main',
-      candidatos: candidatos ?? [], ...sel, ms: 0,
-      erro: e instanceof Error ? e.message : String(e),
+    if (!AI_FIRST) {
+      const sel = selecionarMockLocal(descricao, candidatos)
+      return { ok: true, mock: true, fallback: 'main', candidatos: candidatos ?? [], ...sel, ms: 0 }
     }
+    return { ok: false, mock: false, cmd: 'classificar', erro: ultimoErro ?? 'worker IA não iniciado', candidatos: candidatos ?? [] }
   }
+  if (!realPronto) {
+    if (!AI_FIRST) {
+      try {
+        const r = await rpc('classificar', { descricao, candidatos })
+        return r
+      } catch (e) {
+        const sel = selecionarMockLocal(descricao, candidatos)
+        return {
+          ok: true, mock: true, fallback: 'main',
+          candidatos: candidatos ?? [], ...sel, ms: 0,
+          erro: e instanceof Error ? e.message : String(e),
+        }
+      }
+    }
+    return { ok: false, mock: false, cmd: 'classificar', erro: ultimoErro ?? 'Modelo IA obrigatório indisponível (modo=erro). Verifique recursos-ia/modelo/*.gguf + node-llama-cpp.', candidatos: candidatos ?? [] }
+  }
+  const r = await rpc('classificar', { descricao, candidatos })
+  if (AI_FIRST && r.mock) {
+    return { ok: false, mock: false, cmd: 'classificar', erro: `worker respondeu em modo local (esperado modelo real): ${r.motivo ?? 'mock'}`, candidatos: r.candidatos ?? candidatos ?? [] }
+  }
+  return r
 }
 
 /** Busca RAG (Top-k) via worker; sem worker, lista vazia com erro estruturado. */
@@ -211,6 +283,17 @@ async function buscarViaIa(consulta, k = 5) {
     return { ok: false, cmd: 'buscar', erro: 'worker IA não iniciado', candidatos: [] }
   }
   return rpc('buscar', { consulta, k })
+}
+
+/**
+ * Tradução fiscal em tempo real via worker (dicionário, sem modelo).
+ * Funciona mesmo sem GGUF (só exige o worker vivo para `buscar`).
+ */
+async function traduzirViaIa(texto, para = 'en') {
+  if (!proc || !pronto) {
+    return { ok: false, cmd: 'traduzir', erro: 'worker IA não iniciado', texto: String(texto ?? '') }
+  }
+  return rpc('traduzir', { texto, para })
 }
 
 /**
@@ -239,5 +322,6 @@ module.exports = {
   statusIa,
   classificarViaIa,
   buscarViaIa,
+  traduzirViaIa,
   encerrarIaService,
 }

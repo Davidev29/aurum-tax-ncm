@@ -91,7 +91,8 @@ export function ModalNcmsAnalisados({
   codigoPreferido?: string | null
   titulo?: string
   subtitulo?: string
-  onEscolher: (codigo: string) => void
+  /** Opcional: sem ele, o clique só fecha (modo somente-leitura, ex.: cartões CNAE). */
+  onEscolher?: (codigo: string) => void
 }) {
   const norm = (c: string) => c.replace(/\D+/g, '')
   return (
@@ -110,11 +111,11 @@ export function ModalNcmsAnalisados({
               key={it.codigo}
               type="button"
               onClick={() => {
-                onEscolher(it.codigo)
+                onEscolher?.(it.codigo)
                 onFechar()
               }}
               className={`consulta-ncm-item${preferido ? ' consulta-ncm-item--preferido' : ''}`}
-              title={preferido ? 'Referência preferida da IA — clique para classificar oficialmente' : 'Clique para classificar oficialmente'}
+              title={preferido ? 'Referência preferida da IA' : onEscolher ? 'Clique para classificar oficialmente' : it.titulo}
             >
               <span className="consulta-ncm-item-topo">
                 <span className="font-mono text-sm font-black text-brand-700 dark:text-aurum-200">

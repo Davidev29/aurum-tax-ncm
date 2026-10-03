@@ -1,23 +1,306 @@
 {
-  "versao": "conhecimento-v1",
-  "descricao": "Marcas, siglas e inglês comercial → hiperônimo oficial. Usado para expandir a consulta, nunca para decidir. A decisão final é sempre do resolvedor sobre a base oficial.",
-  "entradas": [
-    { "termo": "samsung", "expansao": "telefone", "nota": "celulares Samsung" },
-    { "termo": "motorola", "expansao": "telefone", "nota": "celulares Motorola" },
-    { "termo": "xiaomi", "expansao": "telefone", "nota": "celulares Xiaomi" },
-    { "termo": "lg", "expansao": "televisao", "nota": "TVs LG" },
-    { "termo": "sony", "expansao": "televisao", "nota": "TVs Sony" },
-    { "termo": "nescau", "expansao": "cacau", "nota": "achocolatado" },
-    { "termo": "danone", "expansao": "iogurte", "nota": "iogurtes" },
-    { "termo": "nike", "expansao": "calcado", "nota": "só em frase: tenis nike" },
-    { "termo": "adidas", "expansao": "calcado", "nota": "só em frase: tenis adidas" },
-    { "termo": "tv", "expansao": "televisao", "nota": "sigla" },
-    { "termo": "pc", "expansao": "computador", "nota": "sigla" },
-    { "termo": "ar cond", "expansao": "condicionador", "nota": "ar-condicionado" },
-    { "termo": "headset", "expansao": "fone", "nota": "inglês" },
-    { "termo": "whey", "expansao": "suplemento", "nota": "inglês suplemento" },
-    { "termo": "pet food", "expansao": "alimentacao", "nota": "ração pet" },
-    { "termo": "notebook", "expansao": "processamento dados", "nota": "via grupos do índice" },
-    { "termo": "air fryer", "expansao": "grelha", "nota": "fritadeira sem óleo" }
-  ]
+ "versao": "conhecimento-v2",
+ "descricao": "Marcas, siglas e inglês comercial → hiperônimo oficial. Usado para expandir a consulta, nunca para decidir. A decisão final é sempre do resolvedor sobre a base oficial.",
+ "entradas": [
+  {
+   "termo": "samsung",
+   "expansao": "telefone",
+   "nota": "celulares Samsung"
+  },
+  {
+   "termo": "motorola",
+   "expansao": "telefone",
+   "nota": "celulares Motorola"
+  },
+  {
+   "termo": "xiaomi",
+   "expansao": "telefone",
+   "nota": "celulares Xiaomi"
+  },
+  {
+   "termo": "lg",
+   "expansao": "televisao",
+   "nota": "TVs LG"
+  },
+  {
+   "termo": "sony",
+   "expansao": "televisao",
+   "nota": "TVs Sony"
+  },
+  {
+   "termo": "nescau",
+   "expansao": "cacau",
+   "nota": "achocolatado"
+  },
+  {
+   "termo": "danone",
+   "expansao": "iogurte",
+   "nota": "iogurtes"
+  },
+  {
+   "termo": "nike",
+   "expansao": "calcado",
+   "nota": "só em frase: tenis nike"
+  },
+  {
+   "termo": "adidas",
+   "expansao": "calcado",
+   "nota": "só em frase: tenis adidas"
+  },
+  {
+   "termo": "tv",
+   "expansao": "televisao",
+   "nota": "sigla"
+  },
+  {
+   "termo": "pc",
+   "expansao": "computador",
+   "nota": "sigla"
+  },
+  {
+   "termo": "ar cond",
+   "expansao": "condicionador",
+   "nota": "ar-condicionado"
+  },
+  {
+   "termo": "headset",
+   "expansao": "fone",
+   "nota": "inglês"
+  },
+  {
+   "termo": "whey",
+   "expansao": "suplemento",
+   "nota": "inglês suplemento"
+  },
+  {
+   "termo": "pet food",
+   "expansao": "alimentacao",
+   "nota": "ração pet"
+  },
+  {
+   "termo": "notebook",
+   "expansao": "processamento dados",
+   "nota": "via grupos do índice"
+  },
+  {
+   "termo": "air fryer",
+   "expansao": "grelha",
+   "nota": "fritadeira sem óleo"
+  },
+  {
+   "termo": "tcl",
+   "expansao": "televisao",
+   "nota": "TVs TCL"
+  },
+  {
+   "termo": "aoc",
+   "expansao": "monitor",
+   "nota": "monitores AOC"
+  },
+  {
+   "termo": "dell",
+   "expansao": "computador",
+   "nota": "notebooks Dell"
+  },
+  {
+   "termo": "hp",
+   "expansao": "computador",
+   "nota": "notebooks HP"
+  },
+  {
+   "termo": "lenovo",
+   "expansao": "computador",
+   "nota": "notebooks Lenovo"
+  },
+  {
+   "termo": "asus",
+   "expansao": "computador",
+   "nota": "notebooks Asus"
+  },
+  {
+   "termo": "acer",
+   "expansao": "computador",
+   "nota": "notebooks Acer"
+  },
+  {
+   "termo": "apple",
+   "expansao": "telefone",
+   "nota": "iPhones Apple"
+  },
+  {
+   "termo": "airpods",
+   "expansao": "fone",
+   "nota": "fones Apple"
+  },
+  {
+   "termo": "jbl",
+   "expansao": "altifalante",
+   "nota": "caixas JBL"
+  },
+  {
+   "termo": "gopro",
+   "expansao": "camera",
+   "nota": "câmeras GoPro"
+  },
+  {
+   "termo": "canon",
+   "expansao": "camera",
+   "nota": "câmeras Canon"
+  },
+  {
+   "termo": "nikon",
+   "expansao": "camera",
+   "nota": "câmeras Nikon"
+  },
+  {
+   "termo": "fiat",
+   "expansao": "veiculo",
+   "nota": "carros Fiat"
+  },
+  {
+   "termo": "volkswagen",
+   "expansao": "veiculo",
+   "nota": "carros VW"
+  },
+  {
+   "termo": "ford",
+   "expansao": "veiculo",
+   "nota": "carros Ford"
+  },
+  {
+   "termo": "chevrolet",
+   "expansao": "veiculo",
+   "nota": "carros Chevrolet"
+  },
+  {
+   "termo": "toyota",
+   "expansao": "veiculo",
+   "nota": "carros Toyota"
+  },
+  {
+   "termo": "honda",
+   "expansao": "motocicleta",
+   "nota": "motos Honda"
+  },
+  {
+   "termo": "yamaha",
+   "expansao": "motocicleta",
+   "nota": "motos Yamaha"
+  },
+  {
+   "termo": "tramontina",
+   "expansao": "talher",
+   "nota": "talheres Tramontina"
+  },
+  {
+   "termo": "havaianas",
+   "expansao": "chinelo",
+   "nota": "chinelos"
+  },
+  {
+   "termo": "lacta",
+   "expansao": "chocolate",
+   "nota": "chocolates Lacta"
+  },
+  {
+   "termo": "garoto",
+   "expansao": "chocolate",
+   "nota": "chocolates Garoto"
+  },
+  {
+   "termo": "sadia",
+   "expansao": "carne",
+   "nota": "carnes Sadia"
+  },
+  {
+   "termo": "seara",
+   "expansao": "carne",
+   "nota": "carnes Seara"
+  },
+  {
+   "termo": "perdigao",
+   "expansao": "carne",
+   "nota": "carnes Perdigão"
+  },
+  {
+   "termo": "italac",
+   "expansao": "leite",
+   "nota": "leites Italac"
+  },
+  {
+   "termo": "piracanjuba",
+   "expansao": "leite",
+   "nota": "leites Piracanjuba"
+  },
+  {
+   "termo": "elege",
+   "expansao": "leite",
+   "nota": "leites Elegê"
+  },
+  {
+   "termo": "tody",
+   "expansao": "cacau",
+   "nota": "achocolatado Tody"
+  },
+  {
+   "termo": "sustagen",
+   "expansao": "suplemento",
+   "nota": "suplementos"
+  },
+  {
+   "termo": "ensure",
+   "expansao": "suplemento",
+   "nota": "suplementos"
+  },
+  {
+   "termo": "neosaldina",
+   "expansao": "analgesico",
+   "nota": "analgésicos"
+  },
+  {
+   "termo": "tylenol",
+   "expansao": "analgesico",
+   "nota": "paracetamol"
+  },
+  {
+   "termo": "advil",
+   "expansao": "antiinflamatorio",
+   "nota": "ibuprofeno"
+  },
+  {
+   "termo": "novalgina",
+   "expansao": "dipirona",
+   "nota": "dipirona"
+  },
+  {
+   "termo": "usb",
+   "expansao": "transmissao",
+   "nota": "sigla USB"
+  },
+  {
+   "termo": "hdmi",
+   "expansao": "transmissao",
+   "nota": "sigla HDMI"
+  },
+  {
+   "termo": "wifi",
+   "expansao": "transmissao",
+   "nota": "sigla Wi-Fi"
+  },
+  {
+   "termo": "bluetooth",
+   "expansao": "transmissao",
+   "nota": "sigla BT"
+  },
+  {
+   "termo": "lcd",
+   "expansao": "cristal",
+   "nota": "telas LCD"
+  },
+  {
+   "termo": "kindle",
+   "expansao": "leitor",
+   "nota": "e-readers"
+  }
+ ]
 }

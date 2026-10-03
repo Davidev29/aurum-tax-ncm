@@ -118,7 +118,7 @@ describe('analisarItemLoteIA', () => {
     expect(a.resumo).toMatch(/não desempatou|empate/i)
   })
 
-  it('nome divergente do NCM gera alerta sem trocar a tributação', () => {
+  it('nome comercial diferente do texto oficial não gera alerta — o NCM manda', () => {
     const c = opcao({
       cst: '000', cClassTrib: '000002', descricao: 'Carne bovina fresca', baseLegal: 'LC 214/2025',
       resumo: { descricaoCClassTrib: 'Carne bovina', percentualReducaoIBS: 100, percentualReducaoCBS: 100, anexo: null, urlLegislacao: null, documentosHabilitados: null },
@@ -127,8 +127,8 @@ describe('analisarItemLoteIA', () => {
       nome: 'Notebook gamer 15 polegadas', ncm: '02011000', classificacoes: [c],
       regraGeral: false, manual: false, extinto: false, nomenclaturaDescricao: 'Carne bovina fresca',
     })
-    expect(a.divergenciaNome).toBe(true)
-    expect(a.alertas.join(' ')).toMatch(/NCM manda/i)
+    expect(a.divergenciaNome).toBe(false)
+    expect(a.alertas).toHaveLength(0)
     expect(a.maisProvavelIndice).toBe(0)
   })
 

@@ -1,53 +1,361 @@
 {
-  "versao": "conhecimento-v1",
-  "descricao": "Frases-modelo reais (anonimizadas) → NCM validado pelo resolvedor. Semente de fine-tuning simulado: cada frase vira consulta de regressão em testar-indice-ia.mjs. Adicionar só após validação humana + resolverClassificacoes.",
-  "frases": [
-    { "consulta": "queijo parmesao", "ncm": "04069010", "fonte": "dicionario" },
-    { "consulta": "queijo mussarela", "ncm": "04061010", "fonte": "dicionario" },
-    { "consulta": "mortadela", "ncm": "16010000", "fonte": "dicionario" },
-    { "consulta": "presunto parma", "ncm": "02101100", "fonte": "dicionario" },
-    { "consulta": "smartphone samsung", "ncm": "85171300", "fonte": "marca" },
-    { "consulta": "alexa echo dot", "ncm": "85182100", "fonte": "marca" },
-    { "consulta": "fone bluetooth", "ncm": "85183000", "fonte": "dicionario" },
-    { "consulta": "playstation 5", "ncm": "95045000", "fonte": "dicionario" },
-    { "consulta": "whey protein", "ncm": "21069030", "fonte": "dicionario" },
-    { "consulta": "cerveja pilsen", "ncm": "22030000", "fonte": "dicionario" },
-    { "consulta": "camiseta de algodao", "ncm": "61091000", "fonte": "dicionario" },
-    { "consulta": "tenis de corrida nike", "ncm": "64041100", "fonte": "dicionario" },
-    { "consulta": "fralda descartavel", "ncm": "96190000", "fonte": "dicionario" },
-    { "consulta": "pneu de carro aro 14", "ncm": "40111000", "fonte": "dicionario" },
-    { "consulta": "caneta esferografica azul", "ncm": "96081000", "fonte": "dicionario" },
-    { "consulta": "lego blocos de montar", "ncm": "95030060", "fonte": "dicionario" },
-    { "consulta": "boneca barbie", "ncm": "95030022", "fonte": "dicionario" },
-    { "consulta": "boi vivo nelore para reproducao", "ncm": "01022919", "fonte": "vocabulario" },
-    { "consulta": "semente de milho para plantio", "ncm": "10051000", "fonte": "vocabulario" },
-    { "consulta": "racao para caes", "ncm": "23091000", "fonte": "vocabulario" },
-    { "consulta": "pastilha de freio", "ncm": "68138110", "fonte": "dicionario" },
-    { "consulta": "amortecedor dianteiro", "ncm": "87088000", "fonte": "dicionario" },
-    { "consulta": "retrovisor externo", "ncm": "70091000", "fonte": "dicionario" },
-    { "consulta": "farol dianteiro", "ncm": "85122011", "fonte": "dicionario" },
-    { "consulta": "bateria automotiva 60 amperes", "ncm": "85071090", "fonte": "dicionario" },
-    { "consulta": "filtro de oleo", "ncm": "84212300", "fonte": "dicionario" },
-    { "consulta": "correia dentada", "ncm": "40103500", "fonte": "dicionario" },
-    { "consulta": "parafuso sextavado", "ncm": "73181500", "fonte": "dicionario" },
-    { "consulta": "vergalhao de aco", "ncm": "72142000", "fonte": "dicionario" },
-    { "consulta": "tubo de aco", "ncm": "73041900", "fonte": "dicionario" },
-    { "consulta": "arame galvanizado", "ncm": "72171090", "fonte": "dicionario" },
-    { "consulta": "barra de aluminio", "ncm": "76041010", "fonte": "dicionario" },
-    { "consulta": "tecido de algodao tricoline", "ncm": "52085200", "fonte": "dicionario" },
-    { "consulta": "fio de algodao", "ncm": "52051200", "fonte": "dicionario" },
-    { "consulta": "calca jeans", "ncm": "62034200", "fonte": "dicionario" },
-    { "consulta": "toalha de banho algodao", "ncm": "63026000", "fonte": "dicionario" },
-    { "consulta": "saco de cimento portland", "ncm": "25232910", "fonte": "dicionario" },
-    { "consulta": "martelo de unha", "ncm": "82052000", "fonte": "dicionario" },
-    { "consulta": "chave de fenda", "ncm": "82054000", "fonte": "dicionario" },
-    { "consulta": "alicate universal", "ncm": "82032010", "fonte": "dicionario" },
-    { "consulta": "panela de pressao", "ncm": "76151000", "fonte": "dicionario" },
-    { "consulta": "cadeira de escritorio", "ncm": "94013900", "fonte": "dicionario" },
-    { "consulta": "colchao de espuma casal", "ncm": "94042100", "fonte": "dicionario" },
-    { "consulta": "caderno espiral universitario", "ncm": "48202000", "fonte": "dicionario" },
-    { "consulta": "mochila escolar", "ncm": "42021220", "fonte": "dicionario" },
-    { "consulta": "sapato social de couro", "ncm": "64039990", "fonte": "dicionario" },
-    { "consulta": "sabonete em barra", "ncm": "34011190", "fonte": "dicionario" }
-  ]
+ "versao": "conhecimento-v2",
+ "descricao": "Frases-modelo reais (anonimizadas) → NCM validado pelo resolvedor. Semente de fine-tuning simulado: cada frase vira consulta de regressão em testar-indice-ia.mjs. Adicionar só após validação humana + resolverClassificacoes.",
+ "frases": [
+  {
+   "consulta": "queijo parmesao",
+   "ncm": "04069010",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "queijo mussarela",
+   "ncm": "04061010",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "mortadela",
+   "ncm": "16010000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "presunto parma",
+   "ncm": "02101100",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "smartphone samsung",
+   "ncm": "85171300",
+   "fonte": "marca"
+  },
+  {
+   "consulta": "alexa echo dot",
+   "ncm": "85182100",
+   "fonte": "marca"
+  },
+  {
+   "consulta": "fone bluetooth",
+   "ncm": "85183000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "playstation 5",
+   "ncm": "95045000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "whey protein",
+   "ncm": "21069030",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "cerveja pilsen",
+   "ncm": "22030000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "camiseta de algodao",
+   "ncm": "61091000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "tenis de corrida nike",
+   "ncm": "64041100",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "fralda descartavel",
+   "ncm": "96190000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "pneu de carro aro 14",
+   "ncm": "40111000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "caneta esferografica azul",
+   "ncm": "96081000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "lego blocos de montar",
+   "ncm": "95030060",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "boneca barbie",
+   "ncm": "95030022",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "boi vivo nelore para reproducao",
+   "ncm": "01022919",
+   "fonte": "vocabulario"
+  },
+  {
+   "consulta": "semente de milho para plantio",
+   "ncm": "10051000",
+   "fonte": "vocabulario"
+  },
+  {
+   "consulta": "racao para caes",
+   "ncm": "23091000",
+   "fonte": "vocabulario"
+  },
+  {
+   "consulta": "pastilha de freio",
+   "ncm": "68138110",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "amortecedor dianteiro",
+   "ncm": "87088000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "retrovisor externo",
+   "ncm": "70091000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "farol dianteiro",
+   "ncm": "85122011",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "bateria automotiva 60 amperes",
+   "ncm": "85071090",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "filtro de oleo",
+   "ncm": "84212300",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "correia dentada",
+   "ncm": "40103500",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "parafuso sextavado",
+   "ncm": "73181500",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "vergalhao de aco",
+   "ncm": "72142000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "tubo de aco",
+   "ncm": "73041900",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "arame galvanizado",
+   "ncm": "72171090",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "barra de aluminio",
+   "ncm": "76041010",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "tecido de algodao tricoline",
+   "ncm": "52085200",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "fio de algodao",
+   "ncm": "52051200",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "calca jeans",
+   "ncm": "62034200",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "toalha de banho algodao",
+   "ncm": "63026000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "saco de cimento portland",
+   "ncm": "25232910",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "martelo de unha",
+   "ncm": "82052000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "chave de fenda",
+   "ncm": "82054000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "alicate universal",
+   "ncm": "82032010",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "panela de pressao",
+   "ncm": "76151000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "cadeira de escritorio",
+   "ncm": "94013900",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "colchao de espuma casal",
+   "ncm": "94042100",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "caderno espiral universitario",
+   "ncm": "48202000",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "mochila escolar",
+   "ncm": "42021220",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "sapato social de couro",
+   "ncm": "64039990",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "sabonete em barra",
+   "ncm": "34011190",
+   "fonte": "dicionario"
+  },
+  {
+   "consulta": "amoxicilina 500mg",
+   "ncm": "30041011",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "dipirona gotas",
+   "ncm": "29331111",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "paracetamol 750mg",
+   "ncm": "30049099",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "protetor solar fator 50",
+   "ncm": "33049910",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "detergente em po",
+   "ncm": "34029039",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "adubo npk",
+   "ncm": "31052000",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "tabua de pinus",
+   "ncm": "44071100",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "papel sulfite a4",
+   "ncm": "48025510",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "ar condicionado split",
+   "ncm": "84151011",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "carregador de celular",
+   "ncm": "85044010",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "roteador wifi",
+   "ncm": "85176241",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "notebook ultrafino",
+   "ncm": "84713011",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "aparelho ortopedico",
+   "ncm": "90211010",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "eletrocardiografo",
+   "ncm": "90181100",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "oculos de sol",
+   "ncm": "90049090",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "guarda roupa casal",
+   "ncm": "94036000",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "bola de futebol",
+   "ncm": "95069900",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "escova de dentes",
+   "ncm": "96032100",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "tubo inox",
+   "ncm": "73041100",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "tirafundo",
+   "ncm": "73181100",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "metanol industrial",
+   "ncm": "29051100",
+   "fonte": "vocabulario-v2"
+  },
+  {
+   "consulta": "celular basico",
+   "ncm": "85171431",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "polietileno com carga",
+   "ncm": "39011020",
+   "fonte": "dicionario-v2"
+  },
+  {
+   "consulta": "latex natural",
+   "ncm": "40011000",
+   "fonte": "dicionario-v2"
+  }
+ ]
 }

@@ -42,25 +42,38 @@ export interface CandidatoIa {
 }
 
 /** Decisão do worker IA (`NÃO SEI` sob baixa similaridade/confiança). */
-export interface ResultadoIaBridge {
-  ok: boolean
+export interface SucessoIaBridge {
+  ok: true
   codigo: string
   confianca: number
   motivo: string
+  /** AI-first: `false` em produção (modelo real). `true` só fora do Electron/testes. */
   mock: boolean
   candidatos?: CandidatoIa[]
   ms?: number
   ramMB?: number
-  /** Presente quando o main respondeu sem worker vivo (mock local). */
+  /** Presente quando o main respondeu sem worker vivo (legado, `AURUM_AI_FIRST=0`). */
   fallback?: string
   erro?: string
 }
 
-/** Estado do worker IA (canal `ia:status`). */
+/** Falha fechada AI-first: sem modelo real, sem decisão (nunca mock silencioso). */
+export interface FalhaIaBridge {
+  ok: false
+  mock: false
+  erro: string
+  cmd?: string
+  candidatos?: CandidatoIa[]
+  ms?: number
+}
+
+export type ResultadoIaBridge = SucessoIaBridge | FalhaIaBridge
+
+/** Estado do worker IA (canal `ia:status`). `erro` = AI-first sem modelo real. */
 export interface StatusIaBridge {
   pronto: boolean
   mock: boolean
-  modo: 'desligado' | 'mock' | 'modelo'
+  modo: 'desligado' | 'mock' | 'modelo' | 'erro'
   modelPath: string | null
   workerPath: string | null
   pid: number | null
@@ -72,6 +85,8 @@ export interface IaBridge {
   classificar(descricao: string, candidatos?: CandidatoIa[]): Promise<ResultadoIaBridge>
   buscar(consulta: string, k?: number): Promise<{ ok: boolean; candidatos: CandidatoIa[]; erro?: string }>
   status(): Promise<StatusIaBridge>
+  /** Tradução fiscal PT↔EN em tempo real (dicionário embutido, sem modelo). Opcional em stubs legados. */
+  traduzir?(texto: string, para?: 'pt' | 'en'): Promise<{ ok: boolean; texto: string; para?: string; erro?: string }>
 }
 
 /** Resultado da verificação de atualizações (electron-updater). */

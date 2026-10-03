@@ -62,12 +62,17 @@ describe('palavra-unica: helpers puros', () => {
 describe('palavra-unica: "chocolate" sozinho nunca vira "branco"', () => {
   beforeEach(() => semearComChocolates())
 
-  it('"chocolate" é NÃO SEI (genéricos empatados + específico sem lastro)', async () => {
+  it('"chocolate" sugere o genérico como hipótese provisória (nunca o branco, nunca 0%)', async () => {
     const r = await classificarComIA('chocolate')
-    expect(r.codigoEscolhido).toBeNull()
-    expect(r.decisao).toBeNull()
+    // Há lastro oficial (2 genéricos "Chocolate" empatados + específico sem
+    // lastro): a IA sugere o genérico como provisória baixa, a verificar.
+    expect(r.codigoEscolhido).not.toBeNull()
+    expect(soDigitos(r.codigoEscolhido)).not.toBe('17049010')
+    expect(r.decisao).not.toBeNull()
     expect(r.candidatos.length).toBeGreaterThan(0)
-    expect(r.motivo).toMatch(/palavra-unica/)
+    expect(r.confiancaIa).toBeGreaterThanOrEqual(0.2)
+    expect(r.confiancaIa).toBeLessThanOrEqual(0.6)
+    expect(r.motivo).toMatch(/pista-ancorada-base-oficial|ancorado|palavra-unica/)
   })
 
   it('"chocolate branco" decide 17049010 (2 palavras comprovam)', async () => {

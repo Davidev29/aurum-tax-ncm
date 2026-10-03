@@ -60,6 +60,26 @@ export function prefixosHierarquia(codigo: string): string[] {
 }
 
 /**
+ * Conjunto de tokens pré-computado para um texto normalizado.
+ * Evita `split` repetido no hot loop do RAG (O(docs) por consulta).
+ */
+export function tokensDoTextoNorm(normTexto: string): string[] {
+  if (!normTexto) return []
+  return [...new Set(normTexto.split(' ').filter((t) => t.length >= 2))]
+}
+
+/** Cache de tokens por texto normalizado (consultas repetidas em lote/XML). */
+const _cacheTokensNorm = new Map<string, string[]>()
+export function tokensNormComCache(normTexto: string): string[] {
+  const hit = _cacheTokensNorm.get(normTexto)
+  if (hit) return hit
+  const toks = tokensDoTextoNorm(normTexto)
+  if (_cacheTokensNorm.size > 3000) _cacheTokensNorm.clear()
+  _cacheTokensNorm.set(normTexto, toks)
+  return toks
+}
+
+/**
  * Compõe o caminho hierárquico (descrições dos ancestrais, sem o próprio item).
  * `obterDescricao` recebe um prefixo e devolve a descrição crua ou `null`.
  */
@@ -132,9 +152,22 @@ export function pareceCodigoNcm(v: unknown): boolean {
 
 import { casaToken } from './vocabulario'
 
+/** Cache do fuzzy: pares (q|o) já medidos (o RAG repete pares entre docs). */
+const _cacheFuzzy = new Map<string, boolean>()
+const _LIMITE_CACHE_FUZZY = 20000
+function casaTokenComCache(q: string, o: string): boolean {
+  if (q === o) return true
+  const chave = `${q}|${o}`
+  const hit = _cacheFuzzy.get(chave)
+  if (hit !== undefined) return hit
+  const r = casaToken(q, o)
+  if (_cacheFuzzy.size >= _LIMITE_CACHE_FUZZY) _cacheFuzzy.clear()
+  _cacheFuzzy.set(chave, r)
+  return r
+}
+
 function tokensDoNorm(normTexto: string): string[] {
-  if (!normTexto) return []
-  return [...new Set(normTexto.split(' ').filter((t) => t.length >= 2))]
+  return tokensNormComCache(normTexto)
 }
 
 /**
@@ -182,9 +215,12 @@ export function pontuarCandidatoParcial(
       }
     }
     if (!achou) {
-      // 2) tolerante por token (radical / fuzzy, sem substring curta)
+      // 2) tolerante por token (radical / fuzzy, sem substring curta).
+      // Pré-filtro por tamanho: oficial com |len diff| > 2 nunca casa no fuzzy
+      // (teto máximo 2) — evita Levenshtein O(n·m) na maioria dos pares.
       for (const o of todosOficiais) {
-        if (casaToken(q, o)) {
+        if (Math.abs(o.length - q.length) > 3 && q !== o) continue
+        if (casaTokenComCache(q, o)) {
           achou = 'tolerante'
           if (toksPropriosTem(toksPropria, q)) naPropria = true
           break

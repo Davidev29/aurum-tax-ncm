@@ -171,9 +171,12 @@ export function StatusAurumAI({ estado, children }: { estado: 'processando' | 'p
 }
 
 /**
- * Moldura com **borda animada** (mesmo padrão `borda-cintilante` do sistema, em
- * ouro Aurum): identifica de relance o bloco que **foi a IA que classificou**.
- * O cabeçalho carrega selo + atribuição obrigatória; o corpo é livre.
+ * Moldura com **borda animada externa** (mesmo padrão `borda-cintilante` do
+ * sistema, em ouro Aurum): identifica de relance o bloco que **foi a IA que
+ * classificou**. O cabeçalho carrega SOMENTE o selo `Aurum AI` (animado);
+ * o `detalhe` vai só para o `aria-label` (acessibilidade), sem texto visual
+ * extra — evita a duplicidade "Sugerido por… · modelo embutido · …".
+ * O corpo é livre e NÃO deve ter outra borda animada dentro (só a de fora).
  */
 export function MolduraAurumAI({
   children,
@@ -194,7 +197,6 @@ export function MolduraAurumAI({
     >
       <div className="aurum-ai-destaque-cab">
         <SeloAurumAI variante="compacto" />
-        <AtribuicaoAurumAI detalhe={detalhe} />
       </div>
       <div className="p-3 pt-2 sm:p-4 sm:pt-2">{children}</div>
     </div>

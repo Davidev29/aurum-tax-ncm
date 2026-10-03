@@ -8,13 +8,14 @@
  *
  * Regras:
  * - conhecidos → código esperado (só dígitos) + via correta;
- * - ambíguos/inválidos → NÃO SEI (sem código, sem decisão, sem cálculo).
+ * - com lastro oficial ambíguo → hipótese provisória baixa ancorada (nunca 0%);
+ * - sem lastro/inválidos → NÃO SEI (sem código, sem decisão, sem cálculo).
  *
  * RAG proativo: descrições reais com 1–2 termos sem correspondente oficial
  * ("premium", "holandesa", "pet food") DECIDEM quando o núcleo do produto é
  * claro (ração para cães/gatos, bovino reprodutor) — com confiança media e
- * carimbo do resolvedor. NÃO SEI fica só para o verdadeiramente ambíguo
- * (termo único genérico, gibberish, vazio).
+ * carimbo do resolvedor. NÃO SEI fica só para o verdadeiramente sem
+ * referência (gibberish, vazio, termo sem match oficial).
  */
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { classificarComIA } from '@/infrastructure/ia/classificacao-ia-repo'
@@ -69,12 +70,20 @@ const CONHECIDOS: CasoConhecido[] = [
 ]
 
 const AMBIGUOS = [
-  'milho', // candidatos empatados → similaridade-insuficiente
-  'bovina', // overlap abaixo do corte 0,2
   'coisa', // insuficiente, 0 candidatos
   'nave espacial alienígena interestelar', // 0 candidatos
   'sal', // termo único curto/genérico — pede contexto
   'ovo', // idem: pode ser alimento, ração ou insumo
+]
+
+/**
+ * Com lastro oficial (overlap > 0), a IA sugere hipótese provisória baixa
+ * ancorada em vez de NÃO SEI seco — mesmo empatada ("milho" semente × grão,
+ * "bovina" reprodutor × abate). NÃO SEI fica só para o sem-referência.
+ */
+const PROVISORIAS_ANCORADAS = [
+  'milho',
+  'bovina',
 ]
 
 const INVALIDOS = [
@@ -125,6 +134,24 @@ describe('classificacao-ia: ambíguos NÃO SEI', () => {
     expect(r.decisao).toBeNull()
     expect(r.nomenclatura).toBeNull()
     expect(r.calculo).toBeNull()
+  })
+})
+
+describe('classificacao-ia: lastro oficial vira hipótese provisória (nunca 0%)', () => {
+  beforeEach(semearBaseIa)
+
+  it.each(PROVISORIAS_ANCORADAS)('%s', async (descricao) => {
+    const r = await classificarComIA(descricao)
+    // Há correspondência na base oficial → a IA sugere, não declara NÃO SEI.
+    expect(r.codigoEscolhido).not.toBeNull()
+    expect(r.decisao).not.toBeNull()
+    expect(r.nomenclatura).not.toBeNull()
+    expect(r.calculo).not.toBeNull()
+    expect(r.candidatos.length).toBeGreaterThan(0)
+    // Provisória: confiança baixa (a verificar com 1–2 detalhes).
+    expect(r.confiancaIa).toBeGreaterThanOrEqual(0.2)
+    expect(r.confiancaIa).toBeLessThanOrEqual(0.6)
+    expect(r.motivo).toMatch(/pista-ancorada-base-oficial|ancorado/)
   })
 })
 

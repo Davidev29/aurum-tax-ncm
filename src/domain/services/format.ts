@@ -11,6 +11,20 @@ export const fmtNcm = (v: unknown): string => {
   return d.length === 8 ? `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6, 8)}` : d
 }
 
+/** `AAA.BBB.CCC` somente quando houver exatamente 9 dígitos (NBS). */
+export const fmtNbs = (v: unknown): string => {
+  const d = norm(v)
+  return d.length === 9 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}` : d
+}
+
+/** Máscara progressiva de NBS (`AAA.BBB.CCC`, 9 dígitos). */
+export const fmtNbsMask = (v: unknown): string => {
+  const d = norm(v).slice(0, 9)
+  if (d.length <= 3) return d
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`
+}
+
 /** Máscara progressiva de CNPJ. */
 export const fmtCnpj = (v: unknown): string => {
   const d = norm(v).slice(0, 14)
@@ -81,6 +95,7 @@ export const MASK = {
     if (d.length <= 6) return `${d.slice(0, 4)}.${d.slice(4)}`
     return `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6)}`
   },
+  nbs: fmtNbsMask,
   cnpj: fmtCnpj,
   cfop: (v: unknown): string => norm(v).slice(0, 4),
   cst: (v: unknown): string => norm(v).slice(0, 3),

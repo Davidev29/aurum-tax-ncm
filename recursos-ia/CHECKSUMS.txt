@@ -4,4 +4,4 @@
 # adquirido (sem rede). Ao colocar o arquivo em recursos-ia/modelo/, recalcule:
 #   certutil -hashfile recursos-ia\modelo\ailo-152m-v2-q4_k_m.gguf SHA256
 # e substitua a linha PENDENTE abaixo pelo hash real.
-PENDENTE-OFFLINE-SEM-REDE  modelo/ailo-152m-v2-q4_k_m.gguf
+d4413fc146577c6756747e885f55703773d9baaf6fb7708d2b2e95b11f20d273  modelo/ailo-152m-v2-q4_k_m.gguf

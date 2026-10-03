@@ -12,7 +12,7 @@
  *   oficiais por aderência textual (tokens do nome × texto oficial das
  *   opções) para sugerir a mais provável — escolha assistida, decisão final
  *   do usuário.
- * - Com 1 opção: confirma (ou alerta divergência nome × NCM).
+ * - Com 1 opção: confirma (o NCM manda — sem alerta de divergência nome × NCM).
  * - Com N opções: explica *por que* há N (comparando os campos oficiais que
  *   de fato diferem) + sugere a mais aderente ao nome + orienta a escolha.
  */
@@ -70,7 +70,7 @@ export interface AnaliseLoteIA {
   alertas: string[]
   opcoes: OpcaoAnalisada[]
   fontes: string[]
-  /** `true` quando o nome não conversa com o NCM — revisar o NCM. */
+  /** Mantido por compatibilidade — sempre `false` (alerta nome × NCM removido). */
   divergenciaNome: boolean
   nomeIA: typeof NOME_IA
 }
@@ -82,7 +82,7 @@ export interface EntradaAnaliseLote {
   regraGeral: boolean
   manual: boolean
   extinto: boolean
-  /** Descrição oficial da nomenclatura (para o alerta nome × NCM). */
+  /** Descrição oficial da nomenclatura (mantida por compatibilidade — sem uso). */
   nomenclaturaDescricao?: string | null
 }
 
@@ -260,40 +260,18 @@ function explicarMultiplas(opcoes: Classificacao[]): string {
 
 /* ------------------------------------------------------------- entrada -- */
 
-/** Alerta nome × NCM: o nome não conversa com a descrição oficial do NCM. */
-function detectarDivergenciaNome(
-  nome: string,
-  nomenclaturaDescricao: string | null | undefined,
-  opcoes: Classificacao[],
-  melhorScore: number,
-): boolean {
-  const toks = tokensRelevantes(nome)
-  if (toks.length < 2) return false
-  if (melhorScore > 0) return false
-  const alvo = [nomenclaturaDescricao ?? '', ...opcoes.map((c) => c.descricao ?? '')].join(' ')
-  const normAlvo = normalizarBusca(alvo)
-  if (!normAlvo) return true
-  const toksAlvo = new Set(normAlvo.split(' ').filter(Boolean))
-  for (const q of toks) {
-    if (toksAlvo.has(q)) return false
-    const sin = expandirSinonimoFiscal(q)
-    if (sin && sin.split(' ').some((s) => toksAlvo.has(s))) return false
-    for (const o of toksAlvo) {
-      if (casaToken(q, o)) return false
-    }
-  }
-  return true
-}
-
 /**
  * Análise assistida de UM item do lote (pura, síncrona, sem I/O).
  *
  * Ordem de prioridade (espelha o resolvedor):
  * inválida → extinta → manual → regra geral → única → múltipla.
+ *
+ * Nota: o alerta nome × NCM foi removido — o produto tem NCM e existe para
+ * ser classificado. O NCM manda na tributação, sem confrontar o nome
+ * comercial com a descrição oficial.
  */
 export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
   const { nome, ncm, classificacoes, regraGeral, manual, extinto } = entrada
-  const nomenDesc = entrada.nomenclaturaDescricao ?? null
   const fontes = [...FONTES_LOTE]
   const nomeSeguro = String(nome ?? '').trim()
 
@@ -378,13 +356,12 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
   if (regraGeral) {
     const c = classificacoes[0]
     const { originais } = tokensDoNome(nomeSeguro)
-    const divergente = detectarDivergenciaNome(nomeSeguro, nomenDesc, classificacoes, 0)
     return {
       situacao: 'regra-geral',
       totalOpcoes: classificacoes.length,
       maisProvavelIndice: 0,
-      confianca: divergente ? 0.5 : 0.8,
-      nivel: nivelDeConfianca(divergente ? 0.5 : 0.8),
+      confianca: 0.8,
+      nivel: nivelDeConfianca(0.8),
       titulo: 'Sem vínculo oficial — vale a regra geral (tributação integral)',
       resumo:
         `O NCM ${ncm} não tem vínculo específico CST × cClassTrib na base oficial — HOJE vale a regra geral CST 000/cClassTrib 000001 (alíquota cheia, redução 0%). ` +
@@ -393,9 +370,7 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
       porqueMultiplas: null,
       orientacaoEscolha:
         'Escriture pela regra geral. Se você conhece uma regra específica com fonte legal, use “Reclassificar manualmente” informando descrição + link — aí a linha passa a valer como manual (responsabilidade sua).',
-      alertas: divergente
-        ? [`O nome “${nomeSeguro.slice(0, 60)}” não conversa com a descrição oficial do NCM — o NCM manda na tributação: confira se o NCM está correto antes de salvar.`]
-        : [],
+      alertas: [],
       opcoes: c
         ? (() => {
             const { comentario, redIBS, redCBS, anexo, anexoRotulo } = comentarOpcao(c, 0, [], nomeSeguro, true)
@@ -409,7 +384,7 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
           })()
         : [],
       fontes,
-      divergenciaNome: divergente,
+      divergenciaNome: false,
       nomeIA: NOME_IA,
     }
   }
@@ -424,8 +399,6 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
   const topo = ordenadas[0]
   const segunda = ordenadas[1]
   const gap = topo && segunda ? topo.score - segunda.score : topo ? topo.score : 0
-  const melhorScore = topo?.score ?? 0
-  const divergente = detectarDivergenciaNome(nomeSeguro, nomenDesc, classificacoes, melhorScore)
 
   const opcoes: OpcaoAnalisada[] = pontuadas.map(({ c, i, score, termos }) => {
     const ehSugerida = topo ? i === topo.i : i === 0
@@ -441,12 +414,7 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
 
   if (classificacoes.length === 1 && topo) {
     const alertas: string[] = []
-    if (divergente) {
-      alertas.push(
-        `O nome “${nomeSeguro.slice(0, 60)}” não conversa com a descrição oficial do NCM — o NCM manda na tributação: confira se o NCM está correto antes de salvar. A tributação única abaixo continua valendo.`,
-      )
-    }
-    const conf = !nomeSeguro ? 0.9 : divergente ? 0.6 : topo.score > 0 ? 0.95 : 0.85
+    const conf = !nomeSeguro ? 0.9 : topo.score > 0 ? 0.95 : 0.85
     return {
       situacao: 'unica',
       totalOpcoes: 1,
@@ -466,7 +434,7 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
       alertas,
       opcoes,
       fontes,
-      divergenciaNome: divergente,
+      divergenciaNome: false,
       nomeIA: NOME_IA,
     }
   }
@@ -506,11 +474,6 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
   }
 
   const alertas: string[] = []
-  if (divergente) {
-    alertas.push(
-      `Atenção: nenhum termo do nome (“${nomeSeguro.slice(0, 60)}”) aparece nos textos oficiais deste NCM — o NCM manda na tributação. Confira se o NCM está correto; se estiver, escolha pela operação real.`,
-    )
-  }
 
   return {
     situacao: 'multipla',
@@ -528,7 +491,7 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
     alertas,
     opcoes,
     fontes,
-    divergenciaNome: divergente,
+    divergenciaNome: false,
     nomeIA: NOME_IA,
   }
 }

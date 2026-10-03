@@ -23,7 +23,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Classificacao } from '@/domain/entities'
-import { NOME_IA, ROTULO_FALLBACK, fmtConfiancaAurumAI, nivelDeConfianca } from '@/domain/aurum-ai'
+import { NOME_IA, fmtConfiancaAurumAI, nivelDeConfianca } from '@/domain/aurum-ai'
 import { fmtMoeda, fmtNcm, MASK, norm } from '@/domain/services/format'
 import { detectarIntencaoConsulta } from '@/domain/services/detector-consulta'
 import { normalizarBusca, tokensRelevantes } from '@/domain/services/busca-texto'
@@ -452,13 +452,7 @@ export function Consulta() {
                 <span className="inline-flex items-center gap-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200">
                   <IconeAurumPremium tamanho="sm" /> Resposta da {NOME_IA}
                 </span>
-                {via === 'ia' ? (
-                  <StatusAurumAI estado="pronto">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-brand-800 to-brand-600 px-2 py-0.5 text-[10px] font-black normal-case text-amber-100">
-                      <IconeAurumPremium tamanho="sm" /> {NOME_IA} ativa
-                    </span>
-                  </StatusAurumAI>
-                ) : via === 'deterministico' ? (
+                {via === 'deterministico' ? (
                   <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black normal-case text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                     determinístico · sem worker
                   </span>
@@ -780,7 +774,7 @@ function SecaoRespostaIA({
             Reavaliando com a {NOME_IA}…
           </div>
         ) : null}
-        <MolduraAurumAI detalhe={`${ROTULO_FALLBACK} · decisão validada`}>
+        <MolduraAurumAI detalhe="decisão validada pela base oficial">
           <RespostaIaValidada onSalvar={onSalvar} onAddCalc={onAddCalc} bloqueios={bloqueios} />
         </MolduraAurumAI>
       </div>
@@ -975,7 +969,6 @@ function RespostaIaValidada({
   const calculo = useConsulta((s) => s.calculoIa)
   const codigoIa = useConsulta((s) => s.codigoIa)
   const confianca = useConsulta((s) => s.confiancaIa)
-  const mock = useConsulta((s) => s.mockIa)
   const veredito = useConsulta((s) => s.vereditoIa)
   const fontes = useConsulta((s) => s.fontesIa)
   const feedbackEnviado = useConsulta((s) => s.feedbackIaEnviado)
@@ -996,21 +989,6 @@ function RespostaIaValidada({
     >
       <div className="flex flex-wrap items-center gap-2">
         <BarraConfiancaAurumAI valor={confianca} compact />
-        {mock ? (
-          <span
-            className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-            title={`${NOME_IA} rodando em modo local (worker indisponível) — mesma validação pelo resolvedor oficial`}
-          >
-            modo local
-          </span>
-        ) : (
-          <span
-            className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
-            title={`${NOME_IA} com modelo/worker ativo — decisão validada pelo resolvedor oficial`}
-          >
-            <IconeAurumPremium tamanho="sm" /> {NOME_IA} ativa
-          </span>
-        )}
       </div>
 
       {codigoIa && decisao ? (
@@ -1024,7 +1002,6 @@ function RespostaIaValidada({
             cl={decisao}
             nomenclatura={nomenclaturaIa}
             bloqueios={bloqueios[decisao.cClassTrib] ?? null}
-            destaqueIA
             onSalvar={() => onSalvar(decisao)}
             onAddCalc={() => onAddCalc({ tipo: 'classificacao', classificacao: decisao })}
           />
@@ -1127,24 +1104,46 @@ function RespostaIaValidada({
         </>
       ) : (
         <>
-          <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
-            <strong>{NOME_IA} sem decisão segura — e prefiro ser honesto a chutar.</strong>{' '}
-            Não encontrei lastro suficiente na base oficial para afirmar um NCM. Para me ajudar a acertar:
-            1) descreva o produto com 1–2 detalhes (material, uso, estado);
-            2) confira as pistas abaixo; 3) ou use a busca por nome.
-            <div className="mt-2">
-              <Btn
-                tam="sm"
-                disabled={feedbackEnviado}
-                onClick={() => {
-                  void feedbackNegativo()
-                  toast('Obrigado — registramos a ausência de decisão.', 'warn')
-                }}
-              >
-                {feedbackEnviado ? '✓ Feedback registrado' : '👎 Não é esse'}
-              </Btn>
+          {top.length ? (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <strong>
+                {NOME_IA} encontrou {top.length} correspondência(s) na base oficial — confira a melhor pista abaixo.
+              </strong>{' '}
+              Para cravar o NCM, descreva com 1–2 detalhes (material, uso, estado) ou toque numa pista para
+              classificar oficialmente.
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Btn
+                  tam="sm"
+                  disabled={feedbackEnviado}
+                  onClick={() => {
+                    void feedbackNegativo()
+                    toast('Obrigado — registramos a ausência de decisão.', 'warn')
+                  }}
+                >
+                  {feedbackEnviado ? '✓ Feedback registrado' : '👎 Não é esse'}
+                </Btn>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
+              <strong>{NOME_IA} sem decisão segura — e prefiro ser honesto a chutar.</strong>{' '}
+              Não encontrei nenhuma referência na base oficial para essa descrição. Para me ajudar a acertar:
+              1) descreva o produto com 1–2 detalhes (material, uso, estado);
+              2) ou use a busca por nome com sinônimos do vocabulário oficial.
+              <div className="mt-2">
+                <Btn
+                  tam="sm"
+                  disabled={feedbackEnviado}
+                  onClick={() => {
+                    void feedbackNegativo()
+                    toast('Obrigado — registramos a ausência de decisão.', 'warn')
+                  }}
+                >
+                  {feedbackEnviado ? '✓ Feedback registrado' : '👎 Não é esse'}
+                </Btn>
+              </div>
+            </div>
+          )}
           {veredito ? (
             <details className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-2.5 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300">
               <summary className="cursor-pointer font-bold">
@@ -1154,15 +1153,45 @@ function RespostaIaValidada({
             </details>
           ) : null}
           {top.length ? (
-            <div className="aurum-ai-acoes" role="group" aria-label="Pistas avaliadas">
-              <BotaoDetalhePremium
-                icone="🔎"
-                rotulo="Pistas avaliadas"
-                contagem={top.length}
-                variante="ia"
-                titulo="Ver as pistas avaliadas em modal glass"
-                onClick={() => setModal('ncms')}
-              />
+            <div className="space-y-2">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-2 dark:border-slate-800 dark:bg-slate-950/40">
+                <div className="px-1 pb-1 text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  🔎 Correspondências na base oficial ({top.length}) — clique para classificar
+                </div>
+                <div className="max-h-72 space-y-1 overflow-y-auto">
+                  {top.slice(0, 8).map((c) => (
+                    <button
+                      key={c.codigo}
+                      type="button"
+                      onClick={() => void escolher(c.codigo)}
+                      className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-brand-50 dark:hover:bg-slate-800"
+                      title={`Classificar ${fmtNcm(c.codigo)} oficialmente`}
+                    >
+                      <span className="min-w-0">
+                        <span className="font-mono text-xs font-bold text-brand-700 dark:text-aurum-200">
+                          {fmtNcm(c.codigo)}
+                        </span>
+                        <span className="ml-2 truncate text-xs text-slate-600 dark:text-slate-300">
+                          {c.descricao}
+                        </span>
+                      </span>
+                      <span className="shrink-0 rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        oficial
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="aurum-ai-acoes" role="group" aria-label="Pistas avaliadas">
+                <BotaoDetalhePremium
+                  icone="🔎"
+                  rotulo="Pistas avaliadas"
+                  contagem={top.length}
+                  variante="ia"
+                  titulo="Ver as pistas avaliadas em modal glass"
+                  onClick={() => setModal('ncms')}
+                />
+              </div>
             </div>
           ) : null}
           <ModalNcmsAnalisados
@@ -1170,7 +1199,11 @@ function RespostaIaValidada({
             onFechar={() => setModal(null)}
             itens={top.map((c) => ({ codigo: c.codigo, titulo: fmtNcm(c.codigo), subtitulo: c.descricao }))}
             codigoPreferido={codigoIa}
-            subtitulo="Melhores pistas encontradas — nenhuma com lastro suficiente para decisão."
+            subtitulo={
+              top.length
+                ? `A ${NOME_IA} avaliou ${top.length} correspondência(s) da base oficial — toque para classificar oficialmente.`
+                : `Nenhuma correspondência na base oficial para essa descrição.`
+            }
             onEscolher={(codigo) => void escolher(codigo)}
           />
           <ModalAuditoriaIA

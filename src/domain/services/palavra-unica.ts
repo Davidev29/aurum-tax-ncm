@@ -15,7 +15,8 @@
  *   carrega qualificador não comprovado quando existe concorrente genérico
  *   (sem extras) com lastro — prefere o genérico ("retorna só ele");
  * - se vários genéricos empatam (ex.: "Chocolate" recheado × não recheado),
- *   não há como escolher sem contexto → NÃO SEI + pergunta complementar;
+ *   a IA sugere o primeiro genérico como hipótese provisória baixa ancorada
+ *   (a verificar com 1–2 detalhes) — NÃO SEI fica só para o sem-lastro;
  * - verbo provável no infinitivo sem lastro literal na base também é NÃO SEI
  *   (a ação não comprova o produto);
  * - com 2+ tokens ou refino preenchido ("chocolate branco", "chocolate" +

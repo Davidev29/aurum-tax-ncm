@@ -93,7 +93,22 @@ export function NfeXml() {
               produtos e notas — tudo vinculado à empresa ativa.
             </p>
           </div>
-          <Pill cor="brand">LC 214/2025 · IBS + CBS</Pill>
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill cor="brand">LC 214/2025 · IBS + CBS</Pill>
+            <button
+              type="button"
+              title="Experimentar o redesenho polido (tabs + hero executivo)"
+              onClick={() => {
+                try {
+                  localStorage.setItem('xml-layout', 'polida')
+                } catch { /* sem armazenamento — mantém clássica */ }
+                window.location.reload()
+              }}
+              className="xml-focus-ouro pill bg-brand-700 text-white dark:bg-aurum-500/20 dark:text-aurum-200"
+            >
+              ✨ Prévia polida
+            </button>
+          </div>
         </div>
       </Entrada>
       <Entrada atraso={0.06}>

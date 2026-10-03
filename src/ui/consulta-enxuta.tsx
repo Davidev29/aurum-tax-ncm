@@ -15,7 +15,7 @@ import { fmtNcm } from '@/domain/services/format'
 import { observacoesFiscais } from '@/domain/services/calculo'
 import { FaixaTributaria } from './faixa-tributaria'
 import { Btn } from './kit'
-import { IconeAurumPremium, SeloAurumAI, AtribuicaoAurumAI, LinhaPreferidaAurumAI } from './aurum-ai'
+import { IconeAurumPremium, SeloAurumAI, LinhaPreferidaAurumAI } from './aurum-ai'
 import { BotaoDetalhePremium, ModalDetalheFiscal } from './consulta-premium'
 import { BotaoVerLegislacao, type BloqueioSistema } from './cartoes'
 import { ListaObservacoes } from './cartoes'
@@ -57,7 +57,6 @@ export function CartaoEnxuto({
       {destaqueIA ? (
         <div className="mb-2 flex items-center gap-2">
           <SeloAurumAI variante="compacto" />
-          <AtribuicaoAurumAI detalhe="classificou este NCM" />
         </div>
       ) : null}
       <FaixaTributaria redIBS={redIBS} redCBS={redCBS} anexo={anexo} baseLegal={baseLegal} />

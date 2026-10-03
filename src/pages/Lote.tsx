@@ -14,8 +14,7 @@
  * Garantia de revisão: nada é gravado sem o modal "Revisar antes de salvar"
  * (o que será salvo × o que ficará de fora + aceite explícito do usuário).
  */
-import { useEffect, useMemo, useState } from 'react'
-import { ROWS_LIMIT } from '@/domain/constants'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { NOME_IA } from '@/domain/aurum-ai'
 import { EMITENTE_PADRAO } from '@/domain/entities'
 import { fmtNcm } from '@/domain/services/format'
@@ -43,15 +42,21 @@ import {
   SeloAurumAI,
 } from '@/ui/aurum-ai'
 import { BarraProgresso, Btn, Check, Modal, Painel, Texto } from '@/ui/kit'
+import { AurinhaLote } from '@/ui/aurinha-lote'
 import { Campo, Olho, Secao, SecaoInformacoesAdicionais } from '@/ui/detalhes'
 
-type FiltroLote = 'todos' | 'multiplas' | 'regra-geral' | 'divergentes' | 'invalidos' | 'unicas'
+/**
+ * Primeira tela do lote: página 1 com todos os produtos (filtro `todos`).
+ * 50 linhas por página mantêm o DOM leve; o usuário folheia até cobrir tudo.
+ */
+const LOTE_POR_PAGINA = 50
+
+type FiltroLote = 'todos' | 'multiplas' | 'regra-geral' | 'invalidos' | 'unicas'
 
 const FILTROS: { id: FiltroLote; rotulo: string; dica: string }[] = [
   { id: 'todos', rotulo: 'Todos', dica: 'Todas as linhas processadas' },
   { id: 'multiplas', rotulo: 'Escolha assistida', dica: 'NCM com 2+ tributações — a IA sugere a mais provável' },
   { id: 'regra-geral', rotulo: 'Regra geral', dica: 'Sem vínculo oficial — tributação integral vigente' },
-  { id: 'divergentes', rotulo: 'Revisar nome × NCM', dica: 'O nome não conversa com o NCM — confira o código' },
   { id: 'invalidos', rotulo: 'Inválidos', dica: 'NCM fora do padrão de 8 dígitos' },
   { id: 'unicas', rotulo: 'Únicas', dica: 'Tributação única confirmada' },
 ]
@@ -72,7 +77,9 @@ export function Lote() {
   const [gerandoPdf, setGerandoPdf] = useState(false)
   const [busca, setBusca] = useState('')
   const [filtro, setFiltro] = useState<FiltroLote>('todos')
+  const [pagina, setPagina] = useState(1)
   const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
+  const resultadosRef = useRef<HTMLElement>(null)
   // Garantia de revisão: o salvamento só acontece dentro do modal de
   // confirmação — abrir a tabela não salva nada sozinho.
   const [revisaoAberta, setRevisaoAberta] = useState(false)
@@ -108,14 +115,29 @@ export function Lote() {
   }
 
   useEffect(() => registrarExportador('lote', () => void exportarPdf()), [exportarPdf])
-  // Nova análise: reseta busca/filtro/expansão para o usuário rever do zero.
+  // Nova análise: sempre entrega o usuário na PRIMEIRA tela com TODOS os
+  // produtos — filtro `todos`, página 1, busca zerada. Nunca cai filtrado.
+  const nomeResumo = resumo?.nomeArquivo
   useEffect(() => {
     if (resumo) {
       setBusca('')
-      setFiltro(resumo.ambiguos > 0 ? 'multiplas' : 'todos')
+      setFiltro('todos')
+      setPagina(1)
       setExpandidos(new Set())
     }
-  }, [resumo?.nomeArquivo]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nomeResumo]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Trocar busca/filtro volta para a primeira página.
+  useEffect(() => {
+    setPagina(1)
+  }, [busca, filtro])
+  // Ao concluir, leva o usuário para a primeira tela de resultados, com todos
+  // os produtos. A lâmpada de conclusão acende NO PET da sidebar (eureka).
+  useEffect(() => {
+    if (!resumo || processando) return
+    window.requestAnimationFrame(() => {
+      resultadosRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [nomeResumo, processando]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const etapa = !resumo ? 1 : processando ? 1 : 3
 
@@ -178,14 +200,10 @@ export function Lote() {
 
           {processando ? (
             <div className="lote-processando mt-4" role="status" aria-live="polite">
-              <div className="lote-processando-cab">
-                <span className="lote-ia-ponto" aria-hidden="true"><span /><span /><span /></span>
-                <span className="text-xs font-bold">
-                  {progresso < 40 ? 'Lendo planilha…' : progresso < 75 ? 'Resolvendo NCMs na base oficial…' : `${NOME_IA} analisando nome × tributação…`}
-                </span>
-                <span className="num ml-auto font-mono text-[11px] text-slate-500">{progresso}%</span>
+              <AurinhaLote progresso={progresso} />
+              <div className="mt-2">
+                <BarraProgresso pct={progresso} etapa="Nada é salvo antes da sua revisão — pode acompanhar." />
               </div>
-              <BarraProgresso pct={progresso} etapa="Nada é salvo antes da sua revisão — pode acompanhar." />
             </div>
           ) : null}
 
@@ -197,6 +215,7 @@ export function Lote() {
                   limpar()
                   setBusca('')
                   setFiltro('todos')
+                  setPagina(1)
                   setExpandidos(new Set())
                   toast('Resultados do lote limpos.', 'warn')
                 }}
@@ -230,14 +249,14 @@ export function Lote() {
       </Painel>
 
       {resumo ? (
-        <section className="animate-fade-up space-y-4" aria-label="Resultados da análise em lote">
+        <section ref={resultadosRef} className="animate-fade-up scroll-mt-20 space-y-4" aria-label="Resultados da análise em lote" tabIndex={-1}>
           <ResumoHero resumo={resumo} />
           <BarraFerramentas
             resumo={resumo}
             busca={busca}
             onBusca={setBusca}
             filtro={filtro}
-            onFiltro={setFiltro}
+            onFiltro={(f) => { setFiltro(f); setPagina(1) }}
             onExportar={() => void exportarPdf()}
             exportandoPdf={gerandoPdf}
             onSalvar={() => setRevisaoAberta(true)}
@@ -247,6 +266,8 @@ export function Lote() {
             resumo={resumo}
             busca={busca}
             filtro={filtro}
+            pagina={pagina}
+            onPagina={setPagina}
             expandidos={expandidos}
             onAlternar={(idx) =>
               setExpandidos((ant) => {
@@ -273,7 +294,6 @@ export function Lote() {
 /* ---------------------------------------------------------- resumo hero -- */
 
 function ResumoHero({ resumo }: { resumo: ResumoLote }) {
-  const divergentes = resumo.divergentes ?? resumo.itens.filter((i) => i.analiseIA?.divergenciaNome).length
   const assistidas = resumo.assistidas ?? resumo.itens.filter((i) => (i.analiseIA?.confianca ?? 0) >= 0.6 && i.analiseIA?.situacao === 'multipla').length
   const unicas = resumo.unicas ?? resumo.itens.filter((i) => i.analiseIA?.situacao === 'unica').length
   const cards = [
@@ -281,7 +301,7 @@ function ResumoHero({ resumo }: { resumo: ResumoLote }) {
     { rot: 'Classificadas', val: resumo.comClassificacao, sub: `${unicas} únicas confirmadas`, tom: 'ok' as const, icone: '✅' },
     { rot: `✨ ${NOME_IA} sugere`, val: resumo.ambiguos, sub: `${assistidas} com sugestão forte`, tom: 'ia' as const, icone: '✨' },
     { rot: 'Regra geral', val: resumo.regraGeral, sub: 'tributação integral vigente', tom: 'warn' as const, icone: '⚡' },
-    { rot: 'Revisar', val: divergentes + resumo.semNcm, sub: `${divergentes} nome × NCM · ${resumo.semNcm} inválidos`, tom: 'err' as const, icone: '👁' },
+    { rot: 'Revisar', val: resumo.semNcm, sub: `${resumo.semNcm} inválidos`, tom: 'err' as const, icone: '👁' },
   ]
   return (
     <div className="lote-stats" role="status" aria-live="polite">
@@ -380,7 +400,7 @@ function BarraFerramentas({
  * Modal obrigatório "Revisar antes de salvar".
  *
  * Mostra exatamente o que será gravado × o que ficará de fora (com motivo
- * por linha ignorada) + alertas (nome × NCM, NCM extinto, regra geral,
+ * por linha ignorada) + alertas (NCM extinto, regra geral,
  * sugestão trocada) e só libera o botão após o aceite explícito.
  * Sem aceite, `salvarTodos` nunca é chamado.
  */
@@ -407,7 +427,6 @@ function ModalRevisaoSalvamento({
     [resumo],
   )
   const alertas = useMemo(() => {
-    const divergentes = gravaveis.filter((i) => i.analiseIA?.divergenciaNome)
     const extintos = gravaveis.filter((i) => i.nomenclatura?.dataFim)
     const regraGeral = gravaveis.filter((i) => i.regraGeral)
     const trocadas = gravaveis.filter((i) => {
@@ -419,7 +438,7 @@ function ModalRevisaoSalvamento({
       )
       return idx !== a.maisProvavelIndice
     })
-    return { divergentes, extintos, regraGeral, trocadas }
+    return { extintos, regraGeral, trocadas }
   }, [gravaveis])
 
   const preview = gravaveis.slice(0, 8)
@@ -520,13 +539,10 @@ function ModalRevisaoSalvamento({
           </div>
         ) : null}
 
-        {alertas.divergentes.length || alertas.extintos.length || alertas.regraGeral.length || alertas.trocadas.length ? (
+        {alertas.extintos.length || alertas.regraGeral.length || alertas.trocadas.length ? (
           <div className="lote-confirm-bloco lote-confirm-bloco--alerta">
             <div className="lote-confirm-titulo">⚠ Pontos de atenção antes de confirmar</div>
             <ul className="lote-confirm-lista">
-              {alertas.divergentes.length ? (
-                <li>👁 {alertas.divergentes.length} com nome × NCM divergente — confira se o NCM está correto (o NCM manda na tributação).</li>
-              ) : null}
               {alertas.extintos.length ? (
                 <li>⛔ {alertas.extintos.length} com NCM extinto — a tributação é só referência histórica, confira o NCM substituto.</li>
               ) : null}
@@ -559,7 +575,6 @@ function contarFiltros(resumo: ResumoLote): Record<FiltroLote, number> {
     todos: itens.length,
     multiplas: itens.filter((i) => i.classificacoes.length > 1).length,
     'regra-geral': itens.filter((i) => i.regraGeral).length,
-    divergentes: itens.filter((i) => i.analiseIA?.divergenciaNome).length,
     invalidos: itens.filter((i) => i.ncm.length !== 8).length,
     unicas: itens.filter((i) => i.analiseIA?.situacao === 'unica').length,
   }
@@ -571,12 +586,16 @@ function TabelaLote({
   resumo,
   busca,
   filtro,
+  pagina,
+  onPagina,
   expandidos,
   onAlternar,
 }: {
   resumo: ResumoLote
   busca: string
   filtro: FiltroLote
+  pagina: number
+  onPagina: (p: number) => void
   expandidos: Set<number>
   onAlternar: (indiceOriginal: number) => void
 }) {
@@ -589,7 +608,6 @@ function TabelaLote({
       .filter(({ item }) => {
         if (filtro === 'multiplas' && item.classificacoes.length <= 1) return false
         if (filtro === 'regra-geral' && !item.regraGeral) return false
-        if (filtro === 'divergentes' && !item.analiseIA?.divergenciaNome) return false
         if (filtro === 'invalidos' && item.ncm.length === 8) return false
         if (filtro === 'unicas' && item.analiseIA?.situacao !== 'unica') return false
         if (!q) return true
@@ -598,7 +616,13 @@ function TabelaLote({
       })
   }, [resumo, busca, filtro])
 
-  const visiveis = linhas.slice(0, ROWS_LIMIT)
+  // Primeira tela primeiro: página 1 com todos os produtos; o usuário folheia
+  // para cobrir o restante sem perder o filtro/busca.
+  const totalPag = Math.max(1, Math.ceil(linhas.length / LOTE_POR_PAGINA))
+  const pg = Math.min(Math.max(1, pagina), totalPag)
+  const inicio = (pg - 1) * LOTE_POR_PAGINA
+  const visiveis = linhas.slice(inicio, inicio + LOTE_POR_PAGINA)
+  const fim = Math.min(inicio + visiveis.length, linhas.length)
 
   if (!linhas.length) {
     return (
@@ -642,14 +666,48 @@ function TabelaLote({
                   />
                 )
               })}
-              {linhas.length > ROWS_LIMIT ? (
+              {linhas.length > LOTE_POR_PAGINA ? (
+                <tr>
+                  <td colSpan={4} className="px-0 py-0">
+                    <div className="lote-paginacao">
+                      <span className="lote-paginacao-cont num">
+                        Mostrando {linhas.length ? inicio + 1 : 0}–{fim} de {linhas.length} linhas
+                        {filtro !== 'todos' || busca.trim() ? ' (filtro)' : ''} · {resumo.itens.length} no arquivo
+                      </span>
+                      <span className="lote-paginacao-nav">
+                        <button
+                          type="button"
+                          className="lote-paginacao-btn"
+                          disabled={pg <= 1}
+                          onClick={() => onPagina(pg - 1)}
+                          aria-label="Página anterior"
+                        >
+                          ‹ Anterior
+                        </button>
+                        <span className="lote-paginacao-pag num" aria-live="polite">
+                          Página {pg} de {totalPag}
+                        </span>
+                        <button
+                          type="button"
+                          className="lote-paginacao-btn"
+                          disabled={pg >= totalPag}
+                          onClick={() => onPagina(pg + 1)}
+                          aria-label="Próxima página"
+                        >
+                          Próxima ›
+                        </button>
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
                 <tr>
                   <td colSpan={4} className="px-3 py-3 text-center text-[11px] text-slate-500">
-                    Exibindo as primeiras {ROWS_LIMIT} de {linhas.length} linhas filtradas — refine a busca para revisar o restante.
+                    Exibindo todas as {linhas.length} linhas filtradas ({resumo.itens.length} no arquivo).
                     A seta abre a análise da {NOME_IA}; 👁 abre CFOP · CST · PIS · COFINS e Reforma.
                   </td>
                 </tr>
-              ) : null}
+              )}
             </tbody>
           </table>
         </div>
@@ -687,7 +745,7 @@ function LinhaLote({
     item.classificacoes.findIndex((x) => x.id === c?.id && x.cst === c?.cst),
   )
   const trocouSugestao = analise && analise.totalOpcoes > 1 && indiceEscolhido !== sugerida
-  const precisaRevisao = item.ncm.length !== 8 || Boolean(analise?.divergenciaNome) || item.classificacoes.length > 1
+  const precisaRevisao = item.ncm.length !== 8 || item.classificacoes.length > 1
 
   return (
     <>
@@ -755,7 +813,6 @@ function CelulaIA({ item, indiceEscolhido, trocouSugestao }: { item: ItemLote; i
     return (
       <span className="lote-ia lote-ia--geral" title={a.resumo}>
         <span aria-hidden="true">⚡</span> regra geral
-        {a.divergenciaNome ? ' · revisar nome' : ''}
       </span>
     )
   }
@@ -1061,11 +1118,6 @@ function celulaLote(
         <div className="text-[10px] text-amber-700 dark:text-amber-400">
           ⚡ {r?.descricaoCClassTrib || 'Tributação integral'}
         </div>
-        {a?.divergenciaNome ? (
-          <div className="lote-divergente" title={a.alertas[0] ?? 'O nome não conversa com o NCM.'}>
-            ⚠ revisar nome × NCM
-          </div>
-        ) : null}
         {seloExtinto}
       </div>
     )
@@ -1079,11 +1131,6 @@ function celulaLote(
         <div className="truncate text-[10px] text-slate-500" title={r?.descricaoCClassTrib}>
           {r?.descricaoCClassTrib || c.baseLegal}
         </div>
-        {a?.divergenciaNome ? (
-          <div className="lote-divergente" title={a.alertas[0] ?? 'O nome não conversa com o NCM.'}>
-            ⚠ revisar nome × NCM
-          </div>
-        ) : null}
         {seloExtinto}
       </div>
     )
@@ -1128,7 +1175,7 @@ function paraLinhaLote(it: ItemLote): LinhaLote {
       : it.manual
         ? 'manual · usuário (isenta o sistema)'
         : it.regraGeral
-          ? `regra geral${a?.divergenciaNome ? ' · revisar nome × NCM' : ''}`
+          ? 'regra geral'
           : it.classificacoes.length > 1
             ? `${it.classificacoes.length} opções · ${NOME_IA} sugere Opção ${(a?.maisProvavelIndice ?? 0) + 1} · escolha do usuário`
             : `classificada${a ? ` · ${NOME_IA} confirma` : ''}`

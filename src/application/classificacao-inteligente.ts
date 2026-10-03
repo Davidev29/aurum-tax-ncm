@@ -21,6 +21,7 @@ import {
   calcularConfianca,
   consultasEfetivas,
   consultasTolerantes,
+  expandirConsultasNucleoForte,
   expandirSinonimo,
   perguntasComplementares,
   type Confianca,
@@ -290,6 +291,21 @@ export async function classificarPorDescricao(
         etapa: 'Tolerância a ruído',
         detalhe: `match obtido ignorando termos sem correspondente oficial (ex.: ${tol.ignorados.slice(0, 3).join(', ')})`,
       })
+    }
+  }
+  // Núcleo forte (última bala lexical): nenhum match → tenta só os 2 tokens
+  // mais específicos. Roda SÓ no vazio para não diluir a margem do caminho
+  // primário (precisão > cobertura no determinístico).
+  if (!agregados.size) {
+    const nucleo = expandirConsultasNucleoForte(analise.tokens)
+    if (nucleo.length) {
+      await agregar(nucleo)
+      if (agregados.size) {
+        trilha.push({
+          etapa: 'Núcleo forte',
+          detalhe: `match obtido no núcleo específico (“${nucleo.join('” / “')}”)`,
+        })
+      }
     }
   }
   // Etapa 2b — dicionário comercial (nomes populares → NCM exato).
