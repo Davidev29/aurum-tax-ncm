@@ -99,9 +99,47 @@ export interface VinculoNbs {
   cst: string
   cClassTrib: string
   baseLegal: string
+  /** Redução de alíquota da origem (ex.: 0.6 = 60%) — auditoria; o cálculo usa a referência. */
+  reducao: number | null
   aliquotaIBS: number | null
   aliquotaCBS: number | null
   descricao: string
+  /** DFes relacionados da origem (ex.: `NFE, NFSE`) — chips de documento. */
+  documentos: string
+}
+
+/**
+ * Linha CNAE × Anexo do Simples Nacional (Phase 7, arquivo vivo
+ * `CNAE X ANEXO.json`). ATENÇÃO: `anexos` aqui são os Anexos I–V do
+ * **Simples Nacional** (com Fator R), NÃO os anexos da LC 214/2025.
+ * A UI deve rotular sempre "Anexo Simples".
+ */
+export interface CnaeAnexo {
+  /** CNAE 7 dígitos (`0111301`); keyPath da store `cnae`. */
+  codigo7: string
+  /** Formato oficial `XXXX-X/XX` (ex.: `0111-3/01`). */
+  codigoFormatado: string
+  descricao: string
+  /** `Permitido` | `Permitido com ressalvas` | `Depende da atividade`. */
+  situacao: 'Permitido' | 'Permitido com ressalvas' | 'Depende da atividade'
+  /** Anexos do Simples (`['III','V']` para `"III / V"`). */
+  anexos: string[]
+  /** Fator R aplicável (Anexo III vs V). */
+  fatorR: boolean
+}
+
+/** Cache de consulta por CNPJ (Phase 7, BrasilAPI + TTL 30 dias). */
+export interface ConsultaCnpj {
+  /** CNPJ 14 dígitos; keyPath da store `consultasCnpj`. */
+  cnpj: string
+  razaoSocial: string
+  fantasia: string
+  porte: string | null
+  situacao: string | null
+  opcaoSimples: boolean | null
+  cnaePrincipal: string | null
+  cnaesSecundarios: string[]
+  quando: string
 }
 
 /**
@@ -417,7 +455,7 @@ export interface Classificacao {
   cClassTrib: string
   baseLegal: string
   descricao: string
-  vinculo: VinculoNcm | null
+  vinculo: VinculoNcm | VinculoNbs | null
   cstDetalhes: TabelaCst | null
   cstClassTribDetalhes: TabelaCstClassTrib | null
   referencia: ReferenciaTributaria | null

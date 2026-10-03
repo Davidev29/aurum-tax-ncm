@@ -14,11 +14,13 @@ import { fingerprintBase, type TipoBase } from './formatos'
 import {
   normalizarAnexosCff,
   normalizarClassTribCff,
+  normalizarCnaeAnexo,
   normalizarCreditoPresumido,
   normalizarCst,
   normalizarCstClassTrib,
   normalizarLocaisOperacao,
   normalizarNcm,
+  normalizarNbsServicos,
   normalizarNomenclatura,
   normalizarNbs,
   normalizarProdutoDfe,
@@ -35,6 +37,8 @@ export type FormatoBase =
   | { formato: 'anexos-cff'; total: number }
   | { formato: 'credito-presumido-cff'; total: number }
   | { formato: 'indoper-cff'; total: number }
+  | { formato: 'cnae-anexo'; total: number }
+  | { formato: 'nbs-servicos'; total: number }
   | { formato: 'classprod-cff'; total: number; sistema: string }
 
 export interface OpcoesImportacao {
@@ -48,6 +52,9 @@ export const META_BASES_CFF = {
   CRED_PRESUMIDO: 'base_credPresumido',
   IND_OPER: 'base_indOper',
   PRODUTOS_DFE: 'importacao_produtosDfe',
+  /** Phase 7 — arquivos vivos de Serviços. */
+  CNAE: 'importacao_cnae',
+  NBS_SERVICOS: 'importacao_nbs_servicos',
 } as const
 
 export interface StatusBase {
@@ -57,6 +64,8 @@ export interface StatusBase {
   referencia: number
   nomenclatura: number
   nbs: number
+  /** Phase 7 — CNAE × Anexo Simples. */
+  cnae: number
   anexos: number
   produtosDfe: number
   credPresumido: number
@@ -238,6 +247,38 @@ export async function importarBase(
     return { formato: tipo, total: dados.length }
   }
 
+  // Phase 7 — arquivo vivo `CNAE X ANEXO.json` (array plano, chaves PT).
+  if (tipo === 'cnae-anexo') {
+    onProgress('Mapeando CNAE × Anexo', 10)
+    const itens = normalizarCnaeAnexo(json)
+    if (!itens.length) throw new Error('Tabela CNAE sem registros válidos.')
+    onProgress('Limpando CNAE', 15)
+    await db.cnae.clear()
+    onProgress('Gravando CNAE', 20)
+    await bulkPut(db.cnae, itens, (f, t) =>
+      onProgress('Gravando CNAE', 20 + Math.round((f / t) * 75)),
+    )
+    await db.meta.put({ chave: META_BASES_CFF.CNAE, data: agora, arquivo: nomeArquivo, total: itens.length })
+    onProgress('Finalizado', 100)
+    return { formato: 'cnae-anexo', total: itens.length }
+  }
+
+  // Phase 7 — arquivo vivo `NBS SERVIÇOS.json` (array plano, chaves PT + dedupe).
+  if (tipo === 'nbs-servicos') {
+    onProgress('Mapeando NBS Serviços', 10)
+    const { vinculos } = normalizarNbsServicos(json)
+    if (!vinculos.length) throw new Error('NBS Serviços sem registros válidos.')
+    onProgress('Limpando NBS', 15)
+    await db.nbs.clear()
+    onProgress('Gravando NBS', 20)
+    await bulkPut(db.nbs, vinculos, (f, t) =>
+      onProgress('Gravando NBS', 20 + Math.round((f / t) * 75)),
+    )
+    await db.meta.put({ chave: META_BASES_CFF.NBS_SERVICOS, data: agora, arquivo: nomeArquivo, total: vinculos.length })
+    onProgress('Finalizado', 100)
+    return { formato: 'nbs-servicos', total: vinculos.length }
+  }
+
   // API CFF `ConsultaClassificacaoProduto` (formato real, por produto):
   // exige o sistema (o arquivo não declara a própria origem).
   if (tipo === 'classprod-cff') {
@@ -281,6 +322,7 @@ export const ARQUIVOS_BASE = [
   'classificacao-tributaria.json',
   'reforma.json',
   'nomenclatura.json',
+  'cnae.json',
 ] as const
 
 /**
@@ -305,7 +347,13 @@ export async function semearBaseEmbutida(
   onProgress: Progresso = () => {},
   forcar = false,
 ): Promise<StatusBase> {
-  if ((await baseCompleta()) && !forcar) return statusBase()
+  // Base legada já semeada: não resemeia tudo, mas completa as stores novas
+  // (Phase 7) que o banco antigo não tem — sem isso, quem atualizou o app
+  // fica com `cnae` vazia e todo CNAE cai em "fora da tabela viva".
+  if ((await baseCompleta()) && !forcar) {
+    await completarStoresFase7().catch(() => false)
+    return statusBase()
+  }
 
   onProgress('Lendo manifesto da base', 4)
   let manifest: Manifest | null = null
@@ -339,6 +387,18 @@ export async function semearBaseEmbutida(
   }
   const nomenclatura: NomenclaturaNcm[] = normalizarNomenclatura(nomenJson)
 
+  // Phase 7 — CNAE × Anexo Simples (arquivo vivo; ausente = store vazia, sem falhar).
+  onProgress('Carregando CNAE × Anexo', 44)
+  let cnae: import('@/domain/entities').CnaeAnexo[] = []
+  try {
+    const cnaeJson = JSON.parse(await lerArquivoBase('cnae.json')) as ArquivoRef & {
+      itens: unknown
+    }
+    cnae = normalizarCnaeAnexo(cnaeJson.itens ?? cnaeJson)
+  } catch {
+    cnae = []
+  }
+
   onProgress('Limpando base anterior', 45)
   await Promise.all([
     db.ncm.clear(),
@@ -346,6 +406,8 @@ export async function semearBaseEmbutida(
     db.cstClassTrib.clear(),
     db.referencia.clear(),
     db.ncmNomenclatura.clear(),
+    db.nbs.clear(),
+    db.cnae.clear(),
   ])
 
   const agora = new Date().toISOString()
@@ -363,6 +425,7 @@ export async function semearBaseEmbutida(
   onProgress('Gravando nomenclatura', 80)
   await bulkPut(db.ncmNomenclatura, nomenclatura, reg(80, 18))
   if (nbs.length) await bulkPut(db.nbs, nbs)
+  if (cnae.length) await bulkPut(db.cnae, cnae)
 
   await db.meta.put({
     chave: META_KEYS.IMPORTACAO,
@@ -392,7 +455,7 @@ export async function semearBaseEmbutida(
 }
 
 export async function statusBase(): Promise<StatusBase> {
-  const [ncm, cst, cstClassTrib, referencia, nomenclatura, nbs, anexos, produtosDfe, metaCred, metaInd, ultima, ultimaNom] =
+  const [ncm, cst, cstClassTrib, referencia, nomenclatura, nbs, cnae, anexos, produtosDfe, metaCred, metaInd, ultima, ultimaNom] =
     await Promise.all([
       db.ncm.count(),
       db.cst.count(),
@@ -400,6 +463,7 @@ export async function statusBase(): Promise<StatusBase> {
       db.referencia.count(),
       db.ncmNomenclatura.count(),
       db.nbs.count(),
+      db.cnae.count().catch(() => 0),
       db.anexos.count().catch(() => 0),
       db.produtosDfe.count().catch(() => 0),
       db.meta.get(META_BASES_CFF.CRED_PRESUMIDO).catch(() => undefined),
@@ -416,6 +480,7 @@ export async function statusBase(): Promise<StatusBase> {
     referencia,
     nomenclatura,
     nbs,
+    cnae,
     anexos,
     produtosDfe,
     credPresumido: typeof metaCred?.total === 'number' ? metaCred.total : 0,
@@ -430,21 +495,78 @@ export async function statusBase(): Promise<StatusBase> {
   }
 }
 
+/**
+ * Completa as stores da Phase 7 em bancos legados já semeados.
+ *
+ * Cenário: o usuário atualizou o app com a base NCM completa, mas as stores
+ * `cnae` (e `nbs`, em instalações muito antigas) estão vazias — o seed
+ * completo é pulado pelo early-return de `baseCompleta()`. Sem este top-up,
+ * todo CNAE cai em "fora da tabela viva". Idempotente e best-effort: nunca
+ * quebra o boot (`semearBaseEmbutida` a chama no caminho rápido).
+ *
+ * Devolve `true` quando preencheu ao menos uma store.
+ */
+export async function completarStoresFase7(): Promise<boolean> {
+  let completou = false
+  try {
+    const [cnae, nbs] = await Promise.all([db.cnae.count(), db.nbs.count()])
+    if (cnae === 0) {
+      try {
+        const cnaeJson = JSON.parse(await lerArquivoBase('cnae.json')) as ArquivoRef & {
+          itens: unknown
+        }
+        const itens = normalizarCnaeAnexo(cnaeJson.itens ?? cnaeJson)
+        if (itens.length) {
+          await bulkPut(db.cnae, itens)
+          await db.meta.put({
+            chave: META_BASES_CFF.CNAE,
+            data: new Date().toISOString(),
+            arquivo: 'base embutida (top-up Phase 7)',
+            total: itens.length,
+          })
+          completou = true
+        }
+      } catch {
+        /* sem cnae.json embutido: mantém vazia, sem falhar */
+      }
+    }
+    if (nbs === 0) {
+      try {
+        const reformaJson = JSON.parse(await lerArquivoBase('reforma.json')) as ArquivoRef & {
+          nbs: unknown[]
+        }
+        const itens = normalizarNbs(reformaJson.nbs)
+        if (itens.length) {
+          await bulkPut(db.nbs, itens)
+          completou = true
+        }
+      } catch {
+        /* sem reforma.json embutido: mantém vazia, sem falhar */
+      }
+    }
+  } catch {
+    return false
+  }
+  return completou
+}
+
 /** Apaga apenas a base importada (SPEC R10.12). */
-export async function apagarBaseImportada(): Promise<void> {
-  await Promise.all([
+export async function apagarBaseImportada(): Promise<void> {  await Promise.all([
     db.ncm.clear(),
     db.cst.clear(),
     db.cstClassTrib.clear(),
     db.referencia.clear(),
     db.ncmNomenclatura.clear(),
     db.nbs.clear(),
+    db.cnae.clear().catch(() => undefined),
     db.anexos.clear().catch(() => undefined),
     db.produtosDfe.clear().catch(() => undefined),
     db.classificacaoProduto.clear(),
     db.meta.delete(META_KEYS.IMPORTACAO),
     db.meta.delete(META_KEYS.IMPORTACAO_NOMENCLATURA),
     db.meta.delete(META_BASES_CFF.ANEXOS),
+    db.meta.delete(META_BASES_CFF.CNAE),
+    db.meta.delete(META_BASES_CFF.NBS_SERVICOS),
     db.meta.delete(META_BASES_CFF.CRED_PRESUMIDO),
     db.meta.delete(META_BASES_CFF.IND_OPER),
     db.meta.delete('base_embutida'),

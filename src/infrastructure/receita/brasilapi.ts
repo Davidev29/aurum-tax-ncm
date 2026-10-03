@@ -10,6 +10,7 @@
  * - nunca lança em lote — o chamador recebe `{ ok, motivo }` por item.
  */
 import { norm } from '@/domain/services/format'
+import { mensagemCnpjInvalido, validarCnpj } from '@/domain/services/cnpj'
 
 export interface DadosCnpjBrasilApi {
   cnpj: string
@@ -21,6 +22,18 @@ export interface DadosCnpjBrasilApi {
   cep: string
   telefone: string
   email: string
+  /** Phase 7 — atividades (CNAE 7 dígitos). Ausentes quando a fonte não informa. */
+  cnaePrincipal?: string | null
+  cnaePrincipalDescricao?: string | null
+  cnaesSecundarios?: { codigo: string; descricao: string }[]
+  porte?: string | null
+  situacao?: string | null
+  opcaoSimples?: boolean | null
+}
+
+interface CnaeSecundarioApi {
+  codigo?: unknown
+  descricao?: unknown
 }
 
 interface RespostaBrasilApi {
@@ -37,6 +50,13 @@ interface RespostaBrasilApi {
   ddd_telefone_1?: unknown
   ddd_telefone_2?: unknown
   email?: unknown
+  /** Phase 7 — CNAE (número 7 dígitos ou `XXXX-X/XX`) + descrição. */
+  cnae_fiscal?: unknown
+  cnae_fiscal_descricao?: unknown
+  cnaes_secundarios?: unknown
+  porte?: unknown
+  descricao_situacao_cadastral?: unknown
+  opcao_pelo_simples?: unknown
 }
 
 const BASE = 'https://brasilapi.com.br/api/cnpj/v1'
@@ -46,12 +66,30 @@ const cache = new Map<string, DadosCnpjBrasilApi>()
 
 const txt = (v: unknown): string => String(v ?? '').trim()
 
+const digitos7 = (v: unknown): string | null => {
+  const d = norm(v)
+  return d.length === 7 ? d : null
+}
+
+const boolOuNulo = (v: unknown): boolean | null => {
+  if (v === null || v === undefined || v === '') return null
+  if (typeof v === 'boolean') return v
+  const s = String(v).trim().toLowerCase()
+  if (['sim', 's', '1', 'true'].includes(s)) return true
+  if (['não', 'nao', 'n', '0', 'false'].includes(s)) return false
+  return null
+}
+
 /** Normaliza a resposta da BrasilAPI para o shape interno. */
 export function mapearRespostaBrasilApi(res: RespostaBrasilApi): DadosCnpjBrasilApi {
   const partesEnd = [txt(res.logradouro), txt(res.numero), txt(res.complemento), txt(res.bairro)]
     .filter(Boolean)
     .join(', ')
   const fone = txt(res.ddd_telefone_1) || txt(res.ddd_telefone_2)
+  const secundarios = Array.isArray(res.cnaes_secundarios) ? res.cnaes_secundarios : []
+  const cnaesSecundarios = (secundarios as CnaeSecundarioApi[])
+    .map((s) => ({ codigo: digitos7(s?.codigo), descricao: txt(s?.descricao) }))
+    .filter((s): s is { codigo: string; descricao: string } => s.codigo !== null)
   return {
     cnpj: norm(res.cnpj),
     razaoSocial: txt(res.razao_social),
@@ -62,6 +100,12 @@ export function mapearRespostaBrasilApi(res: RespostaBrasilApi): DadosCnpjBrasil
     cep: norm(res.cep),
     telefone: fone,
     email: txt(res.email),
+    cnaePrincipal: digitos7(res.cnae_fiscal),
+    cnaePrincipalDescricao: txt(res.cnae_fiscal_descricao) || null,
+    cnaesSecundarios,
+    porte: txt(res.porte) || null,
+    situacao: txt(res.descricao_situacao_cadastral) || null,
+    opcaoSimples: boolOuNulo(res.opcao_pelo_simples),
   }
 }
 
@@ -79,10 +123,11 @@ export async function buscarCnpj(
   cnpjBruto: string,
   fetchFn: typeof fetch = fetch,
 ): Promise<DadosCnpjBrasilApi> {
-  const cnpj = norm(cnpjBruto)
-  if (cnpj.length !== 14) {
-    throw new Error('CNPJ inválido: informe os 14 dígitos.')
+  const validado = validarCnpj(cnpjBruto)
+  if (!validado.ok) {
+    throw new Error(mensagemCnpjInvalido(validado.motivo ?? 'cnpj-tamanho'))
   }
+  const cnpj = validado.cnpj
   const hit = cache.get(cnpj)
   if (hit) return hit
 

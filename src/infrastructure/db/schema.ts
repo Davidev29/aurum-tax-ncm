@@ -8,6 +8,8 @@ import type {
   AnexoNcm,
   AuditLog,
   ClassificacaoProdutoSistema,
+  CnaeAnexo,
+  ConsultaCnpj,
   Empresa,
   NomenclaturaNcm,
   Produto,
@@ -217,6 +219,12 @@ export class AurumDatabase extends Dexie {
   /** Feedback "Não é esse" da Sugestão IA (Dexie v9, Phase 6 / 06-06). */
   iaFeedback!: Table<IaFeedback, number>
 
+  /** CNAE × Anexo Simples (Phase 7, arquivo vivo). */
+  cnae!: Table<CnaeAnexo, string>
+
+  /** Cache de consultas por CNPJ (Phase 7, BrasilAPI + TTL). */
+  consultasCnpj!: Table<ConsultaCnpj, string>
+
   constructor() {
     super(DB_NAME)
     // v6: schema anterior (sem `classificacaoProduto`). Mantido para a
@@ -284,6 +292,31 @@ export class AurumDatabase extends Dexie {
         [STORES.IAFEEDBACK]: '++id, quando, via, decisao',
       })
     // v10 (bases CFF reais): adiciona `anexos` + `produtosDfe`; demais intactas.
+    // Congelada: bancos em v10 sobem para v11 sem perder dados.
+    this.version(10)
+      .stores({
+        [STORES.NCM]: 'id, codigo, cst, cClassTrib',
+        [STORES.NBS]: 'id, codigo, cClassTrib',
+        [STORES.CST]: 'codigo',
+        [STORES.CSTCT]: 'id, cst, cClassTrib',
+        [STORES.REFERENCIA]: 'id, cst, cClassTrib',
+        [STORES.NCMNOM]: 'codigo, descricao',
+        [STORES.EMPRESAS]: '++id, razaoSocial, cnpj',
+        [STORES.PRODUTOS]: '++id, empresaId, ncm, codigo, cstReforma',
+        [STORES.META]: 'chave',
+        [STORES.CFOP]: 'codigo',
+        [STORES.CSTICMS]: 'codigo',
+        [STORES.CSTPISCOFINS]: 'codigo',
+        [STORES.NFENOTAS]: '++id, empresaId, dataEmissao, direcao, emitCnpj, chave, &[empresaId+chave]',
+        [STORES.RECLASS]: 'ncm',
+        [STORES.CLASSPROD]: 'id, sistema, cClassTrib',
+        [STORES.AUDIT]: '++id, quando, tabela, chave, autor',
+        [STORES.CEST]: 'codigo, ncm',
+        [STORES.IAFEEDBACK]: '++id, quando, via, decisao',
+        [STORES.ANEXOS]: 'id, codigo, nroAnexo',
+        [STORES.PRODUTOSDFE]: 'id, sistema, codClassProd',
+      })
+    // v11 (Phase 7 Serviços): adiciona `cnae` + `consultasCnpj`; demais intactas.
     this.version(DB_VERSION)
       .stores({
         [STORES.NCM]: 'id, codigo, cst, cClassTrib',
@@ -306,6 +339,8 @@ export class AurumDatabase extends Dexie {
         [STORES.IAFEEDBACK]: '++id, quando, via, decisao',
         [STORES.ANEXOS]: 'id, codigo, nroAnexo',
         [STORES.PRODUTOSDFE]: 'id, sistema, codClassProd',
+        [STORES.CNAE]: 'codigo7, descricao',
+        [STORES.CONSULTAS_CNPJ]: 'cnpj',
       })
   }
 }
@@ -334,7 +369,7 @@ export async function contarTodos(): Promise<Record<string, number>> {
   const [
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
     cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
-    anexos, produtosDfe,
+    anexos, produtosDfe, cnae, consultasCnpj,
   ] = await Promise.all([
     db.ncm.count(),
     db.nbs.count(),
@@ -355,10 +390,12 @@ export async function contarTodos(): Promise<Record<string, number>> {
     db.iaFeedback.count().catch(() => 0),
     db.anexos.count().catch(() => 0),
     db.produtosDfe.count().catch(() => 0),
+    db.cnae.count().catch(() => 0),
+    db.consultasCnpj.count().catch(() => 0),
   ])
   return {
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
     cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
-    anexos, produtosDfe,
+    anexos, produtosDfe, cnae, consultasCnpj,
   }
 }

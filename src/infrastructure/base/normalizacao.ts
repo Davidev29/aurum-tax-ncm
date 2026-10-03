@@ -308,12 +308,131 @@ export function normalizarNbs(bruto: unknown): VinculoNbs[] {
         cst: padCst(n.cst) ?? '',
         cClassTrib: padCct(n.cClassTrib) ?? '',
         baseLegal: str(n.baseLegal),
+        reducao: toNum(alt(n, 'reducao', 'reducao')),
         aliquotaIBS: toNum(n.aliquotaIBS),
         aliquotaCBS: toNum(n.aliquotaCBS),
         descricao: str(alt(n, 'descricaoCompleta', 'descricao')),
+        documentos: str(alt(n, 'documentosFiscaisRelacionados', 'documentos')),
       } satisfies VinculoNbs
     })
     .filter((n): n is VinculoNbs => n !== null)
+}
+
+/* --------------------------------------------------------------------------
+   Phase 7 — arquivos vivos de Serviços (CNAE × Anexo Simples, NBS Serviços)
+   Chaves acentuadas via `alt()` (ex.: `Descrição oficial` → `descricao`).
+   -------------------------------------------------------------------------- */
+
+/** `0111-3/01` → `0111301` (7 dígitos, chave de lookup). */
+export const somenteDigitosCnae = (v: unknown): string => digits(v)
+
+/** `0111301` → `0111-3/01` (máscara oficial). Fora do padrão, devolve cru. */
+export function fmtCnae(codigo7: unknown): string {
+  const d = digits(codigo7)
+  if (d.length !== 7) return String(codigo7 ?? '').trim()
+  return `${d.slice(0, 4)}-${d.slice(4, 5)}/${d.slice(5, 7)}`
+}
+
+const SITUACOES_CNAE = [
+  'Permitido',
+  'Permitido com ressalvas',
+  'Depende da atividade',
+] as const
+
+export type SituacaoCnae = (typeof SITUACOES_CNAE)[number]
+
+const normalizarSituacaoCnae = (v: unknown): SituacaoCnae => {
+  const s = str(v)
+  const achada = SITUACOES_CNAE.find((x) => x.toLowerCase() === s.toLowerCase())
+  return achada ?? 'Depende da atividade'
+}
+
+/** `"III / V"` → `['III','V']`; `"Não aplicável"` é descartado. */
+export function normalizarAnexosSimples(v: unknown): string[] {
+  return String(v ?? '')
+    .split('/')
+    .map((p) => p.trim().toUpperCase())
+    .filter((p) => p && p !== 'NÃO APLICÁVEL' && p !== 'NAO APLICAVEL')
+}
+
+const ehSim = (v: unknown): boolean => {
+  const s = String(v ?? '').trim().toLowerCase()
+  return s === 'sim' || s === 's' || s === '1' || s === 'true'
+}
+
+/**
+ * Normaliza `CNAE X ANEXO.json` (array plano) ou o artefato `cnae.json`
+ * da base embutida (`{ itens: [...] }`). Idempotente nos dois sentidos.
+ */
+export function normalizarCnaeAnexo(bruto: unknown): import('@/domain/entities').CnaeAnexo[] {
+  const lista = Array.isArray(bruto)
+    ? bruto
+    : ((bruto as { itens?: unknown })?.itens as unknown[] | undefined)
+  if (!Array.isArray(lista)) return []
+  const vistos = new Set<string>()
+  const out: import('@/domain/entities').CnaeAnexo[] = []
+  for (const raw of lista) {
+    if (!raw || typeof raw !== 'object') continue
+    const r = raw as Record<string, unknown>
+    const codigo7 = digits(alt(r, 'CNAE', 'codigo7') ?? alt(r, 'codigoFormatado', 'codigoFormatado'))
+    if (codigo7.length !== 7 || vistos.has(codigo7)) continue
+    vistos.add(codigo7)
+    out.push({
+      codigo7,
+      codigoFormatado: fmtCnae(codigo7),
+      descricao: str(alt(r, 'Descrição oficial', 'descricao')),
+      situacao: normalizarSituacaoCnae(alt(r, 'Situação', 'situacao')),
+      anexos: normalizarAnexosSimples(alt(r, 'Anexos', 'anexos')),
+      fatorR: ehSim(alt(r, 'Fator R', 'fatorR')),
+    })
+  }
+  return out
+}
+
+export interface ResultadoNormalizacaoNbsServicos {
+  vinculos: VinculoNbs[]
+  /** Linhas descartadas como duplicadas (`codigo|cst|cClassTrib` repetido). */
+  duplicados: number
+}
+
+/**
+ * Normaliza `NBS SERVIÇOS.json` (array plano com chaves PT acentuadas) para
+ * `VinculoNbs[]`, com **dedupe** por `codigo|cst|cClassTrib` (o arquivo vivo
+ * contém ~30 linhas repetidas). `Aliq. IBS/CBS` são guardadas como dado de
+ * origem/auditoria — o cálculo usa `calcularTributos` + `REF_DEFAULT`.
+ */
+export function normalizarNbsServicos(bruto: unknown): ResultadoNormalizacaoNbsServicos {
+  const lista = Array.isArray(bruto) ? bruto : []
+  const vistos = new Set<string>()
+  const vinculos: VinculoNbs[] = []
+  let duplicados = 0
+  lista.forEach((raw, i) => {
+    if (!raw || typeof raw !== 'object') return
+    const n = raw as Record<string, unknown>
+    const codigo = digits(alt(n, 'NBS', 'codigo'))
+    if (codigo.length !== 9) return
+    const cst = padCst(alt(n, 'CST', 'cst')) ?? ''
+    const cClassTrib = padCct(alt(n, 'CclassTrib', 'cClassTrib')) ?? ''
+    const chave = `${codigo}|${cst}|${cClassTrib}`
+    if (vistos.has(chave)) {
+      duplicados++
+      return
+    }
+    vistos.add(chave)
+    vinculos.push({
+      id: typeof n.id === 'string' && n.id ? n.id : `${codigo}|${cClassTrib}|${i}`,
+      codigo,
+      cst,
+      cClassTrib,
+      baseLegal: str(alt(n, 'Base Legal', 'baseLegal')),
+      reducao: toNum(alt(n, 'Redução', 'reducao')),
+      aliquotaIBS: toNum(alt(n, 'Aliq. IBS', 'aliquotaIBS')),
+      aliquotaCBS: toNum(alt(n, 'Aliq. CBS', 'aliquotaCBS')),
+      descricao: str(alt(n, 'Descrição completa', 'descricao')),
+      documentos: str(alt(n, 'DFes Relac.', 'documentos')),
+    })
+  })
+  return { vinculos, duplicados }
 }
 
 /* --------------------------------------------------------------------------

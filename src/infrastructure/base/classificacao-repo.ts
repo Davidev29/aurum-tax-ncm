@@ -1,5 +1,5 @@
 import { REGRA_GERAL } from '@/domain/constants'
-import type { Classificacao, NomenclaturaNcm, VinculoNcm } from '@/domain/entities'
+import type { Classificacao, NomenclaturaNcm, VinculoNbs, VinculoNcm } from '@/domain/entities'
 import {
   montarClassificacao,
   montarRegraGeral,
@@ -26,7 +26,7 @@ import { buscarReclassificacaoManual, classificacaoManual } from './reclassifica
  */
 
 /** Resolve o join 3NF de um vínculo (CST + cClassTrib + referência). */
-async function contextoDe(vinculo: VinculoNcm): Promise<ContextoClassificacao> {
+async function contextoDe(vinculo: VinculoNcm | VinculoNbs): Promise<ContextoClassificacao> {
   const [cstDetalhes, cstClassTribDetalhes, referencia] = await Promise.all([
     db.cst.get(vinculo.cst),
     db.cstClassTrib.get(`${vinculo.cst}|${vinculo.cClassTrib}`),
@@ -109,6 +109,9 @@ interface EntradaIndiceTexto {
   caminho: string[]
   normPropria: string
   normCaminho: string
+  /** Tokens pré-computados (evita split O(docs) por consulta no RAG). */
+  toksPropria: string[]
+  toksCaminho: string[]
 }
 let _indiceBuscaTexto: EntradaIndiceTexto[] | null = null
 let _cacheBuscaTextoTotal = -1
@@ -130,11 +133,15 @@ async function indiceBuscaTexto(): Promise<EntradaIndiceTexto[]> {
       .filter((n) => n.codigo.length === 8)
       .map((item) => {
         const caminho = comporCaminho(item.codigo, obter)
+        const normPropria = normalizarBusca(item.descricao)
+        const normCaminho = normalizarBusca([...caminho, item.descricao].join(' '))
         return {
           item,
           caminho,
-          normPropria: normalizarBusca(item.descricao),
-          normCaminho: normalizarBusca([...caminho, item.descricao].join(' ')),
+          normPropria,
+          normCaminho,
+          toksPropria: normPropria ? [...new Set(normPropria.split(' ').filter((t) => t.length >= 2))] : [],
+          toksCaminho: normCaminho ? [...new Set(normCaminho.split(' ').filter((t) => t.length >= 2))] : [],
         }
       })
     _cacheBuscaTextoTotal = total
@@ -329,4 +336,317 @@ export async function resolverClassificacoes(
     montarClassificacao(v, nomenclatura ? { ...ctxs[i], nomenclatura } : ctxs[i]),
   )
   return { vinculos, lista, nomenclatura, regraGeral: false, manual: false, extinto: false, revogado: null }
+}
+
+/* ------------------------------------------------- NBS · serviços (Phase 7) -- */
+
+import { classificacaoRegraGeralNbs } from '@/domain/services/classificacao-nbs'
+import { fmtNbs } from '@/domain/services/format'
+import { expandirSinonimoServicos } from '@/domain/services/classificador-descricao-servicos'
+import { casaToken } from '@/domain/services/vocabulario'
+import type { HipoteseLegal } from '@/domain/services/verificacao-servicos'
+
+/** Resultado da busca textual de NBS (título = Base Legal curta). */
+export interface ResultadoBuscaTextoNbs {
+  codigo: string
+  codigoFormatado: string
+  /** Base Legal curta (nome de exibição do serviço). */
+  titulo: string
+  descricao: string
+  /** Documentos do vínculo (ex.: `NFE, NFSE`). */
+  documentos: string
+  /** Quantos vínculos da Reforma existem para este NBS. */
+  totalClassificacoes: number
+  score: number
+}
+
+interface EntradaIndiceTextoNbs {
+  vinculo: VinculoNbs
+  normTitulo: string
+  normRico: string
+  toksRico: string[]
+}
+
+let _indiceBuscaTextoNbs: EntradaIndiceTextoNbs[] | null = null
+let _cacheBuscaTextoNbsTotal = -1
+
+/** Invalida o cache da busca textual NBS (chamar após importar/apagar a base). */
+export function invalidarCacheBuscaTextoNbs(): void {
+  _indiceBuscaTextoNbs = null
+  _cacheBuscaTextoNbsTotal = -1
+}
+
+async function indiceBuscaTextoNbs(): Promise<EntradaIndiceTextoNbs[]> {
+  const total = await db.nbs.count()
+  if (_indiceBuscaTextoNbs === null || _cacheBuscaTextoNbsTotal !== total) {
+    const vinculos = await db.nbs.toArray()
+    _indiceBuscaTextoNbs = vinculos.map((vinculo) => {
+      const normTitulo = normalizarBusca(vinculo.baseLegal)
+      const normRico = normalizarBusca(`${vinculo.baseLegal} ${vinculo.descricao}`)
+      return {
+        vinculo,
+        normTitulo,
+        normRico,
+        toksRico: normRico ? [...new Set(normRico.split(' ').filter((t) => t.length >= 2))] : [],
+      }
+    })
+    _cacheBuscaTextoNbsTotal = total
+  }
+  return _indiceBuscaTextoNbs ?? []
+}
+
+/** Rótulo curto de exibição do NBS (Base Legal já é curta por construção). */
+export function tituloNbs(v: Pick<VinculoNbs, 'baseLegal' | 'descricao'>): string {
+  const base = String(v.baseLegal ?? '').trim()
+  if (base) return base
+  return String(v.descricao ?? '').trim().slice(0, 90) || 'Serviço sem descrição'
+}
+
+/** R2.3-NBS — prefixo com no mínimo 2 dígitos; vigentes conceituais primeiro. */
+export async function sugerirNbs(prefixo: unknown, limite = 30): Promise<VinculoNbs[]> {
+  const t = norm(prefixo)
+  if (t.length < 2) return []
+  const folga = Math.min(limite + 20, 100)
+  const achados = await db.nbs
+    .where('codigo')
+    .between(t, `${t}\uffff`, true, true)
+    .limit(folga)
+    .toArray()
+  achados.sort((a, b) => a.codigo.localeCompare(b.codigo))
+  return achados.slice(0, limite)
+}
+
+/**
+ * Busca NBS pelo **nome/descrição do serviço**.
+ *
+ * RAG em 2 fases (paridade com `buscarNomenclaturaPorTexto`):
+ * - Fase 1 (precisão): AND estrito sobre tokens relevantes + variação com
+ *   sinônimos de serviços;
+ * - Fase 2 (cobertura): OR tolerante até encher.
+ */
+export async function buscarNbsPorTexto(
+  termo: unknown,
+  limite = 30,
+  opts?: { tolerante?: boolean },
+): Promise<ResultadoBuscaTextoNbs[]> {
+  const tokens = tokensRelevantes(termo)
+  if (!tokens.length) return []
+  const indice = await indiceBuscaTextoNbs()
+  const teto = Math.max(1, Math.min(limite, 100))
+  const tolerante = opts?.tolerante ?? true
+
+  const expandidos = tokens.map((t) => expandirSinonimoServicos(t) ?? t)
+  const tokensExpandidos = [...new Set(expandidos)].join(' ') !== tokens.join(' ') ? [...new Set(expandidos)] : null
+
+  const porCodigo = new Map<string, ResultadoBuscaTextoNbs>()
+
+  function oferecer(e: EntradaIndiceTextoNbs, score: number): void {
+    if (score < 0) return
+    const atual = porCodigo.get(e.vinculo.codigo)
+    if (!atual || score > atual.score) {
+      porCodigo.set(e.vinculo.codigo, {
+        codigo: e.vinculo.codigo,
+        codigoFormatado: fmtNbs(e.vinculo.codigo),
+        titulo: tituloNbs(e.vinculo),
+        descricao: e.vinculo.descricao,
+        documentos: e.vinculo.documentos ?? '',
+        totalClassificacoes: 0,
+        score,
+      })
+    }
+  }
+
+  for (const e of indice) {
+    oferecer(e, pontuarCandidato(tokens, e.normTitulo, e.normRico))
+  }
+  if (tokensExpandidos) {
+    for (const e of indice) {
+      if (porCodigo.has(e.vinculo.codigo)) continue
+      oferecer(e, pontuarCandidato(tokensExpandidos, e.normTitulo, e.normRico))
+    }
+  }
+
+  if (tolerante && porCodigo.size < teto) {
+    const listas: string[][] = [tokens]
+    if (tokensExpandidos) listas.push(tokensExpandidos)
+    for (const toks of listas) {
+      for (const e of indice) {
+        if (porCodigo.has(e.vinculo.codigo)) continue
+        oferecer(e, pontuarCandidatoParcial(toks, e.normTitulo, e.normRico))
+        if (porCodigo.size >= teto * 3) break
+      }
+      if (porCodigo.size >= teto * 3) break
+    }
+  }
+
+  const candidatos = [...porCodigo.values()]
+  candidatos.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return a.codigo.localeCompare(b.codigo)
+  })
+  const pagina = candidatos.slice(0, teto)
+
+  if (pagina.length) {
+    try {
+      const vinculos = await db.nbs
+        .where('codigo')
+        .anyOf(pagina.map((p) => p.codigo))
+        .toArray()
+      const contagem = new Map<string, number>()
+      for (const v of vinculos) contagem.set(v.codigo, (contagem.get(v.codigo) ?? 0) + 1)
+      for (const p of pagina) p.totalClassificacoes = contagem.get(p.codigo) ?? 0
+    } catch {
+      // Sem vínculos: mantém 0, a busca continua útil.
+    }
+  }
+  return pagina
+}
+
+/**
+ * Fluxo 0/1/N dos SERVIÇOS (Phase 7) — motor único do menu Serviços.
+ *
+ * Prioridade: vínculos oficiais da base → regra geral (`000|000001`,
+ * tributação integral). Vínculos com anexo/cct revogado são filtrados;
+ * se nada restar, regra geral com `revogado`. Sem reclassificação manual
+ * no v1 (fora de escopo Phase 7).
+ */
+export async function resolverClassificacoesNbs(
+  codigo: unknown,
+): Promise<{
+  vinculos: VinculoNbs[]
+  lista: Classificacao[]
+  regraGeral: boolean
+  revogado: Revogacao | null
+}> {
+  const c = norm(codigo)
+  if (c.length !== 9) {
+    return { vinculos: [], lista: [], regraGeral: false, revogado: null }
+  }
+  const vinculos = await db.nbs.where('codigo').equals(c).toArray()
+
+  let revogado: Revogacao | null = null
+  let vivos = vinculos
+  if (vivos.length) {
+    const dinamicas = await obterRevogacoesCff()
+    const mantidos: VinculoNbs[] = []
+    for (const v of vivos) {
+      const ctx = await contextoDe(v)
+      const rev = revogacaoDe(v.cClassTrib, ctx.referencia?.anexo, dinamicas)
+      if (rev && !revogado) revogado = rev
+      if (!rev) mantidos.push(v)
+    }
+    vivos = mantidos
+  }
+  vivos.sort((a, b) => a.cst.localeCompare(b.cst) || a.cClassTrib.localeCompare(b.cClassTrib))
+  if (!vivos.length) {
+    const rg = await classificacaoRegraGeralNbs(c)
+    if (revogado) rg.revogado = revogado
+    return { vinculos, lista: [rg], regraGeral: true, revogado }
+  }
+  const ctxs = await Promise.all(vivos.map(contextoDe))
+  const lista = vivos.map((v, i) => montarClassificacao(v, ctxs[i]))
+  return { vinculos, lista, regraGeral: false, revogado: null }
+}
+
+/* --------------------------------- hipóteses legais (conferência Phase 7) -- */
+
+/**
+ * Genéricos que nunca decidem um match sozinhos (aparecem em todas as linhas
+ * da referência: "observado o art…", "Lei Complementar nº 214…").
+ */
+const GENERICOS_HIPOTESE = new Set([
+  'atividade', 'atividades', 'servico', 'servicos', 'serv', 'fornec',
+  'fornecimento', 'fornecimentos', 'prestacao', 'prestacoes', 'similares',
+  'similar', 'outros', 'outras', 'outro', 'outra', 'demais', 'geral', 'forma',
+  'observado', 'observada', 'artigo', 'artigos', 'art', 'arts', 'lei', 'complementar',
+  'inciso', 'incisos', 'paragrafo', 'alinea', 'bem', 'bens',
+])
+
+function tokensHipoteses(texto: unknown): string[] {
+  const base = tokensRelevantes(texto).filter(
+    (t) => !GENERICOS_HIPOTESE.has(t) && !/^\d+$/.test(t),
+  )
+  const expandidos = base.map((t) => expandirSinonimoServicos(t) ?? t)
+  return [...new Set([...base, ...expandidos])]
+}
+
+/**
+ * Benefícios da LC 214 que o texto do CNAE sugere, lidos DA REFERÊNCIA
+ * OFICIAL (redução > 0). Ordenados por cobertura textual; só cobertura
+ * ≥ 0,40 vira hipótese. Nunca inventa vínculo: `temNbs` indica se existe
+ * NBS mapeado para o cct na base atual.
+ */
+export async function buscarHipotesesLegais(
+  textoCnae: unknown,
+  limite = 3,
+  opts?: { pinsCct?: string[] },
+): Promise<HipoteseLegal[]> {
+  const query = tokensHipoteses(textoCnae)
+  if (!query.length && !(opts?.pinsCct?.length)) return []
+  const [referencia, cstct, nbs] = await Promise.all([
+    db.referencia.toArray(),
+    db.cstClassTrib.toArray(),
+    db.nbs.toArray().catch(() => []),
+  ])
+  const porCct = new Map(referencia.map((r) => [r.cClassTrib, r]))
+  const cctsComNbs = new Set(nbs.map((v) => v.cClassTrib))
+  const lcRefPorId = new Map(cstct.map((c) => [c.id, c.lcRef ?? null]))
+
+  function montar(r: (typeof referencia)[number], cobertura: number, origem: HipoteseLegal['origem']): HipoteseLegal {
+    return {
+      cst: r.cst,
+      cClassTrib: r.cClassTrib,
+      reducaoIBS: Number(r.pRedIBS) || 0,
+      reducaoCBS: Number(r.pRedCBS) || 0,
+      anexo: r.anexo,
+      descricao: r.descricao,
+      baseLegal: lcRefPorId.get(`${r.cst}|${r.cClassTrib}`) ?? null,
+      urlLegislacao: r.urlLegislacao,
+      temNbs: cctsComNbs.has(r.cClassTrib),
+      cobertura,
+      origem,
+    }
+  }
+
+  // Pins de setor primeiro (curadoria > inferência), deduplicados abaixo.
+  const pontuadas: HipoteseLegal[] = []
+  for (const cct of opts?.pinsCct ?? []) {
+    const r = porCct.get(String(cct).replace(/\D+/g, ''))
+    if (!r) continue
+    if (!(Number(r.pRedIBS) > 0 || Number(r.pRedCBS) > 0)) continue
+    pontuadas.push(montar(r, 1, 'setor'))
+  }
+  const pinados = new Set(pontuadas.map((h) => h.cClassTrib))
+
+  for (const r of referencia) {
+    if (pinados.has(r.cClassTrib)) continue
+    const redIBS = Number(r.pRedIBS) || 0
+    const redCBS = Number(r.pRedCBS) || 0
+    if (redIBS <= 0 && redCBS <= 0) continue
+    const refToks = tokensHipoteses(`${r.descricao} ${r.cstDescricao}`)
+    if (!refToks.length || !query.length) continue
+    let casados = 0
+    for (const q of query) {
+      if (refToks.includes(q)) {
+        casados += 1
+        continue
+      }
+      for (const o of refToks) {
+        if (casaToken(q, o)) {
+          casados += 0.8
+          break
+        }
+      }
+    }
+    const cobertura = Math.round((casados / query.length) * 100) / 100
+    if (cobertura < 0.4) continue
+    pontuadas.push(montar(r, cobertura, 'texto'))
+  }
+  pontuadas.sort(
+    (a, b) => b.cobertura - a.cobertura || Math.max(b.reducaoIBS, b.reducaoCBS) - Math.max(a.reducaoIBS, a.reducaoCBS),
+  )
+  // Pins de setor têm precedência sobre o léxico (curadoria > inferência).
+  const pins = pontuadas.filter((h) => h.origem === 'setor')
+  const resto = pontuadas.filter((h) => h.origem !== 'setor')
+  return [...pins, ...resto].slice(0, Math.max(1, limite))
 }

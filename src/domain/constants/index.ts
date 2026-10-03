@@ -6,7 +6,7 @@
 /** Nome/versão do IndexedDB legado (paridade com a v1). */
 export const DB_NAME = 'aurum_tax_ncm_v1'
 /** Versão do IndexedDB. A v10 adiciona `anexos` + `produtos_dfe` (formatos reais CFF). */
-export const DB_VERSION = 10
+export const DB_VERSION = 11
 
 /** Itens por página nas listagens. */
 export const PAGE_SIZE = 10
@@ -98,6 +98,10 @@ export const STORES = {
   CEST: 'cest',
   /** Feedback "Não é esse" da Sugestão IA (Phase 6 / 06-06, Dexie v9). */
   IAFEEDBACK: 'ia_feedback',
+  /** CNAE × Anexo Simples + Fator R (Phase 7, arquivo vivo `CNAE X ANEXO.json`). */
+  CNAE: 'cnae',
+  /** Cache de consultas por CNPJ (Phase 7, BrasilAPI + TTL 30 dias). */
+  CONSULTAS_CNPJ: 'consultasCnpj',
 } as const
 
 export type StoreName = (typeof STORES)[keyof typeof STORES]
@@ -112,6 +116,13 @@ export const META_KEYS = {
 
 /** Par de CST/cClassTrib da regra geral. */
 export const REGRA_GERAL = { cst: '000', cClassTrib: '000001' } as const
+
+/**
+ * Regra geral dos SERVIÇOS (Phase 7): mesmo par da regra geral de bens —
+ * tributação integral (alíquota cheia) quando o NBS não tem vínculo na base.
+ * Alias explícito para que a tela Serviços nunca importe semântica de NCM.
+ */
+export const REGRA_GERAL_NBS = { cst: '000', cClassTrib: '000001' } as const
 
 /** Linha da legislação de referência. */
 export const LINK_LC214 = 'https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp214.htm'

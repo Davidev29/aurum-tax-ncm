@@ -18,6 +18,8 @@ export type TipoBase =
   | 'credito-presumido-cff'
   | 'indoper-cff'
   | 'classprod-cff'
+  | 'cnae-anexo'
+  | 'nbs-servicos'
   | 'desconhecido'
 
 export interface InfoBase {
@@ -39,6 +41,8 @@ const INFO: Record<TipoBase, Omit<InfoBase, 'tipo'>> = {
   'credito-presumido-cff': { rotulo: 'Crédito presumido (API CFF)', destino: 'meta (versionado)', precisaSistema: false },
   'indoper-cff': { rotulo: 'Locais de operação (API CFF)', destino: 'meta (versionado)', precisaSistema: false },
   'classprod-cff': { rotulo: 'Produtos por DFe (API CFF)', destino: 'produtosDfe', precisaSistema: true },
+  'cnae-anexo': { rotulo: 'CNAE × Anexo Simples (arquivo vivo)', destino: 'cnae', precisaSistema: false },
+  'nbs-servicos': { rotulo: 'NBS Serviços (arquivo vivo)', destino: 'nbs', precisaSistema: false },
   desconhecido: { rotulo: 'Formato não reconhecido', destino: '—', precisaSistema: false },
 }
 
@@ -60,6 +64,7 @@ export function fingerprintBase(json: unknown): TipoBase {
   if (ehObj(json) && typeof json.tipo === 'string') {
     if (json.tipo === 'nomenclatura' && Array.isArray(json.itens)) return 'nomenclatura'
     if (json.tipo === 'reforma') return 'reforma'
+    if (json.tipo === 'cnae' && Array.isArray(json.itens)) return 'cnae-anexo'
     if (json.tipo === 'classificacao-tributaria' && Array.isArray(json.itens)) return 'referencia-dfe'
   }
 
@@ -73,6 +78,9 @@ export function fingerprintBase(json: unknown): TipoBase {
   if (Array.isArray(json)) {
     const prim = json[0] as Record<string, unknown> | undefined
     if (!prim || typeof prim !== 'object') return 'desconhecido'
+    // Phase 7 — arquivos vivos de Serviços (chaves PT acentuadas).
+    if ('CNAE' in prim) return 'cnae-anexo'
+    if ('NBS' in prim) return 'nbs-servicos'
     // API CFF `classTrib`: CSTs com classificações aninhadas.
     if ('classificacoesTributarias' in prim && 'CST' in prim) return 'classtrib-cff'
     // API CFF `anexos`: linhas NCM/NBS × anexo.
