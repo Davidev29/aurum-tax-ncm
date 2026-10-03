@@ -5,6 +5,7 @@ import { AssistenteInstalacao } from '@/ui/TermoAceite';
 import { lerAceite } from '@/domain/contrato';
 import { useUi } from '@/store/ui';
 import { Calculadora } from '@/pages/Calculadora';
+import { SimplesNacional } from '@/simples/page';
 import { Consulta } from '@/pages/Consulta';
 import { ConsultaServicos } from '@/pages/ConsultaServicos';
 import { DebugIA } from '@/pages/DebugIA';
@@ -25,6 +26,9 @@ export function App() {
 
   let pagina: ReactNode;
   switch (view) {
+    case 'simples':
+      pagina = <SimplesNacional />;
+      break;
     case 'consulta':
       pagina = <Consulta />;
       break;

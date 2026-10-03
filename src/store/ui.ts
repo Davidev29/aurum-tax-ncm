@@ -17,6 +17,7 @@ import type { ProdutoLinha } from '@/store/produtos'
 
 export type ViewId =
   | 'calculadora'
+  | 'simples'
   | 'consulta'
   | 'servicos'
   | 'lote'
@@ -30,6 +31,10 @@ export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = 
   calculadora: {
     titulo: 'Calculadora Tributária',
     subtitulo: 'Simule IBS/CBS com base nas regras cadastradas',
+  },
+  simples: {
+    titulo: 'Simples Nacional',
+    subtitulo: 'DAS por Anexo I–V + Reforma (CBS/IBS) · manual ou por CNPJ',
   },
   consulta: {
     titulo: 'Consulta NCM',

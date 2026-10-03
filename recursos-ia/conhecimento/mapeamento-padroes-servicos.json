@@ -1,0 +1,105 @@
+{
+  "versao": "mapeamento-padroes-v3",
+  "geradoEm": "2026-10-03",
+  "descricao": "Pesquisa de padrões oficial × popular para busca por descrição de serviços (NBS). Método: tokens da Base Legal + Descrição completa dos 137 registros de bases-fonte/NBS SERVIÇOS.json (112 NBS distintos) normalizados e ranqueados por frequência; para cada token oficial distintivo, as variantes populares mapeadas em vocabulario-servicos.ts, gatilhos e pins. Sem benefício mapeado, o padrão honesto é regra geral + orientação setorial (nunca pin forçado).",
+  "base": { "registros_brutos": 137, "nbs_distintos": 112, "grupos": 4 },
+  "grupos": [
+    {
+      "grupo": "PROF-30",
+      "registros": 0,
+      "base_legal": "Prestação de serviços das profissões intelectuais (art. 127, redação do art. 202)",
+      "cst_cct": "200/200052",
+      "nota": "Benefício SEM NBS vinculado: 18 profissões (advogados, contabilistas, engenheiros, administradores, arquitetos, assistentes sociais, bibliotecários, biólogos, economistas, educação física, estatísticos, veterinários, museólogos, químicos, relações públicas, técnicos). Redução de 30%, exige conselho profissional + natureza intelectual. Busca retorna hipótese informativa com contexto (nunca NBS inventado).",
+      "tokens_oficiais_distintivos": ["advogados", "contabilistas", "engenheiros", "administradores", "profissoes", "intelectuais", "conselho"],
+      "nbs_representante": null
+    },
+    {
+      "grupo": "EDU",
+      "registros": 13,
+      "base_legal": "Fornecimento dos serviços de educação (Anexo II)",
+      "cst_cct": "200/200028",
+      "tokens_oficiais_distintivos": ["educacao"],
+      "boilerplate": ["fornecimento", "servicos", "anexo", "complementar", "relacionados", "especificacao", "nomenclatura", "brasileira", "intangiveis", "patrimonio", "observado"],
+      "padroes_populares": ["aula", "curso", "escola", "faculdade", "universidade", "colegio", "autoescola", "cursinho", "vestibular", "enem", "reforco escolar", "formacao de condutores", "treinamento", "idioma", "creche", "ead"],
+      "ponte": "sinonimo→educacao + pins (autoescola, formacao de condutores, aula de ingles...)",
+      "nbs_representante": "122011100"
+    },
+    {
+      "grupo": "SAUDE",
+      "registros": 24,
+      "base_legal": "Fornecimento dos serviços de saúde humana (Anexo III)",
+      "cst_cct": "200/200029",
+      "tokens_oficiais_distintivos": ["saude", "humana"],
+      "boilerplate": ["fornecimento", "servicos", "anexo", "complementar", "relacionados", "especificacao"],
+      "padroes_populares": ["consulta medica", "dentista", "exame", "fisioterapia", "psicologo", "vacina", "laboratorio", "cirurgia", "pronto socorro", "ultrassom", "checkup", "atendimento domiciliar"],
+      "ponte": "sinonimo→saude/humana + pins (dentista, consulta medica, exame de sangue...)",
+      "nbs_representante": "123011100"
+    },
+    {
+      "grupo": "ART",
+      "registros": 90,
+      "base_legal": "Fornecimento dos serviços e o licenciamento ou cessão dos direitos destinados às produções nacionais artísticas (Anexo X)",
+      "cst_cct": "200/200039",
+      "tokens_oficiais_distintivos": ["artisticas", "licenciamento", "cessao", "direitos", "destinados", "producoes", "nacionais", "culturais", "eventos", "musicais", "feiras", "jornalisticas", "audiovisuais", "espetaculos", "teatrais", "circenses", "danca", "shows", "desfiles", "carnavalescos", "folcloricos", "academicos", "congressos", "conferencias", "simposios", "exposicoes", "mostras", "literarias", "programas", "auditorio", "jornalisticos", "filmes", "documentarios", "series", "novelas", "entrevistas", "clipes"],
+      "boilerplate": ["fornecimento", "servicos", "anexo", "complementar", "relacionados", "quando", "seguintes"],
+      "padroes_populares": ["show", "teatro", "cinema", "filme", "serie", "circo", "festa de casamento", "feira", "congresso", "festival", "museu", "palestra", "banda", "dj", "fotografia"],
+      "ponte": "literal direto (show⊂shows, filme⊂filmes...) + pontes circo→circenses, teatro→teatrais + pins; exige destinação nacional (ambiguidade, teto media)",
+      "nbs_representante": "111031000"
+    },
+    {
+      "grupo": "ADM_XI",
+      "registros": 5,
+      "base_legal": "Fornecimento à administração pública dos serviços e bens relativos à soberania (Anexo XI)",
+      "cst_cct": "200/200043",
+      "tokens_oficiais_distintivos": ["seguranca", "administracao", "publica", "soberania", "nacional", "informacao", "cibernetica"],
+      "boilerplate": ["fornecimento", "servicos", "bens", "anexo", "complementar", "direta", "autarquias", "fundacoes"],
+      "padroes_populares": ["vigilancia", "monitoramento", "portaria", "escolta", "alarme", "seguranca patrimonial"],
+      "ponte": "literal (seguranca, administracao, soberania) + pins",
+      "nbs_representante": "115012000"
+    },
+    {
+      "grupo": "CIBER_XI",
+      "registros": 5,
+      "base_legal": "Operações e prestações de serviços de segurança da informação e cibernética por sociedade com sócio brasileiro (Anexo XI)",
+      "cst_cct": "200/200044",
+      "tokens_oficiais_distintivos": ["seguranca", "informacao", "cibernetica", "sociedade", "socio", "brasileiro"],
+      "boilerplate": ["operacoes", "prestacoes", "servicos", "anexo", "complementar"],
+      "padroes_populares": ["firewall", "pentest", "antivirus", "lgpd", "ransomware", "phishing", "teste de invasao", "seguranca da informacao"],
+      "ponte": "literal + pins; exige sócio brasileiro ≥20% (ambiguidade, teto media)",
+      "nbs_representante": "120013500"
+    }
+  ],
+  "padroes_ruido_que_quebravam_o_AND": [
+    { "ruido": "online", "exemplo": "aula de ingles online", "solucao": "drop-1 (tolerantes) + unigrama + RAG tolerante final" },
+    { "ruido": "delivery", "exemplo": "marmita delivery", "solucao": "sinais ALIMENTACAO + orientação setorial honesta (sem benefício)" },
+    { "ruido": "domiciliar", "exemplo": "consulta medica domiciliar", "solucao": "sinal DOMICILIAR + pin saude" },
+    { "ruido": "quero/preciso/fazer", "exemplo": "quero cortar cabelo", "solucao": "stopwords de pedido" },
+    { "ruido": "servico/fornecimento", "exemplo": "consultoria (→servico)", "solucao": "filtro TOKENS_JURIDIQUES_NBS — match só-juridiquês não é lastro" }
+  ],
+  "falsos_amigos_substring_corrigidos": [
+    { "falso": "formacao⊂informacao", "efeito": "'formacao de condutores' perdia para o Anexo XI", "solucao": "pins antes das tolerâncias (conhecimento > inferência) + formacao→educacao" },
+    { "falso": "servico⊂servicos", "efeito": "qualquer termo →servico (consultoria, petshop, app) casava os 112 NBS e elegia benefício à toa", "solucao": "filtro juridiquês no RAG (buscarNbsPorTexto), no preditivo, no seletor local e nas expansões; TI genérico →servico honesto" },
+    { "falso": "programa (software)⊂programas (TV)", "efeito": "'programa de computador' sugeria Anexo X", "solucao": "ambiguidade de destinação nacional também no AUDIOVISUAL (teto media)" }
+  ],
+  "setores_sem_beneficio_na_base": [
+    { "setor": "beleza/bem-estar", "exemplos": ["corte de cabelo", "manicure", "tatuagem", "spa"], "saida_honesta": "regra geral + orientação setorial + perguntas" },
+    { "setor": "transporte/logistica", "exemplos": ["frete", "motoboy", "taxi", "mudanca"], "saida_honesta": "regra geral + orientação setorial + perguntas" },
+    { "setor": "limpeza/conservacao", "exemplos": ["diarista", "faxina", "jardinagem"], "saida_honesta": "regra geral + orientação setorial + perguntas" },
+    { "setor": "manutencao/reparos", "exemplos": ["eletricista", "encanador", "conserto"], "saida_honesta": "regra geral + orientação setorial + perguntas" },
+    { "setor": "profissional liberal", "exemplos": ["advogado", "contador", "consultoria"], "saida_honesta": "regra geral + orientação setorial + perguntas" },
+    { "setor": "alimentacao/hospedagem/turismo", "exemplos": ["restaurante", "hotel", "marmita"], "saida_honesta": "regra geral + orientação setorial + perguntas" },
+    { "setor": "ti/software generico", "exemplos": ["desenvolvimento de aplicativo", "suporte"], "saida_honesta": "regra geral + orientação setorial + perguntas" },
+    { "setor": "construcao", "exemplos": ["reforma", "pedreiro", "pintura"], "saida_honesta": "regra geral + orientação setorial + perguntas" },
+    { "setor": "financeiro/imobiliario", "exemplos": ["emprestimo", "aluguel"], "saida_honesta": "regra geral + perguntas (risco de anexo próprio)" }
+  ],
+  "cobertura": {
+    "sinonimos_servicos": "286 → 880+ (v3 + profissões art. 127 + 17 benefícios v4)",
+    "grupos_contexto": 23,
+    "frases_modelo_servicos": "12 → 60",
+    "gatilhos_por_sinal": "dobrados nos 14 setores (plurais, femininos, verbos, typos, inglês)",
+    "dicionario_servicos_pins": 5,
+    "dicionario_servicos_termos": 100,
+    "frases_modelo_servicos": "12 → 46",
+    "garantia": "nenhuma descrição com lastro setorial volta vazia: ou NBS ancorado, ou preditiva informativa, ou orientação setorial + perguntas específicas + trilha com setor"
+  }
+}

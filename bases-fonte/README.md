@@ -18,19 +18,24 @@ com estes nomes exatos:
 ```powershell
 # 1. Jogue os 3 arquivos novos nesta pasta (substitua os antigos)
 # 2. Dentro de Aurum Tax NCM\:
-npm run base
+npm run base:completa
+#    base tributária (5 fontes) + dados IA (2335 NCM) + índice lexical + validação conhecimento
 
 # 3. Confira a saída:
 #    origem efetiva: ...\bases-fonte
 #    ✔ Integridade: nenhuma inconsistência cruzada.
+#    ✔ Base de conhecimento válida (exit 0).
 
 # 4. Teste rápido:
 npm run dev:web
 
 # 5. Suba a versão em package.json (ex.: 1.0.0 -> 1.0.1)
 
-# 6. Gere o instalador:
+# 6. Gere o instalador (build completa + IA embutida + ofuscação total):
 npm run dist:win
+#    = base:completa + tsc + vite (minify, sem .map) + electron (minify, sem .map)
+#      + ofuscar-build (stringArray em dist/ + electron/dist/) + verificar-build (portão)
+#    Artefatos em release/ com IA embutida via extraResources (GGUF ~97MB + índice + conhecimento).
 
 # 7. Suba para o GitHub (Release v1.0.1 com os arquivos de release/)
 ```

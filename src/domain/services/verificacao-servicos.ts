@@ -32,14 +32,34 @@ export interface HipoteseLegal {
 
 /**
  * Pins curados divisão CNAE → ccts de benefício (hipótese, nunca vínculo).
- * Educação (85) tende ao Anexo LC 214 II; saúde (86–88) ao Anexo III.
+ * Educação (85) tende ao Anexo LC 214 II (+ ProUni quando houver vínculo);
+ * saúde (86–88) ao Anexo III; cultura/esporte (58–60, 90, 91, 93) ao X/desporto;
+ * profissões (69, 71) ao art. 127 (−30%); hotelaria (55) e turismo (79) aos
+ * arts. 281/289; imóveis (68) à locação (art. 261).
  * O pin só aparece se o cct existir na referência com redução > 0.
  */
 export const PIN_HIPOTESE_POR_DIVISAO: Record<string, string[]> = {
-  '85': ['200028'],
+  '55': ['200048'],
+  '58': ['200039'],
+  '59': ['200039'],
+  '60': ['200039'],
+  '68': ['200027', '200046'],
+  '69': ['200052'],
+  '71': ['200052'],
+  '79': ['200051'],
+  // Educação → Anexo LC214 II (200028) + ProUni (200025, quando aplicável)
+  '85': ['200028', '200025'],
+  // Saúde → Anexo LC214 III (200029)
   '86': ['200029'],
   '87': ['200029'],
   '88': ['200029'],
+  // Artes, cultura, eventos, audiovisual → Anexo LC214 X (200039)
+  '90': ['200039'],
+  '91': ['200039'],
+  // Esporte e lazer federado → art. 141 (200041/200042)
+  '93': ['200041', '200042'],
+  '74': ['200039'],
+  '82': ['200039'],
 }
 
 /** Ccts sugeridos pelo setor do CNAE (7 dígitos → divisão). */
@@ -70,7 +90,10 @@ export function verificarCoerenciaServico(
 export function descricaoHipotese(h: HipoteseLegal): string {
   const red = Math.max(h.reducaoIBS, h.reducaoCBS)
   const efeito = red >= 100 ? 'alíquota zero' : `redução de ${red}%`
-  return `${h.cst}/${h.cClassTrib} — ${efeito}${h.anexo ? ` (Anexo LC 214 ${h.anexo})` : ''}${h.baseLegal ? ` — ${h.baseLegal}` : ''}`
+  // Só anexos reais da LC 214 (I–XV); códigos internos de regime (ex.:
+  // `91271` do 200/200052) não são anexos — exibi-los seria falso.
+  const anexoOk = h.anexo && (/^(1[0-5]|[1-9])$/.test(h.anexo) || /^[IVX]+$/.test(h.anexo)) ? h.anexo : null
+  return `${h.cst}/${h.cClassTrib} — ${efeito}${anexoOk ? ` (Anexo LC 214 ${anexoOk})` : ''}${h.baseLegal ? ` — ${h.baseLegal}` : ''}`
 }
 
 export type { ReferenciaCClassTrib }

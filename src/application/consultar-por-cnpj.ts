@@ -54,6 +54,12 @@ export interface AtividadeCnae {
   hipoteses: HipoteseLegal[]
   /** A decisão NBS é coerente com as hipóteses? */
   coerencia: CoerenciaServico
+  /**
+   * Predição informativa por nomes/sinônimos (fine-tuning NBS v2).
+   * Preenchida quando a atividade NÃO puxa NBS mas BATE com os termos do
+   * sistema. Cada item tem `apenasInformativo: true` — nunca decisão final.
+   */
+  preditivas: import('@/domain/services/preditivo-servicos').SugestaoPreditivaServico[]
 }
 
 export interface VereditoEmpresa {
@@ -139,6 +145,7 @@ async function classificarAtividade(
       confiancaFinal: 0,
       hipoteses: [],
       coerencia: 'sem-base',
+      preditivas: [],
     }
   }
   // Conferência contra a tabela da Reforma (vale para todos os estados com
@@ -162,6 +169,7 @@ async function classificarAtividade(
       confiancaFinal: 0,
       hipoteses,
       coerencia: 'sem-base',
+      preditivas: [],
     }
   }
   try {
@@ -187,6 +195,16 @@ async function classificarAtividade(
       // Serviço sem benefício mapeado na base atual → tributação integral
       // (regra geral), honesto e sem chute de NBS. Se a tabela da Reforma
       // sugere benefício, ele aparece como hipótese a verificar.
+      // Fine-tuning NBS v2 — predição informativa: mesmo sem NBS, se a
+      // atividade BATER com os termos do sistema (nomes/sinônimos), sugere
+      // pistas a título informativo (nunca decisão final).
+      let preditivas: import('@/domain/services/preditivo-servicos').SugestaoPreditivaServico[] = []
+      try {
+        const { sugerirPreditivoServicos } = await import('@/domain/services/preditivo-servicos')
+        preditivas = await sugerirPreditivoServicos(textoBuscavelCnae(tabela), { limite: 3 })
+      } catch {
+        preditivas = []
+      }
       const top = hipoteses[0]
       return {
         ...base,
@@ -194,12 +212,15 @@ async function classificarAtividade(
         cnaeTabela: tabela,
         estado: 'tributacao-integral',
         motivoEstado: top
-          ? `Nenhum NBS mapeado, mas a lei prevê ${descricaoHipotese(top)} — hipótese a verificar com o contador (sem NBS vinculado na base atual).`
-          : 'Nenhum benefício mapeado para esta atividade na base atual da Reforma — tributação integral (regra geral). Confirme com o contador.',
+          ? `Nenhum NBS mapeado, mas a lei prevê ${descricaoHipotese(top)} — hipótese a verificar com o contador (sem NBS vinculado na base atual).${preditivas.length ? ` Pistas informativas pelos nomes do sistema: ${preditivas.map((p) => `${p.codigoFormatado} — ${p.titulo}`).join('; ')} (não são decisão final).` : ''}`
+          : preditivas.length
+            ? `Nenhum benefício mapeado para esta atividade na base atual da Reforma — tributação integral (regra geral). Pistas informativas pelos nomes do sistema: ${preditivas.map((p) => `${p.codigoFormatado} — ${p.titulo}`).join('; ')} (não são decisão final). Confirme com o contador.`
+            : 'Nenhum benefício mapeado para esta atividade na base atual da Reforma — tributação integral (regra geral). Confirme com o contador.',
         resultado: null,
         confiancaFinal: 0,
         hipoteses,
         coerencia: 'sem-base',
+        preditivas,
       }
     }
     const teto = tetoConfiancaCnae(tabela.situacao)
@@ -208,6 +229,9 @@ async function classificarAtividade(
       ? `${resultado.motivo}/teto-matriz-ressalva`
       : resultado.motivo
     const coerencia = verificarCoerenciaServico(resultado.decisao?.cClassTrib, hipoteses)
+    // Repassa as preditivas do GATE (quando a confiança não é alta ou há
+    // regra geral, o determinístico já anexou pistas informativas).
+    const preditivasGate = resultado.sugestao?.sugestoesPreditivas ?? []
     return {
       ...base,
       descricao: tabela.descricao,
@@ -222,6 +246,7 @@ async function classificarAtividade(
       confiancaFinal,
       hipoteses,
       coerencia,
+      preditivas: preditivasGate,
     }
   } catch (e) {
     return {
@@ -234,6 +259,7 @@ async function classificarAtividade(
       confiancaFinal: 0,
       hipoteses,
       coerencia: 'sem-base',
+      preditivas: [],
     }
   }
 }

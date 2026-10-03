@@ -24,6 +24,7 @@ import { LIMIAR_NAO_SEI, calibrarConfiancaFinal } from '@/domain/aurum-ai'
 import type { ViaClassificacao } from '@/store/ia'
 import { normalizarBusca, tokensRelevantes } from '@/domain/services/busca-texto'
 import { casaToken } from '@/domain/services/vocabulario'
+import { buscarNoDicionarioServicos } from '@/domain/constants/dicionario-servicos'
 import { norm } from '@/domain/services/format'
 
 export type { ViaClassificacao }
@@ -118,18 +119,37 @@ function vereditoServico(ficha: FichaAbsolutaServico | null): VereditoServico | 
 
 /**
  * Seletor Aurum AI local para NBS (web/testes ou segunda opinião).
+ * Fine-tuning NBS v2: overlap + sinônimos + título×2 + bônus benefício.
  * Overlap textual + calibragem multi-fator + tetos (regra geral ≤ 0.60).
  */
 async function selecionarAurumAILocalNbs(
   descricao: string,
   candidatos: CandidatoIa[],
 ): Promise<{ codigo: string; confianca: number; motivo: string }> {
-  const relevantes = tokensRelevantes(descricao)
+  // Núcleo semântico (sem boilerplate): "servico" casa "servicos" em tudo.
+  const { semJuridiques, expandirSinonimoServicos, TOKENS_JURIDIQUES_NBS } = await import('@/domain/services/classificador-descricao-servicos')
+  const relevantes = semJuridiques(tokensRelevantes(descricao))
   if (!relevantes.length || !candidatos.length) {
     return { codigo: 'NÃO SEI', confianca: 0, motivo: 'similaridade-insuficiente' }
   }
-  const conjunto = new Set(relevantes)
+  // Fine-tuning v2: expansão sinonímica em lote (dia a dia → juridiquês NBS).
+  // "aula"→"educacao", "frete"→"transporte", "advogado"→"advogados".
+  // Expansão p/ juridiquês ("desenvolvimento"→"servico") é descartada.
+  const expandidos = relevantes.map((t) => {
+    const e = expandirSinonimoServicos(t) ?? t
+    return TOKENS_JURIDIQUES_NBS.has(e) ? t : e
+  })
+  const conjunto = new Set([...relevantes, ...expandidos])
+  const sinonimoDe = new Map<string, string>()
+  for (const q of relevantes) {
+    const e = expandirSinonimoServicos(q)
+    if (e && e !== q) sinonimoDe.set(e, q)
+  }
   const teto = Math.max(1, relevantes.length)
+
+  // Dicionário comercial de serviços: pin curado vale como evidência forte
+  // ("dentista" ∉ juridiquês, mas o pin ancora o NBS de saúde).
+  const pinsDict = new Set(buscarNoDicionarioServicos(descricao).map((a) => a.nbs))
 
   const rejeitados = new Set<string>()
   try {
@@ -145,43 +165,73 @@ async function selecionarAurumAILocalNbs(
     /* sem feedback: segue sem demote */
   }
 
-  const pontuados: { c: CandidatoIa; pontos: number }[] = []
+  const pontuados: { c: CandidatoIa; pontos: number; pontosTitulo: number }[] = []
   for (const c of candidatos) {
-    const toks = new Set(normalizarBusca(c.descricao).split(' ').filter(Boolean))
+    // Candidato vem como "titulo — descricao": título (nome do serviço)
+    // vale ×2, descrição (juridiquês) vale ×1.
+    const tituloCru = String(c.descricao ?? '').split('—')[0] ?? ''
+    const toksTitulo = new Set(normalizarBusca(tituloCru).split(' ').filter(Boolean))
+    const toksRico = new Set(normalizarBusca(c.descricao).split(' ').filter(Boolean))
     let pontos = 0
+    let pontosTitulo = 0
     for (const q of conjunto) {
-      if (toks.has(q)) pontos += 1
-      else {
-        for (const o of toks) {
-          if (casaToken(q, o)) {
-            pontos += 0.8
-            break
-          }
+      const ehSinonimo = sinonimoDe.has(q)
+      const pesoExato = ehSinonimo ? 0.9 : 1
+      if (toksTitulo.has(q)) {
+        pontos += 2 * pesoExato
+        pontosTitulo += 2 * pesoExato
+        continue
+      }
+      if (toksRico.has(q)) {
+        pontos += 1 * pesoExato
+        continue
+      }
+      // Tolerante por token (radical/fuzzy) — título primeiro (mais específico).
+      let achouTitulo = false
+      for (const o of toksTitulo) {
+        if (casaToken(q, o)) {
+          achouTitulo = true
+          break
+        }
+      }
+      if (achouTitulo) {
+        pontos += 1.6 * pesoExato
+        pontosTitulo += 1.6 * pesoExato
+        continue
+      }
+      for (const o of toksRico) {
+        if (casaToken(q, o)) {
+          pontos += 0.8 * pesoExato
+          break
         }
       }
     }
     let score = pontos
+    if (pinsDict.has(String(c.codigo).replace(/\D+/g, ''))) score += 2
     if (rejeitados.has(String(c.codigo).replace(/\D+/g, ''))) score -= 500
-    pontuados.push({ c, pontos: score })
+    pontuados.push({ c, pontos: score, pontosTitulo })
   }
-  pontuados.sort((a, b) => b.pontos - a.pontos || a.c.codigo.localeCompare(b.c.codigo))
+  // Título decide o desempate (nome do serviço > juridiquês genérico).
+  pontuados.sort((a, b) => b.pontos - a.pontos || b.pontosTitulo - a.pontosTitulo || a.c.codigo.localeCompare(b.c.codigo))
   const topo = pontuados[0]
   const segundo = pontuados[1]
   if (!topo || topo.pontos <= 0) {
     return { codigo: 'NÃO SEI', confianca: 0, motivo: 'similaridade-insuficiente' }
   }
   const margem = segundo ? Math.max(0, topo.pontos - segundo.pontos) : 999
+  const temSinonimo = [...conjunto].some((q) => sinonimoDe.has(q) && topo.pontos > 0)
   const confianca = calibrarConfiancaFinal({
-    baseTexto: topo.pontos / teto,
+    baseTexto: Math.min(1, topo.pontos / (teto * 1.5)),
     margem: margem >= 999 ? 30 : margem * 10,
     temVinculo: true,
-    temPin: false,
+    temPin: temSinonimo,
     tokens: relevantes.length,
   })
   if (confianca < LIMIAR_NAO_SEI) {
     return { codigo: topo.c.codigo, confianca: LIMIAR_NAO_SEI, motivo: 'similaridade-fraca-ancorada/pista-ancorada-base-oficial' }
   }
-  return { codigo: topo.c.codigo, confianca, motivo: 'aurum-ai-nbs-overlap' }
+  const topoPin = pinsDict.has(String(topo.c.codigo).replace(/\D+/g, ''))
+  return { codigo: topo.c.codigo, confianca, motivo: temSinonimo && topoPin ? 'aurum-ai-nbs-overlap/sinonimo-servico/dicionario-servicos' : temSinonimo ? 'aurum-ai-nbs-overlap/sinonimo-servico' : topoPin ? 'aurum-ai-nbs-overlap/dicionario-servicos' : 'aurum-ai-nbs-overlap' }
 }
 
 const FONTES_GATE_NBS = [
@@ -249,6 +299,16 @@ export async function classificarComIaServicos(
     descricao: `${a.titulo} — ${a.descricao}`.slice(0, 2000),
     score: a.score,
   }))
+  // Dicionário de serviços: pins entram no Top mesmo quando o RAG lexical
+  // não os encontra ("dentista" ∉ juridiquês). O resolvedor valida abaixo.
+  for (const pin of buscarNoDicionarioServicos(textoBusca).slice(0, 6)) {
+    if (candidatos.some((c) => String(c.codigo).replace(/\D+/g, '') === pin.nbs)) continue
+    candidatos.push({
+      codigo: pin.nbs,
+      descricao: `Dicionário de serviços (“${pin.termo}” → ${pin.categoria})`,
+      score: 999,
+    })
+  }
 
   let escolha: { codigo: string; confianca: number; motivo: string } = {
     codigo: 'NÃO SEI',

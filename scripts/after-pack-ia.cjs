@@ -102,31 +102,61 @@ async function afterPackIa(contexto = {}) {
   for (const [rel, oQue] of [
     ['electron/dist/ia-worker.cjs', null],
     ['electron/dist/modelo-seguro.cjs', 'helper de leitura cifrada em memória'],
+    ['electron/dist/main.js', 'processo principal ofuscado (build completa)'],
+    ['electron/dist/preload.cjs', 'preload ofuscado (build completa)'],
   ]) {
     const abs = path.join(raiz, rel)
     if (!existe(abs)) {
       if (oQue) console.warn(`[afterPack:ia] AVISO: ${rel} ausente (${oQue}; rode "node electron/esbuild.mjs").`)
       continue
     }
-    if (rel.endsWith('ia-worker.cjs')) {
+    if (rel.endsWith('ia-worker.cjs') || rel.endsWith('main.js') || rel.endsWith('preload.cjs')) {
       let conteudo = ''
       try {
         conteudo = fs.readFileSync(abs, 'utf8')
       } catch {
         conteudo = ''
       }
-      if (conteudo.includes('__AURUM_IA_OFUSCADO__')) {
-        console.log('[afterPack:ia] ok: worker ofuscado (marcador 06-08 presente).')
+      const ofuscado =
+        conteudo.includes('__AURUM_IA_OFUSCADO__') || conteudo.includes('__AURUM_BUILD_OFUSCADO__')
+      if (ofuscado) {
+        console.log(`[afterPack:ia] ok: ${rel} ofuscado (anti-reversão presente).`)
       } else {
         console.warn(
-          '[afterPack:ia] AVISO: worker SEM ofuscação (rode "node scripts/ofuscar-ia.cjs" ' +
-            'antes do dist — UAT com javascript-obfuscator para o preset médio).',
+          `[afterPack:ia] AVISO: ${rel} SEM ofuscação (rode "node scripts/ofuscar-build.cjs" ` +
+            'antes do dist — o `npm run build` já faz isso).',
         )
+      }
+      // Sourcemap vazando fonte no instalador = falha de anti-reversão.
+      const mapa = `${abs}.map`
+      if (existe(mapa)) {
+        console.warn(`[afterPack:ia] AVISO: ${rel}.map presente em electron/dist (fonte vaza — remova antes do dist).`)
       }
     } else {
       console.log(`[afterPack:ia] ok: ${rel} (${oQue}; ${tamanho(abs)} bytes)`)
     }
   }
+  // Renderer: todos os chunks dist/assets/*.js devem estar ofuscados e sem .map.
+  try {
+    const dirAssets = path.join(raiz, 'dist', 'assets')
+    if (fs.existsSync(dirAssets)) {
+      const jss = fs.readdirSync(dirAssets).filter((f) => f.endsWith('.js'))
+      const mapas = fs.readdirSync(dirAssets).filter((f) => f.endsWith('.map'))
+      if (mapas.length) {
+        console.warn(`[afterPack:ia] AVISO: ${mapas.length} .map em dist/assets (fonte vaza — vite.config deve ter sourcemap:false).`)
+      }
+      let semOfusc = 0
+      for (const f of jss) {
+        let c = ''
+        try { c = fs.readFileSync(path.join(dirAssets, f), 'utf8') } catch { continue }
+        if (!(c.includes('__AURUM_BUILD_OFUSCADO__') || c.includes('__AURUM_IA_OFUSCADO__'))) semOfusc++
+      }
+      if (!jss.length) console.warn('[afterPack:ia] AVISO: dist/assets sem .js (rode vite build antes do dist).')
+      else if (semOfusc) {
+        console.warn(`[afterPack:ia] AVISO: ${semOfusc}/${jss.length} chunk(s) renderer SEM ofuscação (rode "node scripts/ofuscar-build.cjs").`)
+      } else console.log(`[afterPack:ia] ok: renderer ofuscado (${jss.length} chunk(s) dist/assets).`)
+    }
+  } catch { /* best-effort */ }
 
   // Artefatos deliberadamente EXCLUÍDOS do instalador: confirma que o
   // `extraResources` não os puxa por acidente via glob amplo.

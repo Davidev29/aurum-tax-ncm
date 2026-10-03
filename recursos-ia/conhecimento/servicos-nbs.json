@@ -1,0 +1,51 @@
+{
+  "versao": "finetuning-servicos-v1",
+  "geradoEm": "2026-10-03",
+  "descricao": "Fine-tuning simulado da Aurum AI para NBS/Serviços na Reforma (LC 214/2025). NÃO altera a base oficial (nível Deus, só leitura): só guia o raciocínio — sinais por setor, perguntas de refino, condições de risco, chain-of-thought e exemplos validados. Espelho curado de src/domain/services/vocabulario-servicos.ts + classificador-descricao-servicos.ts + preditivo-servicos.ts.",
+  "principio": "Nada aqui vira CST/cClassTrib/redução/base legal direto. Toda saída passa pelo resolvedor (resolverClassificacoesNbs). Sem vínculo oficial, a IA sugere a título INFORMATIVO (sugestoesPreditivas, apenasInformativo:true) — nunca decisão final.",
+  "anexos_lc214": [
+    { "anexo": "II", "artigo": "Art. 129", "reducao": 60, "setores": ["ENSINO"], "cct_exemplo": "200028", "condicao": "Serviços de educação. Confirmar nível/modalidade (presencial x EAD)." },
+    { "anexo": "III", "artigo": "Art. 130-134", "reducao": 60, "setores": ["SAUDE"], "cct_exemplo": "200029", "condicao": "Saúde humana. Confirmar especialidade e local (presencial, domiciliar, telemedicina)." },
+    { "anexo": "X", "artigo": "Art. 260+", "reducao": 60, "setores": ["CULTURA_EVENTO", "AUDIOVISUAL"], "cct_exemplo": "200039", "condicao": "Exige destinação a produção nacional artística/cultural. Sem destinação comprovada, sem benefício." },
+    { "anexo": "XI", "artigo": "Art. 270+", "reducao": 0, "setores": ["CIBERSEGURANCA", "SOBERANIA_SEGURANCA"], "cct_exemplo": "200043", "condicao": "Cibersegurança exige sociedade com sócio brasileiro ≥20%. Confirmar composição societária." },
+    { "anexo": "setorial-uniforme", "artigo": "Art. 233/269", "reducao": 0, "setores": ["FINANCEIRO"], "cct_exemplo": "010002", "condicao": "Serviços financeiros têm alíquota uniforme setorial (não é redução padrão). Confirmar natureza." }
+  ],
+  "setores": [
+    { "sinal": "ENSINO", "pergunta": "Presencial ou EAD? Qual nível (livre, técnico, superior, condutores)?", "risco": "EAD pode ter tratamento distinto do presencial." },
+    { "sinal": "SAUDE", "pergunta": "Presencial, domiciliar ou telemedicina? Qual especialidade?", "risco": "Domiciliar x clínica muda o enquadramento." },
+    { "sinal": "TI_SOFTWARE", "pergunta": "Desenvolvimento, licenciamento, suporte ou hospedagem? Uso próprio ou revenda?", "risco": "Licenciamento x serviço continuado têm ccts distintos." },
+    { "sinal": "SERV_PROFISSIONAL", "pergunta": "Advocacia, contábil, engenharia ou consultoria? Quem é o tomador?", "risco": "Objeto + tomador definem o Anexo. Tomador exterior = exportação." },
+    { "sinal": "TRANSPORTE_LOGISTICA", "pergunta": "Origem/destino (municipal, intermunicipal, interestadual, exterior?) Há armazenagem?", "risco": "Destino exterior = exportação. Interestadual x municipal muda o IBS." },
+    { "sinal": "BELEZA_BEMESTAR", "pergunta": "Qual serviço e onde (salão, domicílio)?", "risco": "Domicílio x estabelecimento pode mudar o documento fiscal." },
+    { "sinal": "ALIMENTACAO_HOSPEDAGEM", "pergunta": "Consumo no local, delivery, hospedagem ou pacote?", "risco": "Delivery x salão e diária x pacote têm tratamentos distintos." },
+    { "sinal": "MANUTENCAO_REPARO", "pergunta": "Há peças junto com a mão de obra? Reparo pontual, reforma ou obra nova?", "risco": "Empreitada mista (peça + serviço) muda o enquadramento." },
+    { "sinal": "FINANCEIRO", "pergunta": "Crédito, seguro, consórcio ou intermediação?", "risco": "Alíquota uniforme setorial — não aplicar redução padrão." },
+    { "sinal": "IMOBILIARIO", "pergunta": "Locação pura, administração, intermediação ou condomínio?", "risco": "Cada modalidade tem cct próprio." }
+  ],
+  "raciocinio": {
+    "etapas": [
+      "1. Normalizar + tokenizar (sem stopwords) + expandir sinônimos de serviços.",
+      "2. Extrair sinais por setor (ENSINO, SAUDE, TI, TRANSPORTE...) — cada sinal sugere Anexo/condição, nunca decide.",
+      "3. Buscar NBS pelo caminho estrito (AND) → tolerante (drop-1) → unigrama → núcleo forte.",
+      "4. Validar cada candidato no resolvedor (única verdade). Sem vínculo = regra geral 000/000001.",
+      "5. Se regra geral ou vazio MAS há lastro nos nomes do sistema → predição INFORMATIVA (top-3, cobertura, termos, sinônimos).",
+      "6. Calibrar confiança (texto 55% + margem + vínculo + sinônimo + contexto). Regra geral com hipótese tem teto 0.60.",
+      "7. Perguntar refino por setor quando confiança ≠ alta ou há risco. Nunca chutar NBS."
+    ],
+    "regras": [
+      "Nunca inventar NBS de 9 dígitos ou cct de 6 dígitos.",
+      "Sinônimo só EXPANDE a consulta; a prova é o match no vínculo + resolvedor.",
+      "Título NBS vale ×2 (nome do serviço); descrição vale ×1 (juridiquês).",
+      "Cobertura mínima preditiva 0.34 (1/3 dos termos). Sem lastro = sem sugestão.",
+      "Toda preditiva carrega apenasInformativo:true + aviso fixo + botão 'Classificar oficialmente'.",
+      "Tomador no exterior sempre vira ambiguidade (exportação possível).",
+      "Palavra única sem contexto nunca alcança 'alta'."
+    ]
+  },
+  "fontes": [
+    "Vínculos NBS × CST × cClassTrib (LC 214/2025)",
+    "Nomenclatura de serviços (Base Legal NBS)",
+    "Referência cClassTrib (descrições + anexos + reduções)",
+    "Tabela CNAE × Anexo Simples (quando origem CNPJ)"
+  ]
+}

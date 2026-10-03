@@ -99,18 +99,23 @@ export function temSinalFiscal(texto: unknown): boolean {
   return false
 }
 
+/** `true` quando há marcador de pedido externo (small talk, tarefa externa, jailbreak). */
+export function temMarcadorExterno(texto: unknown): boolean {
+  const cru = String(texto ?? '')
+  if (!cru.trim()) return false
+  const norm = normalizarBusca(cru)
+  if (!norm) return false
+  return (
+    MARCADORES_FRASE.some((m) => norm.includes(m)) ||
+    norm.split(' ').filter(Boolean).some((t) => MARCADORES_TOKEN.has(t))
+  )
+}
+
 /**
  * Detecta pedido fora do escopo do sistema.
  * Puro e auditável: marcadores externos presentes + zero lastro fiscal.
  */
 export function detectarForaDeEscopo(texto: unknown): boolean {
-  const cru = String(texto ?? '')
-  if (!cru.trim()) return false
-  const norm = normalizarBusca(cru)
-  if (!norm) return false
-  const temMarcador =
-    MARCADORES_FRASE.some((m) => norm.includes(m)) ||
-    norm.split(' ').filter(Boolean).some((t) => MARCADORES_TOKEN.has(t))
-  if (!temMarcador) return false
-  return !temSinalFiscal(cru)
+  if (!temMarcadorExterno(texto)) return false
+  return !temSinalFiscal(texto)
 }

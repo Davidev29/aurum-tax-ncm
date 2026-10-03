@@ -580,9 +580,15 @@ function criarMenu(): void {
     {
       label: 'Exibir',
       submenu: [
-        { role: 'reload', label: 'Recarregar' },
-        { role: 'toggleDevTools', label: 'Ferramentas do desenvolvedor' },
-        { type: 'separator' },
+        // Anti-reversão: Recarregar/DevTools só em dev. No instalado o menu
+        // Exibir tem só o alternador de tema (nada que exponha fonte).
+        ...(EM_DESENVOLVIMENTO
+          ? [
+              { role: 'reload' as const, label: 'Recarregar' },
+              { role: 'toggleDevTools' as const, label: 'Ferramentas do desenvolvedor' },
+              { type: 'separator' as const },
+            ]
+          : []),
         {
           label: 'Alternar tema',
           accelerator: 'CmdOrCtrl+Shift+L',
@@ -646,6 +652,9 @@ async function criarJanela(): Promise<void> {
       nodeIntegration: false,
       sandbox: false,
       spellcheck: false,
+      // Anti-reversão: DevTools só em dev. No instalado, a janela não abre
+      // DevTools nem via menu (menu também filtrado em `criarMenu`).
+      devTools: EM_DESENVOLVIMENTO,
       // Repassa a versão do app ao preload (lida em electron/preload.ts).
       additionalArguments: [`--aurum-versao=${app.getVersion()}`],
     },

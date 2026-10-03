@@ -14,13 +14,16 @@ import type { Classificacao } from '@/domain/entities'
 import {
   analisarDescricaoServico,
   calcularConfiancaServicos,
+  consultasTolerantesServicos,
   expandirConsultasServicos,
   expandirSinonimoServicos,
   perguntasComplementaresServicos,
+  rotuloSetorServico,
+  semJuridiques,
+  temLastroServico,
   type ConfiancaServico,
   type EntradaDescricaoServico,
 } from '@/domain/services/classificador-descricao-servicos'
-import { consultasTolerantes } from '@/domain/services/classificador-descricao'
 import { fmtNbs, norm } from '@/domain/services/format'
 import {
   buscarNbsPorTexto,
@@ -29,7 +32,10 @@ import {
   tituloNbs,
   type ResultadoBuscaTextoNbs,
 } from '@/infrastructure/base/classificacao-repo'
-import { detectarForaDeEscopo } from '@/domain/services/escopo-consulta'
+import { buscarNoDicionarioServicos } from '@/domain/constants/dicionario-servicos'
+import { obterContextoNbs } from '@/domain/constants/contexto-nbs'
+import { db } from '@/infrastructure/db/schema'
+import { temMarcadorExterno } from '@/domain/services/escopo-consulta'
 
 export type { EntradaDescricaoServico, ConfiancaServico }
 
@@ -54,6 +60,18 @@ export interface SugestaoNbsJson {
   perguntasComplementares: string[]
   trilha: EtapaTrilhaServico[]
   foraDeEscopo?: boolean
+  /**
+   * Predição informativa por nomes/sinônimos (fine-tuning NBS v2).
+   * Preenchida quando o fluxo oficial dá regra geral ou vazio, MAS há
+   * lastro nos termos do sistema. Cada item tem `apenasInformativo: true`
+   * — a UI exibe como sugestão a verificar, NUNCA como decisão final.
+   */
+  sugestoesPreditivas?: import('@/domain/services/preditivo-servicos').SugestaoPreditivaServico[]
+  /**
+   * Contexto personalizado do NBS sugerido (resumo, aplica/não-aplica,
+   * condições) — alimenta a descrição preditiva na UI.
+   */
+  contextoNbs?: import('@/domain/constants/contexto-nbs').ContextoNbsView | null
 }
 
 export const MENSAGEM_FORA_DE_ESCOPO_SERVICOS =
@@ -93,7 +111,12 @@ export async function classificarServicoPorDescricao(
   limiteCandidatos = 12,
 ): Promise<SugestaoNbsJson> {
   const textoPedido = [entrada.descricao, entrada.tomador ?? '', entrada.local ?? '', entrada.uso ?? ''].join(' ').trim()
-  if (detectarForaDeEscopo(textoPedido)) {
+  // Barreira anti-alucinação com lastro de serviços: marcador externo
+  // ("teste", "receita de bolo"...) SÓ recusa quando NÃO há termo do sistema
+  // de serviços — "teste de software" tem lastro e segue o fluxo normal.
+  // (O `detectarForaDeEscopo` de bens aceitaria "receita de bolo" por causa
+  // de "bolo"→pastelaria; aqui vale o lastro de SERVIÇOS.)
+  if (temMarcadorExterno(textoPedido) && !temLastroServico(textoPedido)) {
     return {
       nbs_provavel: null,
       descricao_nbs: null,
@@ -147,13 +170,60 @@ export async function classificarServicoPorDescricao(
 
   const perguntas = perguntasComplementaresServicos(analise)
   if (analise.insuficiente) {
+    // Insuficiente NUNCA volta de mãos vazias: tenta pin comercial (ex.:
+    // "dentista", "show") e predição informativa antes de pedir contexto.
+    const pinsInsuf = buscarNoDicionarioServicos(textoPedido).slice(0, 3)
+    for (const pin of pinsInsuf) {
+      try {
+        const r = await resolverClassificacoesNbs(pin.nbs)
+        if (!r.regraGeral && r.lista.length) {
+          const principal = r.lista[0]
+          const tipo = montarTipoExcecaoNbs(principal)
+          trilha.push({
+            etapa: 'Dicionário de serviços',
+            detalhe: `pin curado “${pin.termo}” → ${fmtNbs(pin.nbs)} (${principal.cst}/${principal.cClassTrib}) — palavra única, confiança baixa, a verificar`,
+          })
+          return {
+            nbs_provavel: fmtNbs(pin.nbs),
+            descricao_nbs: principal.descricao || tipo.tipo,
+            excecao_enquadravel: true,
+            tipo_excecao: tipo.tipo,
+            justificativa:
+              `Pelo nome popular “${pin.termo}”, o NBS correspondente é ${fmtNbs(pin.nbs)} — "${principal.descricao || ''}", vínculo oficial ${principal.cst}/${principal.cClassTrib}${tipo.anexo ? `, Anexo LC 214 ${tipo.anexo}` : ''}. ` +
+              `Como foi só 1 palavra, trate como pista (confiança baixa): confirme com 1–2 detalhes${analise.ambiguidades.length ? ` — atenção: ${analise.ambiguidades.join(' ')}` : ''}`,
+            confianca: 'baixa',
+            alternativas: [],
+            cst: principal.cst ?? null,
+            cClassTrib: principal.cClassTrib ?? null,
+            anexo: tipo.anexo,
+            baseLegal: tipo.baseLegal,
+            urlLegislacao: tipo.url,
+            perguntasComplementares: perguntas,
+            trilha,
+            contextoNbs: obterContextoNbs(pin.nbs),
+          }
+        }
+      } catch {
+        /* pin sem vínculo na base atual: segue para preditivas */
+      }
+    }
+    let preditivasInsuf: import('@/domain/services/preditivo-servicos').SugestaoPreditivaServico[] = []
+    try {
+      const { sugerirPreditivoServicos } = await import('@/domain/services/preditivo-servicos')
+      preditivasInsuf = await sugerirPreditivoServicos(textoPedido, { limite: 3 })
+    } catch {
+      preditivasInsuf = []
+    }
+    const setorInsuf = rotuloSetorServico(analise.sinais)
     return {
       nbs_provavel: null,
       descricao_nbs: null,
       excecao_enquadravel: false,
       tipo_excecao: null,
       justificativa:
-        'Ainda não tenho o suficiente para classificar com segurança — e prefiro pedir mais detalhes a chutar um NBS. Descreva o serviço com 1 ou 2 características: é aula, consulta, show, atendimento? Presencial ou online? Para quem (pessoa física, empresa, exterior)?',
+        preditivasInsuf.length
+          ? `Ainda não tenho o suficiente para cravar o NBS — mas pelos nomes do sistema há ${preditivasInsuf.length} pista(s) informativa(s) abaixo (não é decisão final). ${setorInsuf ? `Identifiquei o setor de ${setorInsuf}. ` : ''}Me diga mais 1 ou 2 características para eu fechar: é aula, consulta, show, atendimento? Presencial ou online? Para quem?`
+          : `Ainda não tenho o suficiente para classificar com segurança — e prefiro pedir mais detalhes a chutar um NBS.${setorInsuf ? ` Identifiquei o setor de ${setorInsuf}.` : ''} Descreva o serviço com 1 ou 2 características: é aula, consulta, show, atendimento? Presencial ou online? Para quem (pessoa física, empresa, exterior)?`,
       confianca: 'baixa',
       alternativas: [],
       cst: null,
@@ -162,14 +232,24 @@ export async function classificarServicoPorDescricao(
       baseLegal: null,
       urlLegislacao: null,
       perguntasComplementares: perguntas,
-      trilha: [...trilha, { etapa: 'Validação de contexto', detalhe: 'entrada insuficiente — solicitadas informações complementares' }],
+      trilha: [...trilha, { etapa: 'Validação de contexto', detalhe: `entrada insuficiente${setorInsuf ? ` (setor: ${setorInsuf})` : ''} — solicitadas informações complementares` }],
+      sugestoesPreditivas: preditivasInsuf,
     }
   }
 
   const agregados = new Map<string, ResultadoBuscaTextoNbs & { score: number }>()
-  async function agregar(consultas: string[]): Promise<void> {
+  async function agregar(consultas: string[], opts?: { filtrarJuridiques?: boolean }): Promise<void> {
     for (const consulta of consultas) {
-      const achados = await buscarNbsPorTexto(consulta, 30, { tolerante: false })
+      // Filtro anti-falso-benefício: consulta só de juridiquês ("servico",
+      // "fornecimento") casava os 112 NBS e elegia o Anexo X à toa.
+      let efetiva = consulta
+      if (opts?.filtrarJuridiques !== false) {
+        const nucleo = semJuridiques(consulta.split(' ').filter(Boolean))
+        if (!nucleo.length) continue
+        efetiva = nucleo.join(' ')
+      }
+      // RAG estrito aqui (precisão); a tolerância entra na última bala.
+      const achados = await buscarNbsPorTexto(efetiva, 30, { tolerante: false })
       for (const item of achados) {
         const atual = agregados.get(item.codigo)
         if (!atual || item.score > atual.score) agregados.set(item.codigo, { ...item })
@@ -177,10 +257,46 @@ export async function classificarServicoPorDescricao(
     }
   }
   await agregar(analise.consultasExpandidas)
+  // Dicionário comercial de serviços (nomes populares → NBS exato).
+  // Roda ANTES das tolerâncias: pin curado supera o lexical por construção
+  // (conhecimento > inferência — ex.: "formacao de condutores" não pode
+  // perder para o falso amigo "formacao"⊂"informacao"). Cada código passa
+  // pelo resolvedor — pin sem vínculo na base atual morre aqui.
+  if (!agregados.size) {
+    const pins = buscarNoDicionarioServicos(textoPedido).slice(0, 6)
+    const pinsAplicados: string[] = []
+    for (const pin of pins) {
+      try {
+        const vinc = await db.nbs.where('codigo').equals(pin.nbs).first()
+        if (!vinc) continue
+        const valid = await resolverClassificacoesNbs(pin.nbs)
+        if (valid.regraGeral || !valid.lista.length) continue
+        const scorePin = 500 + pin.termo.length
+        const atual = agregados.get(pin.nbs)
+        if (!atual || scorePin > atual.score) {
+          agregados.set(pin.nbs, {
+            codigo: vinc.codigo,
+            codigoFormatado: fmtNbs(vinc.codigo),
+            titulo: tituloNbs(vinc),
+            descricao: vinc.descricao,
+            documentos: vinc.documentos ?? '',
+            totalClassificacoes: valid.lista.length,
+            score: scorePin,
+          })
+          pinsAplicados.push(`“${pin.termo}” → ${fmtNbs(pin.nbs)}`)
+        }
+      } catch {
+        /* pin sem base: segue sem ele */
+      }
+    }
+    if (pinsAplicados.length) {
+      trilha.push({ etapa: 'Dicionário de serviços', detalhe: pinsAplicados.join(' · ') })
+    }
+  }
   // Tolerância a ruído: nenhum match → tenta sem 1 termo por vez
   // (ex.: "online" não existe no juridiquês oficial e bloqueava o AND).
   if (!agregados.size) {
-    const tol = consultasTolerantes(analise.consultasExpandidas)
+    const tol = consultasTolerantesServicos(analise.consultasExpandidas)
     await agregar(tol.consultas)
     if (agregados.size && tol.ignorados.length) {
       trilha.push({
@@ -192,14 +308,15 @@ export async function classificarServicoPorDescricao(
   // Última bala lexical: cada termo útil expandido sozinho. O corpus NBS é
   // juridiquês pobre ("fornecimento dos serviços de…") — descrições reais
   // trazem 2+ termos sem correspondente ("aula", "online"). Unigrama sem
-  // match continua vazio (sem lastro, sem chute).
+  // match continua vazio (sem lastro, sem chute). Mínimo ≥3 (antes ≥4
+  // descartava "spa", "bar", "taxi", "app", "show").
   if (!agregados.size) {
     const unigramas: string[] = []
     for (const t of analise.tokens) {
       const exp = expandirSinonimoServicos(t) ?? t
       if (!unigramas.includes(exp)) unigramas.push(exp)
     }
-    await agregar(unigramas.filter((u) => u.length >= 4))
+    await agregar(semJuridiques(unigramas).filter((u) => u.length >= 3), { filtrarJuridiques: false })
     if (agregados.size) {
       trilha.push({ etapa: 'Unigrama', detalhe: 'match obtido em termo isolado — confiança segue o cálculo padrão' })
     }
@@ -213,6 +330,29 @@ export async function classificarServicoPorDescricao(
       }
     }
   }
+  // Última rede de segurança: RAG tolerante (OR ponderado com radical/fuzzy)
+  // sobre original + expandida + unigramas. O determinístico usava SÓ AND —
+  // qualquer ruído ("online", "delivery") zerava tudo.
+  if (!agregados.size) {
+    const todasConsultas = [
+      ...analise.consultasExpandidas,
+      ...analise.tokens.map((t) => expandirSinonimoServicos(t) ?? t),
+    ]
+    const unicas = [...new Set(todasConsultas)].filter(Boolean)
+    for (const consulta of unicas) {
+      const nucleo = semJuridiques(consulta.split(' ').filter(Boolean))
+      if (!nucleo.length) continue
+      const achados = await buscarNbsPorTexto(nucleo.join(' '), 30, { tolerante: true })
+      for (const item of achados) {
+        const atual = agregados.get(item.codigo)
+        if (!atual || item.score > atual.score) agregados.set(item.codigo, { ...item })
+      }
+      if (agregados.size >= 12) break
+    }
+    if (agregados.size) {
+      trilha.push({ etapa: 'RAG tolerante', detalhe: 'match obtido no OR ponderado (radical/fuzzy) — confiança segue o cálculo padrão' })
+    }
+  }
 
   const ranckeados = [...agregados.values()]
     .sort((a, b) => b.score - a.score || a.codigo.localeCompare(b.codigo))
@@ -222,17 +362,57 @@ export async function classificarServicoPorDescricao(
     etapa: 'Candidatos (base NBS)',
     detalhe: ranckeados.length
       ? ranckeados.map((c) => `${fmtNbs(c.codigo)} (${c.score})`).join(' · ')
-      : 'nenhum match na base NBS',
+      : `nenhum match na base NBS${rotuloSetorServico(analise.sinais) ? ` (setor detectado: ${rotuloSetorServico(analise.sinais)})` : ' (sem setor detectado)'}`,
   })
 
   if (!ranckeados.length) {
+    // Predição informativa: mesmo sem match estrito, tenta nomes/sinônimos
+    // contra os termos do sistema (NBS + referência). Se houver lastro,
+    // sugere a título informativo — nunca como decisão final.
+    let preditivas: import('@/domain/services/preditivo-servicos').SugestaoPreditivaServico[] = []
+    try {
+      const { sugerirPreditivoServicos } = await import('@/domain/services/preditivo-servicos')
+      preditivas = await sugerirPreditivoServicos(textoPedido, { limite: 3 })
+      if (preditivas.length) {
+        trilha.push({
+          etapa: 'Predição informativa (nomes/sinônimos)',
+          detalhe: `sem match estrito, mas há lastro nos termos do sistema: ${preditivas.map((p) => `${p.codigoFormatado} (${p.cobertura * 100}% cobertura)`).join(' · ')} — apenas informativo`,
+        })
+      }
+    } catch {
+      preditivas = []
+    }
+    const setor = rotuloSetorServico(analise.sinais)
+    const hipoteses = preditivas.filter((p) => p.tipo === 'hipotese-cct')
+    const primeiraHipotese = hipoteses[0]
+    // Sem contradição: se há hipótese de benefício, ela LIDERA a resposta
+    // (antes o texto dizia "sem benefício" e mostrava a hipótese abaixo).
+    let justificativa: string
+    if (primeiraHipotese) {
+      const red = Math.max(primeiraHipotese.reducaoIBS, primeiraHipotese.reducaoCBS)
+      const condicao = primeiraHipotese.contexto?.condicoes[0] ?? ''
+      justificativa =
+        `Não há NBS vinculado para essa atividade — mas encontrei hipótese de benefício na legislação: ${primeiraHipotese.titulo} ` +
+        `(${primeiraHipotese.cst}/${primeiraHipotese.cClassTrib}, redução de ${red}%).` +
+        `${condicao ? ` Condição: ${condicao}.` : ''}` +
+        `${setor ? ` Setor identificado: ${setor}.` : ''} ` +
+        `É pista informativa (não decisão final) — confirme com o contador antes de escriturar.`
+    } else {
+      const orientacaoSetor = setor
+        ? ` Identifiquei o setor de ${setor}: na base atual da Reforma não há NBS/benefício mapeado para ele — vale tributação integral (regra geral), sem exceção enquadrável. Se a operação tiver alguma condição especial (tomador no exterior, produção nacional, sócio brasileiro), me diga que eu reavalio.`
+        : ''
+      const justificativaBase =
+        'Não encontrei nenhum NBS da base pelo caminho estrito — e prefiro dizer isso claramente a inventar um código.'
+      justificativa = preditivas.length
+        ? `${justificativaBase}${orientacaoSetor} Porém, pelos NOMES/SINÔNIMOS do sistema, há ${preditivas.length} pista(s) informativa(s) abaixo (não é decisão final — confirme com o contador e classifique oficialmente).`
+        : `${justificativaBase}${orientacaoSetor} Tente de outro jeito: informe o tipo de serviço (aula, consulta, show, atendimento?), o tomador e se é presencial ou remoto.`
+    }
     return {
       nbs_provavel: null,
       descricao_nbs: null,
       excecao_enquadravel: false,
-      tipo_excecao: null,
-      justificativa:
-        'Não encontrei nenhum NBS da base que corresponda a essa descrição — e prefiro dizer isso claramente a inventar um código. Tente de outro jeito: informe o tipo de serviço (aula, consulta, show, atendimento?), o tomador e se é presencial ou remoto.',
+      tipo_excecao: primeiraHipotese ? `${primeiraHipotese.titulo} (${primeiraHipotese.cst}/${primeiraHipotese.cClassTrib}) — hipótese a verificar` : null,
+      justificativa,
       confianca: 'baixa',
       alternativas: [],
       cst: null,
@@ -242,6 +422,7 @@ export async function classificarServicoPorDescricao(
       urlLegislacao: null,
       perguntasComplementares: [...perguntas, 'Informe o tipo de serviço e o tomador (pessoa física, empresa, exterior?).'],
       trilha,
+      sugestoesPreditivas: preditivas,
     }
   }
 
@@ -313,6 +494,30 @@ export async function classificarServicoPorDescricao(
     ].join(' · '),
   })
 
+  // Predição informativa quando cai em regra geral (sem vínculo) ou a
+  // confiança não é alta: compara nomes/sinônimos com os termos do sistema
+  // e sugere pistas — sempre como informativo, nunca decisão final.
+  let preditivasFinais: import('@/domain/services/preditivo-servicos').SugestaoPreditivaServico[] = []
+  if (!temVinculo || confianca !== 'alta') {
+    try {
+      const { sugerirPreditivoServicos } = await import('@/domain/services/preditivo-servicos')
+      // Evita sugerir o próprio topo como "preditivo" (já é a decisão oficial).
+      const todas = await sugerirPreditivoServicos(textoPedido, { limite: 4 })
+      preditivasFinais = todas.filter((p) => p.codigoFormatado !== codigoFmt).slice(0, 3)
+      if (preditivasFinais.length) {
+        trilha.push({
+          etapa: 'Predição informativa (nomes/sinônimos)',
+          detalhe: `${temVinculo ? 'confiança não-alta' : 'sem vínculo oficial'} — pistas pelos termos do sistema: ${preditivasFinais.map((p) => `${p.codigoFormatado} (${p.cobertura * 100}%)`).join(' · ')} — apenas informativo`,
+        })
+        if (!temVinculo) {
+          justificativa += ` Pistas informativas pelos nomes do sistema (não são decisão final): ${preditivasFinais.map((p) => `${p.codigoFormatado} — ${p.titulo}`).join('; ')}. Confirme com o contador.`
+        }
+      }
+    } catch {
+      preditivasFinais = []
+    }
+  }
+
   return {
     nbs_provavel: codigoFmt,
     descricao_nbs: topo.cand.titulo,
@@ -328,5 +533,7 @@ export async function classificarServicoPorDescricao(
     urlLegislacao: url,
     perguntasComplementares: confianca === 'alta' && !temRisco ? [] : perguntas,
     trilha,
+    sugestoesPreditivas: preditivasFinais,
+    contextoNbs: obterContextoNbs(topo.cand.codigo),
   }
 }

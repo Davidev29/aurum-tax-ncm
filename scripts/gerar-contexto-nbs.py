@@ -1,0 +1,1153 @@
+#!/usr/bin/env python3
+"""Gera recursos-ia/conhecimento/contexto-nbs.json — contexto personalizado por NBS (LC 214/2025).
+
+Uso: python3 scripts/gerar-contexto-nbs.py [--conferir]
+
+- Lê a base viva (bases-fonte/NBS SERVIÇOS.json, 137 linhas, 107 NBS distintos).
+- Combina os vínculos reais por NBS (códigos, ccts, documentos) com os
+  GROUP_TEMPLATES curados abaixo (resumo fiel ao texto oficial + LC 214,
+  quando se aplica / quando NÃO se aplica, condições, consultas típicas,
+  termos populares, perguntas de refino, CNAEs).
+- Sem inventar benefício: textos oficiais idênticos por grupo geram o MESMO
+  núcleo; a personalização por item vem dos vínculos reais (ccts por código,
+  dualidade 200043×200044, cluster estrutural, flag representante, DFes).
+- `--conferir`: só valida (códigos da base cobertos, ccts válidos), sem escrever.
+
+Regenerar após qualquer atualização da base NBS.
+"""
+
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+BASE_NBS = ROOT / "bases-fonte" / "NBS SERVIÇOS.json"
+SAIDA = ROOT / "recursos-ia" / "conhecimento" / "contexto-nbs.json"
+
+# ---------------------------------------------------------------- curadoria --
+# Textos fiéis à Base Legal + Descrição completa oficiais e aos artigos da
+# LC 214/2025. Redação própria de síntese — nunca altera CST/cct/redução.
+
+GROUP_TEMPLATES = {
+    "EDU": {
+        "grupo": "EDU",
+        "cct": "200028",
+        "cst": "200",
+        "titulo_curto": "Serviços de educação — Anexo II",
+        "rotulo_hipotese": "Serviços de educação — redução de 60% (art. 129)",
+        "anexo": "II",
+        "artigo": "Art. 129 da LC 214/2025",
+        "reducao_ibs": 60,
+        "reducao_cbs": 60,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Fornecimento de serviços de educação com redução de 60% das alíquotas "
+            "de IBS e CBS (art. 129, Anexo II da LC 214/2025). Vale para o ensino em "
+            "todos os níveis e modalidades — da creche ao superior, incluindo cursos "
+            "livres, idiomas, formação de condutores e treinamento profissional — "
+            "desde que a atividade prestada seja educacional."
+        ),
+        "quando_se_aplica": [
+            "Aulas e cursos presenciais ou a distância (EAD), em qualquer nível",
+            "Escolas, faculdades, universidades, cursos de idiomas e cursinhos",
+            "Autoescolas e formação de condutores",
+            "Treinamento e capacitação profissional",
+            "Educação infantil (creche e pré-escola)",
+        ],
+        "quando_nao_se_aplica": [
+            "Venda de material didático, livros e apostilas em separado (são bens, NCM)",
+            "Transporte escolar (serviço de transporte, sem benefício mapeado)",
+            "Alimentação escolar e cantina (alimentação, sem benefício mapeado)",
+            "Festa de formatura e shows (avaliar Anexo X, exige destinação nacional)",
+        ],
+        "condicoes": [
+            "Sem exigência de destinação nacional ou composição societária",
+            "Tomador no exterior pode caracterizar exportação de serviços (regra própria) — confirmar",
+        ],
+        "consultas_tipicas": [
+            "aula de inglês online",
+            "formação de condutores",
+            "autoescola",
+            "reforço escolar",
+            "curso preparatório para concurso",
+            "curso de idiomas",
+            "treinamento corporativo",
+            "educação infantil",
+        ],
+        "termos_populares": [
+            "aula", "curso", "escola", "faculdade", "universidade", "colegio",
+            "autoescola", "cursinho", "vestibular", "enem", "idioma", "ingles",
+            "ensino", "educacao", "treinamento", "creche", "ead", "professor",
+            "aluno", "formacao", "condutores", "reforco", "pedagogia",
+        ],
+        "perguntas_refino": [
+            "O ensino é presencial ou a distância (online)?",
+            "Qual o nível — infantil, fundamental, médio, técnico, superior, livre?",
+            "Quem é o tomador (pessoa física, empresa, exterior)?",
+        ],
+        "cnae_divisoes": ["85"],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "SAUDE": {
+        "grupo": "SAUDE",
+        "cct": "200029",
+        "cst": "200",
+        "titulo_curto": "Serviços de saúde humana — Anexo III",
+        "rotulo_hipotese": "Serviços de saúde humana — redução de 60% (art. 130)",
+        "anexo": "III",
+        "artigo": "Art. 130 da LC 214/2025",
+        "reducao_ibs": 60,
+        "reducao_cbs": 60,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Fornecimento de serviços de saúde humana com redução de 60% das "
+            "alíquotas de IBS e CBS (art. 130, Anexo III da LC 214/2025). Abrange "
+            "consultas, exames, odontologia, fisioterapia, enfermagem, vacinação e "
+            "demais atendimentos à saúde humana — no consultório, no hospital, em "
+            "domicílio ou por telemedicina."
+        ),
+        "quando_se_aplica": [
+            "Consultas médicas e odontológicas, em qualquer especialidade",
+            "Exames laboratoriais e de imagem (sangue, ultrassom, raio-x)",
+            "Fisioterapia, enfermagem, nutrição, psicologia e terapias",
+            "Vacinação e campanhas de imunização",
+            "Atendimento domiciliar (home care) e telemedicina",
+            "Cirurgias e internações em serviços de saúde humana",
+        ],
+        "quando_nao_se_aplica": [
+            "Venda de medicamentos, vacinas e insumos em separado (são bens, NCM)",
+            "Serviços veterinários (saúde animal — fora do Anexo III)",
+            "Estética puramente cosmética sem caráter terapêutico (verificar caso a caso)",
+            "Planos e seguros de saúde (análise própria da operação — perguntar)",
+        ],
+        "condicoes": [
+            "Destinado à saúde HUMANA (exclui veterinária)",
+            "Sem exigência de destinação nacional ou composição societária",
+            "Local do atendimento (presencial, domiciliar, remoto) deve constar — muda perguntas, não o benefício",
+        ],
+        "consultas_tipicas": [
+            "consulta médica",
+            "dentista",
+            "exame de sangue",
+            "fisioterapia",
+            "consulta médica domiciliar",
+            "pronto socorro",
+            "vacinação",
+            "telemedicina",
+        ],
+        "termos_populares": [
+            "saude", "humana", "medico", "consulta", "exame", "dentista",
+            "odontologia", "fisioterapia", "enfermagem", "hospital", "clinica",
+            "vacina", "laboratorio", "cirurgia", "emergencia", "psicologo",
+            "nutricionista", "ultrassom", "checkup", "domiciliar", "telemedicina",
+        ],
+        "perguntas_refino": [
+            "O atendimento é presencial, domiciliar ou por telemedicina?",
+            "Qual a especialidade?",
+            "É saúde humana (exclui veterinária)?",
+        ],
+        "cnae_divisoes": ["86", "87", "88"],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "ART-X": {
+        "grupo": "ART-X",
+        "cct": "200039",
+        "cst": "200",
+        "titulo_curto": "Produções nacionais artísticas e culturais — Anexo X",
+        "rotulo_hipotese": "Produções nacionais — redução de 60% (art. 139, exige destinação)",
+        "anexo": "X",
+        "artigo": "Art. 139 da LC 214/2025",
+        "reducao_ibs": 60,
+        "reducao_cbs": 60,
+        "documentos": ["NFE", "NFSE"],
+        "resumo": (
+            "Fornecimento de serviços e licenciamento ou cessão de direitos com "
+            "redução de 60% de IBS e CBS (art. 139, Anexo X), CONDICIONADO à "
+            "destinação a produções nacionais artísticas, culturais, de eventos, "
+            "jornalísticas e audiovisuais: espetáculos teatrais, circenses e de "
+            "dança, shows musicais, desfiles carnavalescos ou folclóricos, eventos "
+            "acadêmicos e científicos (congressos, conferências, simpósios), feiras "
+            "de negócios, exposições e mostras culturais, artísticas e literárias, "
+            "programas de auditório ou jornalísticos, filmes, documentários, "
+            "séries, novelas, entrevistas e clipes musicais."
+        ),
+        "quando_se_aplica": [
+            "Shows, peças de teatro, espetáculos de dança e circo de produção nacional",
+            "Filmes, séries, novelas, documentários e clipes nacionais",
+            " Congressos, feiras, exposições e eventos acadêmicos/científicos",
+            "Desfiles carnavalescos e manifestações folclóricas",
+            "Licenciamento ou cessão de direitos dessas produções",
+        ],
+        "quando_nao_se_aplica": [
+            "Evento particular sem caráter cultural/artístico comprovado (festa privada comum)",
+            "Produção estrangeira (exige produção NACIONAL)",
+            "Publicidade comercial comum sem enquadramento em produção nacional",
+            "Sem destinação comprovada, vale a regra geral — confirmar a destinação",
+        ],
+        "condicoes": [
+            "DESTINAÇÃO NACIONAL OBRIGATÓRIA: sem comprovação, não se aplica",
+            "A destinação deve constar da operação (contrato, projeto, edital)",
+        ],
+        "consultas_tipicas": [
+            "show",
+            "teatro",
+            "cinema",
+            "festa de casamento",
+            "feira de artesanato",
+            "congresso",
+            "festival de música",
+            "circo",
+            "desfile de carnaval",
+            "documentário",
+        ],
+        "termos_populares": [
+            "show", "shows", "teatro", "teatrais", "cinema", "filme", "filmes",
+            "serie", "series", "novela", "circo", "circenses", "danca", "evento",
+            "eventos", "feira", "feiras", "congresso", "festival", "carnaval",
+            "exposicao", "museu", "espetaculo", "espetaculos", "musical",
+            "desfile", "folclore", "documentario", "entrevista", "clipe",
+            "programa", "jornalistico", "producao", "nacional", "artistica",
+            "cultural", "audiovisual",
+        ],
+        "perguntas_refino": [
+            "O serviço destina-se a produção nacional (qual? teatro, filme, evento...)?",
+            "Há comprovação da destinação (contrato, projeto, edital)?",
+            "É show, espetáculo, feira, congresso ou produção audiovisual?",
+        ],
+        "cnae_divisoes": ["58", "59", "60", "74", "82", "90", "91", "92", "93"],
+        "documentos_nota": "Emitido por NFe ou NFSe, conforme a operação.",
+    },
+    "ADM-XI": {
+        "grupo": "ADM-XI",
+        "cct": "200043",
+        "cst": "200",
+        "titulo_curto": "Soberania e segurança — venda à administração pública (Anexo XI)",
+        "rotulo_hipotese": "Soberania/segurança p/ governo — redução de 60% (art. 142)",
+        "anexo": "XI",
+        "artigo": "Art. 142 da LC 214/2025",
+        "reducao_ibs": 60,
+        "reducao_cbs": 60,
+        "documentos": ["NFE", "NFSE"],
+        "resumo": (
+            "Fornecimento à administração pública direta, autarquias e fundações "
+            "públicas de serviços e bens de soberania, segurança nacional, "
+            "segurança da informação e segurança cibernética, com redução de 60% "
+            "de IBS e CBS (art. 142, Anexo XI). O traço distintivo é o TOMADOR: "
+            "só vale vendendo para o poder público nessas finalidades."
+        ),
+        "quando_se_aplica": [
+            "Venda de serviços/bens de soberania e segurança nacional ao governo",
+            "Contratos com administração direta, autarquias e fundações públicas",
+            "Segurança da informação e cibernética contratada por órgão público",
+        ],
+        "quando_nao_se_aplica": [
+            "Venda para empresa privada ou pessoa física (avaliar 200/200044 se for segurança da informação/cibernética, senão regra geral)",
+            "Serviço sem vínculo com soberania/segurança nacional",
+            "Segurança patrimonial privada comum (portaria de condomínio, vigilância privada)",
+        ],
+        "condicoes": [
+            "TOMADOR OBRIGATÓRIO: administração pública direta, autarquia ou fundação pública",
+            "Sem exigência de composição societária neste enquadramento",
+        ],
+        "consultas_tipicas": [
+            "vigilância patrimonial",
+            "segurança para órgão público",
+            "monitoramento",
+            "portaria",
+            "segurança",
+        ],
+        "termos_populares": [
+            "seguranca", "soberania", "administracao", "publica", "nacional",
+            "informacao", "cibernetica", "vigilancia", "monitoramento",
+            "portaria", "escolta", "alarme", "defesa",
+        ],
+        "perguntas_refino": [
+            "O tomador é administração pública direta, autarquia ou fundação?",
+            "O objeto é soberania, segurança nacional, da informação ou cibernética?",
+            "Se for empresa privada: a prestadora tem sócio brasileiro ≥20%? (pode ser 200/200044)",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "Emitido por NFe ou NFSe, conforme a operação.",
+    },
+    "CIBER-XI": {
+        "grupo": "CIBER-XI",
+        "cct": "200044",
+        "cst": "200",
+        "titulo_curto": "Segurança da informação e cibernética com sócio brasileiro (Anexo XI)",
+        "rotulo_hipotese": "Segurança da informação — redução de 60% (art. 142, exige sócio BR)",
+        "anexo": "XI",
+        "artigo": "Art. 142 da LC 214/2025",
+        "reducao_ibs": 60,
+        "reducao_cbs": 60,
+        "documentos": ["NFCE", "NFE", "NFSE"],
+        "resumo": (
+            "Operações e prestações de serviços de segurança da informação e "
+            "segurança cibernética com redução de 60% de IBS e CBS (art. 142, "
+            "Anexo XI), quando prestadas por sociedade com sócio brasileiro "
+            "detendo no mínimo 20% do capital social. O traço distintivo é duplo: "
+            "OBJETO (segurança da informação/cibernética) + COMPOSIÇÃO (sócio BR ≥20%)."
+        ),
+        "quando_se_aplica": [
+            "Pentest, firewall gerenciado e resposta a incidentes por empresa com sócio BR ≥20%",
+            "Monitoramento SOC e antivírus corporativo nessas condições",
+            "Consultoria LGPD com foco em segurança da informação (verificar objeto)",
+        ],
+        "quando_nao_se_aplica": [
+            "Prestadora SEM sócio brasileiro ≥20% (vai para regra geral ou 200/200043 se tomador público)",
+            "TI genérico sem caráter de segurança (desenvolvimento, suporte, hospedagem)",
+            "Venda de software de prateleira sem prestação de serviço de segurança",
+        ],
+        "condicoes": [
+            "COMPOSIÇÃO OBRIGATÓRIA: sócio brasileiro com ≥20% do capital",
+            "OBJETO: segurança da informação / segurança cibernética (não TI genérico)",
+        ],
+        "consultas_tipicas": [
+            "firewall",
+            "pentest",
+            "teste de invasão",
+            "segurança da informação",
+            "antivírus corporativo",
+            "LGPD",
+        ],
+        "termos_populares": [
+            "seguranca", "informacao", "cibernetica", "ciberataque", "firewall",
+            "pentest", "antivirus", "ransomware", "phishing", "malware",
+            "criptografia", "lgpd", "socio", "brasileiro", "sociedade",
+            "invasao", "hacker",
+        ],
+        "perguntas_refino": [
+            "A prestadora tem sócio brasileiro com ≥20% do capital?",
+            "O objeto é segurança da informação/cibernética (não TI genérico)?",
+            "O tomador é público ou privado?",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "Emitido por NFCe, NFe ou NFSe, conforme a operação.",
+    },
+    "PROF-30": {
+        "grupo": "PROF-30",
+        "cct": "200052",
+        "cst": "200",
+        "titulo_curto": "Profissões intelectuais regulamentadas — art. 127",
+        "rotulo_hipotese": "Profissões intelectuais — redução de 30% (art. 127)",
+        "anexo": "",
+        "artigo": "Art. 127 (redação do art. 202) da LC 214/2025",
+        "reducao_ibs": 30,
+        "reducao_cbs": 30,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Prestação de serviços por profissionais liberais em atividades "
+            "intelectuais de natureza científica, literária ou artística, "
+            "submetidas à fiscalização por conselho profissional, com redução "
+            "de 30% das alíquotas de IBS e CBS (art. 127, redação do art. 202 "
+            "da LC 214/2025). Não há NBS vinculado na base atual — o "
+            "enquadramento é por hipótese legal (200/200052), a confirmar com "
+            "o contador."
+        ),
+        "quando_se_aplica": [
+            "Advogados, contabilistas, engenheiros e agrônomos no exercício liberal",
+            "Administradores, arquitetos e urbanistas, economistas, estatísticos",
+            "Assistentes sociais, bibliotecários, biólogos, químicos, museólogos",
+            "Profissionais de educação física e de relações públicas",
+            "Médicos veterinários e zootecnistas, técnicos industriais e agrícolas",
+            "Economistas domésticos",
+        ],
+        "quando_nao_se_aplica": [
+            "Profissional sem registro no conselho de fiscalização",
+            "Atividade comercial ou operacional sem caráter intelectual (ex.: comércio, transporte)",
+            "Serviço prestado como empregado CLT (não é prestação de serviço liberal)",
+            "Pessoa jurídica sem profissional habilitado responsável (verificar)",
+        ],
+        "condicoes": [
+            "PROFISSÃO REGULAMENTADA: atividade submetida a conselho profissional",
+            "NATUREZA INTELECTUAL: científica, literária ou artística",
+            "Sem NBS vinculado — hipótese a confirmar com o contador",
+        ],
+        "consultas_tipicas": [
+            "advogado",
+            "contador",
+            "engenheiro",
+            "contabilista",
+            "administrador",
+            "arquiteto",
+        ],
+        "termos_populares": [
+            "advogado", "advogados", "contador", "contadores", "contabilista",
+            "contabilistas", "engenheiro", "engenheiros", "administrador",
+            "administradores", "arquiteto", "arquitetos", "urbanista",
+            "assistente", "bibliotecario", "biologo", "economista",
+            "estatistico", "veterinario", "museologo", "quimico",
+            "profissao", "profissoes", "intelectual", "conselho",
+        ],
+        "perguntas_refino": [
+            "Qual a profissão (advogado, contador, engenheiro...)? Tem registro no conselho?",
+            "A atividade é intelectual (científica, literária ou artística)?",
+            "É prestação liberal ou vínculo CLT?",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "SAUDE-INTERM": {
+        "grupo": "SAUDE-INTERM",
+        "cct": "011003",
+        "cst": "011",
+        "titulo_curto": "Intermediação de planos de saúde — art. 240",
+        "rotulo_hipotese": "Intermediação de planos de saúde — redução de 60% (art. 240)",
+        "anexo": "",
+        "artigo": "Art. 240 da LC 214/2025",
+        "reducao_ibs": 60,
+        "reducao_cbs": 60,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Intermediação (corretagem) de planos de assistência à saúde com "
+            "redução de 60% de IBS e CBS (art. 240 da LC 214/2025). É o serviço "
+            "do corretor/intermediário — distinto da operadora do plano. Sem NBS "
+            "vinculado: hipótese legal (011/011003), a confirmar com o contador."
+        ),
+        "quando_se_aplica": [
+            "Corretagem e intermediação na contratação de plano de saúde",
+            "Assessoria ao cliente na escolha e adesão ao plano",
+        ],
+        "quando_nao_se_aplica": [
+            "Operadora do plano de saúde (benefício próprio distinto)",
+            "Intermediação de plano funerário ou pet (outros regimes)",
+            "Consultoria sem intermediação efetiva (verificar objeto)",
+        ],
+        "condicoes": [
+            "OBJETO: intermediação de planos de SAÚDE (não o plano em si)",
+            "Sem NBS vinculado — hipótese a confirmar com o contador",
+        ],
+        "consultas_tipicas": [
+            "corretor de plano de saúde",
+            "intermediação de plano de saúde",
+            "corretagem de plano de saúde",
+        ],
+        "termos_populares": [
+            "intermediacao", "corretor", "corretagem", "corretora", "saude",
+            "plano", "planos",
+        ],
+        "perguntas_refino": [
+            "É intermediação/corretagem ou a operadora do plano?",
+            "O plano é de saúde humana?",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "TRANSP-ZPE": {
+        "grupo": "TRANSP-ZPE",
+        "cct": "200001",
+        "cst": "200",
+        "titulo_curto": "Transporte para ZPE e exportados — art. 103 (alíquota zero)",
+        "rotulo_hipotese": "Transporte p/ ZPE — alíquota zero (art. 103)",
+        "anexo": "",
+        "artigo": "Art. 103 da LC 214/2025",
+        "reducao_ibs": 100,
+        "reducao_cbs": 100,
+        "documentos": ["CTE", "CTEOS", "NFSE"],
+        "resumo": (
+            "Serviços de transporte de bens ATÉ as zonas de processamento de "
+            "exportação (ZPE) e de bens exportados A PARTIR das ZPE, com alíquota "
+            "zero de IBS e CBS (art. 103 da LC 214/2025). Sem NBS vinculado: "
+            "hipótese legal (200/200001), a confirmar com o contador."
+        ),
+        "quando_se_aplica": [
+            "Frete rodoviário de bens com destino a ZPE",
+            "Transporte de bens exportados saindo da ZPE",
+        ],
+        "quando_nao_se_aplica": [
+            "Frete comum no mercado interno (sem ZPE)",
+            "Transporte de passageiros, mudanças e táxi",
+            "Transporte internacional sem vínculo com ZPE (verificar exportação)",
+        ],
+        "condicoes": [
+            "ORIGEM/DESTINO ZPE: até a zona ou exportado a partir dela",
+            "OBJETO: bens (não passageiros)",
+        ],
+        "consultas_tipicas": [
+            "frete para zpe",
+            "transporte para zona de processamento de exportação",
+            "frete de exportação zpe",
+        ],
+        "termos_populares": [
+            "transporte", "frete", "exportacao", "exportado", "exportados",
+            "zpe", "carreto",
+        ],
+        "perguntas_refino": [
+            "A origem ou o destino é zona de processamento de exportação (ZPE)?",
+            "É transporte de bens (não passageiros)? Qual o modal?",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "CTe/CTe OS (e NFSE quando cabível).",
+    },
+    "PESQUISA-ICT": {
+        "grupo": "PESQUISA-ICT",
+        "cct": "200016",
+        "cst": "200",
+        "titulo_curto": "Pesquisa por ICT sem fins lucrativos — art. 156 (alíquota zero)",
+        "rotulo_hipotese": "Pesquisa por ICT — alíquota zero (art. 156)",
+        "anexo": "",
+        "artigo": "Art. 156 da LC 214/2025",
+        "reducao_ibs": 100,
+        "reducao_cbs": 100,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Prestação de serviços de pesquisa e desenvolvimento por Instituição "
+            "Científica, Tecnológica e de Inovação (ICT) sem fins lucrativos, para "
+            "a administração pública ou contribuinte do regime regular, com "
+            "alíquota zero de IBS e CBS (art. 156 da LC 214/2025). Sem NBS "
+            "vinculado: hipótese legal (200/200016)."
+        ),
+        "quando_se_aplica": [
+            "Pesquisa científica/tecnológica por ICT sem fins lucrativos",
+            "Desenvolvimento experimental e inovação sob encomenda pública",
+            "Tomador: governo ou contribuinte do regime regular",
+        ],
+        "quando_nao_se_aplica": [
+            "P&D por empresa com fins lucrativos",
+            "Consultoria técnica comum sem pesquisa",
+            "TI genérico (desenvolvimento de software comercial)",
+        ],
+        "condicoes": [
+            "PRESTADORA: ICT sem fins lucrativos",
+            "TOMADOR: administração pública ou contribuinte do regime regular",
+        ],
+        "consultas_tipicas": [
+            "pesquisa científica",
+            "instituto de pesquisa",
+            "inovação tecnológica",
+            "pesquisa e desenvolvimento",
+        ],
+        "termos_populares": [
+            "pesquisa", "pesquisador", "ict", "inovacao", "cientifica",
+            "tecnologica", "instituto", "desenvolvimento",
+        ],
+        "perguntas_refino": [
+            "A prestadora é ICT sem fins lucrativos?",
+            "Quem é o tomador (governo ou contribuinte regular)?",
+            "É pesquisa/inovação ou consultoria comum?",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "FGTS-OP": {
+        "grupo": "FGTS-OP",
+        "cct": "200017",
+        "cst": "200",
+        "titulo_curto": "Operações do FGTS — art. 212 (alíquota zero)",
+        "rotulo_hipotese": "Operações do FGTS — alíquota zero (art. 212)",
+        "anexo": "",
+        "artigo": "Art. 212 da LC 214/2025",
+        "reducao_ibs": 100,
+        "reducao_cbs": 100,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Operações relacionadas ao FGTS (Lei 8.036/1990) realizadas pelo "
+            "Conselho Curador ou pela Secretaria Executiva do FGTS, com alíquota "
+            "zero de IBS e CBS (art. 212 da LC 214/2025). Hipótese legal "
+            "(200/200017), sem NBS vinculado."
+        ),
+        "quando_se_aplica": [
+            "Operações do FGTS pelo Conselho Curador",
+            "Atuação da Secretaria Executiva do FGTS",
+        ],
+        "quando_nao_se_aplica": [
+            "Banco comum fora do circuito do FGTS",
+            "Empréstimo ou crédito pessoal comum",
+        ],
+        "condicoes": ["AGENTE: Conselho Curador ou Secretaria Executiva do FGTS"],
+        "consultas_tipicas": ["operações do fgts", "fgts conselho curador"],
+        "termos_populares": ["fgts", "curador", "conselho"],
+        "perguntas_refino": ["O agente é do circuito oficial do FGTS?"],
+        "cnae_divisoes": [],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "FIN-IMPORT": {
+        "grupo": "FIN-IMPORT",
+        "cct": "200019",
+        "cst": "200",
+        "titulo_curto": "Importador de serviço financeiro com crédito — art. 231 (zero)",
+        "rotulo_hipotese": "Importação de serviço financeiro — alíquota zero (art. 231)",
+        "anexo": "",
+        "artigo": "Art. 231 da LC 214/2025",
+        "reducao_ibs": 100,
+        "reducao_cbs": 100,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Importador de serviços financeiros que seja contribuinte e tenha "
+            "direito à apropriação de créditos na aquisição do mesmo serviço no "
+            "País, com alíquota zero de IBS e CBS (art. 231 da LC 214/2025). "
+            "Hipótese legal (200/200019), sem NBS vinculado."
+        ),
+        "quando_se_aplica": [
+            "Importação de serviço financeiro por contribuinte",
+            "Com direito a crédito do mesmo serviço adquirido no País",
+        ],
+        "quando_nao_se_aplica": [
+            "Importador sem direito a crédito correspondente",
+            "Serviço financeiro doméstico comum (regime próprio)",
+        ],
+        "condicoes": [
+            "CONTRIBUINTE com direito de apropriação de créditos",
+            "MESMO serviço adquirido no País",
+        ],
+        "consultas_tipicas": ["importação de serviço financeiro"],
+        "termos_populares": ["importador", "importacao", "financeiro", "credito", "creditos"],
+        "perguntas_refino": [
+            "O importador é contribuinte com direito ao crédito?",
+            "É o mesmo serviço adquirido no País?",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "COOP": {
+        "grupo": "COOP",
+        "cct": "200020",
+        "cst": "200",
+        "titulo_curto": "Cooperativas em regime específico — art. 271 (alíquota zero)",
+        "rotulo_hipotese": "Operação com cooperativa — alíquota zero (art. 271)",
+        "anexo": "",
+        "artigo": "Art. 271 da LC 214/2025",
+        "reducao_ibs": 100,
+        "reducao_cbs": 100,
+        "documentos": ["NFE", "NFCE", "CTE", "NFSE"],
+        "resumo": (
+            "Operação de sociedade cooperativa optante pelo regime específico: "
+            "associado destina bem ou serviço à cooperativa e a cooperativa "
+            "fornece bem ou serviço a associado do regime regular, com alíquota "
+            "zero de IBS e CBS (art. 271 da LC 214/2025). Hipótese legal "
+            "(200/200020), sem NBS vinculado."
+        ),
+        "quando_se_aplica": [
+            "Associado destina produção/serviço à sua cooperativa",
+            "Cooperativa fornece a associado do regime regular",
+            "Cooperativa optante pelo regime específico",
+        ],
+        "quando_nao_se_aplica": [
+            "Cooperativa fora do regime específico",
+            "Venda a não associado (verificar enquadramento)",
+        ],
+        "condicoes": [
+            "COOPERATIVA optante pelo regime específico",
+            "FLUXO associado ↔ cooperativa",
+        ],
+        "consultas_tipicas": [
+            "cooperativa",
+            "cooperado",
+            "operação com cooperativa",
+        ],
+        "termos_populares": [
+            "cooperativa", "cooperativas", "cooperado", "associado",
+            "cooperativismo",
+        ],
+        "perguntas_refino": [
+            "A cooperativa optou pelo regime específico?",
+            "É fluxo associado ↔ cooperativa?",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "Conforme a operação (NFe, NFCe, CTe ou NFSE).",
+    },
+    "TRANSP-PUB": {
+        "grupo": "TRANSP-PUB",
+        "cct": "200021",
+        "cst": "200",
+        "titulo_curto": "Transporte público ferroviário/hidroviário — art. 285 (zero)",
+        "rotulo_hipotese": "Transporte público trilhos/águas — alíquota zero (art. 285)",
+        "anexo": "",
+        "artigo": "Art. 285 da LC 214/2025",
+        "reducao_ibs": 100,
+        "reducao_cbs": 100,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Serviços de transporte público coletivo de passageiros ferroviário e "
+            "hidroviário, urbanos, semiurbanos e metropolitanos, com alíquota zero "
+            "de IBS e CBS (art. 285 da LC 214/2025). Hipótese legal (200/200021), "
+            "sem NBS vinculado."
+        ),
+        "quando_se_aplica": [
+            "Metrô, trem metropolitano e transporte sobre trilhos urbano",
+            "Barcas e transporte hidroviário urbano de passageiros",
+        ],
+        "quando_nao_se_aplica": [
+            "Ônibus rodoviário comum (outro enquadramento)",
+            "Táxi, uber e transporte individual",
+            "Fretamento privado e transporte de carga",
+        ],
+        "condicoes": [
+            "MODAL: ferroviário ou hidroviário",
+            "COLETIVO de passageiros, urbano/semiurbano/metropolitano",
+        ],
+        "consultas_tipicas": ["metrô", "trem metropolitano", "barca", "transporte hidroviário"],
+        "termos_populares": [
+            "ferroviario", "hidroviario", "metro", "metroviario",
+            "metropolitanos", "urbano", "urbanos", "coletivo", "trem",
+            "barca", "transporte", "passageiros",
+        ],
+        "perguntas_refino": [
+            "É ferroviário ou hidroviário (não rodoviário)?",
+            "É transporte público coletivo urbano de passageiros?",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "EDU-PROUNI": {
+        "grupo": "EDU-PROUNI",
+        "cct": "200025",
+        "cst": "200",
+        "titulo_curto": "Educação ProUni — art. 308 (−60% IBS, zero CBS)",
+        "rotulo_hipotese": "Educação ProUni — zero CBS (art. 308)",
+        "anexo": "",
+        "artigo": "Art. 308 da LC 214/2025",
+        "reducao_ibs": 60,
+        "reducao_cbs": 100,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Serviços de educação do Programa Universidade para Todos (ProUni, "
+            "Lei 11.096/2005), com redução de 60% do IBS e alíquota zero de CBS "
+            "(art. 308 da LC 214/2025). Hipótese legal (200/200025), sem NBS "
+            "vinculado — distinta do 200/200028 (educação geral)."
+        ),
+        "quando_se_aplica": [
+            "Cursos em instituição aderente ao ProUni",
+            "Bolsas e vagas do programa",
+        ],
+        "quando_nao_se_aplica": [
+            "Curso fora do ProUni (avaliar 200/200028, −60%)",
+            "Escola livre sem vínculo com o programa",
+        ],
+        "condicoes": ["VÍNCULO com o ProUni (Lei 11.096/2005)"],
+        "consultas_tipicas": ["faculdade prouni", "bolsa prouni", "universidade prouni"],
+        "termos_populares": ["prouni", "universidade", "universitario", "faculdade", "educacao"],
+        "perguntas_refino": [
+            "A instituição é aderente ao ProUni?",
+            "É curso superior (bolsa) do programa?",
+        ],
+        "cnae_divisoes": ["85"],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "LOC-REAB": {
+        "grupo": "LOC-REAB",
+        "cct": "200026",
+        "cst": "200",
+        "titulo_curto": "Locação em zona reabilitada — art. 158 (−80%, 5 anos)",
+        "rotulo_hipotese": "Locação em zona reabilitada — redução de 80% (art. 158)",
+        "anexo": "",
+        "artigo": "Art. 158 da LC 214/2025",
+        "reducao_ibs": 80,
+        "reducao_cbs": 80,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Locação de imóveis em zonas reabilitadas (históricas ou áreas "
+            "críticas de recuperação), pelo prazo de 5 anos do habite-se, com "
+            "redução de 80% de IBS e CBS (art. 158 da LC 214/2025). Hipótese "
+            "legal (200/200026), sem NBS vinculado."
+        ),
+        "quando_se_aplica": [
+            "Aluguel de imóvel em zona histórica reabilitada",
+            "Dentro dos 5 anos contados do habite-se",
+            "Zona delimitada por lei municipal/distrital",
+        ],
+        "quando_nao_se_aplica": [
+            "Fora de zona delimitada (avaliar 200/200027)",
+            "Após os 5 anos do habite-se",
+            "Imóvel novo comum fora de reabilitação",
+        ],
+        "condicoes": [
+            "ZONA delimitada por lei municipal ou distrital",
+            "PRAZO: 5 anos do habite-se",
+        ],
+        "consultas_tipicas": ["aluguel em zona histórica", "locação em área reabilitada"],
+        "termos_populares": ["locacao", "aluguel", "reabilitacao", "reabilitar", "historica", "historicas", "imovel", "zona", "habite"],
+        "perguntas_refino": [
+            "O imóvel está em zona reabilitada delimitada em lei?",
+            "Está dentro dos 5 anos do habite-se?",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "LOCACAO": {
+        "grupo": "LOCACAO",
+        "cct": "200027",
+        "cst": "200",
+        "titulo_curto": "Locação e arrendamento de imóveis — art. 261 (−70%)",
+        "rotulo_hipotese": "Locação de imóveis — redução de 70% (art. 261)",
+        "anexo": "",
+        "artigo": "Art. 261 da LC 214/2025",
+        "reducao_ibs": 70,
+        "reducao_cbs": 70,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Locação, cessão onerosa e arrendamento de bens imóveis, com redução "
+            "de 70% de IBS e CBS (art. 261 da LC 214/2025). Hipótese legal "
+            "(200/200027), sem NBS vinculado."
+        ),
+        "quando_se_aplica": [
+            "Aluguel residencial e comercial",
+            "Arrendamento de imóvel",
+            "Cessão onerosa de uso de imóvel",
+        ],
+        "quando_nao_se_aplica": [
+            "Venda do imóvel (operação com bem — avaliar 200/200046)",
+            "Hospedagem e hotel (200/200048)",
+            "Zona reabilitada nos 5 anos (200/200026, −80%)",
+        ],
+        "condicoes": ["OPERAÇÃO: locação, cessão onerosa ou arrendamento de imóvel"],
+        "consultas_tipicas": ["aluguel", "arrendamento de imóvel", "cessão de imóvel", "aluguel comercial"],
+        "termos_populares": ["locacao", "aluguel", "arrendamento", "cessao", "imovel", "imoveis", "alugar"],
+        "perguntas_refino": [
+            "É locação, cessão ou arrendamento (não venda nem hospedagem)?",
+            "Está em zona reabilitada nos 5 anos (pode ser −80%)?",
+        ],
+        "cnae_divisoes": ["68"],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "AMBIENTAL": {
+        "grupo": "AMBIENTAL",
+        "cct": "200037",
+        "cst": "200",
+        "titulo_curto": "Serviços ambientais de vegetação nativa — art. 137 (−60%)",
+        "rotulo_hipotese": "Serviços ambientais — redução de 60% (art. 137)",
+        "anexo": "",
+        "artigo": "Art. 137 da LC 214/2025",
+        "reducao_ibs": 60,
+        "reducao_cbs": 60,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Serviços ambientais de conservação ou recuperação da vegetação "
+            "nativa — inclusive sob manejo sustentável agroflorestal — com "
+            "redução de 60% de IBS e CBS (art. 137 da LC 214/2025). Hipótese "
+            "legal (200/200037), sem NBS vinculado."
+        ),
+        "quando_se_aplica": [
+            "Recuperação de mata e vegetação nativa",
+            "Conservação ambiental certificada",
+            "Manejo sustentável agroflorestal conforme a legislação",
+        ],
+        "quando_nao_se_aplica": [
+            "Jardinagem ornamental urbana comum",
+            "Desmatamento e supressão",
+            "Consultoria sem execução vinculada (verificar)",
+        ],
+        "condicoes": [
+            "VEGETAÇÃO NATIVA (não jardim ornamental)",
+            "Conformidade com a legislação específica",
+        ],
+        "consultas_tipicas": ["recuperação de mata nativa", "conservação ambiental", "reflorestamento"],
+        "termos_populares": ["ambiental", "ambientais", "vegetacao", "nativa", "conservacao", "recuperacao", "reflorestamento", "manejo", "mata", "floresta"],
+        "perguntas_refino": [
+            "É vegetação nativa (não jardim ou paisagismo)?",
+            "Há conformidade com a legislação ambiental específica?",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "COMUN-PUB": {
+        "grupo": "COMUN-PUB",
+        "cct": "200040",
+        "cst": "200",
+        "titulo_curto": "Comunicação institucional p/ governo — art. 140 (−60%)",
+        "rotulo_hipotese": "Comunicação p/ governo — redução de 60% (art. 140)",
+        "anexo": "",
+        "artigo": "Art. 140 da LC 214/2025",
+        "reducao_ibs": 60,
+        "reducao_cbs": 60,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Serviços de comunicação institucional para a administração pública "
+            "(sites, redes sociais, SEO, imprensa) com redução de 60% de IBS e "
+            "CBS (art. 140 da LC 214/2025). Hipótese legal (200/200040), sem NBS "
+            "vinculado."
+        ),
+        "quando_se_aplica": [
+            "Site institucional e páginas de prefeitura/órgão",
+            "Gestão de redes sociais do governo",
+            "Assessoria de imprensa pública",
+        ],
+        "quando_nao_se_aplica": [
+            "Publicidade e marketing para empresa privada",
+            "Site comercial comum",
+            "Propaganda eleitoral (regras próprias)",
+        ],
+        "condicoes": [
+            "TOMADOR PÚBLICO + objeto institucional",
+        ],
+        "consultas_tipicas": ["site para prefeitura", "assessoria de imprensa pública", "redes sociais do governo"],
+        "termos_populares": ["comunicacao", "comunic", "institucional", "instit", "imprensa", "prefeitura", "municipio", "admin"],
+        "perguntas_refino": [
+            "O tomador é órgão público?",
+            "O objeto é comunicação institucional (não marketing privado)?",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "ESPORTE": {
+        "grupo": "ESPORTE",
+        "cct": "200041",
+        "cst": "200",
+        "titulo_curto": "Desporto: educação e gestão federada — art. 141 (−60%)",
+        "rotulo_hipotese": "Atividade desportiva federada — redução de 60% (art. 141)",
+        "anexo": "",
+        "artigo": "Art. 141 da LC 214/2025",
+        "reducao_ibs": 60,
+        "reducao_cbs": 60,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Educação desportiva e gestão/exploração do desporto por associações "
+            "e clubes filiados (ingressos, sócio-torcedor, cessão de direitos), "
+            "com redução de 60% de IBS e CBS (art. 141 da LC 214/2025: 200/200041 "
+            "e 200/200042). Hipótese legal, sem NBS vinculado."
+        ),
+        "quando_se_aplica": [
+            "Escolinha e educação desportiva federada",
+            "Clube/associação filiada com gestão e ingressos",
+            "Sócio-torcedor e cessão de direitos desportivos",
+        ],
+        "quando_nao_se_aplica": [
+            "Academia comum sem federação",
+            "Evento sem vínculo desportivo federado (avaliar Anexo X)",
+            "E-sports sem enquadramento (verificar)",
+        ],
+        "condicoes": [
+            "FEDERAÇÃO: clube/associação filiada ao órgão estadual/federal (p/ gestão)",
+            "Educação desportiva ou exploração federada",
+        ],
+        "consultas_tipicas": ["escolinha de futebol", "sócio-torcedor", "clube", "ingressos"],
+        "termos_populares": ["esporte", "esportivo", "desportiva", "desportivas", "desporto", "futebol", "clube", "clubes", "ingresso", "ingressos", "atleta", "torcedor", "academia", "federacao"],
+        "perguntas_refino": [
+            "O clube/associação é filiado à federação?",
+            "É educação desportiva ou gestão/exploração?",
+        ],
+        "cnae_divisoes": ["93"],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "IMOVEL": {
+        "grupo": "IMOVEL",
+        "cct": "200046",
+        "cst": "200",
+        "titulo_curto": "Operações com bens imóveis — art. 261 (−50%)",
+        "rotulo_hipotese": "Operações com imóveis — redução de 50% (art. 261)",
+        "anexo": "",
+        "artigo": "Art. 261 da LC 214/2025",
+        "reducao_ibs": 50,
+        "reducao_cbs": 50,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Operações com bens imóveis com redução de 50% de IBS e CBS "
+            "(art. 261 da LC 214/2025). Hipótese legal (200/200046), sem NBS "
+            "vinculado — confirmar o enquadramento frente à locação (200/200027)."
+        ),
+        "quando_se_aplica": [
+            "Operações imobiliárias do art. 261 (confirmar enquadramento)",
+        ],
+        "quando_nao_se_aplica": [
+            "Locação pura (200/200027, −70%)",
+            "Zona reabilitada nos 5 anos (200/200026, −80%)",
+            "Hospedagem (200/200048)",
+        ],
+        "condicoes": ["Enquadramento no art. 261 — confirmar com o contador"],
+        "consultas_tipicas": ["operação com imóvel"],
+        "termos_populares": ["imovel", "imoveis", "imobiliario"],
+        "perguntas_refino": [
+            "É locação, venda ou outra operação com o imóvel?",
+            "Não seria locação (200/200027) ou zona reabilitada (200/200026)?",
+        ],
+        "cnae_divisoes": ["68"],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "HOTEL": {
+        "grupo": "HOTEL",
+        "cct": "200048",
+        "cst": "200",
+        "titulo_curto": "Hotelaria e parques — art. 281 (−40%)",
+        "rotulo_hipotese": "Hotelaria e parques — redução de 40% (art. 281)",
+        "anexo": "",
+        "artigo": "Art. 281 da LC 214/2025",
+        "reducao_ibs": 40,
+        "reducao_cbs": 40,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Hotelaria, parques de diversão e parques temáticos, com redução de "
+            "40% de IBS e CBS (art. 281 da LC 214/2025). Hipótese legal "
+            "(200/200048), sem NBS vinculado."
+        ),
+        "quando_se_aplica": [
+            "Hotel, pousada e resort",
+            "Parque de diversões e parque temático",
+        ],
+        "quando_nao_se_aplica": [
+            "Aluguel residencial por temporada comum (avaliar locação)",
+            "Restaurante avulso sem hospedagem",
+        ],
+        "condicoes": ["Atividade hoteleira ou de parque (não aluguel residencial)"],
+        "consultas_tipicas": ["hotel", "resort", "parque de diversões", "pousada"],
+        "termos_populares": ["hotelaria", "hotel", "resort", "parque", "parques", "diversao", "tematico", "tematicos", "pousada", "hospedagem", "motel"],
+        "perguntas_refino": [
+            "É hotel/pousada/parque (não aluguel residencial)?",
+        ],
+        "cnae_divisoes": ["55"],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "TURISMO": {
+        "grupo": "TURISMO",
+        "cct": "200051",
+        "cst": "200",
+        "titulo_curto": "Agências de turismo — art. 289 (−40%)",
+        "rotulo_hipotese": "Agências de turismo — redução de 40% (art. 289)",
+        "anexo": "",
+        "artigo": "Art. 289 da LC 214/2025",
+        "reducao_ibs": 40,
+        "reducao_cbs": 40,
+        "documentos": ["NFSE"],
+        "resumo": (
+            "Agências de turismo com redução de 40% de IBS e CBS (art. 289 da "
+            "LC 214/2025). Hipótese legal (200/200051), sem NBS vinculado."
+        ),
+        "quando_se_aplica": [
+            "Agência de viagens e pacotes turísticos",
+            "Operação turística por agência",
+        ],
+        "quando_nao_se_aplica": [
+            "Transporte avulso sem agência",
+            "Hotel avulso sem agência",
+            "Guia autônomo sem agência (verificar)",
+        ],
+        "condicoes": ["AGÊNCIA de turismo (não só transporte ou hotel)"],
+        "consultas_tipicas": ["agência de viagens", "pacote turístico", "agência de turismo"],
+        "termos_populares": ["turismo", "agencia", "pacote", "viagem", "viagens", "turistico", "receptivo"],
+        "perguntas_refino": [
+            "É agência de turismo (não só transporte ou hotel)?",
+        ],
+        "cnae_divisoes": ["79"],
+        "documentos_nota": "Emitido por NFSE.",
+    },
+    "DIFER-INSUMO": {
+        "grupo": "DIFER-INSUMO",
+        "cct": "515001",
+        "cst": "515",
+        "titulo_curto": "Diferimento em insumos agropecuários — art. 138/Anexo IX",
+        "rotulo_hipotese": "Insumos agropecuários — diferimento (art. 138)",
+        "anexo": "IX",
+        "artigo": "Art. 138 da LC 214/2025 (Anexo IX)",
+        "reducao_ibs": 60,
+        "reducao_cbs": 60,
+        "documentos": ["NFE", "NFSE"],
+        "resumo": (
+            "Operações com insumos agropecuários e aquícolas sujeitas a "
+            "DIFERIMENTO (art. 138, Anexo IX): o pagamento é adiado nos termos "
+            "legais — não é redução definitiva. Hipótese (515/515001), sem NBS "
+            "vinculado na base de serviços."
+        ),
+        "quando_se_aplica": [
+            "Venda de insumos agropecuários do Anexo IX com diferimento",
+            "Ração, adubo e sementes enquadrados com diferimento",
+        ],
+        "quando_nao_se_aplica": [
+            "Bem fora do Anexo IX",
+            "Consumo final urbano sem diferimento",
+        ],
+        "condicoes": [
+            "DIFERIMENTO (adiamento, não isenção) — verificar o momento do pagamento",
+            "Insumo do Anexo IX",
+        ],
+        "consultas_tipicas": ["insumo agropecuário", "diferimento de insumo"],
+        "termos_populares": ["diferimento", "insumo", "insumos", "agropecuario", "agropecuarios", "aquicola", "aquicolas"],
+        "perguntas_refino": [
+            "O insumo está no Anexo IX?",
+            "A operação é com diferimento (quando se paga)?",
+        ],
+        "cnae_divisoes": [],
+        "documentos_nota": "NFe ou NFSE, conforme a operação.",
+    },
+}
+
+CCT_POR_GRUPO = {g: v["cct"] for g, v in GROUP_TEMPLATES.items()}
+NOTA_DUAL = (
+    "Este NBS tem DOIS enquadramentos possíveis na base: 200/200043 (venda à "
+    "administração pública em soberania/segurança, sem exigência societária) e "
+    "200/200044 (segurança da informação/cibernética, exige sócio brasileiro "
+    "≥20%). A escolha depende da operação real: tomador público → 200043; "
+    "prestadora com sócio BR ≥20% em segurança da informação → 200044."
+)
+REPRESENTANTES = {
+    "122011100": "EDU",
+    "123011100": "SAUDE",
+    "111031000": "ART-X",
+    "115012000": "ADM-XI",
+    "120013500": "CIBER-XI",
+}
+
+
+def carregar_base():
+    dados = json.loads(BASE_NBS.read_text(encoding="utf-8-sig"))
+    por_nbs = {}
+    for r in dados:
+        nbs = "".join(c for c in str(r.get("NBS", "")) if c.isdigit())
+        if len(nbs) != 9:
+            continue
+        e = por_nbs.setdefault(nbs, {"ccts": set(), "dfes": set()})
+        e["ccts"].add(str(r.get("CclassTrib", "")).strip())
+        for d in str(r.get("DFes Relac.", "") or "").split(","):
+            d = d.strip().upper()
+            if d:
+                e["dfes"].add(d)
+    return por_nbs
+
+
+def grupo_de(ccts):
+    for g, t in GROUP_TEMPLATES.items():
+        if t["cct"] in ccts:
+            # XI dual: o grupo primário é o da venda pública; o contexto
+            # carrega os dois enquadramentos na nota.
+            return g
+    raise ValueError(f"cct desconhecido: {ccts}")
+
+
+def cluster_de(nbs, grupo):
+    if grupo in ("ADM-XI", "CIBER-XI"):
+        return nbs[:5]
+    return nbs[:5]
+
+
+def main():
+    conferir = "--conferir" in sys.argv
+    por_nbs = carregar_base()
+    itens = []
+    for nbs in sorted(por_nbs):
+        info = por_nbs[nbs]
+        ccts = sorted(info["ccts"])
+        grupo = grupo_de(set(ccts))
+        multi = len(ccts) > 1
+        itens.append(
+            {
+                "nbs": nbs,
+                "grupo": grupo,
+                "cluster": cluster_de(nbs, grupo),
+                "ccts": ccts,
+                "documentos": sorted(info["dfes"]),
+                "representante": nbs in REPRESENTANTES,
+                "multi_enquadramento": multi,
+                "nota": NOTA_DUAL if multi else None,
+            }
+        )
+    saida = {
+        "versao": "contexto-nbs-v1",
+        "gerado_por": "scripts/gerar-contexto-nbs.py (base viva + curadoria de grupos)",
+        "total_itens": len(itens),
+        "grupos": list(GROUP_TEMPLATES.values()),
+        "itens": itens,
+    }
+    # validações
+    assert len(itens) == 107, f"esperava 107 NBS, achei {len(itens)}"
+    for it in itens:
+        assert it["grupo"] in GROUP_TEMPLATES, it
+        for c in it["ccts"]:
+            assert c in CCT_POR_GRUPO.values(), (it, c)
+    for nbs in REPRESENTANTES:
+        assert any(i["nbs"] == nbs for i in itens), nbs
+    if conferir:
+        print(f"OK: {len(itens)} itens, 5 grupos, representantes conferidos.")
+        return
+    SAIDA.write_text(json.dumps(saida, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"escrito {SAIDA} ({len(itens)} itens)")
+
+
+if __name__ == "__main__":
+    main()

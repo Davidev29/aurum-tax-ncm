@@ -25,7 +25,7 @@ import {
   StatusAurumAI,
 } from '@/ui/aurum-ai'
 import { Btn, Painel, Texto, Vazio } from '@/ui/kit'
-import { CartaoCnae, DetalhesPerguntasServicos, FichaEmpresaCnpj } from '@/ui/servicos'
+import { CartaoCnae, DetalhesPerguntasServicos, FichaEmpresaCnpj, BlocoContextoNbs } from '@/ui/servicos'
 
 const DEBOUNCE_MS = 3000
 
@@ -516,6 +516,7 @@ function SecaoSugestaoNbs() {
   const usarSugestao = useServicos((s) => s.usarSugestao)
   const escolher = useServicos((s) => s.escolherUnificada)
   if (!sugestao) return null
+  const preditivas = sugestao.sugestoesPreditivas ?? []
   const corConfianca =
     sugestao.confianca === 'alta'
       ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200'
@@ -527,6 +528,8 @@ function SecaoSugestaoNbs() {
       <div className="flex flex-wrap items-center gap-2">
         {sugestao.nbs_provavel ? (
           <span className="consulta-hero-ncm text-brand-700 dark:text-aurum-200">{sugestao.nbs_provavel}</span>
+        ) : preditivas.some((p) => p.tipo === 'hipotese-cct') ? (
+          <span className="text-sm font-bold text-amber-700 dark:text-amber-300">💡 Hipótese de benefício a verificar</span>
         ) : (
           <span className="text-sm font-bold text-slate-500">Sem sugestão segura</span>
         )}
@@ -540,6 +543,7 @@ function SecaoSugestaoNbs() {
       <p className="consulta-justificativa-clamp text-slate-600 dark:text-slate-300" title={sugestao.justificativa}>
         {sugestao.justificativa}
       </p>
+      {sugestao.contextoNbs ? <BlocoContextoNbs contexto={sugestao.contextoNbs} /> : null}
       {sugestao.nbs_provavel ? (
         <div className="flex flex-wrap gap-2">
           <Btn
@@ -552,6 +556,47 @@ function SecaoSugestaoNbs() {
           >
             Classificar {sugestao.nbs_provavel} oficialmente
           </Btn>
+        </div>
+      ) : null}
+      {preditivas.length ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" role="note" aria-label="Sugestões preditivas informativas">
+          <p className="font-black">🔮 Sugestão preditiva — apenas informativa, NÃO é decisão final</p>
+          <p className="mt-0.5 text-[11px] opacity-90">
+            Pelos nomes/sinônimos do sistema há lastro nestas pistas. Confirme com o contador e classifique oficialmente antes de escriturar.
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {preditivas.map((p) => (
+              <li key={`${p.tipo}-${p.codigo}`} className="space-y-1 rounded-lg bg-white/60 px-2 py-1 dark:bg-black/20">
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-mono font-black">{p.codigoFormatado}</span>
+                  <span className="min-w-0 flex-1 truncate" title={p.titulo}>{p.titulo}</span>
+                  <span className="rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[10px] font-black dark:bg-amber-900/50">
+                    {Math.round(p.cobertura * 100)}% termos
+                  </span>
+                  {p.tipo === 'nbs' ? (
+                    <button
+                      type="button"
+                      onClick={() => void escolher(p.codigo)}
+                      className="rounded-full bg-amber-600 px-2 py-0.5 text-[10px] font-black text-white hover:bg-amber-700"
+                      title={`Classificar ${p.codigoFormatado} oficialmente (valida na base)`}
+                    >
+                      Classificar oficialmente
+                    </button>
+                  ) : (
+                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300" title={p.baseLegal ?? 'Hipótese de benefício sem NBS direto — verificar Anexo/cct'}>
+                      hipótese {p.cClassTrib}
+                    </span>
+                  )}
+                </span>
+                {p.contexto ? <BlocoContextoNbs contexto={p.contexto} compacto /> : null}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-[10px] opacity-75">
+            {preditivas[0]?.termosCasados?.length ? `Termos que casaram: ${preditivas[0].termosCasados.join(', ')}` : ''}
+            {preditivas[0]?.sinonimosUsados?.length ? ` · sinônimos: ${preditivas[0].sinonimosUsados.join(', ')}` : ''}
+            {` · origem: ${preditivas[0]?.origem ?? '—'}`}
+          </p>
         </div>
       ) : null}
       {sugestao.alternativas.length ? (

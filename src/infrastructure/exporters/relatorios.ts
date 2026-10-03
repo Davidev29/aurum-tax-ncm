@@ -259,7 +259,7 @@ function celula(txt: Cell, col: ColunaRel, forte?: boolean): {
 }
 
 /** Tabela densa com cabeçalho repetido e faixa zebrada (recursos nativos do pdfMake). */
-function tabelaRelatorio(opts: {
+export function tabelaRelatorio(opts: {
   cols: ColunaRel[]
   rows: Cell[][]
   total?: Cell[]
@@ -365,7 +365,7 @@ function linhasEmitente(e: Emitente): string[][] {
 }
 
 /** Timbrado premium repetido no topo de todas as páginas (equivalente ao `drawLetterhead`). */
-function timbrado(emitente: Emitente, cor: string, titulo: string, subtitulo: string) {
+export function timbrado(emitente: Emitente, cor: string, titulo: string, subtitulo: string) {
   const info = linhasEmitente(emitente)
   return {
     margin: [34, 8, 34, 0] as [number, number, number, number],
@@ -429,7 +429,7 @@ function timbrado(emitente: Emitente, cor: string, titulo: string, subtitulo: st
   }
 }
 
-function rodape(emitente: Emitente) {
+export function rodape(emitente: Emitente) {
   return (pagina: number, total: number) => ({
     margin: [34, 0, 34, 24] as [number, number, number, number],
     stack: [

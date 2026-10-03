@@ -14,7 +14,7 @@
  *   - `platform: 'node'` + `format: 'cjs'` dispensam banner de `require`
  *     (o formato CommonJS já fornece `require`, `__dirname`, `module`);
  *   - `electron` fica externo nos dois bundles (é fornecido pelo runtime);
- *   - source maps habilitados e sem minificação para depuração simples.
+ *   - minify ligado + sourcemap desligado (anti-reversão; debug via `dev`).
  */
 
 import { build } from 'esbuild'
@@ -27,6 +27,8 @@ const pastaSaida = path.join(raizElectron, 'dist')
 
 /**
  * Opções idênticas para main e preload.
+ * BUILD anti-reversão: minify ligado + sem sourcemap. A ofuscação pesada
+ * (stringArray) roda em `scripts/ofuscar-build.cjs` sobre o dist gerado.
  * @type {import('esbuild').BuildOptions}
  */
 const opcoesComuns = {
@@ -35,8 +37,9 @@ const opcoesComuns = {
   target: 'node20',
   format: 'cjs',
   charset: 'utf8',
-  sourcemap: true,
-  minify: false,
+  sourcemap: false,
+  minify: true,
+  legalComments: 'none',
   // `electron`/`electron-updater` são fornecidos pelo runtime; `node-llama-cpp`
   // (nativo + ESM-only) e o futuro stack vetorial NUNCA são bundlados —
   // o worker IA os carrega via `import()` dinâmico (achado C2 do spike).

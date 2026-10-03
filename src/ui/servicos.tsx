@@ -130,6 +130,64 @@ export function BlocoConferenciaReforma({
   )
 }
 
+/* ------------------------------------------------- contexto do NBS -- */
+
+import { obterContextoNbs, type ContextoNbsView } from '@/domain/constants/contexto-nbs'
+
+/**
+ * Cartão do contexto personalizado do NBS (LC 214) — resumo, condições e
+ * quando se aplica / não se aplica. Usado na descrição preditiva (sugestão
+ * principal, preditivas e cartão CNAE). Só leitura: nunca altera o vínculo.
+ */
+export function BlocoContextoNbs({
+  codigo,
+  contexto,
+  compacto,
+}: {
+  /** NBS 9 dígitos (busca o contexto) ou contexto já resolvido. */
+  codigo?: string | null
+  contexto?: ContextoNbsView | null
+  compacto?: boolean
+}): ReactElement | null {
+  const ctx = contexto ?? (codigo ? obterContextoNbs(codigo) : null)
+  if (!ctx) return null
+  return (
+    <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-2.5 text-xs text-slate-600 dark:border-violet-900 dark:bg-violet-950/20 dark:text-slate-300" aria-label={`Contexto ${ctx.tituloCurto}`}>
+      <p className="font-black text-violet-900 dark:text-violet-200">
+        📖 {ctx.tituloCurto} · <span className="font-mono">{ctx.artigo}</span> · −{ctx.reducaoIBS}% IBS/CBS
+      </p>
+      <p className="mt-1">{ctx.resumo}</p>
+      {!compacto ? (
+        <>
+          <p className="mt-1.5 font-bold">Quando se aplica:</p>
+          <ul className="list-disc space-y-0.5 pl-4">
+            {ctx.quandoSeAplica.slice(0, 4).map((q, i) => (
+              <li key={i}>{q}</li>
+            ))}
+          </ul>
+          <p className="mt-1.5 font-bold">Quando NÃO se aplica:</p>
+          <ul className="list-disc space-y-0.5 pl-4">
+            {ctx.quandoNaoSeAplica.slice(0, 3).map((q, i) => (
+              <li key={i}>{q}</li>
+            ))}
+          </ul>
+          <p className="mt-1.5 font-bold">Condições:</p>
+          <ul className="list-disc space-y-0.5 pl-4">
+            {ctx.condicoes.map((q, i) => (
+              <li key={i}>{q}</li>
+            ))}
+          </ul>
+          {ctx.nota ? (
+            <p className="mt-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              ⚠️ {ctx.nota}
+            </p>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  )
+}
+
 /* ------------------------------------------------- cartão CNAE completo -- */
 
 export function CartaoCnae({
@@ -174,6 +232,26 @@ export function CartaoCnae({
           <p className="text-xs text-slate-600 dark:text-slate-300">
             <strong>Tributação integral.</strong> {atividade.motivoEstado}
           </p>
+          {(atividade.preditivas ?? []).length ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" role="note" aria-label="Sugestões preditivas informativas">
+              <p className="font-black">🔮 Sugestão preditiva — apenas informativa, NÃO é decisão final</p>
+              <ul className="mt-1.5 space-y-1">
+                {(atividade.preditivas ?? []).map((p) => (
+                  <li key={`${p.tipo}-${p.codigo}`} className="space-y-1 rounded-lg bg-white/60 px-2 py-1 dark:bg-black/20">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-mono font-black">{p.codigoFormatado}</span>
+                      <span className="min-w-0 flex-1 truncate" title={p.titulo}>{p.titulo}</span>
+                      <span className="rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[10px] font-black dark:bg-amber-900/50">
+                        {Math.round(p.cobertura * 100)}% termos
+                      </span>
+                    </span>
+                    {p.tipo === 'nbs' ? <BlocoContextoNbs codigo={p.codigo} compacto /> : <BlocoContextoNbs contexto={p.contexto} compacto />}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-[10px] opacity-75">Confirme com o contador e classifique no modo manual antes de escriturar.</p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

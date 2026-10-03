@@ -148,6 +148,126 @@ try {
   erro(`espelho TS: ${e.message}`);
 }
 
+// 5. Fine-tuning de serviços/NBS (v2) — só guia o raciocínio, nunca a base oficial.
+try {
+  const s = lerJson(path.join(CON_DIR, 'servicos-nbs.json'));
+  const etapas = s.raciocinio?.etapas ?? [];
+  console.log(`\n servicos-nbs.json: ${(s.setores ?? []).length} setores · ${etapas.length} etapas de raciocínio`);
+  if (s.versao !== 'finetuning-servicos-v1') erro('servicos-nbs.json: versão inesperada');
+  else if (etapas.length !== 7) erro('servicos-nbs.json: raciocínio deve ter 7 etapas');
+  else if (!(s.anexos_lc214 ?? []).length) erro('servicos-nbs.json: sem anexos LC214');
+  else ok('fine-tuning de serviços válido (setores + anexos + raciocínio)');
+} catch (e) {
+  erro(`servicos-nbs.json: ${e.message}`);
+}
+try {
+  const f = lerJson(path.join(CON_DIR, 'frases-modelo-servicos.json'));
+  console.log(` frases-modelo-servicos.json: ${(f.frases ?? []).length} frases`);
+  if ((f.frases ?? []).length < 40) erro(`frases-modelo-servicos.json: cobertura mínima 40 frases (atual ${(f.frases ?? []).length})`);
+  else {
+    const temPreditiva = (f.frases ?? []).some((x) => x.tipo === 'preditiva');
+    const temNegativa = (f.frases ?? []).some((x) => x.tipo === 'sem-lastro');
+    const temEscopo = (f.frases ?? []).some((x) => x.tipo === 'fora-de-escopo');
+    if (!temPreditiva) erro('frases-modelo-servicos.json: sem caso preditivo');
+    else if (!temNegativa) erro('frases-modelo-servicos.json: sem caso negativo');
+    else if (!temEscopo) erro('frases-modelo-servicos.json: sem caso fora-de-escopo');
+    else ok('frases-modelo de serviços com preditivas + negativas + escopo');
+  }
+} catch (e) {
+  erro(`frases-modelo-servicos.json: ${e.message}`);
+}
+try {
+  const vs = fs.readFileSync(path.join(PROJECT_ROOT, 'src', 'domain', 'services', 'vocabulario-servicos.ts'), 'utf8');
+  const amostrasServ = ['frete', 'advogado', 'cabeleireiro', 'restaurante', 'eletricista', 'transporte', 'advogados', 'beleza', 'circo', 'formacao', 'firewall', 'dentista'];
+  const faltandoServ = amostrasServ.filter((a) => !vs.includes(a));
+  if (faltandoServ.length) erro(`vocabulário de serviços desatualizado no TS: ${faltandoServ.join(', ')}`);
+  else {
+    const n = (vs.match(/^  [a-z0-9]+:/gm) ?? []).length;
+    if (n < 500) erro(`vocabulário de serviços abaixo da cobertura v3 (500): ${n}`);
+    else ok(`espelho TS de serviços com cobertura v3 (${n} termos)`);
+  }
+} catch (e) {
+  erro(`espelho TS serviços: ${e.message}`);
+}
+
+// 6. Dicionário comercial de serviços + mapeamento de padrões (v3).
+try {
+  const ds = fs.readFileSync(path.join(PROJECT_ROOT, 'src', 'domain', 'constants', 'dicionario-servicos.ts'), 'utf8');
+  const pins = (ds.match(/nbs: '/g) ?? []).length;
+  console.log(`\n dicionario-servicos.ts: ${pins} pins`);
+  if (pins < 5) erro('dicionario-servicos.ts: mínimo 5 pins (1 por grupo de benefício)');
+  else {
+    // Pins devem apontar para NBS com benefício na base viva.
+    let vivos = new Set();
+    try {
+      const base = lerJson(path.join(PROJECT_ROOT, 'bases-fonte', 'NBS SERVIÇOS.json'));
+      for (const r of base) vivos.add(String(r.NBS ?? '').replace(/\D+/g, ''));
+    } catch { /* sem base: só formato */ }
+    const citados = [...ds.matchAll(/nbs: '(\d{9})'/g)].map((m) => m[1]);
+    const fora = citados.filter((c) => vivos.size && !vivos.has(c));
+    if (fora.length) erro(`dicionario-servicos.ts: pins fora da base viva: ${fora.join(', ')}`);
+    else ok('dicionário de serviços válido (pins com benefício na base viva)');
+  }
+} catch (e) {
+  erro(`dicionario-servicos.ts: ${e.message}`);
+}
+try {
+  const m = lerJson(path.join(CON_DIR, 'mapeamento-padroes-servicos.json'));
+  console.log(` mapeamento-padroes-servicos.json: ${(m.grupos ?? []).length} grupos · sinonimos ${m.cobertura?.sinonimos_servicos ?? '?'}`);
+  if ((m.grupos ?? []).length < 5) erro('mapeamento-padroes-servicos.json: mínimo 5 grupos');
+  else if (!(m.setores_sem_beneficio_na_base ?? []).length) erro('mapeamento-padroes-servicos.json: sem lista honesta de setores sem benefício');
+  else ok('mapeamento de padrões válido (oficial × popular + gaps honestos)');
+} catch (e) {
+  erro(`mapeamento-padroes-servicos.json: ${e.message}`);
+}
+
+// 7. Contexto personalizado por NBS (cada item estudado → descrição preditiva).
+try {
+  const ctx = lerJson(path.join(CON_DIR, 'contexto-nbs.json'));
+  const itens = ctx.itens ?? [];
+  console.log(`\n contexto-nbs.json: ${itens.length} itens · ${(ctx.grupos ?? []).length} grupos`);
+  if (ctx.versao !== 'contexto-nbs-v1') erro('contexto-nbs.json: versão inesperada');
+  else if (itens.length !== 107) erro(`contexto-nbs.json: esperava 107 itens (atual ${itens.length})`);
+  else {
+    const grupos = ctx.grupos ?? [];
+    const prof = grupos.find((g) => g.grupo === 'PROF-30');
+    if (grupos.length !== 23) erro(`contexto-nbs.json: esperava 23 grupos (atual ${grupos.length})`);
+    else if (!prof || prof.cct !== '200052') erro('contexto-nbs.json: grupo PROF-30 (200/200052) ausente');
+    let vivos = new Set();
+    try {
+      const base = lerJson(path.join(PROJECT_ROOT, 'bases-fonte', 'NBS SERVIÇOS.json'));
+      for (const r of base) {
+        const cod = String(r.NBS ?? '').replace(/\D+/g, '');
+        if (/^\d{9}$/.test(cod)) vivos.add(cod);
+      }
+    } catch { /* sem base: só formato */ }
+    const faltando = vivos.size ? [...vivos].filter((c) => !itens.some((i) => i.nbs === c)) : [];
+    const gruposOk = (ctx.grupos ?? []).every((g) => g.resumo && (g.quando_se_aplica ?? []).length && (g.quando_nao_se_aplica ?? []).length && (g.condicoes ?? []).length);
+    const dual = itens.filter((i) => i.multi_enquadramento);
+    if (faltando.length) erro(`contexto-nbs.json: NBS sem contexto: ${faltando.join(', ')}`);
+    else if (!gruposOk) erro('contexto-nbs.json: grupo sem resumo/aplica/não-aplica/condições');
+    else if (dual.length !== 5) erro(`contexto-nbs.json: esperava 5 duplos XI (atual ${dual.length})`);
+    else {
+      const ccts = new Set((ctx.grupos ?? []).map((g) => g.cct));
+      const esperados = ['200028', '200029', '200039', '200043', '200044', '200052', '011003', '200001', '200016', '200017', '200019', '200020', '200021', '200025', '200026', '200027', '200037', '200040', '200041', '200046', '200048', '200051', '515001'];
+      const faltandoCct = esperados.filter((c) => !ccts.has(c));
+      if (faltandoCct.length) erro(`contexto-nbs.json: grupos sem cct: ${faltandoCct.join(', ')}`);
+      else ok('contexto por item válido (107 NBS, 23 grupos, 5 duplos XI, PROF-30 + 17 benefícios)');
+    }
+  }
+} catch (e) {
+  erro(`contexto-nbs.json: ${e.message}`);
+}
+try {
+  const mod = fs.readFileSync(path.join(PROJECT_ROOT, 'src', 'domain', 'constants', 'contexto-nbs.ts'), 'utf8');
+  const n = (mod.match(/nbs: '\d{9}'/g) ?? []).length;
+  if (n !== 107) erro(`contexto-nbs.ts: esperava 107 itens no espelho (atual ${n})`);
+  else if (!mod.includes('NOTA_DUAL_XI')) erro('contexto-nbs.ts: sem NOTA_DUAL_XI');
+  else ok('espelho TS do contexto com 107 itens + nota dual');
+} catch (e) {
+  erro(`espelho TS contexto: ${e.message}`);
+}
+
 if (falhas) {
   console.error(`\n✖ ${falhas} problema(s) no conhecimento (exit 1).`);
   process.exit(1);

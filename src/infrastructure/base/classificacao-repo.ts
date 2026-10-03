@@ -342,7 +342,7 @@ export async function resolverClassificacoes(
 
 import { classificacaoRegraGeralNbs } from '@/domain/services/classificacao-nbs'
 import { fmtNbs } from '@/domain/services/format'
-import { expandirSinonimoServicos } from '@/domain/services/classificador-descricao-servicos'
+import { expandirSinonimoServicos, semJuridiques } from '@/domain/services/classificador-descricao-servicos'
 import { casaToken } from '@/domain/services/vocabulario'
 import type { HipoteseLegal } from '@/domain/services/verificacao-servicos'
 
@@ -429,14 +429,19 @@ export async function buscarNbsPorTexto(
   limite = 30,
   opts?: { tolerante?: boolean },
 ): Promise<ResultadoBuscaTextoNbs[]> {
-  const tokens = tokensRelevantes(termo)
+  // Núcleo semântico: boilerplate ("servico", "fornecimento", "anexo"...)
+  // não é lastro — sem isso qualquer consulta com um termo →'servico'
+  // (ex.: "desenvolvimento", "petshop") casava os 112 NBS via substring
+  // "servico"⊂"servicos" e elegia benefício à toa.
+  const tokens = semJuridiques(tokensRelevantes(termo))
   if (!tokens.length) return []
   const indice = await indiceBuscaTextoNbs()
   const teto = Math.max(1, Math.min(limite, 100))
   const tolerante = opts?.tolerante ?? true
 
   const expandidos = tokens.map((t) => expandirSinonimoServicos(t) ?? t)
-  const tokensExpandidos = [...new Set(expandidos)].join(' ') !== tokens.join(' ') ? [...new Set(expandidos)] : null
+  const expandidosUteis = semJuridiques([...new Set(expandidos)])
+  const tokensExpandidos = expandidosUteis.length && expandidosUteis.join(' ') !== tokens.join(' ') ? expandidosUteis : null
 
   const porCodigo = new Map<string, ResultadoBuscaTextoNbs>()
 
