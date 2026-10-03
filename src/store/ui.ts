@@ -18,6 +18,7 @@ import type { ProdutoLinha } from '@/store/produtos'
 export type ViewId =
   | 'calculadora'
   | 'consulta'
+  | 'servicos'
   | 'lote'
   | 'nfe'
   | 'produtos'
@@ -33,6 +34,10 @@ export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = 
   consulta: {
     titulo: 'Consulta NCM',
     subtitulo: 'Busque por NCM e veja todas as classificações da Reforma',
+  },
+  servicos: {
+    titulo: 'Consulta Serviços (NBS)',
+    subtitulo: 'Busque por NBS, descreva o serviço ou consulte pelo CNPJ',
   },
   lote: {
     titulo: 'Classificação em lote',

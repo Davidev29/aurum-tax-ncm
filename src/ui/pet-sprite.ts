@@ -3,9 +3,10 @@
  *
  * Grade de 26 × 29 px, desenhada à mão (100% vetorial/SVG em tempo de
  * execução — nenhum asset de imagem; o PNG de referência foi removido):
- * orelhinhas, óculos redondos verde-petróleo com olhos
- * kawaii, focinho creme, corpinho magro de lontra com barriguinha clara,
- * rabinho afunilado e a lupinha na patinha direita.
+ * orelhinhas, óculos redondos verde-petróleo com olhos kawaii, focinho
+ * creme, touca escura de lontra, corpinho magro com barriguinha clara e
+ * **selo dourado Aurum** no peito, rabinho afunilado com pontinha creme
+ * e a lupinha dourada na patinha direita.
  *
  * Convenções:
  * - `SPRITE`: mapa base (cabeça `CABECA` = linhas 0–15, corpo `CORPO` = resto).
@@ -19,8 +20,8 @@
 export const PALETA: Record<string, string> = {
   K: '#241610', // contorno
   F: '#a8703f', // pelo
-  D: '#7c4a2d', // pelo escuro (sombra, orelha interna, patas, rabo)
-  C: '#fbeed3', // creme (focinho, barriga)
+  D: '#7c4a2d', // pelo escuro (touca, sombra, patas, rabo)
+  C: '#fbeed3', // creme (focinho, barriga, ponta do rabo)
   T: '#22a8a8', // aro do óculos
   t: '#0f6f6f', // pálpebra fechada
   G: '#bfe9ef', // lente
@@ -29,21 +30,30 @@ export const PALETA: Record<string, string> = {
   P: '#22344d', // pupila
   N: '#5b3a26', // nariz
   R: '#e8938a', // blush
+  A: '#d2a94e', // ouro Aurum (selo, aro da lupa)
+  a: '#8a6d1f', // ouro escuro (sombreado do selo/lupa)
   M: '#8291a3', // metal da lupa
   m: '#3c4450', // cabo da lupa
   S: '#16233a', // sombra do chão
 }
 
-/** Corpo + cabeça (26 colunas × 29 linhas). */
+/** Corpo + cabeça (26 colunas × 29 linhas).
+ *
+ * Detalhamento (linhas):
+ * - 3: touca escura (D) — silhueta de lontra, quebra a flatagem da cabeça
+ * - 7: travessa do óculos (T) unindo as lentes
+ * - 18–23: sombra lateral sutil (D) nas bordas do corpo + selo Aurum (A/a)
+ *   em losango no centro da barriga (linhas 19–21)
+ */
 export const SPRITE: string[] = [
   '.....KK............KK.....',
   '.....KRRK........KRRK.....',
   '......KKKKKKKKKKKKKK......',
-  '....KKFFFFFFFFFFFFFFKK....',
+  '....KKDDDDDDDDDDDDDDKK....',
   '....KFFFFFFFFFFFFFFFFK....',
   '....KFTTTTTTFFTTTTTTFK....',
   '....KFTHWWWTFFTWWWHTFK....',
-  '....KFTWPPWTFFTWPPWTFK....',
+  '....KFTWPPWTTTTWPPWTFK....',
   '....KFTWWWWTFFTWWWWTFK....',
   '....KFTTTTTTFFTTTTTTFK....',
   '....KFFFCCCCCCCCCCFFFK....',
@@ -54,13 +64,12 @@ export const SPRITE: string[] = [
   '.......KKKKKKKKKKKK.......',
   '........KKKKKKKKKK........',
   '........KFFFFFFFFK........',
-  '........KFFCCCCFFK........',
-  '........KFFCCCCFFK........',
-  '........KFFCCCCFFK........',
-  '........KFFCCCCFFK........',
-  '........KFFCCCCFFK........',
-  '........KFFCCCCFFK........',
-  '........KFFCCCCFFK........',
+  '........KDFCCCCFDK........',
+  '........KFFCAACFFK........',
+  '........KDFAaaAFDK........',
+  '........KDFCaaCFDK........',
+  '........KDFCCCCFDK........',
+  '........KDFCCCCFDK........',
   '.........KFFFFFFK.........',
   '.........KKK..KKK.........',
   '..........................',
@@ -74,13 +83,13 @@ export const CORPO: string[] = SPRITE.slice(16)
 
 /** Lupinha de 7 × 11 px, desenhada no próprio sistema de coordenadas. */
 export const LOUPE: string[] = [
-  '..MMM..',
-  '.MGGGM.',
-  'MGGGGGM',
-  'MGHGGGM',
-  'MGGGGGM',
-  '.MGGGM.',
-  '..MMM..',
+  '..AAA..',
+  '.AGGGA.',
+  'AGGHGGA',
+  'AGGGGGA',
+  'AGGGGGA',
+  '.AGGGA.',
+  '..aaa..',
   '...mm..',
   '...mm..',
   '...mm..',
@@ -126,11 +135,11 @@ const BRACO_DIR: Bloco[] = [
   [18, 24, 2, 1, 'D'],
   [19, 24, 2, 1, 'F'],
 ]
-/** Rabinho afunilado com listra (origem do giro = encaixe no corpo). */
+/** Rabinho afunilado com pontinha creme (origem do giro = encaixe no corpo). */
 const RABO: Bloco[] = [
   [5, 23, 1, 1, 'K'], [6, 23, 1, 1, 'F'],
   [4, 24, 1, 1, 'K'], [5, 24, 1, 1, 'D'], [6, 24, 1, 1, 'D'], [7, 24, 1, 1, 'F'],
-  [4, 25, 1, 1, 'K'], [5, 25, 1, 1, 'D'],
+  [3, 25, 1, 1, 'K'], [4, 25, 1, 1, 'C'], [5, 25, 1, 1, 'D'],
 ]
 /** Pálpebras fechadas (piscada + soneca) — cobrem as lentes. */
 const PALPEBRAS: Bloco[] = [

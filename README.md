@@ -51,12 +51,13 @@ Tudo roda **localmente** (IndexedDB via Dexie, sem servidor, sem enviar dados fi
 | 📁 **Classificação em lote** | Arraste CSV/XLSX (`COD/SKU; NOME DO PRODUTO; NCM; CFOP; CST; PIS; COFINS`), o sistema classifica centenas de linhas de uma vez, permite trocar entre múltiplas opções e salvar tudo como produtos. Inclui modelo CSV para download. |
 | 📄 **SPED Fiscal** | Importe EFD **ICMS/IPI** (blocos C100/C170/C190) ou **EFD Contribuições** (A100/A170, C100/C170, D100/D170). Detecta automaticamente o tipo, rejeita Reinf/e-Social/ECD/ECF com explicação, analisa **só as saídas**, agrupa por anexo, exibe gráficos, Top 15 produtos e exporta **PDF timbrado + CSV**. |
 | 🧾 **NF-e XML** | Importe XMLs de NF-e, confronte com a base, apure IBS/CBS por nota e avalie crédito. |
+| 🧰 **Serviços (NBS/CNAE)** | Consulta por NBS (9 dígitos), elegibilidade Simples por CNAE (Anexos I–V + Fator R), tradutor fiscal PT↔EN e motor de hipóteses com trilha de auditoria. Base viva: `NBS SERVIÇOS.json` + `CNAE X ANEXO.json`. |
 | 📦 **Produtos & 🏢 Empresas** | Multi-empresa (CNPJ, razão social, fantasia, importação em lote). Produtos vinculados à empresa ativa. Exportação CSV / JSON / PDF. |
 | 📚 **Tabelas auxiliares** | CST IBS/CBS, cClassTrib, Nomenclatura NCM vigente, vínculo NCM × Classificação, CFOP, CST ICMS, CST PIS/COFINS — todas **editáveis** (criar/editar/excluir). |
 | ⚖️ **Legislação** | LC 214/2025, Decreto 12.955/2026 (CBS), Resolução CGIBS nº 6/2026 (IBS) e Portal Conformidade Fácil. Na consulta, *“Visualizar legislação”* abre o artigo exato (`#art128`, `#art137`…). |
 | 🖨️ **Emitente timbrado** | Configure razão social, CNPJ, logo, cor e rodapé — sai no cabeçalho de todos os PDFs. |
-| 🤖 **IA offline (assistida)** | Sugestão de NCM por descrição em linguagem natural (índice lexical embutido, 100% local). Roda em **modo mock/lexical** sem baixar nada; aceita modelo local `.gguf` quando disponível. Tela de diagnóstico em `Ctrl+Shift+D`. |
-| 🔄 **Atualização automática** | Verificação via GitHub Releases (aba **Configurações → Atualização**). As bases tributárias viajam **embutidas no programa** — cada atualização do app renova NCM, CST, cClassTrib e nomenclatura. Sem servidor, sem sincronização avulsa. |
+| 🤖 **IA embutida (Aurum AI — integrada)** | Sugestão de NCM/NBS por descrição em linguagem natural (PT/EN). Pipeline: bypass determinístico → RAG lexical (`indice-lexical.json` + sinônimos, ~1 MB) → modelo local **AILO-152M** (`recursos-ia/modelo/*.gguf`, ~97 MB) em `utilityProcess` isolado, 100% offline e sem rede. Toda saída passa por geração restrita validada pelo resolvedor oficial (anti-alucinação: `99999999` e NCM sem nomenclatura viram “NÃO SEI”). Trilha auditável em `audit_log` + `ia_feedback` + `logs/consultas-ia.jsonl`. Diagnóstico em `Ctrl+Shift+D` (tela DebugIA oculta). O índice é reconstruído sozinho quando a base muda (hash do `MANIFEST.json`). |
+| 🔄 **Atualização automática** | Verificação via GitHub Releases (aba **Configurações → Atualização**). As bases tributárias viajam **embutidas no programa** — cada atualização do app renova NCM, CST, cClassTrib, nomenclatura, NBS e CNAE. Sem servidor, sem sincronização avulsa. Complemento online (quando há internet): sync **Siscomex** (tabela NCM vigente, com diff novos/alterados/extintos) e **CFF** (classTrib, anexos, crédito presumido, locais de operação, produtos NFCom/NFAg/NF3e/NFGas — alguns exigem certificado ICP-Brasil e têm fallback de importação manual). |
 | 🐾 **Aurinha** | Pet-assistente da interface: reage às telas, celebra exportações e sugere sem atrapalhar. |
 | 🌙 **UX** | Tema claro/escuro, responsivo, atalhos, toasts, modo offline total. Primeiro uso com assistente de aceite local. |
 
@@ -90,7 +91,7 @@ npm run dev:web
 # Só checagem de tipos
 npm run typecheck
 
-# Testes (Vitest, 57 suítes / 575 testes)
+# Testes (Vitest, 68 suítes / 667 testes)
 npm test
 ```
 
@@ -250,7 +251,7 @@ Observações legais automáticas: `100` → Alíquota Zero · `60` → Art. 128
 | `npm run dev:web` | Só Vite no navegador |
 | `npm run build` | Base + `tsc --noEmit` + `vite build` + Electron |
 | `npm run build:electron` | Compila `electron/main.ts` + `preload.ts` via esbuild |
-| `npm run base` | Gera a base embutida (`scripts/build-base.mjs`) |
+| `npm run base` | Gera a base embutida a partir de `bases-fonte/` (`scripts/build-base.mjs`) |
 | `npm run typecheck` / `npm test` | Tipos / Vitest (`vitest run`) |
 | `npm run dist[:win,:mac]` | Instaladores via electron-builder |
 | `npm run icon` | Gera `build/icon.ico` a partir do SVG |
@@ -260,7 +261,7 @@ Observações legais automáticas: `100` → Alíquota Zero · `60` → Art. 128
 ```
 aurum-tax-ncm/
 ├── electron/            # main.ts, preload.ts, esbuild.mjs
-│   └── ia/              # worker IA offline (utilityProcess isolado, modo mock/lexical)
+│   └── ia/              # worker IA offline (utilityProcess isolado, RAG lexical + GGUF AILO-152M)
 ├── src/
 │   ├── App.tsx          # shell: Calculadora, Consulta, Lote, NfeXml,
 │   │                    #  Produtos, Auxiliares, Legislacao (+ DebugIA oculta)
@@ -273,9 +274,10 @@ aurum-tax-ncm/
 │   ├── store/           # Zustand (ui, sessão, empresa ativa, alíquotas, pet)
 │   ├── ui/              # Layout, Marca, PetAurum (Aurinha), kit
 │   └── modais/          # globais (Configurações: emitente/bases/backup/atualização…)
-├── recursos-ia/         # base NCM p/ IA + índice lexical + conhecimento (embarcado)
+├── recursos-ia/         # IA offline: GGUF AILO-152M + índice lexical + conhecimento (embarcado via extraResources)
+├── bases-fonte/         # ← JOGUE OS JSONs OFICIAIS AQUI p/ atualizar: 3 obrigatórios + 2 vivos (ver tabela abaixo)
 ├── scripts/             # build-base.mjs, gerar-indice-ia.mjs, after-pack-ia.cjs…
-├── tests/               # 57 suítes Vitest (cálculo, SPED, NFe, lote, PDF, IA…)
+├── tests/               # 68 suítes Vitest (cálculo, SPED, NFe, lote, PDF, IA, CFF, Siscomex…)
 ├── docs/                # SPEC-LOGICA-NEGOCIO.md, diagnósticos, manuais (fora do instalador)
 ├── public/              # assets estáticos + base JSON embutida (versionada)
 ├── build/               # icon.ico/png, LICENCA.rtf/txt (instalador NSIS em PT-BR)
@@ -293,9 +295,23 @@ Arquitetura: **React + Clean Architecture** — `domain` (regras puras) → `app
 
 ### Dados / base tributária
 
-- `public/` carrega a base embutida gerada por `npm run base` (NCM × CST × cClassTrib + nomenclatura vigente).
+- `public/` carrega a base embutida gerada por `npm run base` (NCM × CST × cClassTrib + nomenclatura vigente + NBS + CNAE).
 - Para atualizar: **Configurações → Importação da base** e selecione o JSON novo (`NCM + tabelasAuxiliares` ou `Nomenclaturas`). Só entram vínculos com NCM de 8 dígitos; o resto é descartado com aviso.
 - Backup: **Configurações → Backup** exporta tudo (empresas, produtos, auxiliares, emitente) em JSON; a restauração é idempotente.
+
+### Onde baixar as bases oficiais (para compilar a próxima build)
+
+Coloque os arquivos em `bases-fonte/` com os nomes exatos e rode `npm run base` (detalhes em [`bases-fonte/README.md`](./bases-fonte/README.md)):
+
+| Arquivo em `bases-fonte/` | O que é | Onde baixar | Obrigatório? |
+|---|---|---|---|
+| `classificacao_tributaria.json` | Referência CST × cClassTrib (164 registros) | Portal DFe / Conformidade Fácil: https://dfe-portal.svrs.rs.gov.br/Cff → Classificação Tributária (ou `https://dfe-portal.svrs.rs.gov.br/DFE/ClassificacaoTributaria`); API: `https://cff.svrs.rs.gov.br/api/v1/consultas/classTrib` | Sim |
+| `reforma_tributaria_por_ncm.json` | Vínculos NCM/NBS × CST × cClassTrib (+ tabelas `cst`/`cstClassTrib`) | Mesmo portal CFF acima (exportação NCM da Reforma — LC 214/2025) | Sim |
+| `Tabela_NCM_Vigente_AAAA-MM-DD.json` | Nomenclatura NCM vigente (~15 mil itens) | Portal Único Siscomex: https://portalunico.siscomex.gov.br/classif/api/publico/nomenclatura/download/json (espelho na página “Download NCM” da Receita). Vale qualquer data no nome, desde que comece com `Tabela_NCM_Vigente_` e termine com `.json`. O app também sincroniza sozinho (com diff novos/alterados/extintos) quando há internet | Sim |
+| `CNAE X ANEXO.json` | CNAE × Anexo Simples + Fator R (~1.090 CNAEs) | Arquivo vivo mantido no projeto (sem URL oficial única — preserve o atual; se a fonte publicar nova versão, substitua com o mesmo nome) | Não (sem ele a store `cnae` nasce vazia, sem quebrar a build) |
+| `NBS SERVIÇOS.json` | Vínculos NBS de serviços (~112 únicos após dedupe) | Arquivo vivo mantido no projeto (idem acima; NBS cai no legado `reforma.json` quando ausente) | Não |
+
+Outras tabelas CFF (`anexos`, `credPresumido`, `indOper`, `ConsultaClassificacaoProduto?sistema=NFCom|NFAg|NF3e|NFGas) não entram no `npm run base`: são sincronizadas/importadas em tempo de execução (algumas exigem certificado digital ICP-Brasil — nesse caso baixe o JSON no portal CFF e importe em **Configurações → Importação da base**).
 
 ---
 
@@ -314,13 +330,13 @@ Na Consulta você vê os N cards; na Classificação e no Lote você escolhe no 
 Sim: `npm run dev:web` ou sirva a pasta `dist/` após `npm run build`. O Electron só adiciona janela nativa, menu e instalador.
 
 **A IA funciona sem internet / sem baixar modelo?**
-Sim. O app embarca o índice lexical e opera em modo assistido local (mock/lexical). Um modelo `.gguf` local é opcional e, quando presente, habilita o modo real — nada é baixado sozinho.
+Sim. O app embarca o índice lexical + o modelo AILO-152M (~97MB) e opera 100% offline. Nada é baixado sozinho.
 
 **Onde ficam meus XMLs e meu banco?**
 XMLs importados vão para `%APPDATA%/Aurum Tax NCM/xml/<cnpj>/<chave>.xml`; o banco (empresas, produtos, auxiliares) fica no IndexedDB local. Nada sai da máquina e nada se perde ao atualizar.
 
 **Como recebo tabelas novas (NCM, CST, alíquotas)?**
-Junto com a atualização do programa (**Configurações → Atualização**): as bases são embutidas e versionadas com o app. Não há sincronização avulsa.
+Junto com a atualização do programa (**Configurações → Atualização**): as bases são embutidas e versionadas com o app. Não há sincronização avulsa obrigatória. Como complemento, o app sincroniza sozinho a **tabela Siscomex** (NCM vigente) e as **tabelas CFF** quando há internet (alguns endpoints CFF exigem certificado digital — nesses casos, baixe o JSON no portal e importe manualmente).
 
 ---
 

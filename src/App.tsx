@@ -6,9 +6,11 @@ import { lerAceite } from '@/domain/contrato';
 import { useUi } from '@/store/ui';
 import { Calculadora } from '@/pages/Calculadora';
 import { Consulta } from '@/pages/Consulta';
+import { ConsultaServicos } from '@/pages/ConsultaServicos';
 import { DebugIA } from '@/pages/DebugIA';
 import { Lote } from '@/pages/Lote';
 import { NfeXml } from '@/pages/NfeXml';
+import { NfeXmlPolida } from '@/pages/NfeXmlPolida';
 import { Produtos } from '@/pages/Produtos';
 import { Auxiliares } from '@/pages/Auxiliares';
 import { Legislacao } from '@/pages/Legislacao';
@@ -26,11 +28,19 @@ export function App() {
     case 'consulta':
       pagina = <Consulta />;
       break;
+    case 'servicos':
+      pagina = <ConsultaServicos />;
+      break;
     case 'lote':
       pagina = <Lote />;
       break;
     case 'nfe':
-      pagina = <NfeXml />;
+      pagina =
+        typeof localStorage !== 'undefined' && localStorage.getItem('xml-layout') === 'polida' ? (
+          <NfeXmlPolida />
+        ) : (
+          <NfeXml />
+        );
       break;
     case 'produtos':
       pagina = <Produtos />;

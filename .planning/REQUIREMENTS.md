@@ -70,6 +70,14 @@ Requirements for initial release. Each maps to roadmap phases.
 
 **Scope note**: Somente NCM de 8 dígitos. NBS e códigos de 9 dígitos excluídos (os 10 ignorados do MANIFEST permanecem ignorados).
 
+### Serviços — NBS + CNAE + CNPJ, com Aurum AI (SER) — IMPLEMENTADA (2026-10-03)
+
+- [x] **SER-01**: Ingerir e versionar `CNAE X ANEXO.json` (1090) + `NBS SERVIÇOS.json` (137→112 dedupe) via `npm run base`, com `MANIFEST.fontesVivas` e artefato `cnae.json`
+- [x] **SER-02**: Consulta manual NBS (código 9 dígitos + nome + IA por descrição), painel oficial 0/1/N, regra geral `000/000001`
+- [x] **SER-03**: Ponte CNAE→NBS (matriz Situação→teto de confiança, palavras-chave por divisão, Fator R como refino; "Anexo Simples" vs "Anexo LC 214" sempre rotulados)
+- [x] **SER-04**: Consulta por CNPJ via BrasilAPI (DV local, CNAE principal+secundários, cache Dexie 30d, 1 cartão elegante por atividade)
+- [x] **SER-05**: Paridade UX/Aurum AI (mesmo GATE determinístico→fallback, ficha absoluta NBS, trilha `audit_log`+`.jsonl`, alíquotas de `calcularTributos`+`REF_DEFAULT`)
+
 ### Persistence & Settings (PER)
 
 - [ ] **PER-01**: Persistir classificações do usuário em IndexedDB (sobrevivem a reinícios)

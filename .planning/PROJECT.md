@@ -33,7 +33,7 @@ Classificação tributária precisa e automatizada que garante conformidade com 
 - Integração direta com ERPs (SAP, Totvs, etc.) — complexidade de APIs proprietárias, fazer via exportação padrão
 - Cálculo de crédito tributário — fora do escopo de classificação, pertence a módulo fiscal separado
 - Versão web/SaaS — arquitetura Electron desktop-first, web requer autenticação e multi-tenancy
-- Classificação de serviços (LC 214 foca em bens) — NCM é apenas para mercadorias
+- ~~Classificação de serviços (LC 214 foca em bens) — NCM é apenas para mercadorias~~ — **entregue na Phase 7** (menu Serviços: NBS + CNAE + CNPJ, 2026-10-03)
 
 ## Context
 

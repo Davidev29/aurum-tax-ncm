@@ -31,6 +31,7 @@ import {
   encerrarIaService,
   iniciarIaService,
   statusIa,
+  traduzirViaIa,
 } from './ia/ia-service.cjs'
 
 /** URL do servidor Vite, definida pelo script `dev:electron` (cross-env). */
@@ -407,9 +408,9 @@ function registrarIpc(): void {
   // -----------------------------------------------------------------------
 
   /**
-   * `ia:classificar` — sugere um NCM via worker `utilityProcess` isolado.
-   * Delega ao `ia-service`; sem worker vivo o próprio service responde com
-   * o mock local (`fallback:'main'`) — a UI nunca trava esperando o modelo.
+   * `ia:classificar` — sugere um NCM via worker `utilityProcess` isolado (AI-first:
+   * exige o modelo real; sem modelo responde `ok:false`, nunca mock silencioso).
+   * Delega ao `ia-service`.
    */
   ipcMain.handle(
     'ia:classificar',
@@ -425,7 +426,12 @@ function registrarIpc(): void {
     buscarViaIa(consulta, typeof k === 'number' ? k : 5),
   )
 
-  /** `ia:status` — estado do worker (`desligado`/`mock`/`modelo`). */
+  /** `ia:traduzir` — tradução fiscal PT↔EN em tempo real (dicionário, sem modelo). */
+  ipcMain.handle('ia:traduzir', async (_evento, texto: string, para?: string) =>
+    traduzirViaIa(texto, para === 'pt' ? 'pt' : 'en'),
+  )
+
+  /** `ia:status` — estado do worker (`desligado`/`mock`/`modelo`/`erro` AI-first). */
   ipcMain.handle('ia:status', () => statusIa())
 }
 

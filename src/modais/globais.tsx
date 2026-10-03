@@ -1,11 +1,11 @@
 /**
  * Modais globais: **Empresas**, **Configurações** (emitente + bases de dados +
- * CFF Sync + atualização do programa + backup) e a edição genérica de registros
+ * atualização do programa + backup) e a edição genérica de registros
  * das tabelas auxiliares.
  *
- * As bases tributárias (NCM, CST, cClassTrib, nomenclatura) podem ser atualizadas
- * manualmente na aba "Bases" (uma base por vez, com validação) e o programa em
- * si é renovado pela atualização geral (electron-updater).
+ * As bases tributárias (NCM, CST, cClassTrib, nomenclatura) viajam embutidas
+ * no build e são renovadas pela atualização geral do programa
+ * (electron-updater). A aba "Bases" é só leitura (contagens + histórico).
  */
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { fmtCnpj } from '@/domain/services/format'
@@ -13,14 +13,6 @@ import { baixarModeloEmpresas } from '@/infrastructure/exporters/relatorios'
 import { contarTodos } from '@/infrastructure/db/schema'
 import { AUX_META, DOCUMENTOS_AUX, type CampoAux } from '@/application/aux-meta'
 import { ehBackup, montarBackup, restaurarBackup, type Backup } from '@/application/backup'
-import { SISTEMAS_CFF } from '@/domain/constants/cff-apis'
-import { fingerprintBase, infoBase, type TipoBase } from '@/infrastructure/base/formatos'
-import {
-  normalizarAnexosCff,
-  normalizarClassTribCff,
-  normalizarNomenclatura,
-  normalizarReferencia,
-} from '@/infrastructure/base/normalizacao'
 import { normalizarCor, processarLogo } from '@/application/emitente'
 import { statusSincronizacao, coberturaTabelasProduto } from '@/application/cff-sync'
 import { baixarAtualizacao, instalarAtualizacao, versaoInstalada, verificarAtualizacaoManual } from '@/application/atualizacao'
@@ -502,291 +494,6 @@ function CoberturaTabelas() {
   )
 }
 
-/* --------------------------------- bases de dados (importação manual) --- */
-
-/* Ordem fixa de aplicação (último escritor vence por store): vínculos e
-   nomenclatura primeiro; referências por último para que a fonte mais
-   completa (API CFF, 164) prevaleça sobre os auxiliares da Reforma (132).
-   Catálogos e versionados fecham a fila. */
-const ORDEM_APLICACAO: TipoBase[] = [
-  'reforma',
-  'nomenclatura',
-  'referencia-dfe',
-  'classtrib-cff',
-  'anexos-cff',
-  'credito-presumido-cff',
-  'indoper-cff',
-  'classprod-cff',
-]
-
-interface ArquivoReconhecido {
-  id: number
-  nome: string
-  tamanho: number
-  tipo: TipoBase
-  totalPrevisto: number
-  sistema: string
-  json: unknown
-  estado: 'pronto' | 'aplicado' | 'erro'
-  mensagem: string | null
-}
-
-let seqArquivoBase = 0
-
-/** Prévia pura (sem gravar): quantos registros aproveitáveis o arquivo tem. */
-function previaPorTipo(tipo: TipoBase, json: unknown): number {
-  switch (tipo) {
-    case 'nomenclatura':
-      return normalizarNomenclatura(json).length
-    case 'reforma': {
-      const j = json as Record<string, unknown>
-      const l = (Array.isArray(j.NCM) ? j.NCM : Array.isArray(j.ncm) ? j.ncm : []) as unknown[]
-      return l.length
-    }
-    case 'referencia-dfe':
-      return normalizarReferencia(json).length
-    case 'classtrib-cff':
-      return normalizarClassTribCff(json).referencia.length
-    case 'anexos-cff':
-      return normalizarAnexosCff(json).length
-    case 'credito-presumido-cff':
-    case 'indoper-cff':
-    case 'classprod-cff':
-      return Array.isArray(json) ? json.length : 0
-    default:
-      return 0
-  }
-}
-
-function NucleoImportacaoBases() {
-  const progresso = useBase((s) => s.progresso)
-  const [arquivos, setArquivos] = useState<ArquivoReconhecido[]>([])
-  const [lendo, setLendo] = useState(false)
-  const [aplicando, setAplicando] = useState(false)
-  const [resultado, setResultado] = useState<string | null>(null)
-  const inputMultiplo = useRef<HTMLInputElement | null>(null)
-
-  const escolherVarios = async (lista: FileList | null) => {
-    if (!lista?.length) return
-    setLendo(true)
-    setResultado(null)
-    const novos: ArquivoReconhecido[] = []
-    for (const file of Array.from(lista)) {
-      try {
-        const texto = await file.text()
-        let json: unknown
-        try {
-          json = JSON.parse(texto)
-        } catch {
-          throw new Error('não é um JSON válido')
-        }
-        const tipo = fingerprintBase(json)
-        if (tipo === 'desconhecido') {
-          throw new Error('estrutura não reconhecida para nenhuma base')
-        }
-        const total = previaPorTipo(tipo, json)
-        if (!total) {
-          throw new Error('válido, mas sem registros aproveitáveis')
-        }
-        novos.push({
-          id: ++seqArquivoBase,
-          nome: file.name,
-          tamanho: file.size,
-          tipo,
-          totalPrevisto: total,
-          sistema: '',
-          json,
-          estado: 'pronto',
-          mensagem: null,
-        })
-      } catch (e) {
-        toast(`"${file.name}" rejeitado: ${e instanceof Error ? e.message : String(e)}.`, 'err')
-      }
-    }
-    if (novos.length) {
-      setArquivos((atual) => [...atual, ...novos])
-      toast(`${novos.length} arquivo(s) reconhecido(s). Confira o sistema dos produtos por DFe e clique em Atualizar.`, 'ok')
-    }
-    setLendo(false)
-    if (inputMultiplo.current) inputMultiplo.current.value = ''
-  }
-
-  const remover = (id: number) => {
-    setArquivos((atual) => atual.filter((a) => a.id !== id))
-  }
-
-  const definirSistema = (id: number, sistema: string) => {
-    setArquivos((atual) => atual.map((a) => (a.id === id ? { ...a, sistema } : a)))
-  }
-
-  const pendentes = [...arquivos]
-    .filter((a) => a.estado === 'pronto')
-    .sort((a, b) => ORDEM_APLICACAO.indexOf(a.tipo) - ORDEM_APLICACAO.indexOf(b.tipo))
-  const atualizando = aplicando || progresso !== null
-  const faltaSistema = pendentes.some((a) => infoBase(a.tipo).precisaSistema && !a.sistema)
-
-  const atualizar = async () => {
-    if (!pendentes.length) {
-      toast('Selecione ao menos um arquivo para atualizar.', 'warn')
-      return
-    }
-    if (faltaSistema) {
-      toast('Informe o sistema (NFCom, NFAg, NF3e ou NFGas) em cada arquivo de produtos por DFe.', 'warn')
-      return
-    }
-    const ok = await confirmar(
-      'Atualizar bases de dados?',
-      `Serão importados ${pendentes.length} arquivo(s), um por vez, na ordem: ${pendentes.map((a) => infoBase(a.tipo).rotulo).join(' → ')}. Recomenda-se ter um backup (aba Backup). Continuar?`,
-      { icone: '🗂', confirmar: 'Atualizar bases' },
-    )
-    if (!ok) return
-    setAplicando(true)
-    setResultado(null)
-    const aplicados: string[] = []
-    try {
-      for (const arq of pendentes) {
-        const importado = await useBase.getState().importar(arq.json, arq.nome, arq.sistema || undefined)
-        if (!importado) {
-          throw new Error(`"${arq.nome}" (${infoBase(arq.tipo).rotulo}): importação recusada — veja o aviso na tela.`)
-        }
-        aplicados.push(`${infoBase(arq.tipo).rotulo} (${arq.totalPrevisto.toLocaleString('pt-BR')})`)
-        setArquivos((atual) => atual.map((a) => (a.id === arq.id ? { ...a, estado: 'aplicado' as const } : a)))
-      }
-      await useBase.getState().recarregar()
-      setArquivos((atual) => atual.filter((a) => a.estado !== 'aplicado'))
-      setResultado(`Bases atualizadas: ${aplicados.join(' · ')}. Classificações de produtos e notas foram revalidadas.`)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      setResultado(`Interrompido após ${aplicados.length} base(s). ${msg} As anteriores continuam valendo.`)
-      toast(msg, 'err')
-    } finally {
-      setAplicando(false)
-    }
-  }
-
-  return (
-    <div>
-      <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">
-        🗂 Atualização manual das bases
-      </h3>
-      <p className="mb-2 text-[11px] leading-relaxed text-slate-400">
-        Selecione <strong>todos os arquivos de uma vez</strong> — o sistema reconhece cada um pelo
-        conteúdo, mostra o destino e importa <strong>um por vez</strong> na ordem correta. Nada é
-        gravado até você clicar em <strong>Atualizar bases de dados</strong>.
-      </p>
-      <div className="mb-3 rounded-xl border border-dashed border-[var(--line)] p-2.5 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
-        <strong>Arquivos aceitos:</strong> Tabela NCM vigente (Siscomex) · classificação tributária
-        (portal DFe <em>ou</em> API CFF <span className="font-mono">classTrib.json</span>) · Reforma por
-        NCM/NBS (vínculos) · anexos · crédito presumido · locais de operação · produtos por DFe
-        (exige informar o sistema: NFCom, NFAg, NF3e ou NFGas).
-      </div>
-
-      <div className="mb-2 flex flex-wrap gap-1.5">
-        <Btn tam="sm" variante="primary" disabled={lendo || atualizando} onClick={() => inputMultiplo.current?.click()}>
-          {lendo ? '⏳ Reconhecendo…' : '📂 Selecionar arquivos'}
-        </Btn>
-        {arquivos.length ? (
-          <Btn
-            tam="sm"
-            disabled={atualizando}
-            onClick={() => {
-              setArquivos([])
-              setResultado(null)
-            }}
-          >
-            Limpar todos
-          </Btn>
-        ) : null}
-      </div>
-      <input
-        ref={inputMultiplo}
-        type="file"
-        accept=".json,application/json"
-        multiple
-        className="hidden"
-        onChange={(e) => void escolherVarios(e.target.files)}
-      />
-
-      {arquivos.length ? (
-        <div className="grid grid-cols-1 gap-2">
-          {pendentes.map((a) => {
-            const info = infoBase(a.tipo)
-            return (
-              <div key={a.id} className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3 shadow-card">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-mono text-[11px] font-bold" title={a.nome}>
-                      {a.nome} · {(a.tamanho / 1024 / 1024).toFixed(2)} MB
-                    </div>
-                    <div className="mt-0.5 text-[10px] text-slate-400">
-                      → {info.rotulo} · {a.totalPrevisto.toLocaleString('pt-BR')} registros · destino: {info.destino}
-                    </div>
-                  </div>
-                  <span className="pill bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-                    ✓ reconhecido
-                  </span>
-                  <Btn tam="sm" onClick={() => remover(a.id)} disabled={atualizando}>
-                    ✕
-                  </Btn>
-                </div>
-                {info.precisaSistema ? (
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
-                      Sistema de origem (o arquivo não informa):
-                    </span>
-                    <select
-                      className="field field-sm max-w-[12rem]"
-                      value={a.sistema}
-                      disabled={atualizando}
-                      onChange={(e) => definirSistema(a.id, e.target.value)}
-                      aria-label={`Sistema de origem de ${a.nome}`}
-                    >
-                      <option value="">— selecione —</option>
-                      {(SISTEMAS_CFF as readonly string[]).map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : null}
-              </div>
-            )
-          })}
-        </div>
-      ) : (
-        <p className="rounded-xl bg-slate-100 p-3 text-center text-[11px] text-slate-400 dark:bg-slate-800">
-          Nenhum arquivo selecionado. Baixe as fontes em <strong>Legislação → Portais para atualização</strong>.
-        </p>
-      )}
-
-      {progresso ? (
-        <div className="mt-3">
-          <BarraProgresso etapa={progresso.etapa} pct={progresso.pct} />
-        </div>
-      ) : null}
-
-      {resultado ? (
-        <p className="mt-2 rounded-lg bg-slate-100 p-2 text-[11px] leading-relaxed text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-          {resultado}
-        </p>
-      ) : null}
-
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        <Btn variante="primary" carregando={atualizando} disabled={!pendentes.length} onClick={() => void atualizar()}>
-          {atualizando ? 'Atualizando…' : `🗂 Atualizar bases de dados${pendentes.length ? ` (${pendentes.length})` : ''}`}
-        </Btn>
-      </div>
-      <p className="mt-2 text-[10px] leading-relaxed text-slate-400">
-        A ordem de aplicação é fixa (vínculos → nomenclatura → referências → anexos → catálogos;
-        a fonte mais completa vence por tabela) e cada base só é apagada depois que a nova foi
-        validada. Se algo falhar, as anteriores ficam valendo. Após importar, produtos e notas XML
-        são revalidados automaticamente.
-      </p>
-    </div>
-  )
-}
-
 function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => void }) {
   const status = useBase((s) => s.status)
   const recarregarStatus = useBase((s) => s.recarregar)
@@ -1090,7 +797,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
                 <div className="mt-0.5 text-[11px] leading-relaxed text-emerald-50/90 dark:text-slate-300">
                   Base gerada em{' '}
                   <strong>{status?.geradoEm ? new Date(status.geradoEm).toLocaleDateString('pt-BR') : '—'}</strong>
-                  {' '}· programa v{versao} · dados atualizados manualmente abaixo
+                  {' '}· programa v{versao} · tabelas embutidas no build
                 </div>
               </div>
               <button
@@ -1110,13 +817,12 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
             <StatTabela icone="📚" rotulo="Referência" valor={fmtQtd(status?.referencia)} chip="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300" />
             <StatTabela icone="📖" rotulo="Nomenclatura" valor={fmtQtd(status?.nomenclatura)} chip="bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300" />
             <StatTabela icone="🧮" rotulo="NBS" valor={fmtQtd(status?.nbs)} chip="bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300" />
+            <StatTabela icone="🗂" rotulo="CNAE" valor={fmtQtd(status?.cnae)} chip="bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300" />
             <StatTabela icone="🏢" rotulo="Empresas" valor={fmtQtd(contagens.empresas)} chip="bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300" />
             <StatTabela icone="📦" rotulo="Produtos" valor={fmtQtd(contagens.produtos)} chip="bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300" />
             <StatTabela icone="📎" rotulo="Anexos" valor={fmtQtd(status?.anexos)} chip="bg-lime-100 text-lime-800 dark:bg-lime-950/60 dark:text-lime-300" />
             <StatTabela icone="🏭" rotulo="Produtos DFe" valor={fmtQtd(status?.produtosDfe)} chip="bg-teal-100 text-teal-800 dark:bg-teal-950/60 dark:text-teal-300" />
           </div>
-
-          <NucleoImportacaoBases />
 
           <div className="mb-2 mt-4 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">
@@ -1130,9 +836,8 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
           </div>
           <Painel className="mb-3 p-3">
             <p className="text-[11px] leading-relaxed text-slate-400">
-              Monitoramento das atualizações que realmente foram aplicadas à base local.
-              As bases acima são atualizadas <strong>manualmente</strong>; o programa em si
-              é renovado pela <strong>atualização do programa</strong>.
+              Tabelas embutidas no build — cada build novo já traz NCM, CST,
+              cClassTrib e nomenclatura atualizados via <strong>atualização do programa</strong>.
             </p>
 
             {cffStatus ? (

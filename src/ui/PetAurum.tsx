@@ -22,12 +22,33 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useCalculadora } from '@/store/calculadora'
 import { useConsulta } from '@/store/consulta'
-import { FRASE_POR_VIEW, FRASES_CALCULANDO, fazerCarinho, usePet } from '@/store/pet'
+import { FRASE_POR_VIEW, FRASES_CALCULANDO, FRASES_PESQUISANDO, fazerCarinho, usePet } from '@/store/pet'
+import {
+  sortearAmbiente,
+  sortearIntervaloAmbiente,
+  sortearTagarelice,
+} from '@/store/pet-ambiente'
+import {
+  alturaPulo,
+  duracaoPulo,
+  escolherAlvo,
+  intervaloPuloAleatorio,
+  limitesPasseio,
+  pausaEntreViagens,
+  podePular,
+  podeVagar,
+  velocidadePasseio,
+} from '@/store/pet-locomocao'
 import {
   fraseFarejando,
   fraseNcmInvalido,
   fraseResultadoBusca,
 } from '@/store/pet-farejo'
+import {
+  sortearFalaHora,
+  sortearHumorFalaHora,
+  sortearIntervaloFalaHora,
+} from '@/store/pet-falas-hora'
 import { registrarEventoPet, saudacaoInicialPet } from '@/store/pet-ia'
 import { useUi } from '@/store/ui'
 import {
@@ -102,6 +123,29 @@ function PetCorpo({ modoVoo = false }: { modoVoo?: boolean }) {
       <span className="pet-fx pet-zzz" aria-hidden="true"><span>z</span><span>Z</span><span>z</span></span>
       <span className="pet-fx pet-coracoes" aria-hidden="true"><span>♥</span><span>♥</span><span>♥</span></span>
       <span className="pet-fx pet-confete" aria-hidden="true"><span /><span /><span /><span /><span /></span>
+      {/* Lâmpada de ideia (eureka do lote): overlay ao lado direito da cabeça,
+          dentro do .pet-salto — herda o pulo/squash sem brigar com o X da
+          locomoção. Acende via [data-eureka='true'] no .pet-aurum. */}
+      <span className="pet-fx pet-lampada" aria-hidden="true">
+        <span className="pet-lampada-haste" />
+        <span className="pet-lampada-cupula" />
+        <span className="pet-lampada-bulbo" />
+        <span className="pet-lampada-glow" />
+        <span className="pet-lampada-raio pet-lampada-raio--1" />
+        <span className="pet-lampada-raio pet-lampada-raio--2" />
+        <span className="pet-lampada-raio pet-lampada-raio--3" />
+        <span className="pet-lampada-raio pet-lampada-raio--4" />
+      </span>
+      {/* Chuva de comemoração do eureka: cai do topo centralizado (não da
+          lâmpada), lenta — 4s de queda suave com leve deriva lateral. */}
+      <span className="pet-fx pet-chuva" aria-hidden="true">
+        <span className="pet-chuva-floco pet-chuva-floco--1" />
+        <span className="pet-chuva-floco pet-chuva-floco--2" />
+        <span className="pet-chuva-floco pet-chuva-floco--3" />
+        <span className="pet-chuva-floco pet-chuva-floco--4" />
+        <span className="pet-chuva-floco pet-chuva-floco--5" />
+        <span className="pet-chuva-floco pet-chuva-floco--6" />
+      </span>
     </>
   )
 }
@@ -347,7 +391,12 @@ function useVoo(
         atualizarPortalDOM(r.x, r.y, 0, 1.05)
       } else {
         // dt em frames (1 = 1 quadro a 60fps): taxas exponenciais por quadro.
-        const kPos = 1 - Math.exp(-dt * 0.35) // ~0.30 a 60fps: glide macio
+        // Ganho ADAPTATIVO: gruda no cursor — base mais firme que antes
+        // para a pet não ficar para trás, e enrijece com a distância para
+        // fechar vãos rápido; de perto volta a filtrar o tremor parado.
+        const distAlvo = Math.hypot(t.x - r.x, t.y - r.y)
+        const rigidez = 0.65 + Math.min(1.6, distAlvo / 120)
+        const kPos = 1 - Math.exp(-dt * rigidez) // ~0.48 de perto, até ~0.9 longe
         r.x += (t.x - r.x) * kPos
         r.y += (t.y - r.y) * kPos
         // Snap final quando почти lá (evita perseguição infinita sub-pixel).
@@ -479,13 +528,36 @@ function useVoo(
       //    cima para o pouso, nunca subindo por baixo;
       // 2. DESCIDA: vertical lenta e aprumada até a caminha, com nuvem de
       //    poeira no toque.
+      // MIRA NO BONECO (K vivo): o portal inclui o paraquedas ACIMA do
+      // boneco, então mirar o TOPO do portal na doca afundava a pet ~100px
+      // abaixo da caminha. `medirK` mede a cada passo a distância real
+      // topo-do-portal → base-do-boneco (copa + corpo + escala/bob do
+      // frame) e o alvejado passa a ser a BASE DO BONECO na doca. Efeito
+      // colateral bom: o portal absorve o bob da flutuação e o boneco voa
+      // colado na trajetória.
       const ALTURA_PLANEIO = 170
       const ESCALA_INICIAL = 1.05
       const ESCALA_FINAL = 1.0
+      const copaEl = portalRef.current?.querySelector('.pet-paraquedas') as HTMLElement | null
+      const copaMedida = copaEl?.getBoundingClientRect().height ?? 0
+      // -15px: o boneco sobrepõe a base da copa (margin-bottom negativa no CSS).
+      const ajusteCopa = copaMedida > 0 ? Math.max(0, copaMedida - 15) : Math.max(0, w * 1.83 - 15)
+      const kReserva = ajusteCopa + h
+      /** Distância viva topo-do-portal → base-do-boneco (px de viewport). */
+      const medirK = (topoPortal: number): number => {
+        const b = portalRef.current?.querySelector('.pet-voo-boneco') as HTMLElement | null
+        if (!b) return kReserva
+        const base = b.getBoundingClientRect().bottom
+        const k = base - topoPortal
+        // Guarda: copa ainda sem layout (primeiros frames) ou medida
+        // inválida → usa a estimativa em vez de puxar o alvo de repente.
+        if (!Number.isFinite(k) || k < kReserva * 0.7) return kReserva
+        return k
+      }
 
       const alvoInicial = medirDocaViva()
       const distTotal = Math.max(1, alvoInicial
-        ? Math.hypot(px - alvoInicial.x, py - (alvoInicial.y - ALTURA_PLANEIO))
+        ? Math.hypot(px - alvoInicial.x, py - (alvoInicial.baseY - kReserva - ALTURA_PLANEIO))
         : Math.hypot(ev.clientX - cx0, ev.clientY - cy0))
       const t0 = performance.now()
       let emDescida = false
@@ -507,21 +579,25 @@ function useVoo(
       // Assentamento: squash & stretch com a BASE ANCORADA (transform-origin
       // embaixo) para não "cair" abaixo da caminha + nuvem de poeira
       // (via onPousar) antes de desmontar o portal. A copa recolhe via CSS.
+      // O estacionamento usa o K vivo: a base do boneco — não o topo do
+      // portal — assenta na base da caminha.
       const pousarComAssentamento = () => {
         cancelAnimationFrame(rafRef.current)
         const alvo = medirDocaViva()
         if (!alvo) { finalizar(false); return }
+        const kPouso = medirK(py)
+        const pousoY = alvo.baseY - kPouso
         try { portalRef.current?.setAttribute('data-pouso', 'true') } catch { /* noop */ }
         try { onPousarRef.current?.(alvo.cx, alvo.baseY) } catch { /* noop */ }
         if (vooMoveRef.current) vooMoveRef.current.style.transformOrigin = '50% 100%'
-        atualizarPortalDOM(alvo.x, alvo.y, 0, 1.08, 0.9)
+        atualizarPortalDOM(alvo.x, pousoY, 0, 1.08, 0.9)
         atualizarSombraDOM(alvo.cx, alvo.baseY, 0)
         assentamentoRef.current = window.setTimeout(() => {
           const a2 = medirDocaViva() ?? alvo
-          atualizarPortalDOM(a2.x, a2.y, 0, 0.98, 1.03)
+          atualizarPortalDOM(a2.x, a2.baseY - kPouso, 0, 0.98, 1.03)
           assentamentoRef.current = window.setTimeout(() => {
             const a3 = medirDocaViva() ?? a2
-            atualizarPortalDOM(a3.x, a3.y, 0, 1, 1)
+            atualizarPortalDOM(a3.x, a3.baseY - kPouso, 0, 1, 1)
             finalizar(true)
           }, 130)
         }, 130)
@@ -541,10 +617,14 @@ function useVoo(
         const alvo = medirDocaViva()
         if (!alvo) { finalizar(false); return }
 
+        // Ponto do TOPO do portal que coloca a base do boneco na doca.
+        const kVivo = medirK(py)
+        const baseAlvo = alvo.baseY - kVivo
+
         if (!emDescida) {
-          // ——— PLANEIO até o ponto acima da doca ———
+          // ——— PLANEIO até o ponto acima da doca (base do boneco) ———
           const gx = alvo.x
-          const gy = alvo.y - ALTURA_PLANEIO
+          const gy = baseAlvo - ALTURA_PLANEIO
           const dx = gx - px
           const dy = gy - py
           const distPlaneio = Math.hypot(dx, dy)
@@ -584,9 +664,11 @@ function useVoo(
           }
         }
 
-        // ——— DESCIDA vertical, lenta e aprumada ———
+        // ——— DESCIDA vertical, lenta e aprumada (base do boneco) ———
+        // Piso rígido: o topo do portal nunca passa de `baseAlvo`,
+        // então o boneco nunca mergulha abaixo da caminha — toca por cima.
         const dx = alvo.x - px
-        const dy = alvo.y - py
+        const dy = baseAlvo - py
         const distRest = Math.hypot(dx, dy)
         const speed = Math.hypot(vx, vy)
 
@@ -610,6 +692,11 @@ function useVoo(
 
         px += vx * dtNorm
         py += vy * dtNorm
+        // Piso: corta qualquer overshoot da mola antes de desenhar.
+        if (py > baseAlvo) {
+          py = baseAlvo
+          if (vy > 0) vy = 0
+        }
 
         const progressoBruto = 1 - Math.min(1, distRest / Math.max(1, ALTURA_PLANEIO))
         const progresso = 1 - Math.pow(1 - Math.min(1, progressoBruto), 2)
@@ -709,7 +796,8 @@ function useReacoesDaAurinha() {
       const bAnt = ant.carregando || ant.buscandoTexto || ant.classificandoDescricao
       const termo = s.entrada || s.buscaTexto || s.codigo || s.descricao
       if (b && !bAnt) {
-        agirRef.current('thinking', fraseFarejando(termo) ?? fraseAleatoria(FRASES_PENSANDO))
+        // Busca ativa = modo investigativo: a lupinha varre sem parar.
+        agirRef.current('searching', fraseFarejando(termo) ?? fraseAleatoria(FRASES_PESQUISANDO))
         return
       }
       if (s.avisoInvalido && !ant.avisoInvalido) {
@@ -733,7 +821,7 @@ function useReacoesDaAurinha() {
           return
         }
         // Busca válida que zerou: cutuca com o termo, sem pisar em erro/sucesso.
-        if (termo.trim() && ['idle', 'reading', 'thinking', 'curious'].includes(usePet.getState().mood)) {
+        if (termo.trim() && ['idle', 'reading', 'searching', 'thinking', 'curious'].includes(usePet.getState().mood)) {
           agirRef.current('curious', fraseResultadoBusca(termo, {
             oficiais, textos, temSugestao, primeiroCodigo,
           }))
@@ -814,6 +902,30 @@ function useReacoesDaAurinha() {
     return () => { obs.disconnect(); if (t) clearTimeout(t) }
   }, [])
 
+  // Lote: enquanto classifica, a Aurinha lê o livrinho; ao concluir, a
+  // lâmpada acende (festeja sem pisar em erro/sucesso já registrados).
+  useEffect(() => {
+    let importarLote = true
+    let parar: (() => void) | null = null
+    void import('@/store/lote').then((mod) => {
+      if (!importarLote) return
+      parar = mod.useLote.subscribe((s, ant) => {
+        if (s.processando && !ant.processando) {
+          agirRef.current('reading', 'Lendo a planilha pra você…')
+          return
+        }
+        if (!s.processando && ant.processando && s.resumo) {
+          if (!registrarEventoPet({ tipo: 'sucesso' })) {
+            agirRef.current('celebrating', `Prontinho! ${s.resumo.itens.length} produtos classificados!`)
+          }
+          // Lâmpada de ideia acende NO PET da sidebar (nunca na tela de lote).
+          try { usePet.getState().dispararEureka() } catch { /* noop */ }
+        }
+      })
+    })
+    return () => { importarLote = false; parar?.() }
+  }, [])
+
   useEffect(() => { const t = setTimeout(() => saudacaoInicialPet(), 900); return () => clearTimeout(t) }, [])
 }
 
@@ -874,11 +986,330 @@ function PoeiraPouso({ x, baseY }: { x: number; baseY: number }) {
   )
 }
 
+/* ============ VIDA PRÓPRIA (ambientes + tagarelice + presença) ============
+   A Aurinha vive mesmo sem clique: microcomportamentos visuais (data-ambient),
+   frases espontâneas espaçadas e reação a presença (aba/rede). Tudo respeita
+   humor ocupado, voo, aba oculta e `prefers-reduced-motion`. */
+function useAmbienteDaAurinha(fase: FaseVoo): string | null {
+  const [ambiente, setAmbiente] = useState<string | null>(null)
+  const faseRef = useRef(fase)
+  faseRef.current = fase
+  const anteriorRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    let vivo = true
+    let agendarId = 0
+    let limparId = 0
+    const movimentoReduzido = () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+    const agendar = () => {
+      if (!vivo) return
+      agendarId = window.setTimeout(() => {
+        if (!vivo) return
+        const livre = usePet.getState().mood === 'idle'
+          && faseRef.current === 'doca'
+          && !document.hidden
+          && !movimentoReduzido()
+        if (livre) {
+          const amb = sortearAmbiente(anteriorRef.current)
+          anteriorRef.current = amb.id
+          setAmbiente(amb.id)
+          limparId = window.setTimeout(() => {
+            if (vivo) setAmbiente(null)
+            agendar()
+          }, amb.duracaoMs + 350)
+        } else {
+          agendar()
+        }
+      }, sortearIntervaloAmbiente())
+    }
+    // Nunca empilha dois ambientes: se o humor saiu do idle no meio da
+    // apresentação, o efeito abaixo recolhe o atributo para o CSS voltar
+    // à patrulha.
+    agendar()
+    return () => {
+      vivo = false
+      window.clearTimeout(agendarId)
+      window.clearTimeout(limparId)
+    }
+  }, [])
+
+  // Recolhe o ambiente se algo importante assumir o palco no meio da cena.
+  const mood = usePet(s => s.mood)
+  useEffect(() => {
+    if (mood !== 'idle' && ambiente) setAmbiente(null)
+  }, [mood, ambiente])
+
+  return ambiente
+}
+
+/** Tagarelice espaçada + presença (aba/rede) — só fala quando está livre. */
+function useVidaPropriaDaAurinha(fase: FaseVoo) {
+  const faseRef = useRef(fase)
+  faseRef.current = fase
+
+  useEffect(() => {
+    let vivo = true
+    let id = 0
+    const podeFalar = () =>
+      vivo
+      && usePet.getState().mood === 'idle'
+      && faseRef.current === 'doca'
+      && !document.hidden
+      && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const falar = () => {
+      if (!vivo) return
+      // 75–140 s entre gracinhas: presente, nunca tagarela.
+      id = window.setTimeout(() => {
+        if (podeFalar() && Math.random() < 0.65) {
+          const frase = sortearTagarelice()
+          usePet.getState().agir(Math.random() < 0.5 ? 'curious' : 'happy', frase)
+        }
+        falar()
+      }, 75_000 + Math.random() * 65_000)
+    }
+    falar()
+    return () => { vivo = false; window.clearTimeout(id) }
+  }, [])
+
+  useEffect(() => {
+    const aoVisivel = () => {
+      if (document.hidden) {
+        if (usePet.getState().mood === 'idle') usePet.getState().agir('sleeping', 'Tô te esperando…')
+      } else if (usePet.getState().mood === 'sleeping') {
+        usePet.getState().agir('waving', 'Voltei! Sentiu saudade?')
+      }
+    }
+    const aoCair = () => { if (usePet.getState().mood === 'idle') usePet.getState().agir('curious', 'Opa, sem internet? Farejo offline!') }
+    const aoVoltar = () => { if (usePet.getState().mood === 'curious') usePet.getState().aquietar() }
+    document.addEventListener('visibilitychange', aoVisivel)
+    window.addEventListener('offline', aoCair)
+    window.addEventListener('online', aoVoltar)
+    return () => {
+      document.removeEventListener('visibilitychange', aoVisivel)
+      window.removeEventListener('offline', aoCair)
+      window.removeEventListener('online', aoVoltar)
+    }
+  }, [])
+}
+
+/* ============ FALAS DA HORA (elogio + relógio, em tempos aleatórios) ============
+   A Aurinha surge do nada com uma fala carismática/divertida, elogiando o
+   humano e lendo a hora atual do relógio. Intervalo irregular (45–115 s) +
+   chance de 80% por ciclo = viva, nunca mecânica. Só fala quando está livre
+   (idle na doca, aba visível, sem `prefers-reduced-motion`). */
+function useFalasHoraDaAurinha(fase: FaseVoo) {
+  const faseRef = useRef(fase)
+  faseRef.current = fase
+
+  useEffect(() => {
+    let vivo = true
+    let id = 0
+    let anterior: string | null = null
+    const podeFalar = () =>
+      vivo
+      && usePet.getState().mood === 'idle'
+      && faseRef.current === 'doca'
+      && !document.hidden
+      && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const agendar = () => {
+      if (!vivo) return
+      id = window.setTimeout(() => {
+        if (podeFalar() && Math.random() < 0.8) {
+          const frase = sortearFalaHora(new Date(), anterior)
+          anterior = frase
+          usePet.getState().agir(sortearHumorFalaHora(), frase)
+        }
+        agendar()
+      }, sortearIntervaloFalaHora())
+    }
+    agendar()
+    return () => { vivo = false; window.clearTimeout(id) }
+  }, [])
+}
+
+/* ============ LOCOMOÇÃO (passeio pela sidebar + pulinhos) ============
+   Dona do eixo X: o JS move `.pet-locomocao` continuamente (rAF, sem
+   React state no loop quente — mesmo padrão do voo). Os humores NUNCA
+   animam `translateX` do passeio, então trocar de humor ou mostrar/esconder
+   o balão não dá snap ("travadinha"): a posição é contínua.
+   - Vaga de um lado ao outro da casinha quando `idle` (mede o trilho vivo,
+     então anda por TODA a largura da sidebar, aberta ou recolhida);
+   - Pulinhos aleatórios a cada 6–14 s + fila da IA: `celebrating` = 3 hops,
+     `happy`/`love` = 1 hop (acerto da IA vira festa física);
+   - Planta pegadas que somem no `.pet-eco` enquanto anda;
+   - `data-loco` (off/parada/andando/pulando) alimenta o CSS (sombra, trote);
+   - Respeita voo, aba oculta e `prefers-reduced-motion` (vira `off` e o CSS
+     assume o fallback estático). */
+function useLocomocaoDaAurinha(
+  casaRef: React.RefObject<HTMLDivElement | null>,
+  locoRef: React.RefObject<HTMLDivElement | null>,
+  aurumRef: React.RefObject<HTMLDivElement | null>,
+  fase: FaseVoo,
+) {
+  const faseRef = useRef(fase)
+  faseRef.current = fase
+
+  useEffect(() => {
+    let raf = 0
+    let vivo = true
+    const movimentoReduzido = () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+    let x = 0
+    let alvo = 0
+    let vel = 40
+    let maxX = 0
+    let primeiraMedida = true
+    let pausaAte = performance.now() + 900
+    let proxPulo = performance.now() + 7000
+    let pulo: { t0: number; dur: number; h: number } | null = null
+    let filaPulos = 0
+    let ultimoPasso = 0
+    let ladoPasso = 1
+    let quadros = 0
+    let ultimo = performance.now()
+    let locoAtual = ''
+
+    const definirLoco = (v: string) => {
+      if (locoAtual === v) return
+      locoAtual = v
+      const el = aurumRef.current
+      if (el) el.dataset.loco = v
+    }
+
+    const medir = (): boolean => {
+      const casa = casaRef.current
+      const loco = locoRef.current
+      if (!casa || !loco) return false
+      const cw = casa.clientWidth
+      const palco = loco.firstElementChild as HTMLElement | null
+      const pw = palco?.getBoundingClientRect().width ?? 72
+      const lim = limitesPasseio(cw, pw)
+      maxX = lim.max
+      x = Math.max(lim.min, Math.min(lim.max, x))
+      if (primeiraMedida) {
+        primeiraMedida = false
+        alvo = escolherAlvo(lim, x)
+        vel = velocidadePasseio()
+      }
+      return true
+    }
+
+    const plantarPegada = (agora: number) => {
+      if (agora - ultimoPasso < 280) return
+      ultimoPasso = agora
+      const casa = casaRef.current
+      const eco = casa?.querySelector('.pet-eco') ?? null
+      if (!eco) return
+      if (eco.querySelectorAll('.pet-pegada').length > 12) {
+        eco.querySelector('.pet-pegada')?.remove()
+      }
+      ladoPasso *= -1
+      const s = document.createElement('span')
+      s.className = 'pet-pegada'
+      s.style.left = `calc(50% + ${Math.round(x + ladoPasso * 7)}px)`
+      eco.appendChild(s)
+      window.setTimeout(() => s.remove(), 1400)
+    }
+
+    // Pulinhos combinados ao acerto: a IA comemora, o corpo acompanha.
+    const desinscrever = usePet.subscribe((s, ant) => {
+      if (s.mood === ant.mood) return
+      if (s.mood === 'celebrating') filaPulos += 3
+      else if (s.mood === 'happy' || s.mood === 'love') filaPulos += 1
+    })
+
+    medir()
+    definirLoco(movimentoReduzido() ? 'off' : 'parada')
+
+    const quadro = (agora: number) => {
+      if (!vivo) return
+      raf = requestAnimationFrame(quadro)
+      if (document.hidden) return
+      if (movimentoReduzido()) {
+        if (locoAtual !== 'off') {
+          definirLoco('off')
+          const loco = locoRef.current
+          if (loco) loco.style.transform = ''
+          aurumRef.current?.style.removeProperty('--pet-x')
+        }
+        return
+      }
+      const loco = locoRef.current
+      const aurum = aurumRef.current
+      if (!loco || !aurum || faseRef.current !== 'doca') return
+      quadros += 1
+      if (quadros % 30 === 0) medir()
+      const dt = Math.min(0.05, Math.max(0.001, (agora - ultimo) / 1000))
+      ultimo = agora
+      const mood = usePet.getState().mood
+      const vagar = podeVagar(mood, faseRef.current)
+      const pular = podePular(mood, faseRef.current)
+
+      if (!pulo && pular) {
+        if (filaPulos > 0) {
+          filaPulos -= 1
+          const h = alturaPulo()
+          pulo = { t0: agora, dur: duracaoPulo(h), h }
+        } else if (vagar && agora >= proxPulo) {
+          proxPulo = agora + intervaloPuloAleatorio()
+          const h = alturaPulo()
+          pulo = { t0: agora, dur: duracaoPulo(h), h }
+        }
+      }
+
+      let y = 0
+      let tilt = 0
+      if (pulo) {
+        const p = Math.min(1, (agora - pulo.t0) / pulo.dur)
+        y = -pulo.h * Math.sin(Math.PI * p)
+        if (p >= 1) { pulo = null; y = 0 }
+        definirLoco('pulando')
+      } else if (vagar) {
+        if (agora < pausaAte) {
+          definirLoco('parada')
+        } else {
+          const dx = alvo - x
+          if (Math.abs(dx) < 1.5) {
+            alvo = escolherAlvo({ min: -maxX, max: maxX }, x)
+            vel = velocidadePasseio()
+            pausaAte = agora + pausaEntreViagens()
+            definirLoco('parada')
+          } else {
+            const passo = Math.sign(dx) * Math.min(Math.abs(dx), vel * dt)
+            x += passo
+            tilt = Math.sign(dx) * 3
+            definirLoco('andando')
+            plantarPegada(agora)
+          }
+        }
+      } else {
+        definirLoco('parada')
+      }
+
+      loco.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) rotate(${tilt.toFixed(2)}deg)`
+      aurum.style.setProperty('--pet-x', `${x.toFixed(1)}px`)
+    }
+    raf = requestAnimationFrame(quadro)
+
+    return () => {
+      vivo = false
+      cancelAnimationFrame(raf)
+      desinscrever()
+    }
+  }, [casaRef, locoRef, aurumRef])
+}
+
 /* =============================== COMPONENTE ================================ */
 export function PetAurum({ recolhida = false }: { recolhida?: boolean }) {
   const mood = usePet(s => s.mood)
   const frase = usePet(s => s.frase)
   const seq = usePet(s => s.seq)
+  const eureka = usePet(s => s.eureka)
   const view = useUi(s => s.view)
 
   // Refs criadas aqui (uma vez por instância do componente)
@@ -887,6 +1318,8 @@ export function PetAurum({ recolhida = false }: { recolhida?: boolean }) {
   const vooMoveRef = useRef<HTMLDivElement>(null)
   const penduloRef = useRef<HTMLDivElement>(null)
   const casaRef = useRef<HTMLDivElement>(null)
+  const locoRef = useRef<HTMLDivElement>(null)
+  const aurumRef = useRef<HTMLDivElement>(null)
 
   // Nuvem de poeira do pouso — o voo avisa o ponto de impacto.
   const [poeira, setPoeira] = useState<{ x: number; baseY: number; chave: number } | null>(null)
@@ -910,22 +1343,73 @@ export function PetAurum({ recolhida = false }: { recolhida?: boolean }) {
   const modoVoo = fase === 'arrastando' || fase === 'retornando'
 
   useReacoesDaAurinha()
+  const ambiente = useAmbienteDaAurinha(fase)
+  useVidaPropriaDaAurinha(fase)
+  useFalasHoraDaAurinha(fase)
+  useLocomocaoDaAurinha(casaRef, locoRef, aurumRef, fase)
+
+  // Olhar segue o cursor (interação natural): escreve --olhar-x/--olhar-y
+  // no botão; o CSS (.pet-svg) translada com transição suave. Limitado a
+  // ±2.5px para não quebrar o pixel-art. Não interfere no arrasto.
+  const olharSegue = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    if (e.pointerType === 'touch') return
+    const el = e.currentTarget
+    const r = el.getBoundingClientRect()
+    if (r.width <= 0 || r.height <= 0) return
+    const dx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2)
+    const dy = (e.clientY - (r.top + r.height / 2)) / (r.height / 2)
+    const cx = Math.max(-1, Math.min(1, dx)) * 2.5
+    const cy = Math.max(-1, Math.min(1, dy)) * 2
+    el.style.setProperty('--olhar-x', `${cx.toFixed(2)}px`)
+    el.style.setProperty('--olhar-y', `${cy.toFixed(2)}px`)
+  }, [])
+  const olharReseta = useCallback((e: React.PointerEvent<HTMLElement>) => {
+    e.currentTarget.style.setProperty('--olhar-x', '0px')
+    e.currentTarget.style.setProperty('--olhar-y', '0px')
+  }, [])
 
   return (
-    <div className="pet-aurum" data-mood={mood} data-recolhida={recolhida} data-fase={fase} data-view={view}>
-      {/* Balão */}
-      {!recolhida && frase ? <div key={seq} className="pet-balao" role="status" aria-live="polite">{frase}</div> : null}
-      {recolhida && frase && fase === 'doca' ? <div key={seq} className="pet-balao pet-balao-tooltip" role="status" aria-live="polite">{frase}</div> : null}
-
-      {/* Doca na sidebar */}
+    <div ref={aurumRef} className="pet-aurum" data-mood={mood} data-recolhida={recolhida} data-fase={fase} data-view={view} data-ambient={ambiente ?? 'nenhum'} data-loco="parada" data-eureka={eureka ? 'true' : 'false'}>
+      {/* Doca na sidebar — SLOT DE TAMANHO FIXO: balão e ecossistema são
+          overlays absolutos (nunca empurram o layout), a locomoção move SÓ o
+          `.pet-locomocao` via JS contínuo — trocar de humor ou de frase nunca
+          dá snap na posição. A caminha vazia tem o mesmo tamanho do botão. */}
       <div ref={casaRef} className="pet-casa">
+        {/* Mini ecossistema: tapete, sombra viva, potinho, moeda, biscoito,
+            notas e brilhos. Tudo `aria-hidden`, tudo fora do fluxo. */}
+        <div className="pet-eco" aria-hidden="true">
+          <span className="pet-tapete" />
+          <span className="pet-sombra-doca" />
+          <span className="pet-pote"><span className="pet-pote-racao" /></span>
+          <span className="pet-moeda" />
+          <span className="pet-moeda pet-moeda--2" />
+          <span className="pet-moeda pet-moeda--3" />
+          <span className="pet-biscoito" />
+          <span className="pet-nota pet-nota--1">♪</span>
+          <span className="pet-nota pet-nota--2">♫</span>
+          <span className="pet-brilho pet-brilho--1" />
+          <span className="pet-brilho pet-brilho--2" />
+          <span className="pet-brilho pet-brilho--3" />
+          <span className="pet-vapor pet-vapor--1" />
+          <span className="pet-vapor pet-vapor--2" />
+          <span className="pet-vapor pet-vapor--3" />
+          <span className="pet-borboleta"><span className="pet-borboleta-asa pet-borboleta-asa--e" /><span className="pet-borboleta-asa pet-borboleta-asa--d" /></span>
+          <span className="pet-beijo">♥</span>
+          <span className="pet-sonho"><span className="pet-sonho-bolha" /><span className="pet-sonho-z">z</span></span>
+        </div>
+        {/* Balão em overlay — fora do fluxo, acima da pet */}
+        {!recolhida && frase ? <div key={seq} className="pet-balao" role="status" aria-live="polite">{frase}</div> : null}
+        {recolhida && frase && fase === 'doca' ? <div key={seq} className="pet-balao pet-balao-tooltip" role="status" aria-live="polite">{frase}</div> : null}
         {foraDaCaminha ? (
           <div className="pet-caminha-vazia" aria-hidden="true" />
         ) : (
+          <div ref={locoRef} className="pet-locomocao">
           <button
             type="button"
             className="pet-palco"
             onPointerDown={iniciarArraste}
+            onPointerMove={olharSegue}
+            onPointerLeave={olharReseta}
             onClick={() => {
               if (suprimirClickRef.current) { suprimirClickRef.current = false; return }
               fazerCarinho(); registrarEventoPet({ tipo: 'carinho' })
@@ -937,6 +1421,7 @@ export function PetAurum({ recolhida = false }: { recolhida?: boolean }) {
           >
             <span className="pet-passeio"><span className="pet-salto"><PetCorpo modoVoo={modoVoo} /></span></span>
           </button>
+          </div>
         )}
       </div>
 

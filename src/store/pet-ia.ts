@@ -160,7 +160,7 @@ function obterPerfil(): PerfilPet {
 }
 
 /** Humores que a IA pode interromper sem ser rude. */
-const INTERROMPIVEL: PetMood[] = ['idle', 'reading', 'happy', 'curious', 'calculating']
+const INTERROMPIVEL: PetMood[] = ['idle', 'reading', 'searching', 'happy', 'curious', 'calculating']
 
 /**
  * Registra um evento de uso e, se alguma rotina disparar (e a pet estiver

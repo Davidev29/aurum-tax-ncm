@@ -16,6 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 2: Classification Engine** - Regras LC 214/2025, classificação automática, override manual
 - [ ] **Phase 3: Search & UI** - Busca/filtro performática, tabela virtualizada, dashboard, atalhos
 - [ ] **Phase 4: Reporting & Export** - Excel/PDF/CSV, backup/restore, validação final
+- [x] **Phase 7: Menu Serviços (NBS + CNAE + CNPJ)** - Consulta NBS manual + automática por CNPJ com a Aurum AI — **IMPLEMENTADA** (ver Phase Details)
 
 ## Phase Details
 
@@ -140,6 +141,24 @@ Plans:
 
 **Scope note**: Somente NCM. NBS explicitamente fora de escopo neste módulo.
 
+### Phase 7: Menu Serviços (NBS + CNAE + CNPJ) — IMPLEMENTADA
+**Goal**: Tela Serviços com 2 modos (manual NBS + automático por CNPJ), mesma experiência da Consulta NCM, 100% ancorada nas bases oficiais + 2 arquivos vivos versionados, usando a mesma Aurum AI (GATE determinístico → fallback, mesma trilha)
+**Depends on**: Phase 6 (reusa GATE, worker por índice, `taxa_uso_ia`, trilha `audit_log` + `.jsonl`)
+**Requirements**: [SER-01, SER-02, SER-03, SER-04, SER-05]
+**Success Criteria** (all TRUE, verificado em 2026-10-03: `tsc` 0 + 648/648 testes):
+  1. `npm run base` ingere `CNAE X ANEXO.json` (1090) + `NBS SERVIÇOS.json` (137→112 dedupe) com `MANIFEST.fontesVivas`
+  2. `122011100 → 200/200028 Anexo II 60%` pelo resolvedor NBS; regra geral `000/000001` fora da base
+  3. Descrição livre ("aula de inglês online") ancora no NBS via determinístico/IA; sem lastro = NÃO SEI
+  4. CNPJ via BrasilAPI (DV local + CNAE + cache 30d) rende 1 cartão elegante por CNAE (teto matriz por Situação)
+  5. Alíquotas sempre de `calcularTributos` + `REF_DEFAULT`; rótulos "Anexo Simples" vs "Anexo LC 214" separados
+**Plans**: 6 plans (todos executados)
+- [x] 07-01: Base viva + tracer Serviços (cnae.json, Dexie v11, `resolverClassificacoesNbs`, view `servicos`)
+- [x] 07-02: Busca textual NBS + IA de serviços (vocabulário/sinais próprios, GATE `dominio nbs`, ficha absoluta NBS)
+- [x] 07-03: Ponte CNAE→NBS (matriz Situação→teto, palavras-chave por divisão, Fator R como refino)
+- [x] 07-04: Consulta por CNPJ (BrasilAPI estendida com CNAE, `consultasCnpj` TTL, veredito por atividade)
+- [x] 07-05: UI Serviços completa (2 abas/modos, `CartaoCnae`/`FaixaCnae`, modais glass reutilizados, Ctrl+E via registro)
+- [x] 07-06: Testes (4 suítes novas, 41 testes) + versionamento vivo + docs
+
 ## Progress
 
 **Execution Order:**
@@ -153,3 +172,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 4. Reporting & Export | 0/4 | Not started | - |
 | 5. Calculadora Tributária & Validação Avançada | 0/5 | Not started | - |
 | 6. Módulo IA Offline NCM | 0/11 | Not started | - |
+| 7. Menu Serviços (NBS + CNAE + CNPJ) | 6/6 | **Implementada** | 2026-10-03 |

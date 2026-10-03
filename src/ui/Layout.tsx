@@ -25,6 +25,7 @@ const NAV: { secao?: string; itens: { id: ViewId; icone: NomeIcone; rotulo: stri
     itens: [
       { id: 'calculadora', icone: 'calculadora', rotulo: 'Calculadora' },
       { id: 'consulta', icone: 'lupa', rotulo: 'Consulta NCM' },
+      { id: 'servicos', icone: 'fornecedor', rotulo: 'Serviços (NBS)' },
       { id: 'lote', icone: 'pasta', rotulo: 'Classificação em lote' },
       { id: 'nfe', icone: 'nota', rotulo: 'Notas Fiscais (XML)' },
     ],

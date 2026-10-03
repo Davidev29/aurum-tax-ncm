@@ -115,6 +115,7 @@ const aurum: AurumBridge = {
       ipcRenderer.invoke('ia:classificar', descricao, candidatos),
     buscar: (consulta: string, k?: number) => ipcRenderer.invoke('ia:buscar', consulta, k),
     status: (): Promise<StatusIaBridge> => ipcRenderer.invoke('ia:status'),
+    traduzir: (texto: string, para?: 'pt' | 'en') => ipcRenderer.invoke('ia:traduzir', texto, para),
   },
 }
 

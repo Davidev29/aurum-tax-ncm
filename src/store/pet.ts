@@ -22,6 +22,8 @@
  * | focar/digitar na Calculadora               | calculating  | "Deixa eu conferir com a lupinha…" |
  * | adicionar item na Calculadora              | calculating  | "Mais um na conta!"     |
  * | classificar/buscar (loading)             | thinking     | "Deixa eu conferir…"      |
+ * | busca unificada ativa (farejo + varredura)  | searching    | "Farejando 'X'…" + lupa investigativa |
+ * | resultado entregue (lupa ainda varrendo)    | celebrating  | "Achei! 'X' é NCM …!" + lupa varrendo |
  * | resultado encontrado                     | celebrating  | "Achei a classificação!"  |
  * | toast ok / PDF ou Excel exportado        | happy        | "Boa!"                    |
  * | toast err / NCM inválido                 | angry        | "Hmm, esse NCM…"          |
@@ -46,6 +48,7 @@ import { create } from 'zustand'
 export type PetMood =
   | 'idle'
   | 'reading'
+  | 'searching'
   | 'walking'
   | 'waving'
   | 'sleeping'
@@ -63,6 +66,7 @@ export type PetMood =
 const DURACAO: Record<PetMood, number> = {
   idle: 0,
   reading: 4200,
+  searching: 6500,
   walking: 1600,
   waving: 2600,
   sleeping: 0, // pegajoso: só sai com interação
@@ -83,12 +87,21 @@ interface PetState {
   frase: string
   /** Contador — incrementa a cada ação; serve de "gatilho" p/ re-disparar CSS. */
   seq: number
+  /**
+   * Ideia acesa (lâmpada do lote) — ortogonal ao `mood`: a conclusão do lote
+   * liga `celebrating` (confete + lupa) + `eureka` (lâmpada + glow + raios).
+   * Desliga sozinha em 4,5 s ou ao aquietar.
+   */
+  eureka: boolean
   agir: (mood: PetMood, frase?: string, duracaoMs?: number) => void
   /** Volta ao respiro neutro (usado pelos temporizadores internos). */
   aquietar: () => void
+  dispararEureka: () => void
+  limparEureka: () => void
 }
 
 let timer: number | null = null
+let eurekaTimer: number | null = null
 
 function limparTimer() {
   if (timer !== null) {
@@ -97,10 +110,18 @@ function limparTimer() {
   }
 }
 
+function limparTimerEureka() {
+  if (eurekaTimer !== null) {
+    window.clearTimeout(eurekaTimer)
+    eurekaTimer = null
+  }
+}
+
 export const usePet = create<PetState>((set, get) => ({
   mood: 'idle',
   frase: '',
   seq: 0,
+  eureka: false,
 
   agir: (mood, frase = '', duracaoMs) => {
     limparTimer()
@@ -117,7 +138,21 @@ export const usePet = create<PetState>((set, get) => ({
 
   aquietar: () => {
     limparTimer()
-    set({ mood: 'idle', frase: '' })
+    limparTimerEureka()
+    set({ mood: 'idle', frase: '', eureka: false })
+  },
+
+  dispararEureka: () => {
+    limparTimerEureka()
+    set({ eureka: true })
+    eurekaTimer = window.setTimeout(() => {
+      get().limparEureka()
+    }, 4500)
+  },
+
+  limparEureka: () => {
+    limparTimerEureka()
+    if (get().eureka) set({ eureka: false })
   },
 }))
 
@@ -136,6 +171,13 @@ export const FRASES_CALCULANDO = [
   'Somando tim-tim por tim-tim…',
   'Lupinha a postos, bora somar!',
   'IBS mais CBS… farejando o total…',
+]
+
+/** Frases da pesquisa investigativa — a lupa varre enquanto ela fala. */
+export const FRASES_PESQUISANDO = [
+  'Vasculhando cada cantinho…',
+  'Lupinha em modo detetive…',
+  'Rastreando pista por pista…',
 ]
 
 /** Dá cafuné: nunca brava, sempre derrete. */

@@ -17,6 +17,7 @@
     "ia:indice": "node scripts/gerar-indice-ia.mjs",
     "ia:testar-indice": "node scripts/testar-indice-ia.mjs",
     "ia:validar-conhecimento": "node scripts/validar-conhecimento.mjs",
+    "ia:cobertura": "node scripts/cobertura-traducao.mjs --min 8 --top 25",
     "predev": "node scripts/kill-port.mjs 5173 && npm run base && npm run build:electron",
     "dev": "concurrently -k -s first \"npm:dev:renderer\" \"npm:dev:electron\"",
     "prestart": "npm run build",
@@ -43,6 +44,7 @@
     "electron-updater": "^6.8.9",
     "fast-xml-parser": "^5.11.1",
     "framer-motion": "^13.4.6",
+    "node-llama-cpp": "^3.22.1",
     "pdfmake": "^0.3.11",
     "react": "^19.3.0",
     "react-chartjs-2": "^5.3.1",
@@ -105,7 +107,10 @@
       {
         "from": "recursos-ia/dados-brutos",
         "to": "recursos-ia/dados-brutos",
-        "filter": ["**/*", "!**/.gitkeep"]
+        "filter": [
+          "**/*",
+          "!**/.gitkeep"
+        ]
       },
       {
         "from": "recursos-ia/indice-ncm/indice-lexical.json",
@@ -122,11 +127,18 @@
       {
         "from": "recursos-ia/conhecimento",
         "to": "recursos-ia/conhecimento",
-        "filter": ["**/*.json", "**/*.md"]
+        "filter": [
+          "**/*.json",
+          "**/*.md"
+        ]
       },
       {
         "from": "recursos-ia/CHECKSUMS.txt",
         "to": "recursos-ia/CHECKSUMS.txt"
+      },
+      {
+        "from": "recursos-ia/modelo/ailo-152m-v2-q4_k_m.gguf",
+        "to": "recursos-ia/modelo/ailo-152m-v2-q4_k_m.gguf"
       }
     ],
     "asarUnpack": [
