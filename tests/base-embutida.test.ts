@@ -66,8 +66,9 @@ describe('normalização da base embutida', () => {
     expect(nbs).toHaveLength(arquivoReforma.meta.totalNbs)
 
     // Espelha `MANIFEST.json` — atualize junto com a base se ela for recompilada.
+    // NBS vem do arquivo vivo dedupicado (137 linhas → 112 vínculos únicos).
     expect([referencia.length, cst.length, cstct.length, ncm.length, nbs.length, nomenclatura.length])
-      .toEqual([164, 17, 132, 2335, 137, 15156])
+      .toEqual([164, 17, 132, 2335, 112, 15156])
   })
 
   it('preserva descrições, documentos, alíquotas e atos', () => {
@@ -282,7 +283,8 @@ describe('semeação da base embutida', () => {
         cstClassTrib: 132,
         referencia: 164,
         nomenclatura: 15156,
-        nbs: 137,
+        nbs: 112,
+        cnae: 1090,
         embutida: true,
       })
       expect(status.ultimaImportacao?.arquivo).toBe(arquivoReforma.meta.arquivoOrigem)

@@ -146,6 +146,30 @@ const GRUPOS_SINONIMOS_BASE = [
   ['shampoo', 'xampus', 'sabonete', 'sabao', 'saboes', 'toucador'],
   ['lapis', 'caderno', 'cadernos', 'mochila', 'mochilas', 'caneta', 'papelaria'],
   ['sapato', 'sapatos', 'calcado', 'tenis'],
+  // Expansão máxima v2: químicos / farma / plásticos / madeira-papel /
+  // máquinas / instrumentos (oficial ↔ comercial). Mesmos grupos no worker.
+  ['acido', 'acidos', 'sulfurico', 'cloridrico', 'nitrico', 'sulfato', 'cloreto', 'nitrato', 'fosfato', 'carbonato', 'hidroxido', 'oxido', 'amonio', 'potassio', 'magnesio'],
+  ['metanol', 'etanol', 'alcool', 'glicerina', 'acetona', 'benzeno', 'ureia', 'etileno', 'propileno', 'acetato', 'eter', 'cetona', 'ester'],
+  ['comprimido', 'capsula', 'drajea', 'xarope', 'vacina', 'pomada', 'antibiotico', 'analgesico', 'dipirona', 'paracetamol', 'amoxicilina', 'vitamina', 'suplemento', 'medicamento', 'farmaco'],
+  ['fertilizante', 'adubo', 'npk', 'fosfatado', 'nitrogenado', 'herbicida', 'inseticida', 'fungicida', 'pesticida', 'glifosato', 'defensivo'],
+  ['tinta', 'verniz', 'pigmento', 'corante', 'solvente', 'resina', 'esmalte'],
+  ['plastico', 'polietileno', 'pvc', 'acrilico', 'silicone', 'isopor', 'embalagem', 'mangueira', 'borracha', 'latex'],
+  ['madeira', 'tabua', 'compensado', 'laminado', 'palete', 'lenha', 'carvao', 'cortica', 'papel', 'papelao', 'cartolina', 'etiqueta'],
+  ['torno', 'fresa', 'prensa', 'esmeril', 'motoserra', 'caldeira', 'gerador', 'transformador', 'compressor', 'elevador', 'maquina', 'motor', 'bomba', 'valvula', 'rolamento', 'engrenagem'],
+  ['oculos', 'lente', 'armacao', 'termometro', 'microscopio', 'relogio', 'bussola', 'ortese', 'protese', 'ultrassom', 'tomografo'],
+  ['trator', 'colheitadeira', 'empilhadeira', 'reboque', 'locomotiva', 'vagao', 'barco', 'aviao', 'helicoptero', 'veiculo'],
+  ['poltrona', 'puff', 'comoda', 'beliche', 'pelucia', 'patinete', 'skate', 'patins', 'piscina', 'brinquedo', 'jogo', 'bola'],
+  ['alcatra', 'maminha', 'cupim', 'fraldinha', 'contrafile', 'carne', 'figado', 'coracao', 'mocoto', 'rabada'],
+  ['camarao', 'lula', 'polvo', 'mexilhao', 'ostra', 'lagosta', 'caranguejo', 'merluza', 'peixe'],
+  ['damasco', 'tamara', 'carambola', 'jabuticaba', 'acerola', 'graviola', 'pitaya', 'kiwi', 'nectarina', 'framboesa', 'mirtilo', 'fruta'],
+  ['pepino', 'quiabo', 'abobora', 'berinjela', 'chuchu', 'ervilha', 'lentilha', 'palmito', 'brocolis', 'espinafre', 'legume', 'verdura'],
+  ['mascavo', 'demerara', 'edulcorante', 'adocante', 'ketchup', 'mostarda', 'maionese', 'shoyu', 'dende', 'molho', 'tempero'],
+  ['chope', 'sidra', 'sake', 'conhaque', 'brandy', 'rum', 'vodka', 'tequila', 'licor', 'bebida'],
+  ['dell', 'hp', 'lenovo', 'asus', 'acer', 'computador', 'notebook'],
+  ['fiat', 'volkswagen', 'ford', 'chevrolet', 'toyota', 'veiculo'],
+  ['honda', 'yamaha', 'motocicleta', 'moto'],
+  ['sadia', 'seara', 'perdigao', 'carne'],
+  ['italac', 'piracanjuba', 'elege', 'leite'],
 ];
 
 /**

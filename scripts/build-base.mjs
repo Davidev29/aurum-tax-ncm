@@ -4,16 +4,28 @@
  * Compila as bases oficiais da Reforma Tributária em artefatos normalizados,
  * prontos para serem embutidos no aplicativo.
  *
- * ENTRADAS (pasta do projeto pai, sobrescrevível com AURUM_BASE_DIR):
+ * COMO ATUALIZAR (sem IA):
+ *   1. Jogue os JSONs oficiais dentro de `bases-fonte/` (pasta do projeto):
+ *   2. Rode `npm run base` — este script recompila `public/base/`
+ *   3. Rode `npm run dist:win` e publique o Release no GitHub
+ *
+ * ENTRADAS (ordem de procura — primeira que tiver os arquivos vence):
+ *   1. `AURUM_BASE_DIR` (se a variável de ambiente estiver definida)
+ *   2. `bases-fonte/` (pasta oficial dentro do projeto — USE ESTA)
+ *   3. pasta pai do projeto (legado: `C:\...\REFORMA NCM\*.json`)
+ *
  *   - classificacao_tributaria.json       -> referência CST x cClassTrib (164 registros)
  *   - reforma_tributaria_por_ncm.json     -> vinculos NCM/NBS + tabelas CST/cClassTrib
  *   - Tabela_NCM_Vigente_*.json           -> nomenclatura NCM vigente
+ *   - CNAE X ANEXO.json                   -> (Phase 7, vivo/opcional) CNAE × Anexo Simples + Fator R
+ *   - NBS SERVIÇOS.json                   -> (Phase 7, vivo/opcional) vínculos NBS (prefere ao legado)
  *
  * SAÍDA (public/base/):
  *   - classificacao-tributaria.json  referência normalizada (chave: cClassTrib)
- *   - reforma.json                   CST + cClassTrib + vinculos NCM
+ *   - reforma.json                   CST + cClassTrib + vinculos NCM/NBS
  *   - nomenclatura.json              nomenclatura vigente (auto-preenchimento)
- *   - MANIFEST.json                  metadados, contagens e checksums
+ *   - cnae.json                      CNAE × Anexo Simples (Phase 7)
+ *   - MANIFEST.json                  metadados, contagens e checksums (+fontesVivas)
  *
  * Por que normalizar?
  *   O JSON de origem tem 16 MB porque repete a mesma referencia (2,5 KB) em cada
@@ -29,7 +41,16 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const SOURCE_DIR = path.resolve(process.env.AURUM_BASE_DIR || path.join(PROJECT_ROOT, '..'));
+/** Pasta oficial das fontes dentro do projeto — é aqui que o Davi atualiza. */
+const DIR_FONTE_PROJETO = path.join(PROJECT_ROOT, 'bases-fonte');
+/** Pasta legada (arquivos soltos na pasta pai `REFORMA NCM\`). Mantida por compatibilidade. */
+const DIR_FONTE_LEGADO = path.join(PROJECT_ROOT, '..');
+/** Ordem de procura: env > projeto > legado. */
+const DIRS_FONTES = [
+  ...(process.env.AURUM_BASE_DIR ? [path.resolve(process.env.AURUM_BASE_DIR)] : []),
+  DIR_FONTE_PROJETO,
+  DIR_FONTE_LEGADO,
+];
 const OUT_DIR = path.join(PROJECT_ROOT, 'public', 'base');
 
 const SCHEMA_VERSION = 1;
@@ -129,9 +150,12 @@ const lerJson = (caminho) => {
 };
 
 const localizar = (padrao) => {
-  if (!fs.existsSync(SOURCE_DIR)) return null;
-  const achado = fs.readdirSync(SOURCE_DIR).find((f) => new RegExp(padrao).test(f));
-  return achado ? path.join(SOURCE_DIR, achado) : null;
+  for (const dir of DIRS_FONTES) {
+    if (!fs.existsSync(dir)) continue;
+    const achado = fs.readdirSync(dir).find((f) => new RegExp(padrao).test(f));
+    if (achado) return path.join(dir, achado);
+  }
+  return null;
 };
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
@@ -247,10 +271,93 @@ export function normalizarNbs(bruto) {
     cst: padCst(n.cst) ?? '',
     cClassTrib: padCct(n.cClassTrib) ?? '',
     baseLegal: String(n.baseLegal ?? '').trim(),
+    reducao: toNum(n.reducao),
     aliquotaIBS: toNum(n.aliquotaIBS),
     aliquotaCBS: toNum(n.aliquotaCBS),
     descricao: String(n.descricaoCompleta ?? '').trim(),
+    documentos: String(n.documentosFiscaisRelacionados ?? n.documentos ?? '').trim(),
   })).filter((n) => n.codigo.length === 9);
+}
+
+/** `0111301` → `0111-3/01` (máscara oficial do CNAE). */
+export const fmtCnae = (d) => (d.length === 7 ? `${d.slice(0, 4)}-${d.slice(4, 5)}/${d.slice(5, 7)}` : d);
+
+/** `"III / V"` → `['III','V']`; `"Não aplicável"` descartado. */
+export function normalizarAnexosSimples(v) {
+  return String(v ?? '')
+    .split('/')
+    .map((p) => p.trim().toUpperCase())
+    .filter((p) => p && p !== 'NÃO APLICÁVEL' && p !== 'NAO APLICAVEL');
+}
+
+const SITUACOES_CNAE = ['Permitido', 'Permitido com ressalvas', 'Depende da atividade'];
+
+const ehSim = (v) => ['sim', 's', '1', 'true'].includes(String(v ?? '').trim().toLowerCase());
+
+/**
+ * Phase 7 — `CNAE X ANEXO.json` (array plano, chaves PT acentuadas) ou o
+ * artefato `cnae.json` (`{ itens }`). Dedupe por `codigo7`.
+ */
+export function normalizarCnaeAnexo(bruto) {
+  const lista = Array.isArray(bruto) ? bruto : (bruto?.itens ?? []);
+  const vistos = new Set();
+  const out = [];
+  for (const raw of (lista ?? [])) {
+    if (!raw || typeof raw !== 'object') continue;
+    const codigo7 = digits(raw['CNAE'] ?? raw.codigo7 ?? raw.codigoFormatado ?? '');
+    if (codigo7.length !== 7 || vistos.has(codigo7)) continue;
+    vistos.add(codigo7);
+    const sit = String(raw['Situação'] ?? raw.situacao ?? '').trim();
+    out.push({
+      codigo7,
+      codigoFormatado: fmtCnae(codigo7),
+      descricao: String(raw['Descrição oficial'] ?? raw.descricao ?? '').trim(),
+      situacao: SITUACOES_CNAE.find((x) => x.toLowerCase() === sit.toLowerCase()) ?? 'Depende da atividade',
+      anexos: normalizarAnexosSimples(raw['Anexos'] ?? raw.anexos ?? ''),
+      fatorR: ehSim(raw['Fator R'] ?? raw.fatorR),
+    });
+  }
+  return out;
+}
+
+/**
+ * Phase 7 — `NBS SERVIÇOS.json` (array plano, chaves PT acentuadas) para o
+ * shape canônico de vínculo NBS, com dedupe por `codigo|cst|cClassTrib`
+ * (o arquivo vivo contém ~30 linhas repetidas). `Aliq. IBS/CBS` são
+ * preservadas como dado de origem/auditoria — o cálculo usa
+ * `calcularTributos` + `REF_DEFAULT`.
+ */
+export function normalizarNbsServicos(bruto) {
+  const lista = Array.isArray(bruto) ? bruto : [];
+  const vistos = new Set();
+  const vinculos = [];
+  let duplicados = 0;
+  lista.forEach((raw, i) => {
+    if (!raw || typeof raw !== 'object') return;
+    const codigo = digits(raw['NBS'] ?? raw.codigo ?? '');
+    if (codigo.length !== 9) return;
+    const cst = padCst(raw['CST'] ?? raw.cst) ?? '';
+    const cct = padCct(raw['CclassTrib'] ?? raw.cClassTrib) ?? '';
+    const chave = `${codigo}|${cst}|${cct}`;
+    if (vistos.has(chave)) {
+      duplicados++;
+      return;
+    }
+    vistos.add(chave);
+    vinculos.push({
+      id: `${codigo}|${cct}|${i}`,
+      codigo,
+      cst,
+      cClassTrib: cct,
+      baseLegal: String(raw['Base Legal'] ?? raw.baseLegal ?? '').trim(),
+      reducao: toNum(raw['Redução'] ?? raw.reducao),
+      aliquotaIBS: toNum(raw['Aliq. IBS'] ?? raw.aliquotaIBS),
+      aliquotaCBS: toNum(raw['Aliq. CBS'] ?? raw.aliquotaCBS),
+      descricao: String(raw['Descrição completa'] ?? raw.descricao ?? '').trim(),
+      documentos: String(raw['DFes Relac.'] ?? raw.documentos ?? '').trim(),
+    });
+  });
+  return { vinculos, duplicados };
 }
 
 // ---------------------------------------------------------------------------
@@ -315,7 +422,7 @@ function coletarIgnorados(refReforma, refNomen) {
 // Validações cruzadas (paridade com a base de origem)
 // ---------------------------------------------------------------------------
 
-function validar(referencia, cst, cstClassTrib, ncm, nomenclatura, ignorados = []) {
+function validar(referencia, cst, cstClassTrib, ncm, nomenclatura, ignorados = [], extras = {}) {
   const problemas = [];
   const cctRef = new Set(referencia.map((r) => r.cClassTrib));
   const cctTabela = new Set(cstClassTrib.map((c) => `${c.cst}|${c.cClassTrib}`));
@@ -348,6 +455,7 @@ function validar(referencia, cst, cstClassTrib, ncm, nomenclatura, ignorados = [
       ncmSemNomenclatura: semNomen.length,
       ncmDuplicados: duplicados,
       codigosIgnorados: ignorados.length,
+      ...(extras.estatisticas ?? {}),
     },
   };
 }
@@ -411,49 +519,75 @@ async function gatilhoIndiceIA(manifest, arquivosSaida) {
 
 async function main() {
   console.log(' Aurum Tax NCM — compilação da base tributária');
-  console.log(`   origem: ${SOURCE_DIR}`);
+  console.log(`   procura em: ${DIRS_FONTES.join('  |  ')}`);
 
   const arquivos = {
     referencia: localizar('^classificacao_tributaria\\.json$'),
     reforma: localizar('^reforma_tributaria_por_ncm\\.json$'),
     nomenclatura: localizar('^Tabela_NCM_Vigente_.*\\.json$'),
+    // Phase 7 — arquivos vivos de Serviços (preferência sobre o legado).
+    cnae: localizar('^CNAE X ANEXO\\.json$'),
+    nbsServicos: localizar('^NBS SERVIÇOS\\.json$'),
   };
 
-  const ausentes = Object.entries(arquivos).filter(([, v]) => !v).map(([k]) => k);
+  const ausentes = Object.entries({ referencia: arquivos.referencia, reforma: arquivos.reforma, nomenclatura: arquivos.nomenclatura }).filter(([, v]) => !v).map(([k]) => k);
+  // Phase 7 — arquivos vivos são OPCIONAIS: sem eles, NBS cai no legado e
+  // CNAE nasce vazio (a base embutida segue válida para NCM).
+  const vivosAusentes = ['cnae', 'nbsServicos'].filter((k) => !arquivos[k]);
   if (ausentes.length) {
     // Tolera fontes ausentes quando a saída versionada já existe: `public/base/`
     // é commitado no repo, então `npm run build`/`dist` funciona em qualquer
-    // máquina com só `git clone + npm ci` (sem os JSONs brutos da pasta pai).
+    // máquina com só `git clone + npm ci` (sem os JSONs brutos).
     const saidasVersionadas = ['classificacao-tributaria.json', 'reforma.json', 'nomenclatura.json', 'MANIFEST.json'];
     const saidasOk = saidasVersionadas.every((f) => fs.existsSync(path.join(OUT_DIR, f)));
     if (saidasOk) {
       console.warn(`\n⚠ Fontes ausentes (${ausentes.join(', ')}) — usando public/base/ versionado.`);
-      console.warn('  Para regenerar, defina AURUM_BASE_DIR com as bases de origem.');
+      console.warn('  Para atualizar: jogue os 3 JSONs em bases-fonte/ e rode `npm run base`.');
       return;
     }
     console.error(`\n✖ Arquivos de origem ausentes: ${ausentes.join(', ')}`);
-    console.error('  Defina AURUM_BASE_DIR apontando para a pasta que contém as bases.');
+    console.error('  Jogue os 3 JSONs em Aurum Tax NCM/bases-fonte/ e rode `npm run base`.');
     process.exit(1);
   }
 
+  const origemEfetiva = path.dirname(arquivos.referencia);
+  console.log(`   origem efetiva: ${origemEfetiva}`);
   console.log(`   referencia : ${path.basename(arquivos.referencia)}`);
   console.log(`   reforma     : ${path.basename(arquivos.reforma)}`);
   console.log(`   nomenclatura: ${path.basename(arquivos.nomenclatura)}`);
+  console.log(`   cnae        : ${arquivos.cnae ? path.basename(arquivos.cnae) : '(ausente — store CNAE vazia)'}`);
+  console.log(`   nbsServicos : ${arquivos.nbsServicos ? path.basename(arquivos.nbsServicos) : '(ausente — NBS do legado)'}`);
+  if (vivosAusentes.length) console.log(`   vivos ausentes: ${vivosAusentes.join(', ')} (tolerado)`);
 
   const t0 = Date.now();
   const refBruta = lerJson(arquivos.referencia);
   const refReforma = lerJson(arquivos.reforma);
   const refNomen = lerJson(arquivos.nomenclatura);
+  const refCnae = arquivos.cnae ? lerJson(arquivos.cnae) : [];
+  const refNbsVivo = arquivos.nbsServicos ? lerJson(arquivos.nbsServicos) : null;
 
   const referencia = normalizarReferencia(refBruta);
   const cst = normalizarCst(refReforma.tabelasAuxiliares?.cst);
   const cstClassTrib = normalizarCstClassTrib(refReforma.tabelasAuxiliares?.cstClassTrib);
   const ncm = normalizarNcm(refReforma.NCM);
-  const nbs = normalizarNbs(refReforma.NBS);
+  // Phase 7 — NBS prefere o arquivo vivo (dedupe); legado como fallback.
+  const nbsVivo = refNbsVivo ? normalizarNbsServicos(refNbsVivo) : { vinculos: normalizarNbs(refReforma.NBS), duplicados: 0 };
+  const nbs = nbsVivo.vinculos;
+  const cnae = normalizarCnaeAnexo(refCnae);
   const nomenclatura = normalizarNomenclatura(refNomen);
 
   const ignorados = coletarIgnorados(refReforma, refNomen);
-  const { problemas, estatisticas } = validar(referencia, cst, cstClassTrib, ncm, nomenclatura, ignorados);
+  const { problemas, estatisticas } = validar(referencia, cst, cstClassTrib, ncm, nomenclatura, ignorados, {
+    estatisticas: {
+      cnae: cnae.length,
+      nbsServicos: nbs.length,
+      nbsDuplicados: nbsVivo.duplicados,
+      fontesVivas: {
+        cnae: arquivos.cnae ? path.basename(arquivos.cnae) : null,
+        nbsServicos: arquivos.nbsServicos ? path.basename(arquivos.nbsServicos) : null,
+      },
+    },
+  });
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const geradoEm = new Date().toISOString();
@@ -502,13 +636,25 @@ async function main() {
       },
       itens: nomenclatura,
     }),
+    escrever('cnae.json', {
+      schema: SCHEMA_VERSION,
+      tipo: 'cnae',
+      meta: {
+        fonte: 'CNAE × Anexo Simples + Fator R (arquivo vivo)',
+        arquivoOrigem: arquivos.cnae ? path.basename(arquivos.cnae) : null,
+        descricao: 'Elegibilidade Simples por CNAE — anexos I–V do Simples Nacional, NÃO da LC 214/2025',
+        total: cnae.length,
+        geradoEm,
+      },
+      itens: cnae,
+    }),
   ];
 
   const manifest = {
     schema: SCHEMA_VERSION,
     geradoEm,
     origem: {
-      baseDir: SOURCE_DIR,
+      baseDir: origemEfetiva,
       arquivos: Object.fromEntries(Object.entries(arquivos).map(([k, v]) => [k, path.basename(v)])),
     },
     estatisticas,
@@ -543,6 +689,20 @@ async function main() {
   const ref = referencia.find((r) => r.cClassTrib === amostra.cClassTrib);
   console.log(`\n Amostra ${amostra.codigo}: CST ${amostra.cst} · cClassTrib ${amostra.cClassTrib}`
     + ` · redução IBS ${ref?.pRedIBS ?? '—'}% · CBS ${ref?.pRedCBS ?? '—'}% · anexo ${ref?.anexo ?? '—'}`);
+
+  // Amostra Phase 7 (Serviços): NBS vivo + CNAE.
+  const amostraNbs = nbs.find((n) => n.codigo === '122011100') ?? nbs[0];
+  if (amostraNbs) {
+    console.log(` Amostra NBS ${amostraNbs.codigo}: CST ${amostraNbs.cst} · cClassTrib ${amostraNbs.cClassTrib}`
+      + ` · ${amostraNbs.baseLegal || '—'} (${nbs.length} vínculos, ${nbsVivo.duplicados} dups removidos)`);
+  }
+  const amostraCnae = cnae.find((c) => c.codigo7 === '8599601') ?? cnae[0];
+  if (amostraCnae) {
+    console.log(` Amostra CNAE ${amostraCnae.codigoFormatado}: ${amostraCnae.descricao || '—'}`
+      + ` · ${amostraCnae.situacao} · Anexo Simples ${amostraCnae.anexos.join('/') || '—'} (${cnae.length} CNAEs)`);
+  } else {
+    console.log(' Amostra CNAE: store vazia (arquivo vivo ausente — tolerado).');
+  }
 
   process.exit(problemas.length ? 0 : 0);
 }
