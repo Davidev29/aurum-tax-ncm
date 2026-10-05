@@ -1,0 +1,102 @@
+{
+  "versao": "rag-v1",
+  "_comentario": "Catálogo das FONTES RAG do Aurum Tax NCM — o que o modelo pode consultar via ferramentas. DERIVADO de src/application/aurum-ai-registro-ferramentas.ts (ver scripts/gerar-catalogo-rag.mjs). Edite o TS, não este JSON.",
+  "fontes": [
+    {
+      "id": "indice-ncm",
+      "arquivo": "recursos-ia/indice-ncm/indice-lexical.json",
+      "tipo": "lexical-bm25",
+      "cobre": "2335 vínculos NCM (capítulo + nomenclatura + vínculo cClassTrib)",
+      "quandoUsar": "consultarNCM: produto descrito ou NCM de 8 dígitos",
+      "ferramentas": ["consultarNCM", "detalharCodigo", "calcularIBSCBS"]
+    },
+    {
+      "id": "base-ncm-ia",
+      "arquivo": "recursos-ia/dados-brutos/ncm-para-ia.json",
+      "tipo": "fichas-oficiais",
+      "cobre": "2335 fichas (descricaoExpandida + nomenclatura + capítulo + cClassTrib)",
+      "quandoUsar": "enriquecer candidatos do índice com nome/vínculo",
+      "ferramentas": ["consultarNCM", "detalharCodigo"]
+    },
+    {
+      "id": "nbs-servicos",
+      "arquivo": "bases-fonte/NBS SERVIÇOS.json + recursos-ia/conhecimento/contexto-nbs.json",
+      "tipo": "tabela-viva",
+      "cobre": "112+ vínculos NBS (9 dígitos × CST × cClassTrib, 23 grupos)",
+      "quandoUsar": "consultarNBS: serviço descrito ou NBS de 9 dígitos",
+      "ferramentas": ["consultarNBS", "detalharCodigo"]
+    },
+    {
+      "id": "cnae-anexo",
+      "arquivo": "public/base/cnae.json",
+      "tipo": "tabela-viva",
+      "cobre": "1090 CNAEs × Anexo Simples + Fator R",
+      "quandoUsar": "consultarCNAE: CNAE de 7 dígitos → Anexo",
+      "ferramentas": ["consultarCNAE", "calcularSimples"]
+    },
+    {
+      "id": "lc214",
+      "arquivo": "src/domain/services/lc214.ts + recursos-ia/conhecimento/lc214-artigos.json",
+      "tipo": "corpus-curado",
+      "cobre": "Artigos da LC 214/2025 (corpus offline embarcado)",
+      "quandoUsar": "explicarArtigoLC214: artigo citado ou tema livre",
+      "ferramentas": ["explicarArtigoLC214", "explicarConceito"]
+    },
+    {
+      "id": "conhecimento-curadoria",
+      "arquivo": "recursos-ia/conhecimento/sinonimos.json",
+      "tipo": "curadoria",
+      "cobre": "Pins termo→NCM (peso 500), sinônimos, marcas/siglas, erros comuns, frases-modelo (+ dicionario, marcas-siglas, erros-comuns, frases-modelo, pesos)",
+      "quandoUsar": "expansão de consulta + pins do RAG + correção ortográfica",
+      "ferramentas": ["consultarNCM", "consultarNBS"]
+    },
+    {
+      "id": "glossario-pt-en",
+      "arquivo": "recursos-ia/conhecimento/glossario-pt-en.json",
+      "tipo": "dicionario-bilingue",
+      "cobre": "Frases 3/2g + termos PT↔EN + en_para_pt curado",
+      "quandoUsar": "retrieval: consulta EN ancora no PT oficial (buscar + gate)",
+      "ferramentas": ["consultarNCM"]
+    },
+    {
+      "id": "notas-xml",
+      "arquivo": "Dexie NotaXml (importado via XML)",
+      "tipo": "dados-usuario",
+      "cobre": "Movimento importado: fornecedores, produtos, NCM/CFOP/CST, reduções, diferidos, períodos",
+      "quandoUsar": "consultarDadosXml / gerarRelatorioDados: pergunta sobre o movimento",
+      "ferramentas": ["consultarDadosXml", "gerarRelatorioDados", "consultarClientes"]
+    },
+    {
+      "id": "empresas",
+      "arquivo": "Dexie empresas + BrasilAPI (cache 30d)",
+      "tipo": "cadastro+rede",
+      "cobre": "Empresas locais + CNAEs/atividades via CNPJ",
+      "quandoUsar": "consultarCNPJ / verificarCadastroCnpj / consultarClientes",
+      "ferramentas": ["consultarCNPJ", "verificarCadastroCnpj", "consultarClientes"]
+    },
+    {
+      "id": "tabelas-simples",
+      "arquivo": "src/simples/tabelas.ts + src/simples/calculo.ts",
+      "tipo": "motor-calculo",
+      "cobre": "Anexos I–V, faixas RBT12, Fator R 0.28, CBS ref 0.088, DAS convencional/híbrido",
+      "quandoUsar": "calcularSimples / simularComparativo",
+      "ferramentas": ["calcularSimples", "simularComparativo"]
+    },
+    {
+      "id": "motor-ibs-cbs",
+      "arquivo": "src/domain/services/calculo.ts",
+      "tipo": "motor-calculo",
+      "cobre": "calcularTributos(valorBase, redIBS, redCBS, refIBS, refCBS)",
+      "quandoUsar": "calcularIBSCBS: código + base",
+      "ferramentas": ["calcularIBSCBS", "detalharCodigo"]
+    },
+    {
+      "id": "sistema-assistido",
+      "arquivo": "sistema (orquestrador + stores + UI)",
+      "tipo": "runtime",
+      "cobre": "Conta básica, cadastro assistido de produto, gráficos, relatórios, navegação, tempo, papo leve e barreira de escopo",
+      "quandoUsar": "fluxos com UI/store ou escrita assistida — o orquestrador continua dono da execução",
+      "ferramentas": ["calcularContaBasica", "cadastrarProdutoAssistido", "gerarGrafico", "gerarRelatorio", "navegarPara", "responderTempo", "responderLeve", "recusarForaDeEscopo"]
+    }
+  ]
+}
