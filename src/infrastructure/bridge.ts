@@ -84,6 +84,10 @@ export interface StatusIaBridge {
   modelPath: string | null
   /** Perfil da camada de compatibilidade (família/template/parâmetros). */
   perfil?: PerfilModeloIa | null
+  /** Troca automática de modelo ativa (vigia de recursos-ia/modelo/). */
+  observandoModelo?: boolean
+  /** ISO da última troca automática detectada (ou null). */
+  ultimaTrocaModelo?: string | null
   workerPath: string | null
   pid: number | null
   erro: string | null

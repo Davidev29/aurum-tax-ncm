@@ -57,6 +57,8 @@ export function DebugIA() {
   const modo = useIa((s) => s.modo)
   const mock = useIa((s) => s.mock)
   const erro = useIa((s) => s.erro)
+  const modeloArquivo = useIa((s) => s.modeloArquivo)
+  const observandoModelo = useIa((s) => s.observandoModelo)
   const candidatos = useIa((s) => s.candidatos)
   const ultima = useIa((s) => s.ultimaDecisao)
   const historico = useIa((s) => s.historico)
@@ -102,11 +104,14 @@ export function DebugIA() {
     }
     try {
       const s: StatusIaBridge = await bridge.ia.status()
+      const nomeArquivo = s.modelPath ? s.modelPath.split(/[/\\]/).pop() ?? null : null
       setConexao({
         status: s.pronto ? 'pronto' : 'erro',
         modo: s.modo,
         mock: s.mock,
         erro: s.erro,
+        modeloArquivo: nomeArquivo,
+        observandoModelo: s.observandoModelo === true,
       })
     } catch (e) {
       setConexao({
@@ -219,7 +224,16 @@ export function DebugIA() {
           <SeloAurumAI variante="compacto" />
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             status: {status} · {modo === 'modelo' ? 'modelo embutido ativo' : modo === 'erro' ? 'IA indisponível' : `modo: ${modo}`}
+            {modeloArquivo ? ` · ${modeloArquivo}` : ''}
           </span>
+          {observandoModelo ? (
+            <span
+              className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200"
+              title="Apague/troque o *.gguf em recursos-ia/modelo/ — o app recarrega sozinho, sem reiniciar"
+            >
+              troca automática ativa
+            </span>
+          ) : null}
           {erro ? <span className="text-[11px] text-red-500">{erro}</span> : null}
           <button type="button" className="btn btn-press btn-ghost btn-sm ml-auto" onClick={() => void atualizarStatus()}>
             Atualizar status

@@ -26,10 +26,17 @@
  */
 
 const fs = require('node:fs')
+const path = require('node:path')
+let caminhosIa = null
+try {
+  caminhosIa = require('./caminhos-ia.cjs')
+} catch (_) {
+  caminhosIa = null
+}
 const {
   resolverWorkerPath: resolverWorkerPathCompartilhado,
   resolverModeloEfetivo,
-} = require('./caminhos-ia.cjs')
+} = caminhosIa || {}
 
 const TIMEOUT_MS = 30_000
 const MODELO_ENV = 'AURUM_IA_MODEL'
@@ -83,7 +90,14 @@ function selecionarMockLocal(descricao, candidatos) {
  * `process.resourcesPath`/`app.asar.unpacked`, com fallback e log.
  */
 function resolverWorkerPath() {
-  return resolverWorkerPathCompartilhado(appRef)
+  try {
+    if (typeof resolverWorkerPathCompartilhado === 'function') {
+      return resolverWorkerPathCompartilhado(appRef)
+    }
+  } catch (_) {
+    // fallback abaixo
+  }
+  return null
 }
 
 function ligarRoteador(worker, aoPronto) {
@@ -239,6 +253,8 @@ function statusIa() {
     modo,
     modelPath: modeloPath,
     perfil: perfilModelo,
+    observandoModelo,
+    ultimaTrocaModelo,
     workerPath: proc ? resolverWorkerPath() : null,
     pid,
     erro: ultimoErro,
@@ -344,6 +360,206 @@ async function perfilModeloViaIa() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Troca automática de modelo (hot-swap): apagou o .gguf e colocou outro, o
+// sistema percebe sozinho — sem reiniciar o app.
+// `observarModelo(app)` vigia `recursos-ia/modelo/` com `fs.watch`; ao
+// detectar `*.gguf`/`modelo.json` novo/removido, aguarda o arquivo estabilizar
+// (cópia de centenas de MB leva minutos) e recarrega o worker com o perfil da
+// camada de compatibilidade. Desliga com `AURUM_IA_WATCH=0`.
+// ---------------------------------------------------------------------------
+
+let observadorModelo = null
+let observandoModelo = false
+let emRecargaModelo = false
+let recargaModeloPendente = null
+let timerRecargaModelo = null
+let ultimaTrocaModelo = null
+
+/** `true` para arquivos que disparam a troca (`*.gguf` + `modelo.json`). */
+function ehArquivoDeModelo(nome) {
+  const n = String(nome || '').toLowerCase().trim()
+  if (!n || n.startsWith('.') || n.startsWith('~')) return false
+  if (n.endsWith('.tmp') || n.endsWith('.part') || n.endsWith('.crdownload') || n.endsWith('.swp') || n.endsWith('.lock')) return false
+  return n.endsWith('.gguf') || n === 'modelo.json'
+}
+
+function tamanhoArquivo(caminho) {
+  try {
+    return fs.statSync(caminho).size
+  } catch (_) {
+    return -1 // ausente (remoção também é troca válida)
+  }
+}
+
+/**
+ * Aguarda o arquivo estabilizar (2 leituras iguais de tamanho): evita carregar
+ * um GGUF ainda em cópia. `ausente` estabiliza de imediato (remoção).
+ * Retorna `true` (estável) ou `false` (teto excedido).
+ */
+function aguardarArquivoEstavel(caminho, intervaloMs = 1500, tetoMs = 300000) {
+  return new Promise((resolve) => {
+    const ini = Date.now()
+    let anterior = tamanhoArquivo(caminho)
+    if (anterior < 0) {
+      resolve(true)
+      return
+    }
+    const timer = setInterval(() => {
+      const atual = tamanhoArquivo(caminho)
+      if (atual < 0 || atual === anterior) {
+        clearInterval(timer)
+        resolve(true)
+        return
+      }
+      anterior = atual
+      if (Date.now() - ini > tetoMs) {
+        clearInterval(timer)
+        resolve(false)
+      }
+    }, Math.max(250, intervaloMs))
+    if (timer.unref) timer.unref()
+  })
+}
+
+function avisoChecksumAusente(caminhoModelo, app) {
+  try {
+    if (!caminhoModelo || !caminhosIa || typeof caminhosIa.dirRecursosIa !== 'function') return null
+    const base = path.basename(caminhoModelo)
+    const arq = path.join(caminhosIa.dirRecursosIa(app), 'CHECKSUMS.txt')
+    if (!fs.existsSync(arq)) return `CHECKSUMS.txt ausente — registre o SHA256 de ${base}`
+    const txt = fs.readFileSync(arq, 'utf8')
+    const tem = txt.split('\n').some((l) => {
+      const t = l.trim()
+      return t && !t.startsWith('#') && t.includes(base)
+    })
+    if (!tem) return `SHA de ${base} não registrado em CHECKSUMS.txt (rode certutil + atualize o arquivo)`
+    return null
+  } catch (_) {
+    return null
+  }
+}
+
+async function recarregarModeloAgora(app, motivo) {
+  if (emRecargaModelo) {
+    recargaModeloPendente = motivo
+    return
+  }
+  emRecargaModelo = true
+  try {
+    do {
+      recargaModeloPendente = null
+      console.log(`[ia] troca de modelo detectada (${motivo}) — recarregando worker...`)
+      encerrarIaService()
+      const s = await iniciarIaService(app)
+      ultimaTrocaModelo = new Date().toISOString()
+      if (s.modelPath) {
+        const aviso = avisoChecksumAusente(s.modelPath, app)
+        console.log(`[ia] modelo efetivo: ${path.basename(s.modelPath)} modo=${s.modo}${s.perfil ? ` familia=${s.perfil.familia} ctx=${s.perfil.contextSize}` : ''}${aviso ? ` — AVISO: ${aviso}` : ''}`)
+      } else {
+        console.log(`[ia] nenhum modelo em recursos-ia/modelo/ (modo=${s.modo}) — coloque qualquer *.gguf para ativar`)
+      }
+    } while (recargaModeloPendente)
+  } catch (e) {
+    console.warn(`[ia] falha na troca automática de modelo: ${e instanceof Error ? e.message : String(e)}`)
+  } finally {
+    emRecargaModelo = false
+  }
+}
+
+function agendarRecargaModelo(app, motivo) {
+  try {
+    if (timerRecargaModelo) clearTimeout(timerRecargaModelo)
+  } catch (_) { /* ignora */ }
+  timerRecargaModelo = setTimeout(() => {
+    timerRecargaModelo = null
+    void (async () => {
+      try {
+        let alvo = null
+        try {
+          if (caminhosIa && typeof caminhosIa.descobrirGgufEfetivo === 'function') {
+            const achado = caminhosIa.descobrirGgufEfetivo(app)
+            alvo = (achado && achado.caminho) || null
+          }
+        } catch (_) { alvo = null }
+        if (alvo) {
+          const estavel = await aguardarArquivoEstavel(alvo)
+          if (!estavel) {
+            console.warn(`[ia] ${path.basename(alvo)} não estabilizou — troca adiada (toque o arquivo para tentar de novo)`)
+            return
+          }
+          if (alvo === modeloPath && realPronto) return // mesmo arquivo, nada a fazer
+        } else {
+          await new Promise((r) => setTimeout(r, 2000)) // remoção: pequena pausa anti-rajada
+        }
+        await recarregarModeloAgora(app, motivo)
+      } catch (e) {
+        console.warn(`[ia] falha ao agendar troca de modelo: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    })()
+  }, 2500)
+  if (timerRecargaModelo.unref) timerRecargaModelo.unref()
+}
+
+/**
+ * Liga a vigia de `recursos-ia/modelo/`. Idempotente; retorna se está ativa.
+ * Opt-out: `AURUM_IA_WATCH=0`.
+ */
+function observarModelo(app) {
+  if (observadorModelo) return true
+  try {
+    if (String(process.env.AURUM_IA_WATCH ?? '1') === '0') {
+      console.log('[ia] vigia de modelo desligada (AURUM_IA_WATCH=0)')
+      return false
+    }
+  } catch (_) { /* ligada por padrão */ }
+  let dir = null
+  try {
+    if (caminhosIa && typeof caminhosIa.caminhoDirModelo === 'function') {
+      dir = caminhosIa.caminhoDirModelo(app)
+    } else if (caminhosIa && typeof caminhosIa.dirRecursosIa === 'function') {
+      dir = path.join(caminhosIa.dirRecursosIa(app), 'modelo')
+    }
+  } catch (_) { dir = null }
+  if (!dir) return false
+  try {
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    observadorModelo = fs.watch(dir, { persistent: false }, (_evento, nome) => {
+      try {
+        if (!ehArquivoDeModelo(nome)) return
+        agendarRecargaModelo(app, `${_evento}:${nome}`)
+      } catch (_) { /* vigia nunca quebra o app */ }
+    })
+    observadorModelo.on('error', (e) => {
+      console.warn(`[ia] vigia de modelo falhou: ${e instanceof Error ? e.message : String(e)}`)
+      try { observadorModelo.close() } catch (_) { /* ignora */ }
+      observadorModelo = null
+      observandoModelo = false
+    })
+    observandoModelo = true
+    console.log(`[ia] troca automática de modelo ativa em ${dir} (apague/troque o *.gguf e aguarde)`)
+    return true
+  } catch (e) {
+    console.warn(`[ia] sem vigia de modelo em ${dir}: ${e instanceof Error ? e.message : String(e)}`)
+    observadorModelo = null
+    observandoModelo = false
+    return false
+  }
+}
+
+/** Desliga a vigia (chamado no `before-quit`). */
+function pararObservarModelo() {
+  try {
+    if (timerRecargaModelo) clearTimeout(timerRecargaModelo)
+  } catch (_) { /* ignora */ }
+  timerRecargaModelo = null
+  try {
+    if (observadorModelo) observadorModelo.close()
+  } catch (_) { /* ignora */ }
+  observadorModelo = null
+  observandoModelo = false
+}
+
 module.exports = {
   iniciarIaService,
   statusIa,
@@ -352,4 +568,8 @@ module.exports = {
   conversarViaIa,
   encerrarIaService,
   perfilModeloViaIa,
+  observarModelo,
+  pararObservarModelo,
+  ehArquivoDeModelo,
+  aguardarArquivoEstavel,
 }

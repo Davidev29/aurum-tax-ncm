@@ -1,6 +1,6 @@
 # Camada de compatibilidade do modelo + RAG agêntico
 
-## 1. Trocar o modelo: simples assim
+## 1. Trocar o modelo: simples assim (AUTOMÁTICO)
 
 ```
 recursos-ia/modelo/
@@ -10,11 +10,17 @@ recursos-ia/modelo/
 
 1. Apague o `.gguf` atual, copie o novo (qualquer nome, qualquer família:
    Qwen, Llama, Mistral, Phi, Gemma…).
-2. (Opcional) Copie `modelo.json.example` → `modelo.json` e ajuste
+2. **Só aguarde** — o app vigia `recursos-ia/modelo/` (`observarModelo`,
+   `electron/ia/ia-service.cjs`) e recarrega o worker SOZINHO quando o
+   arquivo estabiliza (cópia grande leva minutos; a vigia espera a cópia
+   terminar). Sem reiniciar, sem clicar em nada. O selo
+   "troca automática ativa" no DebugIA confirma; o log mostra
+   `[ia] troca de modelo detectada…`. Opt-out: `AURUM_IA_WATCH=0`.
+3. (Opcional) Copie `modelo.json.example` → `modelo.json` e ajuste
    `familia` / `templateChat` / `contextSize` / parâmetros. Sem o arquivo,
    a família é detectada pelo nome e o resto usa defaults seguros.
-3. Rebuild/reinicie. O status IA (`DebugIA` / `ia:status`) mostra o
-   `perfil` efetivo: `{ familia, templateChat, contextSize, arquivo }`.
+   O status IA (`DebugIA` / `ia:status`) mostra o `perfil` efetivo:
+   `{ familia, templateChat, contextSize, arquivo }`.
 
 Regras:
 

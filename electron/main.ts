@@ -31,6 +31,8 @@ import {
   conversarViaIa,
   encerrarIaService,
   iniciarIaService,
+  observarModelo,
+  pararObservarModelo,
   statusIa,
 } from './ia/ia-service.cjs'
 
@@ -737,10 +739,17 @@ if (!instanciaUnica) {
       configurarAtualizador()
       // IA offline (06-05): spawn do worker isolado; falha aqui não impede
       // a UI — o service degrada para mock e sinaliza no `ia:status`.
+      // Troca automática: `observarModelo` vigia `recursos-ia/modelo/` e
+      // recarrega o worker sozinho quando o .gguf muda (sem reiniciar).
       iniciarIaService(app)
         .then((s) => {
           if (!s.pronto) console.warn(`[ia] worker indisponível: ${s.erro ?? 'motivo desconhecido'}`)
           else console.log(`[ia] worker pronto (modo=${s.modo})`)
+          try {
+            observarModelo(app)
+          } catch (erro) {
+            console.warn(`[ia] sem troca automática de modelo: ${mensagemDeErro(erro)}`)
+          }
         })
         .catch((erro) => {
           console.warn(`[ia] falha ao iniciar worker: ${mensagemDeErro(erro)}`)
@@ -764,6 +773,11 @@ app.on('window-all-closed', () => {
 // IA offline (06-05): o worker `utilityProcess` deve morrer com o app —
 // kill síncrono de segurança, sem órfãos (critério do tracer).
 app.on('before-quit', () => {
+  try {
+    pararObservarModelo()
+  } catch (_) {
+    // vigia já parada
+  }
   encerrarIaService()
 })
 

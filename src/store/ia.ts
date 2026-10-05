@@ -36,13 +36,16 @@ interface IaState {
   modo: StatusIaBridge['modo']
   mock: boolean
   erro: string | null
+  /** Arquivo .gguf efetivo (só o nome) + troca automática ativa. */
+  modeloArquivo: string | null
+  observandoModelo: boolean
   candidatos: CandidatoIa[]
   ultimaDecisao: DecisaoIa | null
   historico: DecisaoIa[]
   /** Contadores da métrica `taxa_uso_ia = consultasIa / totalConsultas`. */
   totalConsultas: number
   consultasIa: number
-  setConexao: (s: Pick<IaState, 'status' | 'modo' | 'mock' | 'erro'>) => void
+  setConexao: (s: Pick<IaState, 'status' | 'modo' | 'mock' | 'erro'> & Partial<Pick<IaState, 'modeloArquivo' | 'observandoModelo'>>) => void
   registrarDecisao: (d: DecisaoIa) => void
   limpar: () => void
 }
@@ -54,6 +57,8 @@ export const useIa = create<IaState>((set) => ({
   modo: 'desligado',
   mock: true,
   erro: null,
+  modeloArquivo: null,
+  observandoModelo: false,
   candidatos: [],
   ultimaDecisao: null,
   historico: [],
