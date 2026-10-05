@@ -12,11 +12,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { NOME_IA, ROTULO_FALLBACK, fmtConfiancaAurumAI } from '@/domain/aurum-ai'
 import { classificarComIa } from '@/application/classificacao-ia'
+import { montarSistemaLivre, sanitizarLivre } from '@/application/aurum-ai-livre'
 import { SeloAurumAI, BarraConfiancaAurumAI } from '@/ui/aurum-ai'
 import { bridge, type StatusIaBridge } from '@/infrastructure/bridge'
 import { db } from '@/infrastructure/db/schema'
 import { taxaUsoIa, useIa, type DecisaoIa } from '@/store/ia'
 import { useUi } from '@/store/ui'
+import { Entrada, Secao } from '@/ui/motion'
 
 function seloVia(via: DecisaoIa['via']) {
   return via === 'ia'
@@ -66,6 +68,14 @@ export function DebugIA() {
 
   const [descricao, setDescricao] = useState('frango vivo para abate')
   const [ocupado, setOcupado] = useState(false)
+  // IA-06 — teste livre com o seu GGUF (conversa direta, sem gate fiscal).
+  const [perguntaLivre, setPerguntaLivre] = useState('Oi, tudo bem?')
+  const [thinkLivre, setThinkLivre] = useState(false)
+  const [brutoLivre, setBrutoLivre] = useState(() => {
+    try { return localStorage.getItem('aurum_ia_teste_livre') === '1' } catch { return false }
+  })
+  const [respLivre, setRespLivre] = useState<{ texto: string; motivo: string; ms: number; barrada: boolean } | null>(null)
+  const [ocupadoLivre, setOcupadoLivre] = useState(false)
   // Aceitação IA = decisões `via: ia` no histórico sem feedback "Não é esse"
   // (Dexie `ia_feedback`, best-effort). Rejeitada = mesmo par descrição+decisão.
   const [rejeitadas, setRejeitadas] = useState(0)
@@ -74,7 +84,7 @@ export function DebugIA() {
     let vivo = true
     void (async () => {
       try {
-        const fbs = await db.iaFeedback.toArray()
+        const fbs = await db.table('ia_feedback').toArray().catch(() => [])
         if (!vivo) return
         const chaves = new Set(fbs.map((f) => `${f.descricao}‖${f.decisao}`))
         setRejeitadas(historico.filter((h) => h.via === 'ia' && chaves.has(`${h.descricao}‖${h.codigoEscolhido}`)).length)
@@ -162,8 +172,47 @@ export function DebugIA() {
   const taxaNS = taxaNaoSei(historico)
   const aceitacao = viaIa > 0 ? Math.round(((viaIa - Math.min(rejeitadas, viaIa)) / viaIa) * 1000) / 10 : 100
 
+  const conversarLivreTeste = useCallback(async () => {
+    const p = perguntaLivre.trim()
+    if (!p || ocupadoLivre) return
+    if (!bridge?.ia?.conversar) {
+      toast('Canal ia:conversar indisponível — rode via Electron (npm run dev), não no navegador.', 'err')
+      return
+    }
+    setOcupadoLivre(true)
+    setRespLivre(null)
+    const t0 = Date.now()
+    try {
+      try { localStorage.setItem('aurum_ia_teste_livre', brutoLivre ? '1' : '0') } catch { /* ignora */ }
+      const r = await bridge.ia.conversar(p, {
+        sistema: montarSistemaLivre(),
+        historico: [],
+        think: thinkLivre,
+        maxTokens: thinkLivre ? 448 : 280,
+        temperature: 0.6,
+      })
+      if (!r.ok) {
+        setRespLivre({ texto: `ERRO: ${r.erro ?? 'sem modelo'} — verifique o *.gguf em recursos-ia/modelo/ e o status acima.`, motivo: 'erro', ms: Date.now() - t0, barrada: true })
+        return
+      }
+      const cru = String(r.texto ?? '')
+      const limpo = sanitizarLivre(cru)
+      setRespLivre({
+        texto: brutoLivre ? cru.slice(0, 1200) : (limpo ?? `BARRADA pela sanitização (fail-closed). Texto cru tinha ${cru.length} chars — ative "mostrar bruto" para ver. Início: "${cru.slice(0, 180)}"`),
+        motivo: String(r.motivo ?? ''),
+        ms: Date.now() - t0,
+        barrada: !limpo,
+      })
+    } catch (e) {
+      setRespLivre({ texto: `ERRO: ${e instanceof Error ? e.message : String(e)}`, motivo: 'excecao', ms: Date.now() - t0, barrada: true })
+    } finally {
+      setOcupadoLivre(false)
+    }
+  }, [perguntaLivre, ocupadoLivre, brutoLivre, thinkLivre, toast])
+
   return (
     <div className="space-y-4">
+      <Entrada>
       <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4 shadow-card">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-sm font-black">Worker {NOME_IA} (tracer 06-05)</h2>
@@ -208,8 +257,63 @@ export function DebugIA() {
           <div><dt className="font-bold text-slate-500">Taxa NÃO SEI</dt><dd className="font-mono">{taxaNS}%</dd></div>
         </dl>
       </section>
+      </Entrada>
+
+      <Entrada>
+      <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4 shadow-card">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-black">Conversa livre — teste com seu modelo (IA-06)</h2>
+          <SeloAurumAI variante="compacto" />
+          {!bridge?.ia?.conversar ? (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">sem Electron: rode npm run dev</span>
+          ) : null}
+        </div>
+        <p className="mt-1 text-[11px] text-slate-500">
+          Chama direto o GGUF atual (`recursos-ia/modelo/*.gguf` — qualquer modelo; ver perfil no status), sem gate fiscal. Desmarque “mostrar bruto” para ver o que passaria na sanitização do chat.
+        </p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            value={perguntaLivre}
+            onChange={(e) => setPerguntaLivre(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void conversarLivreTeste() }}
+            placeholder="Oi, tudo bem?"
+            className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-brand-500"
+            aria-label="Pergunta livre para o modelo local"
+          />
+          <button
+            type="button"
+            className="btn btn-press btn-sm bg-brand-600 font-bold text-white hover:bg-brand-500 disabled:opacity-50"
+            disabled={ocupadoLivre || !perguntaLivre.trim()}
+            onClick={() => void conversarLivreTeste()}
+          >
+            {ocupadoLivre ? 'Pensando…' : 'Conversar'}
+          </button>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-4 text-xs">
+          <label className="flex items-center gap-1">
+            <input type="checkbox" checked={thinkLivre} onChange={(e) => setThinkLivre(e.target.checked)} />
+            reasoning (think)
+          </label>
+          <label className="flex items-center gap-1">
+            <input type="checkbox" checked={brutoLivre} onChange={(e) => setBrutoLivre(e.target.checked)} />
+            mostrar bruto (sem sanitização)
+          </label>
+        </div>
+        {respLivre ? (
+          <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3 text-xs">
+            <div className="flex flex-wrap gap-2 text-[11px] text-slate-500">
+              <span className="font-mono">{respLivre.motivo}</span>
+              <span className="font-mono">{respLivre.ms} ms</span>
+              {respLivre.barrada && !brutoLivre ? <span className="font-bold text-amber-600">barrada no chat, ok no bruto</span> : null}
+            </div>
+            <p className="mt-1 whitespace-pre-wrap">{respLivre.texto}</p>
+          </div>
+        ) : null}
+      </section>
+      </Entrada>
 
       {ultima ? (
+        <Secao>
         <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4 shadow-card">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-black">Última decisão · Sugerido por {NOME_IA}</h2>
@@ -251,9 +355,11 @@ export function DebugIA() {
             <p className="mt-2 text-xs text-slate-500">Sem candidatos — caminho determinístico direto.</p>
           )}
         </section>
+        </Secao>
       ) : null}
 
       {historico.length ? (
+        <Secao>
         <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4 shadow-card">
           <h2 className="text-sm font-black">Histórico (últimas {historico.length})</h2>
           <ul className="mt-2 space-y-1 text-xs">
@@ -266,6 +372,7 @@ export function DebugIA() {
             ))}
           </ul>
         </section>
+        </Secao>
       ) : null}
     </div>
   )

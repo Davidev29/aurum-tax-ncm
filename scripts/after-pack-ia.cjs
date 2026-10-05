@@ -6,10 +6,13 @@
  * empacotar cada alvo.
  *
  * O que verifica:
- *   1. Worker copiado (`electron/dist/ia-worker.cjs` + `caminhos-ia.cjs`) — FALHA se ausente.
+ *   1. Worker copiado (`electron/dist/ia-worker.cjs` + `caminhos-ia.cjs` +
+ *      `perfil-modelo.cjs` [camada de compatibilidade]) — FALHA se ausente.
  *   2. Índice lexical RAG + `.manifest-hash` — FALHA se ausentes.
  *   3. Base `ncm-para-ia.json` (06-02) + `CHECKSUMS.txt` — FALHA se ausentes.
- *   4. GGUF `ailo-152m-v2-q4_k_m.gguf` — OBRIGATÓRIO (AI-first; FALHA se ausente).
+ *   4. GGUF em `recursos-ia/modelo/*.gguf` — OBRIGATÓRIO (AI-first; FALHA se
+ *      ausente). AGNÓSTICO: qualquer nome `*.gguf` vale (trocar o arquivo =
+ *      trocar o modelo; ver `electron/ia/perfil-modelo.cjs` + `modelo.json`).
  *   5. Se `appOutDir/resources/` já existir, confere que `extraResources`
  *      (`recursos-ia/...`) aterrissou — AVISA se não (não falha: layout varia
  *      por alfo NSIS/DMG/AppImage).
@@ -24,17 +27,32 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const GGUF = 'ailo-152m-v2-q4_k_m.gguf'
+const GGUF_LEGADO = 'Qwen3-0.6B-Q8_0.gguf'
 
 /** Checagens duras: `[relativo-à-raiz, descrição]`. */
 const OBRIGATORIOS = [
   ['electron/dist/ia-worker.cjs', 'worker IA copiado pelo esbuild'],
   ['electron/dist/caminhos-ia.cjs', 'módulo de caminhos IA copiado pelo esbuild'],
+  ['electron/dist/perfil-modelo.cjs', 'camada de compatibilidade do modelo (copiada pelo esbuild)'],
   ['recursos-ia/dados-brutos/ncm-para-ia.json', 'base unificada 06-02 (2335 NCMs)'],
   ['recursos-ia/indice-ncm/indice-lexical.json', 'índice lexical RAG (fallback 06-03)'],
   ['recursos-ia/indice-ncm/.manifest-hash', 'hash semântico do MANIFEST (gatilho 06-03)'],
   ['recursos-ia/CHECKSUMS.txt', 'checksums dos artefatos IA'],
 ]
+
+/** Qualquer `*.gguf` em `recursos-ia/modelo/` (modelo agnóstico). */
+function listarGgufsModelo(raiz) {
+  try {
+    const dir = path.join(raiz, 'recursos-ia', 'modelo')
+    if (!fs.existsSync(dir)) return []
+    return fs.readdirSync(dir)
+      .filter((f) => f.toLowerCase().endsWith('.gguf'))
+      .map((f) => ({ arquivo: f, abs: path.join(dir, f) }))
+      .filter((e) => { try { return fs.statSync(e.abs).size > 0 } catch { return false } })
+  } catch {
+    return []
+  }
+}
 
 function existe(p) {
   try {
@@ -69,15 +87,19 @@ async function afterPackIa(contexto = {}) {
   }
 
   // GGUF: OBRIGATÓRIO em produção (AI-first, modelo embutido nativo).
-  // Sem o modelo o instalador sairia sem IA real — falha o pack.
-  const gguf = path.join(raiz, 'recursos-ia', 'modelo', GGUF)
-  if (!existe(gguf)) {
+  // AGNÓSTICO: qualquer `*.gguf` em recursos-ia/modelo/ vale — trocar o
+  // arquivo = trocar o modelo (camada de compatibilidade resolve o perfil).
+  // Sem nenhum .gguf o instalador sairia sem IA real — falha o pack.
+  const ggufs = listarGgufsModelo(raiz)
+  if (!ggufs.length) {
     falhas.push(
-      `recursos-ia/modelo/${GGUF} — modelo IA embutido obrigatório (AI-first); coloque o .gguf em recursos-ia/modelo/ antes do dist`,
+      'recursos-ia/modelo/*.gguf — modelo IA embutido obrigatório (AI-first); coloque qualquer .gguf em recursos-ia/modelo/ antes do dist',
     )
-    console.error(`[afterPack:ia] FALTA: recursos-ia/modelo/${GGUF} (modelo IA embutido obrigatório)`)
+    console.error('[afterPack:ia] FALTA: recursos-ia/modelo/*.gguf (modelo IA embutido obrigatório)')
   } else {
-    console.log(`[afterPack:ia] ok: recursos-ia/modelo/${GGUF} (${tamanho(gguf)} bytes)`)
+    for (const g of ggufs) {
+      console.log(`[afterPack:ia] ok: recursos-ia/modelo/${g.arquivo} (${tamanho(g.abs)} bytes)`)
+    }
   }
 
   // 06-08 (IA-08) — checagens SUAVES (avisos, nunca falham o pack):
@@ -160,11 +182,12 @@ async function afterPackIa(contexto = {}) {
 
   // Artefatos deliberadamente EXCLUÍDOS do instalador: confirma que o
   // `extraResources` não os puxa por acidente via glob amplo.
-  // Modelo GGUF: EMBUTIDO nativamente via extraResources (package.json).
-  const ggufEmb = path.join(raiz, 'recursos-ia', 'modelo', GGUF)
-  if (existe(ggufEmb)) {
+  // Modelo GGUF: EMBUTIDO nativamente via extraResources (package.json —
+  // qualquer *.gguf + modelo.json do diretório recursos-ia/modelo/).
+  const ggufsEmb = listarGgufsModelo(raiz)
+  for (const g of ggufsEmb) {
     console.log(
-      `[afterPack:ia] ok: modelo embutido nativamente (${tamanho(ggufEmb)} bytes -> resources/recursos-ia/modelo/${GGUF})`,
+      `[afterPack:ia] ok: modelo embutido nativamente (${tamanho(g.abs)} bytes -> resources/recursos-ia/modelo/${g.arquivo})`,
     )
   }
   for (const rel of ['recursos-ia/embedding']) {

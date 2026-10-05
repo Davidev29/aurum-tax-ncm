@@ -38,7 +38,34 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RAIZ = path.resolve(__dirname, '..');
-const GGUF_PADRAO = path.join(RAIZ, 'recursos-ia', 'modelo', 'ailo-152m-v2-q4_k_m.gguf');
+// Entrada padrão: --entrada > env > manifesto > qualquer *.gguf (agnóstico).
+function descobrirGgufPadrao() {
+  const argEntrada = lerArg('--entrada');
+  if (argEntrada) return path.resolve(RAIZ, argEntrada);
+  const env = String(process.env.AURUM_IA_MODEL || '').trim();
+  if (env && fs.existsSync(env)) return env;
+  try {
+    const man = path.join(RAIZ, 'recursos-ia', 'modelo', 'modelo.json');
+    if (fs.existsSync(man)) {
+      const j = JSON.parse(fs.readFileSync(man, 'utf8'));
+      if (j && typeof j.arquivo === 'string') {
+        const abs = path.join(RAIZ, 'recursos-ia', 'modelo', j.arquivo.trim());
+        if (fs.existsSync(abs)) return abs;
+      }
+    }
+  } catch (_) { /* segue */ }
+  const legado = path.join(RAIZ, 'recursos-ia', 'modelo', 'Qwen3-0.6B-Q8_0.gguf');
+  if (fs.existsSync(legado)) return legado;
+  try {
+    const dir = path.join(RAIZ, 'recursos-ia', 'modelo');
+    if (fs.existsSync(dir)) {
+      const ggufs = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.gguf'));
+      if (ggufs.length) return path.join(dir, ggufs.slice().sort()[0]);
+    }
+  } catch (_) { /* segue */ }
+  return legado;
+}
+const GGUF_PADRAO = descobrirGgufPadrao();
 const AUX_PADRAO = path.join(RAIZ, 'assets', 'aux.dat');
 
 export const MAGIC = Buffer.from('AURUMIA1', 'ascii');

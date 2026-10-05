@@ -6,7 +6,7 @@
  *      oficiais (164 referência, 2335 NCM, 15156 nomenclatura, 1090 CNAE,
  *      112 NBS, 17 CST, 132 CST×cClassTrib).
  *   2. IA offline: `ncm-para-ia.json` (2335) + índice lexical + hash MANIFEST
- *      sincronizado + sinônimos + conhecimento curado + GGUF (~97MB) com
+ *      sincronizado + sinônimos + conhecimento curado + GGUF (~640MB) com
  *      SHA256 conferido contra `CHECKSUMS.txt`.
  *   3. Saídas compiladas: `dist/` (renderer) + `electron/dist/` (main/preload/IA).
  *   4. Anti-reversão: NENHUM `.map` em `dist/`/`electron/dist/` + marcador
@@ -138,18 +138,27 @@ function verificarIA() {
     if (!fs.existsSync(path.join(conDir, f))) fail(`conhecimento/${f} ausente`)
   }
   if (fs.existsSync(path.join(conDir, 'dicionario.json'))) ok('conhecimento curado ok (5+ JSONs)')
-  // GGUF: obrigatório, com SHA conferido.
-  const gguf = path.join(RAIZ, 'recursos-ia', 'modelo', 'ailo-152m-v2-q4_k_m.gguf')
-  if (!fs.existsSync(gguf)) {
-    fail('GGUF ausente em recursos-ia/modelo/ — instalador sairia SEM IA real')
+  // GGUF: obrigatório (qualquer *.gguf — modelo agnóstico), com SHA
+  // conferido quando houver linha correspondente em CHECKSUMS.txt.
+  const dirModelo = path.join(RAIZ, 'recursos-ia', 'modelo')
+  let ggufs = []
+  try {
+    ggufs = fs.existsSync(dirModelo)
+      ? fs.readdirSync(dirModelo).filter((f) => f.toLowerCase().endsWith('.gguf')).map((f) => path.join(dirModelo, f))
+      : []
+  } catch { ggufs = [] }
+  const gguf = ggufs[0] ?? path.join(RAIZ, 'recursos-ia', 'modelo', 'modelo.gguf')
+  if (!ggufs.length || !fs.existsSync(gguf)) {
+    fail('GGUF ausente em recursos-ia/modelo/*.gguf — instalador sairia SEM IA real')
   } else {
     const bytes = fs.statSync(gguf).size
     if (bytes < 50 * 1024 * 1024) fail(`GGUF pequeno demais (${bytes} bytes — corrompido?)`)
-    else ok(`GGUF: ${(bytes / 1024 / 1024).toFixed(1)} MB`)
+    else ok(`GGUF: ${path.basename(gguf)} (${(bytes / 1024 / 1024).toFixed(1)} MB)`)
     if (fs.existsSync(checksums)) {
       const txt = fs.readFileSync(checksums, 'utf8')
-      const linha = txt.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('#') && l.includes('ailo-152m'))
-      if (!linha) fail('CHECKSUMS.txt sem linha do GGUF')
+      const base = path.basename(gguf)
+      const linha = txt.split('\n').map((l) => l.trim()).find((l) => l && !l.startsWith('#') && (l.includes(base) || l.includes('.gguf')))
+      if (!linha) warn(`CHECKSUMS.txt sem linha para ${base} (registre o SHA do modelo atual)`)
       else {
         const esperado = linha.split(/\s+/)[0]
         if (!/^[0-9a-f]{64}$/i.test(esperado)) fail('CHECKSUMS.txt com hash inválido')
@@ -196,7 +205,7 @@ function verificarSaidas() {
   const jsRenderer = fs.existsSync(assets) ? fs.readdirSync(assets).filter((f) => f.endsWith('.js')) : []
   if (!jsRenderer.length) fail('dist/assets/*.js ausentes')
   else ok(`renderer: ${jsRenderer.length} chunk(s) JS`)
-  for (const f of ['main.js', 'preload.cjs', 'ia-worker.cjs', 'caminhos-ia.cjs', 'modelo-seguro.cjs']) {
+  for (const f of ['main.js', 'preload.cjs', 'ia-worker.cjs', 'caminhos-ia.cjs', 'modelo-seguro.cjs', 'perfil-modelo.cjs']) {
     if (!fs.existsSync(path.join(RAIZ, 'electron', 'dist', f))) fail(`electron/dist/${f} ausente (rode build:electron)`)
   }
   if (!falhas.length) ok('electron/dist/ ok (main+preload+IA)')

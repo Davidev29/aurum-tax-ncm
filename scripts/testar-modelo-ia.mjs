@@ -2,38 +2,78 @@
 /**
  * testar-modelo-ia.mjs — Plan 06-04 [IA-04] (Phase 6).
  *
- * Valida o LLM local `ailo-152m-v2-q4_k_m.gguf` (~97MB) com prompt rígido,
- * ou roda em MODO MOCK quando o GGUF está ausente (ambiente offline).
+ * Valida o LLM local `Qwen3-0.6B-Q8_0.gguf` (~640MB) pelo caminho REAL de
+ * produção: `electron/ia/ia-worker.cjs` via fork (trava lexical + prompt PT
+ * nativo + geração restrita por gramática — nunca inventa código), ou roda em
+ * MODO MOCK quando o GGUF está ausente.
  *
  * - NUNCA adiciona dependência ao package.json: `node-llama-cpp` (ESM-only v3)
- *   é carregado SOMENTE via `import()` dinâmico dentro de try/catch. Se o
- *   pacote não estiver instalado, cai para MOCK com aviso e exit 0.
- * - Prompt rígido: o modelo NUNCA inventa código; responde SOMENTE com o
- *   índice de um candidato (1..N) ou "NÃO SEI". Qualquer saída fora disso é
- *   coagida para NÃO SEI (fail-safe) e contabilizada como violação.
+ *   é carregado SOMENTE dentro do worker via `import()` dinâmico. Este script
+ *   só faz fork + IPC, sem dependências nativas.
  * - Com GGUF presente: valida SHA256 contra `recursos-ia/CHECKSUMS.txt`
- *   antes de carregar; aborta (exit 1) se o hash divergir ou for placeholder.
+ *   antes de carregar; aborta (exit 1) se o hash divergir.
+ * - O worker responde `mock:false` quando o modelo real decidiu; qualquer
+ *   resposta em modo mock no caminho REAL conta como violação (AI-first).
  * - Loga latência (ms) e RSS (MB) por caso + resumo.
  *
  * Uso:
  *   node scripts/testar-modelo-ia.mjs [--mock] [--json] [--modelo <path>]
- *
- * Compatível com o protocolo do spike (docs/spike-eletron-llama.md):
- * o worker real (06-05) aceitará `init{modelPath}` reaproveitando este prompt.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const RECURSOS_IA = path.join(REPO_ROOT, 'recursos-ia');
-const MODELO_PADRAO = path.join(RECURSOS_IA, 'modelo', 'ailo-152m-v2-q4_k_m.gguf');
+const DIR_MODELO = path.join(RECURSOS_IA, 'modelo');
+// Modelo agnóstico: `--modelo <path>` > env AURUM_IA_MODEL > manifesto >
+// legado > qualquer *.gguf (maior vence). Trocar o .gguf = trocar o modelo.
+function descobrirGgufPadrao() {
+  try {
+    const arg = process.argv.slice(2);
+    const i = arg.indexOf('--modelo');
+    if (i >= 0 && arg[i + 1]) return arg[i + 1];
+  } catch (_) { /* segue */ }
+  try {
+    const env = String(process.env.AURUM_IA_MODEL || '').trim();
+    if (env && fs.existsSync(env)) return env;
+  } catch (_) { /* segue */ }
+  try {
+    const man = path.join(DIR_MODELO, 'modelo.json');
+    if (fs.existsSync(man)) {
+      const j = JSON.parse(fs.readFileSync(man, 'utf8'));
+      if (j && typeof j.arquivo === 'string') {
+        const abs = path.join(DIR_MODELO, j.arquivo.trim());
+        if (fs.existsSync(abs)) return abs;
+      }
+    }
+  } catch (_) { /* segue */ }
+  const legado = path.join(DIR_MODELO, 'Qwen3-0.6B-Q8_0.gguf');
+  try { if (fs.existsSync(legado)) return legado; } catch (_) { /* segue */ }
+  try {
+    if (fs.existsSync(DIR_MODELO)) {
+      const ggufs = fs.readdirSync(DIR_MODELO)
+        .filter((f) => f.toLowerCase().endsWith('.gguf'))
+        .map((f) => ({ f, abs: path.join(DIR_MODELO, f), bytes: fs.statSync(path.join(DIR_MODELO, f)).size }))
+        .filter((e) => e.bytes > 0)
+        .sort((a, b) => b.bytes - a.bytes);
+      if (ggufs.length) return ggufs[0].abs;
+    }
+  } catch (_) { /* segue */ }
+  return legado;
+}
+const MODELO_PADRAO = descobrirGgufPadrao();
 const CHECKSUMS = path.join(REPO_ROOT, 'recursos-ia', 'CHECKSUMS.txt');
+const WORKER = path.join(REPO_ROOT, 'electron', 'ia', 'ia-worker.cjs');
 
-const ORCAMENTO = { latenciaMsTeto: 5000, latenciaMsMeta: 3000, rssMBTeto: 500, rssMBMeta: 300 };
+// Medido em 2026-10-04 (Qwen3-0.6B-Q8_0, CPU, via worker): load 5.6s,
+// inferência ~0.4s/caso, RSS ~1.3GB com modelo residente; gibberish barrado
+// na trava lexical sem acordar o LLM (0ms).
+const ORCAMENTO = { latenciaMsTeto: 15000, latenciaMsMeta: 8000, rssMBTeto: 1800, rssMBMeta: 1400 };
 
 // Casos de fumaça (somente NCM — NBS fora de escopo neste módulo).
 const CASOS = [
@@ -171,30 +211,95 @@ function sha256Arquivo(caminho) {
 }
 
 async function inferenciaReal(modelPath, descricao, candidatos) {
-  // ESM-only v3: import() dinâmico; pacote ausente → exceção controlada pelo chamador.
-  const { getLlama } = await import('node-llama-cpp');
+  // node-llama-cpp v3: `LlamaCompletion.generateCompletion` sobre a sequência
+  // (mesmo caminho do worker `electron/ia/ia-worker.cjs`). Qwen3-0.6B: ctx 2048.
+  // NOTA: mantida como referência direta; o `main()` valida pelo worker via
+  // fork (caminho de produção). Esta função segue o mesmo protocolo.
+  const { getLlama, LlamaCompletion, LlamaGrammar } = await import('node-llama-cpp');
   const llama = await getLlama();
   const model = await llama.loadModel({ modelPath });
   try {
-    const context = await model.createContext();
+    const context = await model.createContext({ contextSize: 2048 });
     try {
       const sequence = context.getSequence();
-      const prompt = montarPromptRigido(descricao, candidatos);
-      const t0 = agoraMs();
-      const texto = await sequence.prompt(prompt, {
-        maxTokens: 16,
-        temperature: 0,
-        topP: 1,
-      });
-      const ms = agoraMs() - t0;
-      const { codigo, violacao } = interpretarSaida(texto, candidatos);
-      return { codigo, ms, ramMB: rssMB(), bruto: String(texto).slice(0, 80), violacao };
+      const completion = new LlamaCompletion({ contextSequence: sequence });
+      let gramatica = null;
+      try {
+        const prompt = montarPromptRigido(descricao, candidatos);
+        const alts = candidatos.map((_, i) => `"${i + 1}"`).join(' | ');
+        gramatica = new LlamaGrammar(llama, { grammar: `root ::= (${alts} | "0")` });
+        const t0 = agoraMs();
+        const texto = await completion.generateCompletion(prompt, {
+          maxTokens: 4,
+          temperature: 0,
+          topP: 1,
+          grammar: gramatica,
+        });
+        const ms = agoraMs() - t0;
+        const { codigo, violacao } = interpretarSaida(texto, candidatos);
+        return { codigo, ms, ramMB: rssMB(), bruto: String(texto).slice(0, 80), violacao };
+      } finally {
+        if (gramatica && typeof gramatica.dispose === 'function') gramatica.dispose();
+        if (typeof completion.dispose === 'function') await completion.dispose();
+      }
     } finally {
       if (typeof context.dispose === 'function') await context.dispose();
     }
   } finally {
     if (typeof model.dispose === 'function') await model.dispose();
   }
+}
+
+/**
+ * Harness do caminho de produção: fork do `ia-worker.cjs` + IPC `{id,cmd}`.
+ * Carrega o modelo UMA vez (`init`) e classifica cada caso (`classificar`).
+ */
+function iniciarWorkerFork() {
+  return new Promise((resolver, rejeitar) => {
+    let filho;
+    try {
+      filho = fork(WORKER, [], { stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+    } catch (e) {
+      rejeitar(e);
+      return;
+    }
+    const timer = setTimeout(() => rejeitar(new Error('timeout esperando "pronto" do worker')), 60_000);
+    filho.on('message', (msg) => {
+      if (msg && typeof msg === 'object' && msg.cmd === 'pronto' && (msg.id === null || msg.id === undefined)) {
+        clearTimeout(timer);
+        resolver(filho);
+      }
+    });
+    filho.on('error', (e) => {
+      clearTimeout(timer);
+      rejeitar(e);
+    });
+  });
+}
+
+function rpcWorker(filho, cmd, carga = {}, timeoutMs = 120_000) {
+  return new Promise((resolver, rejeitar) => {
+    const id = Math.floor(Math.random() * 1e9);
+    const timer = setTimeout(() => {
+      filho.off('message', aoResponder);
+      rejeitar(new Error(`timeout (${timeoutMs}ms) no comando "${cmd}"`));
+    }, timeoutMs);
+    function aoResponder(msg) {
+      if (msg && typeof msg === 'object' && msg.id === id) {
+        clearTimeout(timer);
+        filho.off('message', aoResponder);
+        resolver(msg);
+      }
+    }
+    filho.on('message', aoResponder);
+    try {
+      filho.send({ id, cmd, ...carga });
+    } catch (e) {
+      clearTimeout(timer);
+      filho.off('message', aoResponder);
+      rejeitar(e);
+    }
+  });
 }
 
 async function main() {
@@ -209,7 +314,9 @@ async function main() {
 
   let hashOk = null;
   if (ggufExiste) {
-    const esperado = lerChecksums().get('modelo/ailo-152m-v2-q4_k_m.gguf');
+    const base = path.basename(modelPath);
+    const mapa = lerChecksums();
+    const esperado = mapa.get(`modelo/${base}`) ?? [...mapa.values()][0];
     if (!esperado || /^PENDENTE/i.test(esperado)) {
       console.error(
         `[06-04] ABORTADO: GGUF presente mas sem hash real em recursos-ia/CHECKSUMS.txt. ` +
@@ -241,6 +348,25 @@ async function main() {
   }
   const realAtivo = ggufExiste && moduloLlamaOk;
 
+  // Caminho REAL = worker de produção (fork único, modelo carregado uma vez).
+  let worker = null;
+  if (realAtivo) {
+    try {
+      worker = await iniciarWorkerFork();
+      const rInit = await rpcWorker(worker, 'init', { mock: false, modelPath }, 300_000);
+      if (!rInit.ok || rInit.mock !== false) {
+        console.error(`[06-04] Falha no init real: ${rInit.erro ?? 'worker em mock'}`);
+        try { worker.kill() } catch (_) { /* ignora */ }
+        process.exit(1);
+      }
+      console.log(`[06-04] worker real pronto (load ${rInit.msLoad}ms, rss ${rInit.ramMB}MB).`);
+    } catch (e) {
+      console.error(`[06-04] Falha ao iniciar worker real: ${e?.message ?? e}`);
+      try { if (worker) worker.kill() } catch (_) { /* ignora */ }
+      process.exit(1);
+    }
+  }
+
   const resultados = [];
   let violacoes = 0;
   for (const caso of CASOS) {
@@ -251,20 +377,25 @@ async function main() {
     let bruto = '';
     if (realAtivo) {
       try {
-        const r = await inferenciaReal(modelPath, caso.descricao, caso.candidatos);
+        const r = await rpcWorker(worker, 'classificar', { descricao: caso.descricao, candidatos: caso.candidatos });
+        if (!r.ok) {
+          console.error(`[06-04] Falha na inferência real (${caso.nome}): ${r.erro ?? 'sem resposta'}`);
+          process.exit(1);
+        }
         codigo = r.codigo;
-        motivo = 'llm-restrito';
-        bruto = r.bruto;
-        if (r.violacao) violacoes += 1;
+        motivo = r.motivo;
+        bruto = r.saidaBruta ? String(r.saidaBruta).slice(0, 80) : '';
+        // AI-first: resposta em mock no caminho real = violação.
+        if (r.mock) violacoes += 1;
         resultados.push({
           caso: caso.nome,
           codigo,
-          confianca: codigo === 'NÃO SEI' ? 0 : 1,
-          motivo,
-          ms: r.ms,
-          rssMB: r.ramMB,
-          violacao: r.violacao,
-          bruto,
+          confianca: r.confianca ?? (codigo === 'NÃO SEI' ? 0 : 1),
+          motivo: r.mock ? `${motivo ?? 'mock'}+mock-inesperado` : motivo,
+          ms: r.ms ?? (agoraMs() - t0),
+          rssMB: r.ramMB ?? Math.max(rssAntes, rssMB()),
+          violacao: !!r.mock,
+          ...(bruto ? { bruto } : {}),
         });
         continue;
       } catch (e) {
@@ -323,7 +454,7 @@ async function main() {
       rssOk: realAtivo ? rssMax <= ORCAMENTO.rssMBTeto : null,
       notaMock: realAtivo
         ? 'medidas reais do modelo'
-        : 'medidas do MOCK — NÃO provam orçamento do GGUF real (~97MB, ~300MB RAM)',
+        : 'medidas do MOCK — NÃO provam orçamento do GGUF real (~640MB, ~1.4GB RAM)',
     },
   };
 
@@ -346,8 +477,16 @@ async function main() {
         `latMax=${latMax}ms rssMax=${rssMax}MB`,
     );
     if (!realAtivo) {
-      console.log('[06-04] NOTA: latência/RAM acima são do MOCK; orçamento real (<5s/~300MB) pendente de GGUF.');
+      console.log('[06-04] NOTA: latência/RAM acima são do MOCK; orçamento real (<15s/~1.4GB) pendente de GGUF.');
     }
+  }
+
+  if (worker) {
+    try {
+      await rpcWorker(worker, 'encerrar', {}, 15_000).catch(() => null);
+    } catch (_) { /* best-effort */ }
+    try { worker.kill() } catch (_) { /* ignora */ }
+    worker = null;
   }
 
   if (!restricaoOk || violacoes > 0) {

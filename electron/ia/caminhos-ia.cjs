@@ -28,7 +28,21 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const NOME_GGUF = 'ailo-152m-v2-q4_k_m.gguf'
+const NOME_GGUF = 'Qwen3-0.6B-Q8_0.gguf'
+
+/**
+ * CAMADA DE COMPATIBILIDADE (modelo agnóstico): `NOME_GGUF` acima é o nome
+ * LEGADO, mantido para compatibilidade. A descoberta efetiva delega a
+ * `perfil-modelo.cjs` (`descobrirModelo`): manifesto `modelo.json` → env
+ * `AURUM_IA_MODEL` → legado → qualquer `*.gguf`. Trocar de modelo = trocar o
+ * arquivo `.gguf` em `recursos-ia/modelo/` — nenhum código muda.
+ */
+let perfilModelo = null
+try {
+  perfilModelo = require('./perfil-modelo.cjs')
+} catch (_) {
+  perfilModelo = null
+}
 
 /** `true` quando rodando dentro do app empacotado. */
 function ehEmpacotado(app) {
@@ -92,8 +106,27 @@ function caminhoBaseIa(app) {
   return path.join(dirRecursosIa(app), 'dados-brutos', 'ncm-para-ia.json')
 }
 
-/** GGUF do LLM local (06-04; ausente offline → `null`, modo mock). */
+/** Diretório `recursos-ia/modelo/` efetivo (qualquer `*.gguf` + `modelo.json`). */
+function caminhoDirModelo(app) {
+  return path.join(dirRecursosIa(app), 'modelo')
+}
+
+/** GGUF do LLM local (agnóstico: descoberta via perfil-modelo; ausente → `null`, modo mock). */
 function caminhoModeloGguf(app) {
+  try {
+    if (perfilModelo && typeof perfilModelo.descobrirModelo === 'function') {
+      const achado = perfilModelo.descobrirModelo(caminhoDirModelo(app))
+      if (achado && achado.caminho) {
+        try {
+          if (fs.existsSync(achado.caminho)) return achado.caminho
+        } catch (_) {
+          // ignora
+        }
+      }
+    }
+  } catch (_) {
+    // cai no legado abaixo
+  }
   const alvo = path.join(dirRecursosIa(app), 'modelo', NOME_GGUF)
   try {
     if (fs.existsSync(alvo)) return alvo
@@ -101,6 +134,48 @@ function caminhoModeloGguf(app) {
     // ignora
   }
   return null
+}
+
+/**
+ * Descoberta detalhada do modelo (`{ caminho, arquivo, origem }`).
+ * `origem`: 'manifesto' | 'env' | 'legado' | 'descoberta' | null.
+ */
+function descobrirGgufEfetivo(app) {
+  try {
+    if (perfilModelo && typeof perfilModelo.descobrirModelo === 'function') {
+      return perfilModelo.descobrirModelo(caminhoDirModelo(app))
+    }
+  } catch (_) {
+    // fallback abaixo
+  }
+  const alvo = path.join(dirRecursosIa(app), 'modelo', NOME_GGUF)
+  try {
+    if (fs.existsSync(alvo)) return { caminho: alvo, arquivo: NOME_GGUF, origem: 'legado' }
+  } catch (_) {
+    // ignora
+  }
+  return { caminho: null, arquivo: null, origem: null }
+}
+
+/**
+ * Perfil efetivo do modelo (`{ gguf, perfil }` — ver perfil-modelo.cjs).
+ * Nunca lança; sem GGUF devolve perfil genérico com `gguf: null`.
+ */
+function perfilModeloEfetivo(app) {
+  try {
+    if (perfilModelo && typeof perfilModelo.perfilEfetivo === 'function') {
+      return perfilModelo.perfilEfetivo(caminhoDirModelo(app))
+    }
+  } catch (_) {
+    // fallback abaixo
+  }
+  const gguf = descobrirGgufEfetivo(app)
+  return {
+    gguf: gguf.caminho ? gguf : null,
+    perfil: perfilModelo && perfilModelo.PERFIL_GENERICO
+      ? { ...perfilModelo.PERFIL_GENERICO }
+      : { familia: 'generico', templateChat: 'generico', contextSize: 4096 },
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -236,6 +311,9 @@ module.exports = {
   caminhoManifestHash,
   caminhoBaseIa,
   caminhoModeloGguf,
+  caminhoDirModelo,
+  descobrirGgufEfetivo,
+  perfilModeloEfetivo,
   dirAtivosProtegidos,
   caminhoModeloCifrado,
   caminhoIndiceProtegido,

@@ -1,0 +1,27 @@
+{
+  "$schema": "modelo.json (camada de compatibilidade Aurum Tax NCM)",
+  "_comentario": "Trocar de modelo = trocar o .gguf em recursos-ia/modelo/. Este arquivo é OPCIONAL: só preencha para ajustar o perfil detectado automaticamente pelo nome do arquivo.",
+  "arquivo": "Qwen3-0.6B-Q8_0.gguf",
+  "familia": "qwen3",
+  "_familias": "qwen3 | qwen | llama | mistral | phi | gemma | generico (detectada pelo nome quando omitida)",
+  "templateChat": "chatml-qwen",
+  "_templates": "chatml-qwen | llama3 | mistral | phi | gemma | generico",
+  "contextSize": 4096,
+  "maxCandidatos": 6,
+  "thinkTag": "think",
+  "suportaGramatica": true,
+  "classificacao": {
+    "maxTokens": 4,
+    "temperature": 0,
+    "topP": 1
+  },
+  "conversa": {
+    "maxTokensPadrao": 280,
+    "maxTokensThink": 448,
+    "temperature": 0.35,
+    "topP": 0.85,
+    "topK": 40,
+    "repeatPenalty": 1.18
+  },
+  "systemPromptExtra": ""
+}

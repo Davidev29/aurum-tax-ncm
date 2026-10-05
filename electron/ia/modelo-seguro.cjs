@@ -83,12 +83,17 @@ function resolverModeloEfetivo(app) {
   if (caminhos && typeof caminhos.resolverModeloEfetivo === 'function') {
     return caminhos.resolverModeloEfetivo(app)
   }
-  // Fallback sem caminhos-ia: heurística local (dev).
+  // Fallback sem caminhos-ia: heurística local (dev — qualquer *.gguf).
   const raiz = path.resolve(__dirname, '..', '..')
   const aux = path.join(raiz, 'assets', 'aux.dat')
   if (fs.existsSync(aux)) return { caminho: aux, formato: 'cifrado' }
-  const gguf = path.join(raiz, 'recursos-ia', 'modelo', 'ailo-152m-v2-q4_k_m.gguf')
-  if (fs.existsSync(gguf)) return { caminho: gguf, formato: 'gguf' }
+  try {
+    const dir = path.join(raiz, 'recursos-ia', 'modelo')
+    const ggufs = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.gguf')) : []
+    const legado = path.join(dir, 'Qwen3-0.6B-Q8_0.gguf')
+    if (fs.existsSync(legado)) return { caminho: legado, formato: 'gguf' }
+    if (ggufs.length) return { caminho: path.join(dir, ggufs.slice().sort()[0]), formato: 'gguf' }
+  } catch (_) { /* retorna nulo abaixo */ }
   return { caminho: null, formato: null }
 }
 

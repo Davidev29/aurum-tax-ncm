@@ -25,22 +25,32 @@ O modelo nunca é re-treinado. Quando `public/base/` muda (nova tabela oficial):
 toda release que embarcar base nova; nunca por mudança de descrição do usuário
 (descrições livres não tocam o índice).
 
-## 2. Troca do GGUF (modelo)
+## 2. Troca do GGUF (modelo — agnóstico via camada de compatibilidade)
 
-1. Copie `ailo-152m-v2-q4_k_m.gguf` (~97 MB, `q4_k_m`) para `recursos-ia/modelo/`
-   com exatamente esse nome (ver `recursos-ia/README.md`).
-2. Calcule o SHA256 e registre em `recursos-ia/CHECKSUMS.txt` (substitui a linha
-   `PENDENTE-OFFLINE-SEM-REDE`):
+Trocar de modelo = trocar o arquivo `.gguf` (qualquer nome, qualquer família:
+Qwen, Llama, Mistral, Phi, Gemma…). O sistema consome o PERFIL
+(`electron/ia/perfil-modelo.cjs`), nunca o modelo — ver
+`docs/camada-modelo-rag.md`.
+
+1. Apague o `.gguf` atual e copie o novo para `recursos-ia/modelo/`
+   (ex.: o atual `Qwen3-0.6B-Q8_0.gguf`, ~640 MB, `Q8_0`,
+   fonte: https://huggingface.co/Qwen/Qwen3-0.6B-GGUF).
+2. (Opcional) Copie `recursos-ia/modelo/modelo.json.example` →
+   `recursos-ia/modelo/modelo.json` para fixar `familia`/`templateChat`/
+   `contextSize`/parâmetros. Sem ele, a família é detectada pelo nome.
+3. Calcule o SHA256 e registre em `recursos-ia/CHECKSUMS.txt`:
    ```powershell
-   certutil -hashfile recursos-ia\modelo\ailo-152m-v2-q4_k_m.gguf SHA256
+   certutil -hashfile recursos-ia\modelo\<novo>.gguf SHA256
    ```
-   Formato: `<sha256-hex>  modelo/ailo-152m-v2-q4_k_m.gguf`.
-3. Valide (aborta com exit 1 se o hash divergir — GGUF não confiável nunca carrega):
+   Formato: `<sha256-hex>  modelo/<novo>.gguf`.
+4. Valide (aborta com exit 1 se o hash divergir — GGUF não confiável nunca carrega):
    ```powershell
-   node scripts/testar-modelo-ia.mjs
+   node scripts/testar-modelo-ia.mjs            # qualquer .gguf (descoberta automática)
+   node scripts/testar-modelo-ia.mjs --modelo recursos-ia\modelo\<novo>.gguf
    ```
-   Esperado: modo REAL, `restricao100=true`, latência < 5 s, RSS < 500 MB.
-4. Se o modelo for distribuído cifrado: ver `docs/seguranca-ia.md` §5
+   Esperado: modo REAL, `restricao100=true`, latência < 15 s, RSS < 1.6 GB.
+   O `init` do worker responde com o `perfil` efetivo (confira no DebugIA).
+5. Se o modelo for distribuído cifrado: ver `docs/seguranca-ia.md` §5
    (`--cifrar` → `assets/aux.dat`, registrar `cifrado <sha256>  assets/aux.dat`
    no `CHECKSUMS.txt`, chave no cofre, nunca no repo).
 

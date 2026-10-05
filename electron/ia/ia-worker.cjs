@@ -41,6 +41,16 @@ const path = require('node:path')
 // para `electron/dist/` junto a este worker, então o `require` relativo
 // funciona tanto na fonte (`electron/ia/`) quanto no `dist/`.
 const { dirRecursosIa } = require('./caminhos-ia.cjs')
+// Camada de compatibilidade (modelo agnóstico): perfis por família, prompts e
+// parâmetros via `perfil-modelo.cjs`. O worker consome o PERFIL — nunca um
+// modelo específico. Trocar o `.gguf` = novo perfil automático (+ overrides
+// opcionais em `recursos-ia/modelo/modelo.json`).
+let compat = null
+try {
+  compat = require('./perfil-modelo.cjs')
+} catch (_) {
+  compat = null
+}
 // 06-08: leitura do modelo cifrado (`assets/aux.dat`, AES-256-GCM) EM MEMÓRIA.
 // Módulo OPCIONAL: falha de require NÃO quebra o worker (cai para o GGUF
 // legado). Ver `electron/ia/modelo-seguro.cjs` + `docs/seguranca-ia.md`.
@@ -57,6 +67,34 @@ const LIMIAR_NAO_SEI = 0.2
 let modelo = null // { mock:true } | { mock:false, llama, model, context, session, modelPath }
 let indice = null // índice lexical carregado preguiçosamente
 let mapaDescricoes = null // codigo -> { descricao, capitulo }
+let perfilAtivo = null // perfil da camada de compatibilidade (perfil-modelo.cjs)
+
+/** Perfil efetivo atual (genérico quando a camada está ausente). */
+function perfilAtual() {
+  if (perfilAtivo) return perfilAtivo
+  try {
+    if (compat && compat.PERFIL_GENERICO) return { ...compat.PERFIL_GENERICO }
+  } catch (_) { /* fallback abaixo */ }
+  return { familia: 'generico', templateChat: 'generico', contextSize: 4096, thinkTag: null, suportaGramatica: true, classificacao: { maxTokens: 8, temperature: 0, topP: 1 }, conversa: { maxTokensPadrao: 320, maxTokensThink: 512, temperature: 0.4, topP: 0.9, topK: 40, repeatPenalty: 1.15 }, maxCandidatos: 6 }
+}
+
+/**
+ * Carrega o perfil do modelo a partir do diretório de `modelPath`
+ * (`modelo.json` ao lado do `.gguf` + heurística por nome de arquivo).
+ * Nunca lança; desconhecido → perfil genérico seguro.
+ */
+function carregarPerfilPara(modelPath) {
+  try {
+    if (!compat || typeof compat.perfilEfetivo !== 'function') return perfilAtual()
+    const dir = require('node:path').dirname(String(modelPath || ''))
+    const { perfil } = compat.perfilEfetivo(dir)
+    if (perfil) {
+      perfilAtivo = perfil
+      return perfil
+    }
+  } catch (_) { /* fallback */ }
+  return perfilAtual()
+}
 
 // ---------------------------------------------------------------------------
 // Normalização / tokenização PT (porte de scripts/gerar-indice-ia.mjs)
@@ -263,12 +301,10 @@ function buscarIndice(ind, consulta, k = 5) {
 }
 
 // ---------------------------------------------------------------------------
-// Tradutor fiscal PT-BR → EN (AI-first, 100% local/offline)
+// Tradutor fiscal PT-BR ↔ EN (100% local/offline)
 // ---------------------------------------------------------------------------
-// O AILO-152M é EN-only (tokenizer GPT-2, sem template de chat): o prompt é
-// montado bilíngue — EN traduzido pelo glossário curado
-// (`recursos-ia/conhecimento/glossario-pt-en.json`, embutido no instalador)
-// + PT original. Desconhecido passa em PT (nunca inventa tradução).
+// Enriquecimento do retrieval: a busca lexical ancora termos em PT oficial e
+// em EN (consulta PT+EN no `buscar`), e o prompt do modelo leva PT original.
 // Single-source: o JSON; aqui só o carregamento preguiçoso + matching guloso.
 
 let glossario = null // { frases, termos, enFrases, enPt } | { vazio: true, ... }
@@ -508,30 +544,36 @@ function montarPromptRigido(descricao, candidatos) {
 }
 
 /**
- * Prompt bilíngue EN+PT para o AILO-152M (ctx 512, EN-only).
- * Cada opção carrega o CONJUNTO da base oficial — nome puro (nomenclatura),
- * capítulo e vínculo tributário — em EN traduzido + PT original:
- * o modelo lê o inglês, o PT ancora o termo oficial exato.
- * 6 opções cabem no contexto com folga (~300 tokens GPT-2).
+ * Prompt curto de classificação (camada de compatibilidade).
+ * Monta as fichas oficiais (nome + capítulo + vínculo) e delega o envelope
+ * ao `perfil-modelo.cjs` — o texto é idêntico para qualquer modelo; só o
+ * `maxCandidatos` vem do perfil (`modelo.json` pode ajustar).
  */
 function montarPromptCurto(descricao, candidatos, maxCandidatos = 6) {
   const limpa = (s, n) => String(s || '').replace(/\s+/g, ' ').replace(/<[^>]*>/g, '').trim().slice(0, n)
-  const ptProduto = limpa(descricao, 140)
-  const enProduto = traduzirParaEN(ptProduto).slice(0, 140)
-  const lista = (candidatos || []).slice(0, maxCandidatos).map((c, i) => {
+  const teto = Math.max(2, Math.min(20, Number(maxCandidatos) || Number(perfilAtual().maxCandidatos) || 6))
+  const fichas = (candidatos || []).slice(0, teto).map((c) => {
     const ficha = mapaDescricoes ? mapaDescricoes.get(String(c.codigo).replace(/\D+/g, '')) : undefined
-    const nomePT = limpa(ficha?.nomenclatura || String(c.descricao || '').split(' (')[0], 60)
-    const nomeEN = traduzirParaEN(nomePT).slice(0, 60)
+    const nome = limpa(ficha?.nomenclatura || String(c.descricao || '').split(' (')[0], 80)
     const cap = ficha?.capitulo || String(c.capitulo || c.codigo || '').slice(0, 2)
     const vinc = limpa(ficha?.vinculo, 40)
-    const extra = [cap ? `Ch ${cap}` : '', vinc].filter(Boolean).join(' · ')
-    return `${i + 1}. ${nomeEN} | ${nomePT}${extra ? ` [${extra}]` : ''}`
-  }).join('\n')
+    const extra = [cap ? `Cap. ${cap}` : '', vinc].filter(Boolean).join(' · ')
+    return { codigo: c.codigo, nome, extra }
+  })
+  try {
+    if (compat && typeof compat.montarPromptClassificacao === 'function') {
+      return compat.montarPromptClassificacao(descricao, fichas, teto)
+    }
+  } catch (_) { /* fallback abaixo */ }
+  const produto = limpa(descricao, 140)
+  const lista = fichas.map((f, i) => `${i + 1}. ${f.codigo} — ${f.nome}${f.extra ? ` [${f.extra}]` : ''}`).join('\n')
   return (
-    'You are a fiscal classifier. Pick ONE number for the product, or 0 when none fits. Reply with the number only.\n' +
-    `Product: "${enProduto}" ("${ptProduto}")\n` +
-    `Options:\n${lista}\n` +
-    'Answer (number only):'
+    'Você é um classificador fiscal brasileiro (Reforma Tributária, LC 214/2025). ' +
+    'Escolha EXATAMENTE UM número da lista para o produto, ou 0 se nenhum servir. ' +
+    'Responda apenas com o número, sem explicações.\n' +
+    `Produto: "${produto}"\n` +
+    `Opções:\n${lista}\n` +
+    'Resposta (somente o número):'
   )
 }
 
@@ -547,9 +589,20 @@ function gramaticaIndices(n) {
  * Geração restrita por gramática (índice 1..N ou 0=NÃO SEI) + temperature 0:
  * o modelo NUNCA emite texto livre nem inventa código — a resposta é sempre
  * um índice válido, mapeado aqui para o NCM da lista.
+ *
+ * FILA: `completion` usa 1 sequence — chamadas concorrentes são serializadas
+ * via `filaInfer` para não misturar contexto entre classificar/conversar.
  */
+let filaInfer = Promise.resolve()
+function enfileirarInfer(fn) {
+  const r = filaInfer.then(() => fn())
+  filaInfer = r.catch(() => null)
+  return r
+}
 async function selecionarReal(descricao, candidatos) {
-  const lista = (candidatos || []).slice(0, 6)
+  const perfil = perfilAtual()
+  const tetoCand = Math.max(2, Math.min(20, Number(perfil.maxCandidatos) || 6))
+  const lista = (candidatos || []).slice(0, tetoCand)
   if (!lista.length) return { codigo: 'NÃO SEI', confianca: 0, motivo: 'sem-candidatos' }
   if (!String(descricao ?? '').trim()) return { codigo: 'NÃO SEI', confianca: 0, motivo: 'descricao-vazia' }
   if (!modelo || modelo.mock || !modelo.completion || !modelo.llamaModulo) {
@@ -593,25 +646,49 @@ async function selecionarReal(descricao, candidatos) {
     parada.push('\n')
   }
   // Robustez produção: 2 tentativas (transiente de inferência não vira NÃO SEI
-  // sem tentar de novo). Gramática mantida nas duas — nunca texto livre.
+  // sem tentar de novo). Com gramática (quando o perfil suporta) — nunca
+  // texto livre; sem gramática (modelo sem suporte) → geração livre curta +
+  // extração do 1º dígito (fail-closed: fora de 0..N vira NÃO SEI).
+  // Serializado na fila (1 sequence por contexto).
+  const pc = (perfil && perfil.classificacao) || { maxTokens: 8, temperature: 0, topP: 1 }
+  const querGramatica = perfil.suportaGramatica !== false
   let texto = ''
   let erroFinal = null
   for (let tentativa = 1; tentativa <= 2; tentativa++) {
     let gramatica = null
     try {
-      gramatica = new LlamaGrammar(modelo.llama, { grammar: gramaticaIndices(lista.length) })
-      texto = String(await modelo.completion.generateCompletion(prompt, {
-        maxTokens: 4,
-        temperature: 0,
-        topP: 1,
+      if (querGramatica) {
+        gramatica = new LlamaGrammar(modelo.llama, { grammar: gramaticaIndices(lista.length) })
+      }
+      texto = String(await enfileirarInfer(() => modelo.completion.generateCompletion(prompt, {
+        maxTokens: Math.max(1, Math.min(64, Number(pc.maxTokens) || 8)),
+        temperature: Math.max(0, Math.min(2, Number(pc.temperature) || 0)),
+        topP: Math.max(0, Math.min(1, Number(pc.topP) || 1)),
         stopGenerationTriggers: parada,
-        grammar: gramatica,
-      }))
+        ...(gramatica ? { grammar: gramatica } : {}),
+      })))
       erroFinal = null
       break
     } catch (e) {
-      erroFinal = e
-      texto = ''
+      // Modelo sem suporte a gramática: 2ª tentativa sem gramática.
+      if (querGramatica && tentativa === 1 && /grammar/i.test(String((e && e.message) || e))) {
+        try {
+          texto = String(await enfileirarInfer(() => modelo.completion.generateCompletion(prompt, {
+            maxTokens: Math.max(1, Math.min(64, Number(pc.maxTokens) || 8)),
+            temperature: Math.max(0, Math.min(2, Number(pc.temperature) || 0)),
+            topP: Math.max(0, Math.min(1, Number(pc.topP) || 1)),
+            stopGenerationTriggers: parada,
+          })))
+          erroFinal = null
+          break
+        } catch (e2) {
+          erroFinal = e2
+          texto = ''
+        }
+      } else {
+        erroFinal = e
+        texto = ''
+      }
     } finally {
       try {
         if (gramatica && typeof gramatica.dispose === 'function') gramatica.dispose()
@@ -629,6 +706,133 @@ async function selecionarReal(descricao, candidatos) {
   if (idx === 0) return { codigo: 'NÃO SEI', confianca: 0, motivo: 'llm-nenhum-candidato+pt-en' }
   const escolhido = lista[idx - 1]
   return { codigo: String(escolhido.codigo).replace(/\D+/g, '') ? escolhido.codigo : 'NÃO SEI', confianca: 0.7, motivo: 'llm-indice-gramatica+pt-en' }
+}
+
+// ---------------------------------------------------------------------------
+// Conversa livre: envelope por TEMPLATE do perfil (chatml-qwen / llama3 /
+// mistral / phi / gemma / generico). O motor determinístico continua fonte
+// da verdade fiscal — aqui a IA só dá fluidez para papo leve/generico.
+// Regras duras vivem no system prompt e a sanitização final é agnóstica
+// (`limparTextoLivre` → `perfil-modelo.cjs`).
+// ---------------------------------------------------------------------------
+
+/** Limpa texto livre: thinking, restos de template e repetições (agnóstico). */
+function limparTextoLivre(bruto) {
+  try {
+    if (compat && typeof compat.limparTextoLivreGenerico === 'function') {
+      return compat.limparTextoLivreGenerico(bruto)
+    }
+  } catch (_) { /* fallback abaixo */ }
+  let s = String(bruto ?? '')
+  // Qwen3 thinking: <think>...</think> nunca vaza para a UI.
+  s = s.replace(/<think>[\s\S]*?<\/think>/gi, ' ')
+  s = s.replace(/<\/?think>/gi, ' ')
+  s = s.replace(/<\|im_(start|end)\|>/g, ' ')
+  s = s.replace(/\|im_end\|/g, ' ')
+  s = s.replace(/\b(system|user|assistant)\s*:/gi, ' ')
+  // Corta marcadores de fim alucinados pelo 0.6B e thinking em inglês vazado.
+  const cortes = ['(End of', '[End of', '</code>', '<code>', 'Okay, the user', 'translates to', 'I need to', 'I should respond']
+  for (const c of cortes) {
+    const i = s.indexOf(c)
+    if (i >= 0) s = s.slice(0, i)
+  }
+  s = s.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  // Colapsa frases consecutivas duplicadas (loop típico do 0.6B).
+  const frases = s.split(/(?<=[.!?])\s+/)
+  const unicas = []
+  for (const f of frases) {
+    const t = f.trim()
+    if (!t) continue
+    if (unicas.length && unicas[unicas.length - 1].toLowerCase() === t.toLowerCase()) continue
+    unicas.push(t)
+    if (unicas.length >= 6) break
+  }
+  s = unicas.join(' ')
+  // Repetição de n-grama 5+ palavras 3x → corta (degeneração).
+  const palavras = s.split(/\s+/)
+  if (palavras.length > 30) {
+    const assinatura = palavras.slice(0, 5).join(' ').toLowerCase()
+    let rep = 0
+    for (let i = 5; i + 5 <= palavras.length; i += 5) {
+      if (palavras.slice(i, i + 5).join(' ').toLowerCase() === assinatura) rep += 1
+    }
+    if (rep >= 2) s = palavras.slice(0, 30).join(' ')
+  }
+  if (s.length > 1200) s = s.slice(0, 1200).trimEnd() + '…'
+  return s.trim()
+}
+
+/**
+ * Prompt de conversa pelo TEMPLATE do perfil ativo (ver perfil-modelo.cjs).
+ * Conteúdo idêntico em todos os modelos; só o envelope muda.
+ */
+function montarPromptConversa(sistema, historico, pergunta, think) {
+  try {
+    if (compat && typeof compat.montarPromptConversa === 'function') {
+      return compat.montarPromptConversa(perfilAtual(), sistema, historico, pergunta, think)
+    }
+  } catch (_) { /* fallback abaixo */ }
+  const sys = String(sistema ?? '').slice(0, 1800)
+  const hist = Array.isArray(historico) ? historico.slice(-6) : []
+  const thinkTag = think ? '' : '/no_think\n'
+  const direto = think ? '' : 'Responda direto em português, sem mostrar raciocínio, sem inglês, sem marcadores.\n'
+  let p = `<|im_start|>system\n${thinkTag}${direto}${sys}<|im_end|>\n`
+  for (const m of hist) {
+    const papel = m && m.papel === 'assistant' ? 'assistant' : 'user'
+    const txt = String((m && m.texto) || '').replace(/\s+/g, ' ').trim().slice(0, 500)
+    if (!txt) continue
+    p += `<|im_start|>${papel}\n${txt}<|im_end|>\n`
+  }
+  p += `<|im_start|>user\n${String(pergunta ?? '').replace(/\s+/g, ' ').trim().slice(0, 800)}<|im_end|>\n<|im_start|>assistant\n`
+  return p
+}
+
+async function conversarReal(sistema, historico, pergunta, opts) {
+  if (!modelo || modelo.mock || !modelo.completion || !modelo.llamaModulo) {
+    return { texto: '', motivo: 'inferencia-falhou:modelo-real-nao-inicializado' }
+  }
+  const perfil = perfilAtual()
+  const pc = (perfil && perfil.conversa) || { maxTokensPadrao: 320, maxTokensThink: 512, temperature: 0.4, topP: 0.9, topK: 40, repeatPenalty: 1.15 }
+  const o = opts && typeof opts === 'object' ? opts : {}
+  const think = o.think === true
+  const tetoPadrao = Number(pc.maxTokensPadrao) || 320
+  const tetoThink = Number(pc.maxTokensThink) || 512
+  const maxTokens = Math.max(64, Math.min(think ? 1024 : 640, Number(o.maxTokens) || (think ? tetoThink : tetoPadrao)))
+  const temperature = Math.max(0, Math.min(2, Number(o.temperature ?? pc.temperature) || 0.4))
+  const prompt = montarPromptConversa(sistema, historico, pergunta, think)
+  const { LlamaText } = modelo.llamaModulo
+  let stops = []
+  try {
+    if (compat && typeof compat.stopsParaTemplate === 'function') {
+      stops = compat.stopsParaTemplate(perfil)
+    } else {
+      stops = ['<|im_end|>', '<|im_start|>', '\n\n\n']
+    }
+  } catch (_) {
+    stops = ['<|im_end|>', '<|im_start|>', '\n\n\n']
+  }
+  const parada = []
+  try {
+    for (const s of stops) parada.push(typeof LlamaText === 'function' ? LlamaText(s) : s)
+  } catch (_) {
+    parada.push(stops[0] || '<|im_end|>')
+  }
+  let bruto = ''
+  try {
+    bruto = String(await enfileirarInfer(() => modelo.completion.generateCompletion(prompt, {
+      maxTokens,
+      temperature,
+      topP: Math.max(0, Math.min(1, Number(pc.topP) || 0.9)),
+      topK: Math.max(1, Math.min(200, Number(pc.topK) || 40)),
+      repeatPenalty: Math.max(1, Math.min(2, Number(pc.repeatPenalty) || 1.15)),
+      stopGenerationTriggers: parada,
+    })))
+  } catch (e) {
+    return { texto: '', motivo: `inferencia-falhou:${e && e.message ? e.message : e}` }
+  }
+  const texto = limparTextoLivre(bruto)
+  if (!texto || texto.length < 2) return { texto: '', motivo: 'llm-resposta-vazia' }
+  return { texto, motivo: think ? 'llm-livre-think' : 'llm-livre' }
 }
 
 // ---------------------------------------------------------------------------
@@ -670,14 +874,32 @@ async function tratar(msg) {
   const tIni = agoraMs()
   const { id, cmd } = msg || {}
   try {
+    if (cmd === 'perfil') {
+      // Introspecção da camada de compatibilidade: o sistema consulta o
+      // perfil sem precisar conhecer o modelo.
+      return { id, ok: true, cmd, perfil: perfilAtual(), mock: modelo ? modelo.mock === true : true }
+    }
+
     if (cmd === 'init') {
       if (!msg || msg.mock !== false) {
         modelo = { mock: true, nome: MODELO_SIMBOLICO, iniciadoEm: Date.now() }
-        return { id, ok: true, cmd, mock: true, msLoad: agoraMs() - tIni, ramMB: ramMB(), transporte: canalTipo }
+        return { id, ok: true, cmd, mock: true, msLoad: agoraMs() - tIni, ramMB: ramMB(), transporte: canalTipo, perfil: perfilAtual() }
       }
-      const alvo = String(msg.modelPath || '')
+      // `modelPath` explícito OU descoberta automática (`recursos-ia/modelo/`
+      // — qualquer `*.gguf` + `modelo.json`). Trocar o arquivo = novo modelo.
+      let alvo = String(msg.modelPath || '')
+      if (!alvo) {
+        try {
+          const { dirRecursosIa: dirIa } = require('./caminhos-ia.cjs')
+          const dirModelo = require('node:path').join(dirIa(null), 'modelo')
+          if (compat && typeof compat.descobrirModelo === 'function') {
+            const achado = compat.descobrirModelo(dirModelo)
+            if (achado && achado.caminho) alvo = achado.caminho
+          }
+        } catch (_) { /* erro tratado abaixo */ }
+      }
       if (!alvo || !fs.existsSync(alvo)) {
-        return { id, ok: false, cmd, erro: `GGUF não encontrado: "${alvo || '(vazio)'}"` }
+        return { id, ok: false, cmd, erro: `GGUF não encontrado: "${alvo || '(vazio)'}" — coloque qualquer *.gguf em recursos-ia/modelo/` }
       }
       // 06-08: contêiner cifrado (`assets/aux.dat`) descriptografa EM MEMÓRIA
       // via `modelo-seguro.cjs` — nunca em disco. O `node-llama-cpp` v3 carrega
@@ -706,12 +928,16 @@ async function tratar(msg) {
       try {
         const llama = await llamaModulo.getLlama()
         const model = await llama.loadModel({ modelPath: alvo })
-        const context = await model.createContext({ contextSize: 512 })
+        // Contexto pelo PERFIL (modelo agnóstico): `modelo.json` pode
+        // ajustar; o padrão equilibra RAM/latência em CPU.
+        const perfilInit = carregarPerfilPara(alvo)
+        const ctxSize = Math.max(512, Math.min(131072, Number(perfilInit.contextSize) || 4096))
+        const context = await model.createContext({ contextSize: ctxSize })
         const sequence = context.getSequence()
         const { LlamaCompletion } = llamaModulo
         const completion = new LlamaCompletion({ contextSequence: sequence })
         modelo = { mock: false, llama, llamaModulo, model, context, sequence, completion, modelPath: alvo }
-        return { id, ok: true, cmd, mock: false, msLoad: agoraMs() - tIni, ramMB: ramMB(), transporte: canalTipo }
+        return { id, ok: true, cmd, mock: false, msLoad: agoraMs() - tIni, ramMB: ramMB(), transporte: canalTipo, perfil: perfilInit }
       } catch (e) {
         return { id, ok: false, cmd, erro: `falha ao carregar GGUF: ${e && e.message ? e.message : e}` }
       }
@@ -729,13 +955,9 @@ async function tratar(msg) {
       return { id, ok: true, cmd, candidatos: resultados, total: ind.totalDocs ?? ind.docs.length, ms: agoraMs() - tIni }
     }
 
-    if (cmd === 'traduzir') {
-      // Tradução em tempo real por dicionário (sem modelo): `para: 'en'|'pt'`.
-      const para = String(msg.para || 'en').toLowerCase().startsWith('pt') ? 'pt' : 'en'
-      const texto = String(msg.texto ?? '')
-      const traduzido = para === 'pt' ? traduzirParaPT(texto) : traduzirParaEN(texto)
-      return { id, ok: true, cmd, para, texto: traduzido, ms: agoraMs() - tIni }
-    }
+    // Comando `traduzir` removido: modelo multilíngue nativo, sem camada de
+    // tradução no app. Os mapas internos (traduzirParaPT/EN) seguem em uso
+    // apenas na recuperação lexical do índice PT (buscar + gate de sanidade).
 
     if (cmd === 'selecionar') {
       if (!modelo) return { id, ok: false, cmd, erro: 'modelo não inicializado (envie init)' }
@@ -764,6 +986,14 @@ async function tratar(msg) {
       }
     }
 
+    if (cmd === 'conversar') {
+      if (!modelo) return { id, ok: false, cmd, erro: 'modelo não inicializado (envie init)' }
+      if (modelo.mock) return { id, ok: false, cmd, mock: true, erro: 'conversa livre exige modelo real (mock não verbaliza)' }
+      const r = await conversarReal(msg.sistema, msg.historico, msg.pergunta, { think: msg.think === true, maxTokens: msg.maxTokens, temperature: msg.temperature })
+      if (!r.texto) return { id, ok: false, cmd, mock: false, erro: r.motivo || 'resposta vazia' }
+      return { id, ok: true, cmd, mock: false, texto: r.texto, motivo: r.motivo, ms: agoraMs() - tIni, ramMB: ramMB() }
+    }
+
     if (cmd === 'encerrar') {
       const resposta = { id, ok: true, cmd, ramMB: ramMB() }
       if (modelo && !modelo.mock) {
@@ -779,6 +1009,7 @@ async function tratar(msg) {
       modelo = null
       indice = null
       mapaDescricoes = null
+      perfilAtivo = null
       return resposta
     }
 

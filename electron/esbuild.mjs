@@ -84,6 +84,11 @@ async function compilar() {
   const seguroOrigem = path.join(raizElectron, 'ia', 'modelo-seguro.cjs')
   const seguroDestino = path.join(pastaSaida, 'modelo-seguro.cjs')
   copyFileSync(seguroOrigem, seguroDestino)
+  // Camada de compatibilidade (modelo agnóstico): perfil-modelo.cjs vai junto
+  // ao worker (require relativo funciona na fonte e no dist).
+  const perfilOrigem = path.join(raizElectron, 'ia', 'perfil-modelo.cjs')
+  const perfilDestino = path.join(pastaSaida, 'perfil-modelo.cjs')
+  copyFileSync(perfilOrigem, perfilDestino)
 
   console.log('✔ Electron compilado com sucesso:')
   console.log(`   ${saidaMain}`)
@@ -91,6 +96,7 @@ async function compilar() {
   console.log(`   ${workerDestino} (copiado, sem bundle)`)
   console.log(`   ${caminhosDestino} (copiado, sem bundle)`)
   console.log(`   ${seguroDestino} (copiado, sem bundle — 06-08)`)
+  console.log(`   ${perfilDestino} (copiado, sem bundle — camada de compatibilidade)`)
 }
 
 compilar().catch((erro) => {

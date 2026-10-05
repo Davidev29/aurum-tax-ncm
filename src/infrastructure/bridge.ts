@@ -70,11 +70,20 @@ export interface FalhaIaBridge {
 export type ResultadoIaBridge = SucessoIaBridge | FalhaIaBridge
 
 /** Estado do worker IA (canal `ia:status`). `erro` = AI-first sem modelo real. */
+export interface PerfilModeloIa {
+  familia: string
+  templateChat: string
+  contextSize: number
+  arquivo?: string | null
+}
+
 export interface StatusIaBridge {
   pronto: boolean
   mock: boolean
   modo: 'desligado' | 'mock' | 'modelo' | 'erro'
   modelPath: string | null
+  /** Perfil da camada de compatibilidade (família/template/parâmetros). */
+  perfil?: PerfilModeloIa | null
   workerPath: string | null
   pid: number | null
   erro: string | null
@@ -85,8 +94,14 @@ export interface IaBridge {
   classificar(descricao: string, candidatos?: CandidatoIa[]): Promise<ResultadoIaBridge>
   buscar(consulta: string, k?: number): Promise<{ ok: boolean; candidatos: CandidatoIa[]; erro?: string }>
   status(): Promise<StatusIaBridge>
-  /** Tradução fiscal PT↔EN em tempo real (dicionário embutido, sem modelo). Opcional em stubs legados. */
-  traduzir?(texto: string, para?: 'pt' | 'en'): Promise<{ ok: boolean; texto: string; para?: string; erro?: string }>
+  /**
+   * Conversa livre (IA-06, Qwen3 real). `ok:false` quando sem modelo —
+   * o renderer cai no template determinístico (fail-closed).
+   */
+  conversar?(
+    pergunta: string,
+    opts?: { sistema?: string; historico?: { papel: string; texto: string }[]; think?: boolean; maxTokens?: number; temperature?: number },
+  ): Promise<{ ok: boolean; texto?: string; motivo?: string; erro?: string; mock?: boolean }>
 }
 
 /** Resultado da verificação de atualizações (electron-updater). */
@@ -140,7 +155,8 @@ export interface AurumBridge {
   verificarAtualizacao(): Promise<VerificacaoAtualizacao>
   baixarAtualizacao(): Promise<{ ok: boolean }>
   instalarAtualizacao(): Promise<{ ok: boolean }>
-  onAtualizacao(cb: (evento: EventoAtualizacao) => void): void
+  /** Empilha um ouvinte e devolve a desinscrição. */
+  onAtualizacao(cb: (evento: EventoAtualizacao) => void): () => void
   /**
    * IA offline (Phase 6 / IA-05). Só existe no Electron — fora dele
    * (`window.aurum` ausente) o fluxo usa o fallback local em

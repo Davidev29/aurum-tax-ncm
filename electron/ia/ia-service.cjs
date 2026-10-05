@@ -43,6 +43,7 @@ let pronto = false
 let modoMock = true
 let realPronto = false
 let modeloPath = null
+let perfilModelo = null
 let ultimoErro = null
 const pendentes = new Map()
 
@@ -179,6 +180,7 @@ async function iniciarIaService(app) {
         realPronto = true
         modoMock = false
         modeloPath = candidatoModelo
+        perfilModelo = r.perfil ?? null
         ultimoErro = null
         return statusIa()
       }
@@ -203,13 +205,14 @@ async function iniciarIaService(app) {
     // Sem GGUF: AI-first bloqueia decisões; legado permite mock.
     realPronto = false
     modeloPath = null
+    perfilModelo = null
     if (!AI_FIRST) {
       const r2 = await rpc('init', { mock: true })
       modoMock = r2.mock !== false
       ultimoErro = avisoPrevio
       return statusIa()
     }
-    ultimoErro = avisoPrevio ?? 'Modelo IA obrigatório ausente: recursos-ia/modelo/ailo-152m-v2-q4_k_m.gguf não encontrado.'
+    ultimoErro = avisoPrevio ?? 'Modelo IA obrigatório ausente: nenhum *.gguf em recursos-ia/modelo/ (troque o arquivo .gguf e reinicie).'
     try {
       await rpc('init', { mock: true })
       modoMock = true
@@ -235,6 +238,7 @@ function statusIa() {
     mock: !realPronto,
     modo,
     modelPath: modeloPath,
+    perfil: perfilModelo,
     workerPath: proc ? resolverWorkerPath() : null,
     pid,
     erro: ultimoErro,
@@ -268,7 +272,7 @@ async function classificarViaIa(descricao, candidatos) {
         }
       }
     }
-    return { ok: false, mock: false, cmd: 'classificar', erro: ultimoErro ?? 'Modelo IA obrigatório indisponível (modo=erro). Verifique recursos-ia/modelo/*.gguf + node-llama-cpp.', candidatos: candidatos ?? [] }
+    return { ok: false, mock: false, cmd: 'classificar', erro: ultimoErro ?? 'Modelo IA obrigatório indisponível (modo=erro). Verifique o *.gguf em recursos-ia/modelo/ + node-llama-cpp.', candidatos: candidatos ?? [] }
   }
   const r = await rpc('classificar', { descricao, candidatos })
   if (AI_FIRST && r.mock) {
@@ -286,14 +290,27 @@ async function buscarViaIa(consulta, k = 5) {
 }
 
 /**
- * Tradução fiscal em tempo real via worker (dicionário, sem modelo).
- * Funciona mesmo sem GGUF (só exige o worker vivo para `buscar`).
+ * Conversa livre via worker (IA-06). Exige modelo real (`realPronto`):
+ * sem modelo responde `ok:false` para o renderer cair no template
+ * determinístico (fail-closed, nunca mock verbalizando).
  */
-async function traduzirViaIa(texto, para = 'en') {
-  if (!proc || !pronto) {
-    return { ok: false, cmd: 'traduzir', erro: 'worker IA não iniciado', texto: String(texto ?? '') }
+async function conversarViaIa(pergunta, opts = {}) {
+  if (!proc || !pronto || !realPronto) {
+    return { ok: false, mock: false, cmd: 'conversar', erro: ultimoErro ?? 'Modelo IA indisponível para conversa livre.' }
   }
-  return rpc('traduzir', { texto, para })
+  try {
+    const r = await rpc('conversar', {
+      pergunta: String(pergunta ?? ''),
+      sistema: String(opts.sistema ?? ''),
+      historico: Array.isArray(opts.historico) ? opts.historico.slice(-6) : [],
+      think: opts.think === true,
+      maxTokens: typeof opts.maxTokens === 'number' ? opts.maxTokens : undefined,
+      temperature: typeof opts.temperature === 'number' ? opts.temperature : undefined,
+    })
+    return r
+  } catch (e) {
+    return { ok: false, mock: false, cmd: 'conversar', erro: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 /**
@@ -313,8 +330,18 @@ function encerrarIaService() {
   }
   proc = null
   pronto = false
+  perfilModelo = null
   for (const [, p] of pendentes) clearTimeout(p.timer)
   pendentes.clear()
+}
+
+async function perfilModeloViaIa() {
+  if (!proc || !pronto) return { ok: false, erro: 'worker IA não iniciado' }
+  try {
+    return await rpc('perfil', {})
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 module.exports = {
@@ -322,6 +349,7 @@ module.exports = {
   statusIa,
   classificarViaIa,
   buscarViaIa,
-  traduzirViaIa,
+  conversarViaIa,
   encerrarIaService,
+  perfilModeloViaIa,
 }

@@ -38,7 +38,8 @@
     "dist": "npm run build && electron-builder --publish never",
     "dist:win": "npm run build && electron-builder --win --publish never",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
-    "icon": "node scripts/make-icon.mjs"
+    "icon": "node scripts/make-icon.mjs",
+    "ia:catalogo": "node scripts/gerar-catalogo-rag.mjs --check"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
@@ -143,14 +144,19 @@
         "to": "recursos-ia/CHECKSUMS.txt"
       },
       {
-        "from": "recursos-ia/modelo/ailo-152m-v2-q4_k_m.gguf",
-        "to": "recursos-ia/modelo/ailo-152m-v2-q4_k_m.gguf"
+        "from": "recursos-ia/modelo",
+        "to": "recursos-ia/modelo",
+        "filter": [
+          "**/*.gguf",
+          "**/*.json"
+        ]
       }
     ],
     "asarUnpack": [
       "electron/dist/ia-worker.cjs",
       "electron/dist/caminhos-ia.cjs",
-      "electron/dist/modelo-seguro.cjs"
+      "electron/dist/modelo-seguro.cjs",
+      "electron/dist/perfil-modelo.cjs"
     ],
     "win": {
       "target": [
