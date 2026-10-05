@@ -18,7 +18,7 @@ import type { AnaliseChat } from '@/domain/services/detector-chat';
 import { extrairNucleoBusca } from '@/domain/services/detector-chat';
 import { ehProvavelDados } from '@/domain/services/acoes-dados';
 import { temSinalFiscal } from '@/domain/services/escopo-consulta';
-import { extrairSlotsSimples, extrairTodosValores } from '@/domain/services/valores-chat';
+import { extrairSlotsSimples, extrairTodosValores, historicoSlotsSimples } from '@/domain/services/valores-chat';
 import {
   ehConfirmacao,
   ehNegacao,
@@ -29,6 +29,7 @@ import {
 } from './aurum-ai-cadastro';
 import type { MemoriaSistema } from './aurum-ai-artefatos';
 import { detectarPedidoGrafico, ehPedidoVisualPuro } from './aurum-ai-graficos';
+import { extrairDespesasDoTexto } from './aurum-ai-simples-exploratorio';
 import { detectarContaFollowUp } from '@/domain/services/basico-chat';
 
 export type ToolName =
@@ -68,7 +69,7 @@ export interface ToolSpec {
 export const PLANO_TOOL_CALLING: ToolSpec[] = [
   {
     tool: 'consultarNCM',
-    quandoUsar: 'intenção ncm: produto descrito ou NCM de 8 dígitos, sem valor monetário.',
+    quandoUsar: 'intenção ncm: produto descrito ou NCM de 8 dígitos, sem valor monetário. MENÇÃO EXPLÍCITA a "NCM" (ou 8 dígitos) vence a heurística do Simples.',
     inputs: ['termoBusca (texto limpo)'],
     exemplo: ['"tem algum ncm de banana?" → consultarNCM("banana")'],
     guardrail: 'RAG + resolvedor oficial; sem lastro → NÃO SEI instrutivo, nunca chute.',
@@ -76,10 +77,10 @@ export const PLANO_TOOL_CALLING: ToolSpec[] = [
   },
   {
     tool: 'consultarNBS',
-    quandoUsar: 'intenção nbs: serviço descrito ou NBS de 9 dígitos. TI genérico (programação/dev/SaaS) responde com desambiguação + CNAEs 6201–6209 + LC 116 item 1.',
+    quandoUsar: 'intenção nbs: serviço descrito ou NBS de 9 dígitos. MENÇÃO EXPLÍCITA a "NBS" (ou 9 dígitos) vence a heurística do Simples — ex.: "quais seriam os NBS para consultoria?" é SEMPRE nbs, nunca simples, mesmo contendo "consultoria/advocacia/software" (sinais do Simples). TI genérico (programação/dev/SaaS) responde com desambiguação + CNAEs 6201–6209 + LC 116 item 1.',
     inputs: ['termoBusca', 'composicao? (não se aplica a serviços; usa tomador/local quando houver)'],
     exemplo: ['"nbs para aula de yoga?" → consultarNBS("aula de yoga")', '"NBS para programação de computadores?" → desambiguar TI + regra geral + CNAE/Fator R'],
-    guardrail: 'Base NBS × CST × cClassTrib; sem lastro → NÃO SEI. Programação genérica = regra geral (tributação integral), nunca NBS inventado.',
+    guardrail: 'Base NBS × CST × cClassTrib; sem lastro → explicação honesta do determinístico (regra geral/setor) + funil serviço (tipo/tomador/local), nunca funil de produto nem chute. Programação genérica = regra geral (tributação integral), nunca NBS inventado.',
     escreveNoSistema: false,
   },
   {
@@ -196,18 +197,18 @@ export const PLANO_TOOL_CALLING: ToolSpec[] = [
   },
   {
     tool: 'calcularSimples',
-    quandoUsar: 'intenção simples: anexo + RBT12 + receita (+folha opcional). Herda SÓ do domínio Simples.',
+    quandoUsar: 'intenção simples: anexo + RBT12 + receita (+folha opcional). Herda SÓ do domínio Simples. Follow-up de edição ("troca/muda/corrige/bota/aumenta/refaz", "e com 200 mil?", "30% do RBT", "paus/conto/pila/k/mi") altera só o slot citado e refaz o DAS. Troca de anexo ("troca para o V com os mesmos valores", "e no III?") mantém RBT/receita e só carrega a folha se o destino exige (III/V); para I/II/IV a folha é arquivada e some do eco. Referências ("primeiro/anterior/volta/o outro/aquele") resolvem contra a pilha em ordem cronológica; "o outro anexo" sem 2 candidatos PERGUNTA em vez de chutar. Fator R <28% explica que NÃO é Anexo III (vai para V) + sugere folha mínima 28%×RBT12 + botão __RECALCULAR_FATOR_R__.',
     inputs: ['anexo', 'rbt12', 'receitaMes', 'folha12?'],
-    exemplo: ['"DAS Anexo III, RBT12 500 mil, receita 40 mil"', '"e com folha 200 mil?" (herda anexo/RBT)'],
-    guardrail: 'Motor calcularConvencional + fatorR; faltou anexo/RBT/receita → PERGUNTA os valores, nunca projeta exemplo nem mistura contexto do IBS.',
+    exemplo: ['"DAS Anexo III, RBT12 500 mil, receita 40 mil"', '"e com folha 200 mil?" (herda anexo/RBT)', '"troca para o Anexo V com os mesmos valores" (só anexo muda)', '"volta para o RBT anterior" (penúltimo da pilha)', '"usa o primeiro RBT" (turnos[0])'],
+    guardrail: 'Motor calcularConvencional + fatorR; faltou anexo/RBT/receita → PERGUNTA os valores, nunca projeta exemplo nem mistura contexto do IBS. Comparativo ("qual melhor III ou V?") nunca é edição.',
     escreveNoSistema: false,
   },
   {
     tool: 'simularComparativo',
-    quandoUsar: 'intenção comparativo: "qual melhor III ou V?", "convencional ou híbrido?"',
-    inputs: ['anexos em disputa', 'rbt12/receita/folha (do contexto ou pede)'],
-    exemplo: ['"vale a pena migrar para o III?" → explica regra + pede RBT12/folha ou usa contexto'],
-    guardrail: 'Sem números → explica regra geral SEM simular; com números → usa o motor, nunca estima.',
+    quandoUsar: 'intenção comparativo COM números + menção a híbrido ("comparar com híbrido", "no híbrido", "usar referência", "aluguel 2000" em thread híbrida): calcula e entrega as 2 guias — DAS sem CBS + DARF da CBS. Duelo Conv×Híb e matriz I–V SÓ sob demanda (clique no botão ou pedido explícito); sem isso, o convencional mostra só botões. Sem números, explica a regra + pede anexo/RBT12/receita, sem projetar exemplo.',
+    inputs: ['anexo', 'rbt12', 'receitaMes', 'folha12?', 'despesas? (da conversa ou "usar referência")', 'cbsRef?'],
+    exemplo: ['"comparar com híbrido ..." (com contexto) → 2 guias', '"Anexo III ... no híbrido" → 2 guias', '"aluguel 2000" (thread híbrida) → recalcula híbrido'],
+    guardrail: 'Sem números → explica regra geral SEM simular; com números → usa o motor via responderHibridoAnexo (única saída do híbrido), nunca estima.',
     escreveNoSistema: false,
   },
   {
@@ -291,6 +292,11 @@ export interface ContextoConversa {
   ultimoRbt12: number | null;
   ultimaReceita: number | null;
   ultimaFolha: number | null;
+  /** v7 — pilha em ordem cronológica (só falas user do domínio Simples). */
+  historicoAnexos: Array<'I' | 'II' | 'III' | 'IV' | 'V'>;
+  historicoRbt12: number[];
+  historicoReceitas: number[];
+  historicoFolhas: number[];
   houveCalculo: boolean;
   houveSimples: boolean;
   houveCnpj: boolean;
@@ -395,6 +401,27 @@ export function extrairContextoConversa(historico: MensagemHistorico[] = []): Co
     }
   }
   const slots = extrairSlotsSimples(falasSimples.join('\n'));
+  // v7 — pilha por fala (não o `join` cego): preserva primeiro/anterior/último
+  // para "volta para o RBT anterior", "usa o primeiro RBT", "o outro anexo".
+  // O `ultimo*` continua sendo a view do topo (compat com v6).
+  let historicoAnexos: Array<'I' | 'II' | 'III' | 'IV' | 'V'> = [];
+  let historicoRbt12: number[] = [];
+  let historicoReceitas: number[] = [];
+  let historicoFolhas: number[] = [];
+  try {
+    const pilha = historicoSlotsSimples(falasSimples);
+    historicoAnexos = pilha.turnos.map((t) => t.anexo).filter((v): v is 'I' | 'II' | 'III' | 'IV' | 'V' => v != null);
+    historicoRbt12 = pilha.turnos.map((t) => t.rbt12).filter((v): v is number => v != null);
+    historicoReceitas = pilha.turnos.map((t) => t.receitaMes).filter((v): v is number => v != null);
+    historicoFolhas = pilha.turnos.map((t) => t.folha12).filter((v): v is number => v != null);
+  } catch {
+    /* pilha é best-effort */
+  }
+  // v7 — o `ultimoAnexo` sai do TOPO da pilha (última menção), não do `join`
+  // (onde o `match` pegava a PRIMEIRA menção e congelava o passado).
+  // RBT/receita/folha seguem do `join` (o fallback posicional precisa do blob).
+  const ultimoAnexoPilha: 'I' | 'II' | 'III' | 'IV' | 'V' | null =
+    historicoAnexos.length ? historicoAnexos[historicoAnexos.length - 1] : null
   const valoresCalculo = extrairTodosValores(falasCalculo.join('\n'));
   const ultimoValorBase = valoresCalculo.length ? valoresCalculo[valoresCalculo.length - 1].valor : null;
   const textoBaixo = textoUsuario.toLowerCase();
@@ -450,10 +477,14 @@ export function extrairContextoConversa(historico: MensagemHistorico[] = []): Co
     ultimoAssunto,
     ultimoDominio,
     ultimoValorBase,
-    ultimoAnexo: slots.anexo,
+    ultimoAnexo: ultimoAnexoPilha ?? slots.anexo,
     ultimoRbt12: slots.rbt12,
     ultimaReceita: slots.receitaMes,
     ultimaFolha: slots.folha12,
+    historicoAnexos,
+    historicoRbt12,
+    historicoReceitas,
+    historicoFolhas,
     houveCalculo: /ibs|quanto fica|calcula|calcule|calculo|simula|\bncm\b/i.test(textoBaixo),
     houveSimples: /das|anexo|rbt12|rbt|fator r|sublimite|simples/i.test(textoBaixo),
     houveCnpj: ultimoCnpj != null || /cnpj|consultar.*empresa|atividades.*cnpj/i.test(textoBaixo),
@@ -565,6 +596,44 @@ export function refinarIntencaoComContexto(
         if (ctxPre.houveDados && /desse cliente|dessa empresa|deste cliente|dessa consulta|disso\b|nesse recorte|\bdessa\b|\bdeste\b/i.test(nn)) {
           return { ...analise, intencao: 'dados' }
         }
+        // v7 — rede de segurança do Simples: frase com vocabulário de slot
+        // ("anexo", "folha", "rbt", "receita", "fator r") + conversa de
+        // Simples, sem código/CNAE/CNPJ/NBS explícito, é follow-up do Simples
+        // ("e no outro anexo?", "e com folha maior?") — nunca RAG de NCM.
+        const semCodigoExplicito =
+          !/\bnbs\b|\bcnae\b|\bcnpj\b/.test(nn) &&
+          !(analise.codigoDigitos?.length === 8 || analise.codigoDigitos?.length === 9) &&
+          !analise.cnpj && !analise.cnae
+        if (
+          semCodigoExplicito &&
+          (ctxPre.houveSimples || ctxPre.ultimoAnexo != null || ctxPre.ultimoRbt12 != null) &&
+          /anexo|folha|flh\b|rbt|receita|fator\s*r|sublimite|\bdas\b/.test(nn)
+        ) {
+          return { ...analise, intencao: 'simples' }
+        }
+      } catch {
+        /* segue o fluxo */
+      }
+    }
+    // v9 — "receita tem redução" é do Simples, não dos XMLs: sem termo de
+    // dados (xml/nota/fornecedor/cliente...) e sem movimento no histórico,
+    // vocabulário de slot + conversa Simples volta ao Simples.
+    if (analise.intencao === 'dados') {
+      try {
+        const ctxPre2 = contextoBaseDoTurno(historico)
+        const nn2 = String(texto ?? '').toLowerCase()
+        const temTermoDados =
+          /xml|nota fiscal|\bnfe\b|nfce|fornecedor|cliente|diferid|cfop|\bcst\b|entradas?|saidas?|estoque|\btop\b|ranking|\bvendas?\b|\bcompras?\b/.test(nn2)
+        const temVocabSimples =
+          /anexo|\brbt\b|receita|folha|flh\b|\bdas\b|fator|sublimite|hibrido|despesa|aluguel|energia|reduc/.test(nn2)
+        if (
+          !temTermoDados &&
+          temVocabSimples &&
+          !ctxPre2.houveDados &&
+          (ctxPre2.houveSimples || ctxPre2.ultimoRbt12 != null || ctxPre2.ultimoAnexo != null)
+        ) {
+          return { ...analise, intencao: 'simples' }
+        }
       } catch {
         /* segue o fluxo */
       }
@@ -646,22 +715,33 @@ export function refinarIntencaoComContexto(
   }
   // Refino de classificação ("e para revenda?", "100% algodão", "esse mesmo"):
   // herda o assunto anterior; os detalhes saem da frase atual via slots.
+  // v9 — nunca rouba follow-up do Simples/despesas ("energia 300 com redução
+  // de 30%", "30% do RBT", "aluguel 2000"): com conversa Simples + valor ou
+  // %, o Simples decide nos blocos abaixo.
   if (ctx.ultimoAssunto || ctx.ultimoCodigoNcm || ctx.ultimoCodigoNbs) {
+    const pareceSimplesOuDespesa =
+      /anexo|rbt|receita|folha|flh\b|\bdas\b|fator|sublimite|hibrido|despesa|aluguel|energia|reduc/.test(n);
+    const rouboSimples =
+      pareceSimplesOuDespesa &&
+      /[%0-9]/.test(n) &&
+      (ctx.houveSimples || ctx.ultimoRbt12 != null || ctx.ultimoAnexo != null);
     const ehOpcoes =
-      /s[oó]\s+tem\s+(um|uma|esse|essa|isso)\b/.test(n) ||
+      !rouboSimples &&
+      (/s[oó]\s+tem\s+(um|uma|esse|essa|isso)\b/.test(n) ||
       /tem\s+mais\s+(algum|alguma|outro|outra|op)/.test(n) ||
       /outr[oa]s?\s+(ncm|nbs|opç|possibil|codigos?)|^outr[oa]s?\b/.test(n) ||
       /quantos?\s+(ncm|nbs|codigos?|existem|opç)/.test(n) ||
-      (/lista|todos?\b|alternativ|possibilidades|opç/.test(n) && !/relatorio|pdf|csv|json/.test(n))
+      (/lista|todos?\b|alternativ|possibilidades|opç/.test(n) && !/relatorio|pdf|csv|json/.test(n)))
     // "tem mais crédito/débito?" é dados, não opções de NCM.
     if (ehOpcoes && !/credito|debito|fornecedor|cliente|xml|nota fiscal/.test(n)) {
       return { ...analise, intencao: ctx.ultimoDominio ?? 'ncm', termoBusca: ctx.ultimoAssunto ?? analise.termoBusca };
     }
     const ehRefino =
-      /esse|essa|isso|desse|dessa|disso|dele|dela|mesm|dito|mencionad|acima/i.test(n) ||
+      !rouboSimples &&
+      (/esse|essa|isso|desse|dessa|disso|dele|dela|mesm|dito|mencionad|acima/i.test(n) ||
       /composi|compost|feit[oa]\s+(de|em|com)|material|ingrediente|%/i.test(n) ||
       /para\s+(revenda|consumo|plantio|semeadura|abate|uso|industrial|exporta)/i.test(n) ||
-      /uso\s+(em|para|proprio)/i.test(n);
+      /uso\s+(em|para|proprio)/i.test(n));
     if (ehRefino && ctx.ultimoAssunto) {
       return { ...analise, intencao: ctx.ultimoDominio ?? 'ncm', termoBusca: ctx.ultimoAssunto };
     }
@@ -682,10 +762,26 @@ export function refinarIntencaoComContexto(
     return { ...analise, intencao: 'calculo' };
   }
   // "e com folha maior?" — vocabulário do Simples ou conversa de Simples.
-  if (/folha|rbt|receita|anexo|das|fator|sublimite/.test(n) || ctx.houveSimples) {
+  // Fine-tuning v6: cobre dialetos (paus/conto/pila/mi/bi, verbos de edição,
+  // "30% do RBT", "refaz/recalcula", "corrige/muda/troca/bota/aumenta").
+  if (/folha|rbt|receita|anexo|das|fator|sublimite|flh\b|salario|prolabore|colaborador|funcionario|troca|muda|corrige|altera|bota|coloca|aumenta|reduz|baixa|refaz|recalcula|e se|e com|mantem|folha minima|fator r/.test(n) || ctx.houveSimples) {
     // Só promove se há algo do Simples no ar (termo atual ou contexto).
-    if (/folha|rbt|receita|anexo|das|fator|sublimite|mil|milh|k\b|r\$|\d/.test(n) && (ctx.ultimoRbt12 != null || ctx.ultimaReceita != null || ctx.ultimoAnexo != null || /folha|rbt|receita|anexo|das/.test(n))) {
+    if (/folha|rbt|receita|anexo|das|fator|sublimite|mil|milh|mi\b|k\b|bi\b|pau|pila|conto|prata|r\$|\d|%/.test(n) && (ctx.ultimoRbt12 != null || ctx.ultimaReceita != null || ctx.ultimoAnexo != null || /folha|rbt|receita|anexo|das|troca|muda|corrige|altera|bota|aumenta|refaz|recalcula/.test(n))) {
       return { ...analise, intencao: 'simples' };
+    }
+  }
+  // v8 — refino de despesas do híbrido ("aluguel 2000", "usar referência",
+  // "adicionar contador 800"): com conversa Simples ativa é follow-up do
+  // Simples, nunca RAG genérico. O orquestrador decide entre convencional e
+  // híbrido pelo contexto (thread híbrida → 2 guias; senão, cálculo normal).
+  if (analise.intencao === 'generico') {
+    try {
+      const temDespesa = extrairDespesasDoTexto(texto).length > 0 || /usar refer[eê]ncia|\bdespesa/i.test(texto)
+      if (temDespesa && (ctx.houveSimples || ctx.ultimoAnexo != null || ctx.ultimoRbt12 != null)) {
+        return { ...analise, intencao: 'simples' };
+      }
+    } catch {
+      /* despesa nunca trava o refinamento */
     }
   }
   // Follow-up de CNAE ("e esse CNAE?", "qual anexo dele?"): herda o CNAE do

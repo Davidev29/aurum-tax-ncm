@@ -223,19 +223,39 @@ function historicoAte(mensagens: MensagemChat[], userId: number): { papel: 'user
 async function drenarFila(): Promise<void> {
   if (processandoFila) return processandoFila
   processandoFila = (async () => {
+    // Assistentes criados nesta drenagem (para correção retroativa de lote).
+    const assistentesDaDrenagem: { aid: number; userId: number; userTexto: string }[] = []
     while (useChat.getState().fila.length) {
       const proximo = useChat.getState().fila[0]
       if (!proximo) break
       // Citação "Em resposta a" só em lote/rajada: 2+ enviadas juntas.
       // Marca na fila (enviada com outras) ou rajada (anterior imediato é user).
+      // A avaliação inicial (antes do await) não basta: a 1ª mensagem enviada
+      // sozinha tem emLote=false, mas vira lote se a 2ª chegar durante o await.
+      // Por isso a decisão final é refeita APÓS `responderChat` (ver abaixo).
       const msgsAntes = useChat.getState().mensagens
       const idxAntes = msgsAntes.findIndex((m) => m.id === proximo.id)
-      const anteriorUsuario = idxAntes > 0 && msgsAntes[idxAntes - 1]?.papel === 'user'
-      const emLote = Boolean(proximo.emLote) || useChat.getState().fila.length > 1 || anteriorUsuario
-      const citacao = emLote ? { id: proximo.id, texto: proximo.texto.slice(0, 280) } : null
+      const anteriorUsuarioAntes = idxAntes > 0 && msgsAntes[idxAntes - 1]?.papel === 'user'
+      const emLoteAntes =
+        Boolean(proximo.emLote) || useChat.getState().fila.length > 1 || anteriorUsuarioAntes
       try {
         const hist = historicoAte(useChat.getState().mensagens, proximo.id)
         const r = await responderChat(proximo.texto, hist)
+        // Reavalia o lote APÓS o await: se outra mensagem chegou enquanto
+        // respondíamos, a atual também faz parte do lote e precisa citar.
+        const estadoDepois = useChat.getState()
+        const msgsDepois = estadoDepois.mensagens
+        const idxDepois = msgsDepois.findIndex((m) => m.id === proximo.id)
+        const anteriorUsuarioDepois = idxDepois > 0 && msgsDepois[idxDepois - 1]?.papel === 'user'
+        const itemFilaDepois = estadoDepois.fila.find((f) => f.id === proximo.id)
+        const filaDepois = estadoDepois.fila
+        const emLoteDepois =
+          Boolean(proximo.emLote) ||
+          Boolean(itemFilaDepois?.emLote) ||
+          filaDepois.length > 1 ||
+          anteriorUsuarioDepois
+        const emLote = emLoteAntes || emLoteDepois
+        const citacao = emLote ? { id: proximo.id, texto: proximo.texto.slice(0, 280) } : null
         // IA-07: resposta do modelo revela em streaming (efeito digitação);
         // determinística entra instantânea. `enviando` segue true até o fim,
         // então o "digitando…" + avatar pulsante nunca somem no meio.
@@ -265,6 +285,7 @@ async function drenarFila(): Promise<void> {
             ],
             fila: s.fila.filter((f) => f.id !== proximo.id),
           }))
+          assistentesDaDrenagem.push({ aid: assistant.id, userId: proximo.id, userTexto: proximo.texto })
           espelharAtiva()
           continue
         }
@@ -314,14 +335,22 @@ async function drenarFila(): Promise<void> {
           ),
           fila: s.fila.filter((f) => f.id !== proximo.id),
         }))
+        assistentesDaDrenagem.push({ aid, userId: proximo.id, userTexto: proximo.texto })
         espelharAtiva()
       } catch {
+        // No erro, reavalia o lote com o estado atual (a 2ª pode ter chegado
+        // durante o await que falhou) para não perder a citação.
+        const estadoErro = useChat.getState()
+        const citacaoErro =
+          emLoteAntes || estadoErro.fila.length > 1
+            ? { id: proximo.id, texto: proximo.texto.slice(0, 280) }
+            : null
         const erro: MensagemChat = {
           id: ++seq,
           papel: 'assistant',
           texto: 'Tive uma falha momentânea. Tente de novo com 1–2 detalhes do produto.',
           quando: new Date().toISOString(),
-          emRespostaA: citacao,
+          emRespostaA: citacaoErro,
         }
         useChat.setState((s) => ({
           mensagens: [
@@ -330,8 +359,24 @@ async function drenarFila(): Promise<void> {
           ],
           fila: s.fila.filter((f) => f.id !== proximo.id),
         }))
+        assistentesDaDrenagem.push({ aid: erro.id, userId: proximo.id, userTexto: proximo.texto })
         espelharAtiva()
       }
+    }
+    // Lote formado no meio da drenagem (2ª chegou após a 1ª já ter respondido
+    // sem citação): garante `emRespostaA` retroativamente em todas desta leva.
+    if (assistentesDaDrenagem.length > 1) {
+      const porAid = new Map(assistentesDaDrenagem.map((a) => [a.aid, a]))
+      useChat.setState((s) => ({
+        mensagens: s.mensagens.map((m) => {
+          const alvo = porAid.get(m.id)
+          if (alvo && !m.emRespostaA) {
+            return { ...m, emRespostaA: { id: alvo.userId, texto: alvo.userTexto.slice(0, 280) } }
+          }
+          return m
+        }),
+      }))
+      espelharAtiva()
     }
     useChat.setState({ enviando: false })
   })().finally(() => {
@@ -400,7 +445,15 @@ export const useChat = create<ChatState>((set, get) => ({
     if (!cru) return
     const emLote = get().enviando || get().fila.length > 0
     const user: MensagemChat = { id: ++seq, papel: 'user', texto: cru.slice(0, 2000), quando: new Date().toISOString(), status: 'enviada' }
-    set((s) => ({ mensagens: [...s.mensagens, user], fila: [...s.fila, { id: user.id, texto: user.texto, emLote }], enviando: true }))
+    set((s) => ({
+      mensagens: [...s.mensagens, user],
+      // Rajada formada no meio: pendentes anteriores também passam a ser lote.
+      fila: [
+        ...(emLote ? s.fila.map((f) => (f.emLote ? f : { ...f, emLote: true })) : s.fila),
+        { id: user.id, texto: user.texto, emLote },
+      ],
+      enviando: true,
+    }))
     await drenarFila()
   },
 
@@ -420,7 +473,10 @@ export const useChat = create<ChatState>((set, get) => ({
     }))
     set((s) => ({
       mensagens: [...s.mensagens, ...novos],
-      fila: [...s.fila, ...novos.map((m) => ({ id: m.id, texto: m.texto, emLote }))],
+      fila: [
+        ...(emLote ? s.fila.map((f) => (f.emLote ? f : { ...f, emLote: true })) : s.fila),
+        ...novos.map((m) => ({ id: m.id, texto: m.texto, emLote })),
+      ],
       enviando: true,
     }))
     await drenarFila()

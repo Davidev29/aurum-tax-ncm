@@ -37,10 +37,32 @@ export const fmtCnpj = (v: unknown): string => {
 }
 
 export const fmtMoeda = (v: unknown): string =>
-  (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  FMT_BRL_CACHE.format(Number(v) || 0)
 
-export const fmtNum = (v: unknown): string =>
-  (Number(v) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })
+/** Instâncias cacheadas: evita alocar `Intl.NumberFormat` por chamada (chat/tabelas). */
+const FMT_BRL_CACHE = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+const FMT_INT_CACHE = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 })
+const FMT_NUM3_CACHE = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 })
+
+/**
+ * Formatador de moeda eficiente para a conversa direta (fine-tuning v6).
+ * - Reusa `Intl.NumberFormat` singleton (sem alocação por chamada).
+ * - Fast-path para number finito; `null/NaN/Infinity/''` → `quandoVazio`.
+ * - `-0` normalizado para `R$ 0,00`.
+ */
+export const fmtMoedaEficiente = (v: unknown, quandoVazio = '—'): string => {
+  if (v == null || v === '') return quandoVazio
+  const n = typeof v === 'number' ? v : Number(v)
+  if (!Number.isFinite(n)) return quandoVazio
+  const norm = Object.is(n, -0) ? 0 : n
+  try {
+    return FMT_BRL_CACHE.format(norm)
+  } catch {
+    return fmtBRL(norm)
+  }
+}
+
+export const fmtNum = (v: unknown): string => FMT_NUM3_CACHE.format(Number(v) || 0)
 
 export const fmtPct = (v: unknown): string =>
   v == null || v === ''
@@ -52,8 +74,7 @@ export const fmtCarga = (v: unknown): string =>
   `${(Number(v) || 0).toFixed(2).replace('.', ',')}%`
 
 /** Inteiro com separador de milhar: `1234` → `"1.234"`. */
-export const fmtInt = (v: unknown): string =>
-  new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(Number(v) || 0)
+export const fmtInt = (v: unknown): string => FMT_INT_CACHE.format(Number(v) || 0)
 
 /** `R$ 1.234,56` sem depender de `Intl` (paridade exata com a v1). */
 export const fmtBRL = (v: unknown): string => {
@@ -62,7 +83,15 @@ export const fmtBRL = (v: unknown): string => {
   const totalCent = Math.round(Math.abs(n) * 100)
   const inteiro = Math.floor(totalCent / 100)
   const cent = totalCent % 100
-  const milhar = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 }).format(inteiro)
+  // Loop de milhar sem `Intl` nem regex lookahead (fallback offline/SSR).
+  const dig = String(inteiro)
+  let milhar = ''
+  let c = 0
+  for (let i = dig.length - 1; i >= 0; i--) {
+    milhar = dig[i] + milhar
+    c++
+    if (c % 3 === 0 && i > 0) milhar = '.' + milhar
+  }
   return `${neg ? '-' : ''}R$ ${milhar},${String(cent).padStart(2, '0')}`
 }
 

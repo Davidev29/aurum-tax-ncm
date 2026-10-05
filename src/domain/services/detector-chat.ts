@@ -122,7 +122,7 @@ const SINAIS_CALCULO = [
 ]
 
 const SINAIS_SIMPLES = [
-  'simples', 'das', 'anexo i', 'anexo ii', 'anexo iii', 'anexo iv', 'anexo v',
+  'simples', 'das', 'anexo', 'anexo i', 'anexo ii', 'anexo iii', 'anexo iv', 'anexo v',
   'anexo 1', 'anexo 2', 'anexo 3', 'anexo 4', 'anexo 5', 'rbt12', 'fator r',
   'sublimite', 'receita bruta', 'folha', 'rbt', 'receita', 'comercio', 'industria', 'construcao', 'advocacia', 'advogado', 'medico', 'engenheiro', 'contador', 'consultoria', 'programador', 'software', 'salao', 'barbeiro', 'academia', 'mei',
   'hibrido', 'hibrida', 'convencional', 'todos os anexos', 'cada anexo', 'sem empresa', 'nao tenho empresa', 'despesa', 'credito cbs', 'cbs por fora',
@@ -800,12 +800,13 @@ function contem(lista: string[], n: string): boolean {
 }
 
 /**
- * `das`/`mei` como substring casam dentro de "ca-das-tra" e "meio/primeiro" —
- * exigem fronteira de palavra. Demais sinais mantêm substring.
+ * `das`/`mei`/`anexo` como substring casam dentro de "ca-das-tra",
+ * "meio/primeiro" e "anexado" — exigem fronteira de palavra. Demais sinais
+ * mantêm substring.
  */
 function contemSimples(n: string): boolean {
   return SINAIS_SIMPLES.some((s) =>
-    s === 'das' || s === 'mei' ? new RegExp(`\\b${s}\\b`).test(n) : n.includes(s),
+    s === 'das' || s === 'mei' || s === 'anexo' ? new RegExp(`\\b${s}\\b`).test(n) : n.includes(s),
   )
 }
 
@@ -1010,6 +1011,20 @@ export function detectarIntencaoChat(mensagem: unknown): AnaliseChat {
   // Antes do Simples para "anexo" não roubar a rota.
   if (cnae) {
     return { intencao: 'cnae', codigoDigitos, cnpj, cnae, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
+  }
+  // Pedido explícito de código (NBS/NCM) vence a heurística do Simples:
+  // "quais seriam os NBS para consultoria?" contém "consultoria" (sinal do
+  // Simples), mas a intenção é consultarNBS, não calcular DAS. Sem esse
+  // guard, a tool errada era chamada e a resposta vinha "sem nexo".
+  // Com verbo de cálculo + código/valor, mantém o cálculo (orquestrador cruza).
+  const temNbsExplicito = /\bnbs\b/.test(n) || codigoDigitos?.length === 9
+  const temNcmExplicito = /\bncm\b/.test(n) || codigoDigitos?.length === 8
+  const temSinalCalculo = contem(SINAIS_CALCULO, n) || (valorBase != null && codigoDigitos != null)
+  if (temNbsExplicito && !temSinalCalculo) {
+    return { intencao: 'nbs', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
+  }
+  if (temNcmExplicito && !temSinalCalculo) {
+    return { intencao: 'ncm', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
   }
   if (contemSimples(n)) {
     return { intencao: 'simples', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }

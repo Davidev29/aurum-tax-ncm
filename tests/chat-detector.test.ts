@@ -61,4 +61,14 @@ describe('detector-chat (Aurum AI)', () => {
   it('valor sem código não força NCM (é continuação de cálculo)', () => {
     expect(detectarIntencaoChat('e para 50 mil?').intencao).toBe('generico')
   })
+  it('NBS explícito vence a heurística do Simples (consultoria/advocacia/software)', () => {
+    expect(detectarIntencaoChat('quais seriam os NBS para consultoria?').intencao).toBe('nbs')
+    expect(detectarIntencaoChat('quais seriam os NBS para advocacia?').intencao).toBe('nbs')
+    expect(detectarIntencaoChat('quais seriam os NBS para desenvolvimento de software?').intencao).toBe('nbs')
+    expect(detectarIntencaoChat('quais seriam os NBS para contador?').intencao).toBe('nbs')
+    expect(detectarIntencaoChat('quais seriam os NBS para salão de beleza?').intencao).toBe('nbs')
+  })
+  it('NCM explícito vence a heurística do Simples', () => {
+    expect(detectarIntencaoChat('qual NCM para comércio de roupas?').intencao).toBe('ncm')
+  })
 })

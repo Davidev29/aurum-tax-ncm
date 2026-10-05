@@ -29,7 +29,7 @@ import { REF_DEFAULT } from '@/domain/constants'
 import { buscarArtigoLC214, disponibilidadeLC214, explicarArtigoLC214, extrairNumeroArtigoLC214, pesquisarLC214 } from '@/domain/services/lc214'
 import { detectarForaDeEscopo, MENSAGEM_FORA_DE_ESCOPO, ehConversaLeve, temSinalFiscal } from '@/domain/services/escopo-consulta'
 import { detectarIntencaoChat, classificarDominio, extrairCnae, extrairNucleoBusca, extrairSlotsProduto, type AnaliseChat } from '@/domain/services/detector-chat'
-import { extrairSlotsSimples, extrairTodosValores } from '@/domain/services/valores-chat'
+import { extrairSlotsSimples, extrairTodosValores, aplicarEdicaoSimples, resolverFolhaPercentual, historicoSlotsSimples, anexoExigeFolha, ehPedidoOutroAnexoAmbiguo, resolverAnexoPorReferencia, observarIntencaoSimples } from '@/domain/services/valores-chat'
 import { inferirAnexoPorAtividade } from '@/domain/services/anexo-inferencia'
 import { codigo7De, exigePerguntaFatorR, rotuloAnexoSimples } from '@/domain/services/cnae'
 import { fmtCnae } from '@/infrastructure/base/normalizacao'
@@ -41,15 +41,21 @@ import { classificarComIa, type ResultadoGateIa } from '@/application/classifica
 import { classificarComIaServicos, type ResultadoGateIaServicos } from '@/application/classificacao-ia-servicos'
 import { resolverClassificacoes, resolverClassificacoesNbs } from '@/infrastructure/base/classificacao-repo'
 import { montarCSV } from '@/infrastructure/exporters/relatorios'
-import { calcularConvencional, calcularHibrido, debitoCBS, fatorR } from '@/simples/calculo'
+import { calcularConvencional, calcularHibrido, debitoCBS, fatorR, type ResultadoConvencional, type ResultadoHibrido, type RegraDebitoCBS } from '@/simples/calculo'
+import { rotuloRegraCredito, rotuloRegraDebito } from '@/domain/services/percentual-chat';
 import { ANEXOS_SIMPLES, CBS_REF_PADRAO, type AnexoSimplesId } from '@/simples/tabelas'
 import {
   acumularDespesas,
   detectarModoExploratorio,
   detectarQuerHibrido,
   detectarQuerTodosAnexos,
+  detectarRegraDebitoReceita,
   detectarSemEmpresa,
+  ehReducaoPorTipo,
   extrairCbsRef,
+  extrairDespesasDoTexto,
+  contextoHibridoAtivo,
+  mencionaReducaoReceita,
   montarRelatorioSimples,
   orquestrarTodosAnexos,
   reconstruirEstadoColeta,
@@ -58,6 +64,7 @@ import {
   DESPESAS_REFERENCIA,
   totalCreditosChat,
   type DadosSimplesChat,
+  type DespesaChat,
 } from './aurum-ai-simples-exploratorio'
 import { VIEWS_AURUM_AI, botoesCapacidades, type BotaoChat } from './aurum-ai-recursos'
 import { encontrarConceito, textoConceito } from './aurum-ai-conhecimento'
@@ -470,12 +477,49 @@ function responderConceito(pergunta: string, perfil?: PerfilMemoria | null): Res
 
 function responderComparativo(pergunta: string, historico: MensagemHistorico[] = []): RespostaChat {
   const n = pergunta.toLowerCase()
+  // v8 — normaliza acentos para os gates ("híbrido" com í deve casar).
+  const nn = n.normalize('NFD').replace(/[̀-ͯ]/g, '')
   const ctx = contextoBaseDoTurno(historico)
+  const falasUser = historico.filter((m) => m.papel === 'user').map((m) => m.texto)
   const temNumeros = ctx.ultimoRbt12 != null || ctx.ultimaReceita != null || ctx.ultimaFolha != null
-  const falaIII_V = /iii| v\b|anexo/.test(n)
-  const falaHib = /hibrido|convencional|conv|hib/.test(n)
-  // Com contexto numérico, delega ao motor via Simples (cálculo real).
+  const falaIII_V = /iii| v\b|anexo/.test(nn)
+  const falaHib = /hibrido|convencional|conv|hib/.test(nn)
+  // v8 — pedido de híbrido COM números: calcula e entrega as 2 guias (sob
+  // demanda: clique ou pergunta explícita). Sem isso, o híbrido nunca aparece.
+  if (falaHib) {
+    const slotsQ = extrairSlotsSimples(pergunta)
+    const anexoQ = slotsQ.anexo ?? ctx.ultimoAnexo ?? null
+    const rbtQ = slotsQ.rbt12 ?? ctx.ultimoRbt12 ?? null
+    const recQ = slotsQ.receitaMes ?? ctx.ultimaReceita ?? null
+    if (anexoQ != null && rbtQ != null && recQ != null) {
+      const cbsRefQ = extrairCbsRef([...falasUser, pergunta].join('\n')) ?? CBS_REF_PADRAO
+      const despesasQ = acumularDespesas([...falasUser, pergunta])
+      const detDebQ = detectarRegraDebitoReceita([...falasUser, pergunta].join('\n'))
+      return responderHibridoAnexo({
+        anexo: anexoQ as AnexoSimplesId, rbt12: rbtQ, receita: recQ,
+        cbsRef: cbsRefQ, despesas: despesasQ, origem: 'comparativo:hibrido',
+        regraDebito: detDebQ.regra ?? 'cheia', debitoIncerto: detDebQ.incerta && detDebQ.regra == null,
+      })
+    }
+    const faltamQ: string[] = []
+    if (anexoQ == null) faltamQ.push('o anexo')
+    if (rbtQ == null) faltamQ.push('o RBT12 (faturamento dos últimos 12 meses)')
+    if (recQ == null) faltamQ.push('a receita do mês')
+    return {
+      texto:
+        `Para o híbrido preciso de ${faltamQ.join(', ')}.\n` +
+        `Me diga — ex.: "Anexo III, RBT12 500 mil, receita 40 mil no híbrido".`,
+      confianca: 0.9, nivel: 'alta',
+      fontes: ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)'],
+      sugestoes: ['Anexo III, RBT12 500 mil, receita 40 mil no híbrido'],
+      botoes: [{ rotulo: 'Abrir Simples Nacional', acao: 'navegar', alvo: 'simples' }],
+      pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Comparativo híbrido sem números — perguntar'),
+    }
+  }
+  // Com contexto numérico, o comparativo III×V roda em 1 clique (sem nada
+  // automático: o híbrido continua atrás do próprio botão).
   if (temNumeros && (falaIII_V || falaHib)) {
+    const temTudo = ctx.ultimoAnexo != null && ctx.ultimoRbt12 != null && ctx.ultimaReceita != null
     return {
       texto:
         `Boa — já tenho números da nossa conversa (RBT12 ${ctx.ultimoRbt12 != null ? fmtMoeda(ctx.ultimoRbt12) : '—'}, ` +
@@ -484,7 +528,16 @@ function responderComparativo(pergunta: string, historico: MensagemHistorico[] =
         `Regra rápida: Anexo III vence quando o Fator R ≥ 28%; Híbrido vence quando os créditos de CBS superam a CBS embutida no DAS.`,
       confianca: 0.85, nivel: 'alta',
       fontes: ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)', 'Fator R (folha/RBT12 ≥ 28% → III)'],
-      botoes: [{ rotulo: 'Abrir Simples Nacional', acao: 'navegar', alvo: 'simples' }],
+      botoes: [
+        ...(temTudo
+          ? [{
+              rotulo: '⚖️ Comparar anexos I–V',
+              acao: 'perguntar' as const,
+              alvo: `__COMPARAR_ANEXOS__ RBT12=${ctx.ultimoRbt12 as number} RECEITA=${ctx.ultimaReceita as number} FOLHA=${ctx.ultimaFolha ?? 0} ANEXO_ATUAL=${ctx.ultimoAnexo as string}`,
+            }]
+          : []),
+        { rotulo: 'Abrir Simples Nacional', acao: 'navegar', alvo: 'simples' },
+      ],
       pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Comparativo com contexto → módulo Simples'),
     }
   }
@@ -519,6 +572,141 @@ function parsePayloadComparar(texto: string): { rbt12: number; receita: number; 
   const cbsRef = cbsM ? Number(cbsM[1]) : CBS_REF_PADRAO
   if (rbt12 == null || receita == null || !anexo) return null
   return { rbt12, receita, folha: Number.isFinite(folha) && folha >= 0 ? folha : 0, anexo, cbsRef: cbsRef > 0 && cbsRef < 1 ? cbsRef : CBS_REF_PADRAO }
+}
+
+/* v8 — entrega padrão do híbrido em 2 guias (só sob demanda) --------------- */
+
+/**
+ * Bloco de entrega do híbrido: as 2 guias que o usuário recolhe.
+ * - Guia DAS (sem CBS) = DAS convencional − CBS embutida;
+ * - Guia DARF (CBS por fora) = débitos (receita × CBS ref) − créditos.
+ * Puro: só formata números do motor.
+ */
+function blocoGuiasHibrido(conv: ResultadoConvencional, hib: ResultadoHibrido, debitos: number, creditos: number): string {
+  return (
+    `• Guia DAS (sem CBS): **${fmtMoeda(hib.dasReduzido)}**\n` +
+    `• Guia DARF (CBS por fora): **${fmtMoeda(hib.cbsFora)}** (débitos ${fmtMoeda(debitos)} − créditos ${fmtMoeda(creditos)})\n` +
+    `• Total no híbrido: **${fmtMoeda(hib.total)}**/mês (convencional: ${fmtMoeda(conv.das)})`
+  )
+}
+
+/**
+ * Calcula o híbrido de UM anexo e entrega as 2 guias.
+ * - Sem despesas: entrega pessimista (CBS fora cheia) + STEP-BY-STEP da
+ *   referência ("usar referência" ou "aluguel 2000").
+ * - Com despesas: entrega com débitos − créditos + convite de ajuste.
+ * Única porta de saída do híbrido no chat (payload, pedido explícito ou
+ * refino de despesas em thread híbrida).
+ */
+function responderHibridoAnexo(args: {
+  anexo: AnexoSimplesId
+  rbt12: number
+  receita: number
+  cbsRef: number
+  despesas: DespesaChat[]
+  origem: string
+  /** v9 — redução sobre a receita (débito com alíquota reduzida). */
+  regraDebito?: RegraDebitoCBS
+  /** v9 — receita cita redução sem %: pergunta qual porcentagem. */
+  debitoIncerto?: boolean
+}): RespostaChat {
+  const t0 = Date.now()
+  const { anexo, rbt12, receita, cbsRef, despesas } = args
+  const regraDebito: RegraDebitoCBS = args.regraDebito ?? 'cheia'
+  const conv = calcularConvencional({ anexoId: anexo, rbt12, receitaMes: receita })
+  const debitos = debitoCBS(receita, regraDebito, cbsRef)
+  const creditos = totalCreditosChat(despesas, cbsRef)
+  const hib = calcularHibrido({ convencional: conv, debitosCBS: debitos, creditosCBS: creditos })
+  const veredito = hib.melhor === 'empate' ? 'Empate técnico' : hib.melhor === 'hibrido' ? 'Híbrido vence' : 'Convencional vence'
+  const pedidoHib = detectarPedidoGrafico(`${args.origem} ${anexo} ${rbt12} ${receita}`)
+  const graficoHib: GraficoChat | null = graficoConvXHibrido({
+    anexo, dasConv: conv.das, dasReduzido: hib.dasReduzido,
+    cbsFora: hib.cbsFora, totalHib: hib.total, economia: hib.economiaVsConvencional,
+  })
+  const graficoFinal = pedidoHib.tipo ? aplicarTipoPreferido(graficoHib, pedidoHib.tipo) : graficoHib
+  const sugHib = sugestaoGrafico(
+    `Mostra em gráfico a comparação Convencional × Híbrido: Anexo ${anexo}, RBT12 ${rbt12}, receita ${receita}`,
+    `Mostra em tabela a comparação Convencional × Híbrido: Anexo ${anexo}, RBT12 ${rbt12}, receita ${receita}`,
+  )
+  const cabecalho =
+    `Híbrido — Anexo ${anexo} (RBT12 ${fmtMoeda(rbt12)} · receita ${fmtMoeda(receita)} · CBS ref ${(cbsRef * 100).toFixed(2).replace('.', ',')}%${regraDebito !== 'cheia' ? ` · receita com ${rotuloRegraDebito(regraDebito)}` : ''}):\n` +
+    `${blocoGuiasHibrido(conv, hib, debitos, creditos)} → **${veredito}**`
+  // v9 — perguntas de redução (uma por resposta): receita sem % e a primeira
+  // despesa com regra assumida. O resultado acima já é a análise completa com
+  // as regras assumidas sinalizadas — confirmar refina na hora.
+  let blocoPerguntas = ''
+  const botoesPergunta: BotaoChat[] = []
+  if (args.debitoIncerto) {
+    blocoPerguntas +=
+      `\n\n❓ Sua receita tem redução — **qual porcentagem?**\n` +
+      `• Clique ou diga: "receita com redução de 30%" · "...de 60%" · "receita com alíquota zero" · "receita sem redução".`
+    botoesPergunta.push(
+      { rotulo: 'Redução de 30%', acao: 'perguntar', alvo: 'receita com redução de 30%' },
+      { rotulo: 'Redução de 60%', acao: 'perguntar', alvo: 'receita com redução de 60%' },
+      { rotulo: 'Alíquota zero', acao: 'perguntar', alvo: 'receita com alíquota zero' },
+      { rotulo: 'Sem redução', acao: 'perguntar', alvo: 'receita sem redução' },
+    )
+  }
+  const incerta = despesas.find((d) => !d.regraExplicita && !ehReducaoPorTipo(d.rotulo))
+  if (incerta) {
+    const rot = incerta.rotulo
+    const val = incerta.valor
+    blocoPerguntas +=
+      `\n\n❓ Sobre **${rot} (${fmtMoeda(val)})**: tem redução? Assumi **${rotuloRegraCredito(incerta.regra)}** — confirme ou corrija:`
+    botoesPergunta.push(
+      { rotulo: '✅ Integral', acao: 'perguntar', alvo: `${rot} ${val} integral` },
+      { rotulo: '➖ Redução de 30%', acao: 'perguntar', alvo: `${rot} ${val} com redução de 30%` },
+      { rotulo: '➖ Redução de 60%', acao: 'perguntar', alvo: `${rot} ${val} com redução de 60%` },
+      { rotulo: '🚫 Sem crédito', acao: 'perguntar', alvo: `${rot} ${val} sem crédito` },
+    )
+  }
+  if (!despesas.length) {
+    // STEP-BY-STEP do híbrido: mostra a referência e pede confirmação/ajuste.
+    const ref = DESPESAS_REFERENCIA.map((d) => {
+      const c = Math.round(d.valor * cbsRef * (d.rotulo === 'Aluguel' ? 0.3 : 1) * 100) / 100
+      return `• ${d.rotulo}: ${fmtMoeda(d.valor)} → crédito ${fmtMoeda(c)}`
+    }).join('\n')
+    const totalRef = totalCreditosChat([...DESPESAS_REFERENCIA], cbsRef)
+    const debitosRef = debitoCBS(receita, regraDebito, cbsRef)
+    return {
+      texto:
+        `${cabecalho} (pessimista, sem despesas)\n\n` +
+        `## Para refinar o híbrido, confirme as despesas\n` +
+        `Débitos de CBS sobre a receita: **${fmtMoeda(debitosRef)}** (${(cbsRef * 100).toFixed(2).replace('.', ',')}% de ${fmtMoeda(receita)}).\n` +
+        `Valores de referência que posso usar:\n${ref}\n` +
+        `Total de créditos (referência): **${fmtMoeda(totalRef)}**\n\n` +
+        `• Diga "usar referência" para recalcular com esses valores\n` +
+        `• Ou ajuste: "aluguel 2000, energia 350" · "adicionar contador 800 integral"` +
+        `${blocoPerguntas}\n\n${sugHib.frase}`,
+      confianca: 0.9, nivel: 'alta',
+      fontes: ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)'],
+      grafico: graficoFinal,
+      sugestoes: ['Usar referência', ...sugHib.sugestoes],
+      botoes: [
+        { rotulo: '✅ Usar referência', acao: 'perguntar', alvo: `Usar referência: aluguel 1500, energia 300, telefone 150, água 50, material 300. Comparar híbrido Anexo ${anexo}, RBT12 ${rbt12}, receita ${receita}` },
+        ...botoesPergunta,
+        ...sugHib.botoes,
+        { rotulo: 'Abrir Simples Nacional', acao: 'navegar', alvo: 'simples' },
+      ],
+      pensamento: pensar([PENSAR.entender, PENSAR.validar, PENSAR.calcularDas], `Híbrido Anexo ${anexo} (sem despesas → pedir referência) · ${args.origem}`, Date.now() - t0),
+    }
+  }
+  const linhaRegras =
+    `\nRegras aplicadas: ${despesas.map((d) => `${d.rotulo} ${ehReducaoPorTipo(d.rotulo) ? '30% da alíquota (padrão da categoria)' : `${rotuloRegraCredito(d.regra)}${d.regraExplicita ? '' : ' (assumido — confirme)'}`}`).join(' · ')}.`
+  const detalheDespesas =
+    `\nDespesas consideradas:\n${despesas.map((d) => `• ${d.rotulo}: ${fmtMoeda(d.valor)} → crédito ${fmtMoeda(Math.round(d.valor * cbsRef * (d.rotulo.toLowerCase().includes('aluguel') ? 0.3 : d.regra === 'integral' ? 1 : d.regra === 'red30' ? 0.7 : d.regra === 'red60' ? 0.4 : 0) * 100) / 100)}`).join('\n')}`
+  return {
+    texto:
+      `${cabecalho}\n${detalheDespesas}${linhaRegras}\n\n` +
+      `Ajuste com "aluguel 2000" ou "adicionar contador 800" que recalculo na hora.` +
+      `${blocoPerguntas}\n\n${sugHib.frase}`,
+    confianca: 0.9, nivel: 'alta',
+    fontes: ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)'],
+    grafico: graficoFinal,
+    sugestoes: [...sugHib.sugestoes],
+    botoes: [...botoesPergunta, ...sugHib.botoes, { rotulo: 'Abrir Simples Nacional', acao: 'navegar', alvo: 'simples' }],
+    pensamento: pensar([PENSAR.entender, PENSAR.validar, PENSAR.calcularDas], `Híbrido Anexo ${anexo} (com despesas) · ${args.origem}`, Date.now() - t0),
+  }
 }
 
 function responderComparativoMatriz(texto: string, historico: MensagemHistorico[] = []): RespostaChat {
@@ -589,7 +777,6 @@ function responderComparativoMatriz(texto: string, historico: MensagemHistorico[
 }
 
 function responderComparativoHibrido(texto: string, historico: MensagemHistorico[] = []): RespostaChat {
-  const t0 = Date.now()
   const args = parsePayloadComparar(texto)
   if (!args) {
     return {
@@ -607,82 +794,13 @@ function responderComparativoHibrido(texto: string, historico: MensagemHistorico
   let despesas = acumularDespesas([...falasUser, texto])
   const despM = texto.match(/DESPESA=(\d+(?:\.\d+)?)/)
   const despesaPayload = despM ? Number(despM[1]) : 0
-  const temDespesaExplicita = despesas.length > 0 || despesaPayload > 0
   if (despesaPayload > 0 && !despesas.length) {
     despesas = [{ rotulo: 'Despesa informada', valor: despesaPayload, regra: 'integral' }]
   }
-  // CORREÇÃO: débitos = receita × CBS ref (cheia), nunca cbsDentroDAS.
-  const debitos = debitoCBS(args.receita, 'cheia', cbsRef)
-  const listaParaCalculo = despesas.length ? despesas : []
-  const creditos = totalCreditosChat(listaParaCalculo, cbsRef)
-  // Para o veredito honesto por anexo, usa o orquestrador (mesmos inputs).
-  const entrada = { rbt12: args.rbt12, receitaMes: args.receita, folha12: args.folha > 0 ? args.folha : null, cbsRef, despesas: listaParaCalculo.length ? listaParaCalculo : [...DESPESAS_REFERENCIA].map((d) => ({ rotulo: d.rotulo, valor: 0, regra: d.regra })) }
-  void entrada
-  const conv = calcularConvencional({ anexoId: args.anexo as AnexoSimplesId, rbt12: args.rbt12, receitaMes: args.receita })
-  const hib = calcularHibrido({ convencional: conv, debitosCBS: debitos, creditosCBS: creditos })
-  const veredito = hib.melhor === 'empate' ? 'Empate técnico' : hib.melhor === 'hibrido' ? 'Híbrido vence' : 'Convencional vence'
-  const pedidoHib = detectarPedidoGrafico(texto)
-  let graficoHib: GraficoChat | null = graficoConvXHibrido({
-    anexo: args.anexo,
-    dasConv: conv.das,
-    dasReduzido: hib.dasReduzido,
-    cbsFora: hib.cbsFora,
-    totalHib: hib.total,
-    economia: hib.economiaVsConvencional,
+  return responderHibridoAnexo({
+    anexo: args.anexo as AnexoSimplesId, rbt12: args.rbt12, receita: args.receita,
+    cbsRef, despesas, origem: 'comparativo:hibrido-payload',
   })
-  if (pedidoHib.tipo) graficoHib = aplicarTipoPreferido(graficoHib, pedidoHib.tipo)
-  const sugHib = sugestaoGrafico(
-    `Mostra em gráfico a comparação Convencional × Híbrido: Anexo ${args.anexo}, RBT12 ${args.rbt12}, receita ${args.receita}`,
-    `Mostra em tabela a comparação Convencional × Híbrido: Anexo ${args.anexo}, RBT12 ${args.rbt12}, receita ${args.receita}`,
-  )
-  if (!temDespesaExplicita) {
-    // STEP-BY-STEP do híbrido: mostra a referência e pede confirmação/ajuste.
-    const ref = DESPESAS_REFERENCIA.map((d) => {
-      const c = Math.round(d.valor * cbsRef * (d.rotulo === 'Aluguel' ? 0.3 : 1) * 100) / 100
-      return `• ${d.rotulo}: ${fmtMoeda(d.valor)} → crédito ${fmtMoeda(c)}`
-    }).join('\n')
-    const totalRef = totalCreditosChat([...DESPESAS_REFERENCIA], cbsRef)
-    const debitosRef = debitoCBS(args.receita, 'cheia', cbsRef)
-    return {
-      texto:
-        `Conv×Híb no Anexo ${args.anexo} (RBT12 ${fmtMoeda(args.rbt12)} · receita ${fmtMoeda(args.receita)}):\n` +
-        `• Convencional (DAS): ${fmtMoeda(conv.das)} (CBS dentro: ${fmtMoeda(conv.cbsDentroDAS)})\n` +
-        `• Híbrido sem créditos: DAS reduzido ${fmtMoeda(hib.dasReduzido)} + CBS fora ${fmtMoeda(hib.cbsFora)} = **${fmtMoeda(hib.total)}** → **${veredito}** (pessimista, sem despesas)\n\n` +
-        `## Para refinar o híbrido, confirme as despesas\n` +
-        `Débitos de CBS sobre a receita: **${fmtMoeda(debitosRef)}** (${(cbsRef * 100).toFixed(2).replace('.', ',')}% de ${fmtMoeda(args.receita)}).\n` +
-        `Valores de referência que posso usar:\n${ref}\n` +
-        `Total de créditos (referência): **${fmtMoeda(totalRef)}**\n\n` +
-        `• Diga "usar referência" para recalcular com esses valores\n` +
-        `• Ou ajuste: "aluguel 2000, energia 350" · "adicionar contador 800 integral"\n\n${sugHib.frase}`,
-      confianca: 0.9, nivel: 'alta',
-      fontes: ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)'],
-      grafico: graficoHib,
-      sugestoes: ['Usar referência', ...sugHib.sugestoes],
-      botoes: [
-        { rotulo: '✅ Usar referência', acao: 'perguntar', alvo: `Usar referência: aluguel 1500, energia 300, telefone 150, água 50, material 300. Comparar híbrido Anexo ${args.anexo}, RBT12 ${args.rbt12}, receita ${args.receita}` },
-        ...sugHib.botoes,
-        { rotulo: 'Abrir Simples Nacional', acao: 'navegar', alvo: 'simples' },
-      ],
-      pensamento: pensar([PENSAR.entender, PENSAR.validar, PENSAR.calcularDas], `Conv×Híb Anexo ${args.anexo} (sem despesas → pedir referência)`, Date.now() - t0),
-    }
-  }
-  const detalheDespesas = despesas.length
-    ? `\nDespesas consideradas:\n${despesas.map((d) => `• ${d.rotulo}: ${fmtMoeda(d.valor)} → crédito ${fmtMoeda(Math.round(d.valor * cbsRef * (d.rotulo.toLowerCase().includes('aluguel') ? 0.3 : d.regra === 'integral' ? 1 : d.regra === 'red30' ? 0.7 : d.regra === 'red60' ? 0.4 : 0) * 100) / 100)}`).join('\n')}`
-    : ''
-  return {
-    texto:
-      `Conv×Híb no Anexo ${args.anexo} (RBT12 ${fmtMoeda(args.rbt12)} · receita ${fmtMoeda(args.receita)} · CBS ref ${(cbsRef * 100).toFixed(2).replace('.', ',')}%):\n` +
-      `• Convencional (DAS): ${fmtMoeda(conv.das)} (CBS dentro: ${fmtMoeda(conv.cbsDentroDAS)})\n` +
-      `• Híbrido: DAS reduzido ${fmtMoeda(hib.dasReduzido)} + CBS fora ${fmtMoeda(hib.cbsFora)} (débitos ${fmtMoeda(debitos)} − créditos ${fmtMoeda(creditos)}) = **${fmtMoeda(hib.total)}** (economia ${fmtMoeda(hib.economiaVsConvencional)})\n` +
-      `**${veredito}**${detalheDespesas}\n\n` +
-      `Ajuste com "aluguel 2000" ou "adicionar contador 800" que recalculo na hora.\n\n${sugHib.frase}`,
-    confianca: 0.9, nivel: 'alta',
-    fontes: ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)'],
-    grafico: graficoHib,
-    sugestoes: [...sugHib.sugestoes],
-    botoes: [...sugHib.botoes, { rotulo: 'Abrir Simples Nacional', acao: 'navegar', alvo: 'simples' }],
-    pensamento: pensar([PENSAR.entender, PENSAR.validar, PENSAR.calcularDas], `Conv×Híb Anexo ${args.anexo} (com despesas)`, Date.now() - t0),
-  }
 }
 
 /* -------------------------------------------------- legislação LC 214 --
@@ -1090,6 +1208,33 @@ function semLastro(termo?: string, bases?: string[]): RespostaChat {
     pensamento: pensar(
       [PENSAR.entender, PENSAR.consultar(0)],
       vasculhei ? `Raciocínio: ${bases?.join(' → ')} sem lastro para "${termo}"` : 'Sem lastro na TEC',
+    ),
+  }
+}
+
+/**
+ * Sem-lastro específico de SERVIÇOS: funil por tipo/tomador/local, nunca por
+ * material/uso/estado (esses são de produto e soavam "sem nexo" no NBS).
+ */
+function semLastroNbs(termo?: string): RespostaChat {
+  const vasculhei = termo ? `Vasculhei NBS e NCM por "${termo}" e não achei referência. ` : ''
+  return {
+    texto:
+      `${vasculhei}Me diga para eu funilar e orientar:\n` +
+      `• tipo de serviço (ex.: "aula de inglês", "manutenção de ar-condicionado", "consultoria empresarial")\n` +
+      `• tomador (empresa ou pessoa física?)\n` +
+      `• local da prestação (município/UF)\n\n` +
+      `Ex.: "qual o NBS para aula de inglês?" — aí cruzo na base oficial (NBS × CST × cClassTrib) na hora. ` +
+      `Se souber o CNPJ, diga "quais atividades o CNPJ ... tem?" que puxo CNAEs + Anexo do Simples.`,
+    confianca: 0,
+    nivel: 'baixa',
+    exato: false,
+    fontes: ['Vínculos NBS × CST × cClassTrib (LC 214/2025)'],
+    sugestoes: ['Qual o NBS para aula de inglês?', 'O que você pode fazer?'],
+    botoes: [{ rotulo: 'Abrir Serviços (NBS)', acao: 'navegar', alvo: 'servicos' }],
+    pensamento: pensar(
+      [PENSAR.entender, PENSAR.consultar(0)],
+      vasculhei ? `Raciocínio: NBS → NCM sem lastro para "${termo}"` : 'Sem lastro NBS',
     ),
   }
 }
@@ -1835,6 +1980,34 @@ async function responderNbs(pergunta: string, analise: AnaliseChat, historico: M
     }
   }
   if (respNbs) return respNbs
+  // Sem NBS ancorado, mas o determinístico já explicou (setor/regra geral/
+  // hipótese de benefício em `sugestao.justificativa`): surface a explicação
+  // honesta em vez de cair no funil genérico de produto. É o caso de serviços
+  // sem benefício mapeado (ex.: "consultoria") — regra geral, não "não achei".
+  const justDet = gate.sugestao?.justificativa?.trim()
+  if (justDet && !gate.sugestao?.foraDeEscopo && justDet.length >= 20) {
+    return {
+      texto:
+        `${justDet}\n\n` +
+        `**Base:** vínculos NBS × CST × cClassTrib (LC 214/2025) + LC 116/2003 (ISS municipal).\n` +
+        `**Próximo passo sugerido:** me diga o tomador (empresa ou pessoa física?), o local da prestação ou o CNPJ — puxo CNAEs + Anexo do Simples e simulo o DAS.`,
+      codigo: null,
+      tipoCodigo: 'nbs',
+      confianca: 0.4,
+      nivel: 'media',
+      fontes: ['Vínculos NBS × CST × cClassTrib (LC 214/2025)', 'LC 116/2003 (serviços)'],
+      sugestoes: ['Quais atividades o CNPJ 53.795.990/0001-68 tem?', 'Qual melhor: Anexo III ou V?'],
+      botoes: [
+        { rotulo: 'Abrir Serviços (NBS)', acao: 'navegar', alvo: 'servicos' },
+        { rotulo: 'Consultar por CNPJ', acao: 'perguntar', alvo: 'Quais atividades o CNPJ 53.795.990/0001-68 tem?' },
+      ],
+      pensamento: pensar(
+        [PENSAR.entender, PENSAR.consultar(gate.candidatos.length), PENSAR.validar],
+        `NBS sem vínculo ancorado → explicação honesta do determinístico ("${termoEfetivo}")`,
+        Date.now() - t0,
+      ),
+    }
+  }
   // Camada 2 do raciocínio: não é serviço? Cruza na base de PRODUTOS (NCM)
   // com o mesmo núcleo antes de desistir.
   const gateNcm = await classificarComIa({ descricao: termoEfetivo })
@@ -1848,7 +2021,7 @@ async function responderNbs(pergunta: string, analise: AnaliseChat, historico: M
     compacto,
   })
   if (respNcm) return respNcm
-  return semLastro(nucleo ?? termo, ['NBS', 'NCM'])
+  return semLastroNbs(nucleo ?? termo)
 }
 
 /* ------------------------------------------------------------ CNPJ --
@@ -2530,6 +2703,24 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
   // receita da conversa; base R$ 1.000 de um cálculo IBS nunca vira receita).
   const ctx = contextoBaseDoTurno(historico)
   const slots = extrairSlotsSimples(pergunta)
+  // Payloads de botão: refazem o cálculo com a folha sugerida/alterada,
+  // herdando RBT12/receita/anexo da conversa (fine-tuning v6 — Fator R).
+  // Formato: `__RECALCULAR_FATOR_R__ RBT12=.. RECEITA=.. FOLHA=.. ANEXO_ATUAL=..`
+  if (/^__RECALCULAR_FATOR_R__/.test(String(pergunta ?? '').trim())) {
+    const nums = Object.fromEntries(
+      [...String(pergunta).matchAll(/(RBT12|RECEITA|FOLHA|ANEXO_ATUAL)\s*=\s*([^\s]+)/gi)].map((m) => [m[1].toUpperCase(), m[2]]),
+    ) as Record<string, string>
+    const rbtP = Number(String(nums.RBT12 ?? '').replace(',', '.')) || ctx.ultimoRbt12 || slots.rbt12
+    const recP = Number(String(nums.RECEITA ?? '').replace(',', '.')) || ctx.ultimaReceita || slots.receitaMes
+    const folhaP = Number(String(nums.FOLHA ?? '').replace(',', '.')) || ctx.ultimaFolha || slots.folha12
+    const anexoP = (String(nums.ANEXO_ATUAL ?? '').toUpperCase() || ctx.ultimoAnexo || slots.anexo || 'III') as AnexoSimplesId
+    if (rbtP != null && recP != null && folhaP != null) {
+      const frase = `Anexo ${anexoP}, RBT12 ${rbtP}, receita ${recP}, folha ${folhaP}`
+      const r = await responderSimples(frase, [])
+      const marca = `🔁 Recálculo com folha sugerida (${fmtMoeda(folhaP)}).\n`
+      return { ...r, texto: marca + r.texto }
+    }
+  }
   // 08-01: MEI orienta, nunca calcula (DAS-MEI fixo, fora dos Anexos I–V).
   if (/\bmei\b/i.test(pergunta)) {
     return {
@@ -2548,12 +2739,71 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
     }
   }
   // 08-01: frase atual vence herança — explícito > inferido > contexto.
+  // Fine-tuning v6: mescla anti-"RBT fantasma" via `aplicarEdicaoSimples`
+  // ("e com 200 mil?" após RBT+receita vira FOLHA, nunca RBT).
+  // v7: pilha em ordem cronológica — "primeiro/anterior/volta/outro/mesmos
+  // valores" resolvem contra o histórico, e a intenção é observada sempre.
   const inferencia = slots.anexo == null ? inferirAnexoPorAtividade(pergunta) : null
-  const anexoId = slots.anexo ?? inferencia?.anexo ?? ctx.ultimoAnexo ?? null
+  const falasUserPre = historico.filter((m) => m.papel === 'user').map((m) => m.texto)
+  const pilhaSimples = historicoSlotsSimples(falasUserPre)
+  const edicao = aplicarEdicaoSimples(
+    pergunta,
+    slots,
+    { ultimoAnexo: ctx.ultimoAnexo, ultimoRbt12: ctx.ultimoRbt12, ultimaReceita: ctx.ultimaReceita, ultimaFolha: ctx.ultimaFolha },
+    pilhaSimples,
+  )
+  // v7 — "e no outro anexo?" sem nome e sem 2 candidatos: pergunta em vez de chutar.
+  if (edicao.ambiguo && ehPedidoOutroAnexoAmbiguo(pergunta, slots.anexo)) {
+    const distintos = [...new Set(pilhaSimples.turnos.map((t) => t.anexo).filter((v): v is NonNullable<typeof v> => v != null))]
+    const sugestao = distintos.length === 1 && distintos[0] !== ctx.ultimoAnexo ? distintos[0] : null
+    void resolverAnexoPorReferencia
+    void observarIntencaoSimples
+    return {
+      texto:
+        `Você quer ir para qual anexo?\n` +
+        `Contexto atual: ${ctx.ultimoAnexo ? `Anexo ${ctx.ultimoAnexo} · ` : ''}${ctx.ultimoRbt12 ? `RBT12 ${fmtMoeda(ctx.ultimoRbt12)} · ` : ''}${ctx.ultimaReceita ? `receita ${fmtMoeda(ctx.ultimaReceita)}` : ''}\n\n` +
+        (distintos.length >= 1 ? `Anexos já usados: ${distintos.map((a) => `Anexo ${a}`).join(', ')}.\n` : '') +
+        `Diga "Anexo V com os mesmos valores" ou "calcula no III mantendo tudo".`,
+      confianca: 0.9,
+      nivel: 'alta',
+      fontes: ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)'],
+      sugestoes: ['Anexo V com os mesmos valores', 'Calcula no III mantendo tudo'],
+      botoes: [
+        { rotulo: `Ir para Anexo V`, acao: 'perguntar', alvo: `Anexo V com os mesmos valores (RBT12 ${ctx.ultimoRbt12 ?? ''}, receita ${ctx.ultimaReceita ?? ''})` },
+        ...(sugestao ? [{ rotulo: `Ir para Anexo ${sugestao}`, acao: 'perguntar' as const, alvo: `Anexo ${sugestao} com os mesmos valores` }] : []),
+      ],
+      pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Simples: outro anexo ambíguo → perguntar destino', Date.now() - t0),
+    }
+  }
+  // Valor avulso totalmente ambíguo ("e para 5 mil?" sem pista): pergunta qual slot.
+  if (edicao.ambiguo) {
+    const unico = extrairTodosValores(pergunta)[0]?.valor ?? null
+    return {
+      texto:
+        `Entendi ${unico != null ? fmtMoeda(unico) : 'o valor'} — mas preciso saber onde aplicar.\n` +
+        `É **RBT12**, **receita do mês** ou **folha 12m**?\n` +
+        `Contexto atual: ${ctx.ultimoAnexo ? `Anexo ${ctx.ultimoAnexo} · ` : ''}${ctx.ultimoRbt12 ? `RBT12 ${fmtMoeda(ctx.ultimoRbt12)} · ` : ''}${ctx.ultimaReceita ? `receita ${fmtMoeda(ctx.ultimaReceita)}` : ''}\n\n` +
+        `Ex.: "é a folha", "muda a receita para ${unico != null ? fmtMoeda(unico) : 'X'}" ou "corrige o RBT12 para ${unico != null ? fmtMoeda(unico) : 'X'}".`,
+      confianca: 0.9,
+      nivel: 'alta',
+      fontes: ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)'],
+      sugestoes: ['É a folha', 'É a receita', 'É o RBT12'],
+      botoes: [
+        { rotulo: 'É a folha', acao: 'perguntar', alvo: `folha ${unico ?? ''} (RBT12 ${ctx.ultimoRbt12 ?? ''}, receita ${ctx.ultimaReceita ?? ''})` },
+        { rotulo: 'É a receita', acao: 'perguntar', alvo: `receita ${unico ?? ''} (RBT12 ${ctx.ultimoRbt12 ?? ''})` },
+        { rotulo: 'É o RBT12', acao: 'perguntar', alvo: `RBT12 ${unico ?? ''}` },
+      ],
+      pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Simples: valor avulso ambíguo → perguntar slot', Date.now() - t0),
+    }
+  }
+  const anexoId = edicao.anexo ?? inferencia?.anexo ?? ctx.ultimoAnexo ?? null
   const anexoInferidoV = slots.anexo == null && inferencia?.anexo === 'V'
-  const rbt12 = slots.rbt12 ?? ctx.ultimoRbt12 ?? null
-  const receita = slots.receitaMes ?? ctx.ultimaReceita ?? null
-  const folhaCtx = slots.folha12 ?? ctx.ultimaFolha ?? null
+  const rbt12 = edicao.rbt12 ?? ctx.ultimoRbt12 ?? null
+  const receita = edicao.receitaMes ?? ctx.ultimaReceita ?? null
+  // Folha percentual ("30% do RBT") resolve contra o RBT final.
+  let folhaCtx = edicao.folha12 ?? ctx.ultimaFolha ?? null
+  const folhaPct = resolverFolhaPercentual(pergunta, rbt12)
+  if (folhaPct != null) folhaCtx = folhaPct
   const falasUser = historico.filter((m) => m.papel === 'user').map((m) => m.texto)
   const combinado = [...falasUser, pergunta].join('\n')
   const semEmpresa = detectarSemEmpresa(pergunta) || detectarSemEmpresa(falasUser.slice(-3).join('\n'))
@@ -2609,13 +2859,21 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
     }
     const res = orquestrarTodosAnexos(entrada)
     const alertaReceita = (estado.receita as number) > (estado.rbt12 as number) ? `\n\nReceita mensal maior que o RBT12 — confirma os valores?` : ''
-    const mostrarHibrido = true
+    // v8 — duelo com o híbrido SÓ sob demanda (clique em "Comparar com regime
+    // híbrido", pedido explícito ou despesas já informadas). Sem isso, a matriz
+    // mostra só o convencional + convite com botão.
+    const mostrarHibrido = querHibridoCtx || temDespesa
     const texto = textoExploratorioCompleto(entrada, res, { mostrarHibrido }) + alertaReceita
     const pedido = detectarPedidoGrafico(pergunta)
     let grafico: GraficoChat | null = null
     try {
-      // Variações: Conv×Híb agrupado (principal) + comparativo DAS + repartição do vencedor.
-      grafico = graficoConvHibTodosAnexos(res.linhas.map((l) => ({ id: l.anexo, conv: l.das, hib: l.totalHibrido })))
+      grafico = mostrarHibrido
+        ? graficoConvHibTodosAnexos(res.linhas.map((l) => ({ id: l.anexo, conv: l.das, hib: l.totalHibrido })))
+        : graficoComparativoAnexos(
+            res.linhas.map((l) => ({ id: l.anexo, das: l.das })),
+            estado.rbt12 as number,
+            estado.receita as number,
+          )
       if (pedido.tipo) grafico = aplicarTipoPreferido(grafico, pedido.tipo)
     } catch {
       grafico = null
@@ -2636,18 +2894,26 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
       botoes.push({ rotulo: '📊 Informar folha (III × V)', acao: 'perguntar', alvo: `Folha 200 mil (RBT12 ${estado.rbt12}, receita ${estado.receita})` })
     }
     if (!temDespesa) {
-      botoes.push({ rotulo: '🧾 Refinar híbrido (despesas)', acao: 'perguntar', alvo: `Comparar com híbrido: RBT12 ${estado.rbt12}, receita ${estado.receita}${estado.folha ? `, folha ${estado.folha}` : ''}. Usar referência` })
+      botoes.push({
+        rotulo: mostrarHibrido ? '🧾 Refinar híbrido (despesas)' : '🔀 Comparar com regime híbrido',
+        acao: 'perguntar',
+        alvo: `Comparar com híbrido: RBT12 ${estado.rbt12}, receita ${estado.receita}${estado.folha ? `, folha ${estado.folha}` : ''}. Usar referência`,
+      })
     } else {
       botoes.push({ rotulo: '🧾 Ajustar despesas', acao: 'perguntar', alvo: `Ajustar despesas do híbrido (RBT12 ${estado.rbt12}, receita ${estado.receita}): aluguel, energia, telefone, água, material` })
     }
     return {
-      texto: `${texto}\n\n${temDespesa ? '' : '🧾 **Híbrido acima sem créditos (pessimista).** Para refinar, diga "usar referência" ou informe despesas ("aluguel 2000").\n\n'}${sug.frase}`,
+      texto: `${texto}\n\n${mostrarHibrido
+        ? (temDespesa ? '' : '🧾 **Híbrido acima sem créditos (pessimista).** Para refinar, diga "usar referência" ou informe despesas ("aluguel 2000").\n\n')
+        : '🔀 O duelo com o **regime híbrido** (DAS sem CBS + DARF da CBS) só aparece se você pedir — clique em "Comparar com regime híbrido" ou diga "comparar com híbrido".\n\n'}${sug.frase}`,
       confianca: 0.9, nivel: 'alta',
-      fontes: querHibridoCtx || temDespesa
+      fontes: mostrarHibrido
         ? ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)', 'Fator R (folha/RBT12 ≥ 28% → III)']
         : ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)'],
       grafico,
-      sugestoes: ['Usar referência', 'Gera relatório dessa simulação', ...sug.sugestoes],
+      sugestoes: mostrarHibrido
+        ? ['Usar referência', 'Gera relatório dessa simulação', ...sug.sugestoes]
+        : ['Comparar com regime híbrido', 'Gera relatório dessa simulação', ...sug.sugestoes],
       botoes: [
         ...botoes,
         { rotulo: '📕 Gerar relatório', acao: 'perguntar', alvo: 'Gera relatório dessa simulação do Simples' },
@@ -2674,7 +2940,11 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
       texto:
         `Para calcular seu DAS no Simples, preciso de ${faltando.join(', ')}.\n` +
         (entendi.length ? `Já entendi: ${entendi.join(' · ')}.\n` : '') +
-        `Me diga os que faltam — ex.: "Anexo III, RBT12 500 mil, receita 40 mil" (folha 12m opcional, decide III × V).\n\n` +
+        `Me diga os que faltam — ex.: "Anexo III, RBT12 500 mil, receita 40 mil" (folha 12m opcional, decide III × V).\n` +
+        (mencionaReducaoReceita(pergunta) || /redu[cç][aã]o|despesa|cr[eé]dito/i.test(pergunta)
+          ? `Se a receita ou alguma despesa tem redução, diga qual % (ex.: "receita com redução de 30%", "energia 300 com redução de 60%") — aplico no híbrido.\n`
+          : '') +
+        `\n` +
         `Se preferir, abra o Simples Nacional e simule com o relatório analítico completo.`,
       confianca: 0.9,
       nivel: 'alta',
@@ -2693,25 +2963,105 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
   }
   const anexo = ANEXOS_SIMPLES[anexoId as AnexoSimplesId]
   if (!anexo) return semLastro()
+  // v8 — híbrido sob demanda no cálculo individual: pedido explícito ("no
+  // híbrido", "comparar com híbrido"), refino de despesas em thread híbrida
+  // ("aluguel 2000", "usar referência") ou receita com redução ("receita com
+  // redução de 30%"). Entrega as 2 guias; o duelo Conv×Híb nunca aparece sem
+  // clique/pedido.
+  const pediuHibridoAgora = detectarQuerHibrido(pergunta)
+  const temDespesaAgora =
+    extrairDespesasDoTexto(pergunta).length > 0 || /usar refer[eê]ncia/i.test(pergunta)
+  const reducaoReceitaAgora = mencionaReducaoReceita(pergunta)
+  if (pediuHibridoAgora || reducaoReceitaAgora || (temDespesaAgora && contextoHibridoAtivo([...falasUser, pergunta]))) {
+    const cbsRefH = extrairCbsRef([...falasUser, pergunta].join('\n')) ?? CBS_REF_PADRAO
+    const despesasH = acumularDespesas([...falasUser, pergunta])
+    const detDebH = detectarRegraDebitoReceita([...falasUser, pergunta].join('\n'))
+    return responderHibridoAnexo({
+      anexo: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receita: receita as number,
+      cbsRef: cbsRefH, despesas: despesasH, origem: 'simples:hibrido-sob-demanda',
+      regraDebito: detDebH.regra ?? 'cheia', debitoIncerto: detDebH.incerta && detDebH.regra == null,
+    })
+  }
   // Fator R só existe para serviços III/V (LC 123, art. 18 §5º-C … §5º-I):
   // I/II/IV nunca exibem linha Fator R, fonte Fator R, nem pedido de folha III×V.
   const USA_FATOR_R = anexoId === 'III' || anexoId === 'V'
   const conv = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: receita as number })
   const fr = USA_FATOR_R ? fatorR(folhaCtx ?? 0, rbt12 as number) : null
   // Só herdados do DOMÍNIO Simples (nunca do IBS) — e sem avisos de exemplo.
+  // Fine-tuning v6: eco explícito da edição ("Alterado: folha X → Y, mantidos ...").
+  // v7: troca de anexo só carrega o que o destino exige — folha para I/II/IV é
+  // arquivada (some do eco e do contexto exibido, mas segue na pilha p/ a volta).
+  const MOSTRAR_FOLHA = anexoExigeFolha(anexoId as never)
+  if (!MOSTRAR_FOLHA) folhaCtx = null
   const herdados: string[] = []
   if (slots.anexo == null && ctx.ultimoAnexo != null) herdados.push(`Anexo ${ctx.ultimoAnexo} (da conversa)`)
   if (slots.rbt12 == null && ctx.ultimoRbt12 != null) herdados.push(`RBT12 ${fmtMoeda(ctx.ultimoRbt12)} (da conversa)`)
   if (slots.receitaMes == null && ctx.ultimaReceita != null) herdados.push(`receita ${fmtMoeda(ctx.ultimaReceita)} (da conversa)`)
-  if (slots.folha12 == null && ctx.ultimaFolha != null) herdados.push(`folha ${fmtMoeda(ctx.ultimaFolha)} (da conversa)`)
+  if (MOSTRAR_FOLHA && slots.folha12 == null && ctx.ultimaFolha != null && edicao.slotAlterado !== 'folha12') herdados.push(`folha ${fmtMoeda(ctx.ultimaFolha)} (da conversa)`)
+  const prefixoTroca = edicao.slotAlterado === 'anexo' && (edicao as { observacao?: string | null }).observacao === 'mesmos_valores'
+    ? `Indo para o Anexo ${anexoId} com os mesmos valores.\n`
+    : (edicao as { observacao?: string | null }).observacao === 'volta'
+      ? `Voltado para o valor anterior.\n`
+      : (edicao as { observacao?: string | null }).observacao === 'primeiro'
+        ? `Usando o primeiro valor informado.\n`
+        : (edicao as { observacao?: string | null }).observacao === 'folha_arquivada'
+          ? `Indo para o Anexo ${anexoId} com os mesmos valores (folha arquivada — Anexo ${anexoId} não usa folha 12m).\n`
+          : ''
+  const ecoEdicao = edicao.slotAlterado != null && historico.length > 0
+    ? (() => {
+        const nomeSlot = edicao.slotAlterado === 'rbt12' ? 'RBT12' : edicao.slotAlterado === 'receitaMes' ? 'receita' : edicao.slotAlterado === 'folha12' ? 'folha' : 'Anexo'
+        const novoVal = edicao.slotAlterado === 'rbt12' ? fmtMoeda(rbt12 as number) : edicao.slotAlterado === 'receitaMes' ? fmtMoeda(receita as number) : edicao.slotAlterado === 'folha12' ? fmtMoeda(folhaCtx as number) : `Anexo ${anexoId}`
+        const antigoVal = edicao.slotAlterado === 'rbt12' && ctx.ultimoRbt12 != null ? ` (${fmtMoeda(ctx.ultimoRbt12)} → ${novoVal})` : edicao.slotAlterado === 'receitaMes' && ctx.ultimaReceita != null ? ` (${fmtMoeda(ctx.ultimaReceita)} → ${novoVal})` : edicao.slotAlterado === 'folha12' && ctx.ultimaFolha != null ? ` (${fmtMoeda(ctx.ultimaFolha)} → ${novoVal})` : `: ${novoVal}`
+        const mantidos: string[] = []
+        if (edicao.slotAlterado !== 'rbt12') mantidos.push(`RBT12 ${fmtMoeda(rbt12 as number)}`)
+        if (edicao.slotAlterado !== 'receitaMes') mantidos.push(`receita ${fmtMoeda(receita as number)}`)
+        if (MOSTRAR_FOLHA && edicao.slotAlterado !== 'folha12' && folhaCtx != null) mantidos.push(`folha ${fmtMoeda(folhaCtx)}`)
+        if (edicao.slotAlterado !== 'anexo') mantidos.push(`Anexo ${anexoId}`)
+        return `${prefixoTroca}Alterado: ${nomeSlot}${antigoVal}, mantidos ${mantidos.join(' · ')}.\n`
+      })()
+    : (prefixoTroca || '')
   // Sanidade sem autocorreção: receita maior que RBT12 merece confirmação.
   const alertaReceita = (receita as number) > (rbt12 as number) ? `\n\nReceita mensal maior que o RBT12 — confirma os valores?` : ''
-  const ctxLinha = herdados.length ? `Contexto usado: ${herdados.join(' · ')}.\n` : ''
+  const ctxLinha = herdados.length || ecoEdicao ? `${ecoEdicao}${herdados.length ? `Contexto usado: ${herdados.join(' · ')}.\n` : ''}` : ''
   const folhaAviso = USA_FATOR_R && folhaCtx == null ? ` — informe a folha 12m para confirmar III × V` : ''
   const avisoInferidoV = anexoInferidoV && folhaCtx == null ? `\nAtividade sugere Anexo V — informe a folha 12m para confirmar III × V.` : ''
-  const linhaFatorR = USA_FATOR_R && fr
-    ? `\n• Fator R: ${(fr.indice * 100).toFixed(2)}% (sugere Anexo ${fr.anexo})${folhaAviso}.`
-    : ''
+  // Bloco Fator R (fine-tuning v6): <28% explica que NÃO é III + quantifica
+  // a folha mínima + comparativo III×V + botão de refazer com a folha sugerida.
+  let linhaFatorR = ''
+  let blocoFatorBaixo = ''
+  let botaoRefazerFolha: BotaoChat | null = null
+  if (USA_FATOR_R && fr) {
+    const pctFR = `${(fr.indice * 100).toFixed(2).replace('.', ',')}%`
+    if (folhaCtx == null) {
+      linhaFatorR = `\n• Fator R: não calculado (sem folha)${folhaAviso}.`
+    } else if (fr.indice >= 0.28) {
+      linhaFatorR = `\n• Fator R: ${pctFR} (folha ${fmtMoeda(folhaCtx)} / RBT12 ${fmtMoeda(rbt12 as number)}) — enquadrado (≥ 28%), sustenta o Anexo III. Monitore todo mês.`
+    } else {
+      const folhaMinima = Math.round((Number(rbt12) || 0) * 0.28 * 100) / 100
+      const gap = Math.max(0, Math.round((folhaMinima - (Number(folhaCtx) || 0)) * 100) / 100)
+      const gapMensal = Math.round((gap / 12) * 100) / 100
+      const dasIII = calcularConvencional({ anexoId: 'III', rbt12: rbt12 as number, receitaMes: receita as number })
+      const dasV = calcularConvencional({ anexoId: 'V', rbt12: rbt12 as number, receitaMes: receita as number })
+      const economiaMes = Math.round((dasV.das - dasIII.das) * 100) / 100
+      linhaFatorR = `\n• Fator R: ${pctFR} (folha ${fmtMoeda(folhaCtx)} / RBT12 ${fmtMoeda(rbt12 as number)}) — sugere Anexo ${fr.anexo}.`
+      blocoFatorBaixo =
+        `\n⚠️ Com Fator R abaixo de 28%, sua empresa **não é tributada pelo Anexo III** — ela se enquadra no **Anexo V** (LC 123, art. 18 §§5º-C a 5º-I). O DAS acima foi simulado no Anexo ${anexoId}; compare abaixo.` +
+        `\n• Para enquadrar no III: folha mínima de 12 meses = **${fmtMoeda(folhaMinima)}** (28% × ${fmtMoeda(rbt12 as number)}). Faltam **${fmtMoeda(gap)}** (~${fmtMoeda(gapMensal)}/mês).` +
+        `\n• Comparativo no seu número: DAS III ${fmtMoeda(dasIII.das)} × DAS V ${fmtMoeda(dasV.das)} → ` +
+        (economiaMes >= 0
+          ? `economia de **${fmtMoeda(economiaMes)}/mês** se migrar para o III.`
+          : `o III sairia **${fmtMoeda(Math.abs(economiaMes))}/mês mais caro** neste RBT12/receita — subir a folha só pelo DAS não se paga aqui.`) +
+        `\n• Aumente sua folha de pagamento para **${fmtMoeda(folhaMinima)}** (12m) para migrar para o Anexo III.` +
+        (economiaMes > 0 && gapMensal > 0
+          ? ` O acréscimo mensal (~${fmtMoeda(gapMensal)}) se paga com a economia no DAS — avalie com seu contador antes de contratar/aumentar pró-labore.`
+          : ` Atenção: o custo extra de folha pode superar a economia no DAS — confirme com seu contador antes de decidir.`)
+      botaoRefazerFolha = {
+        rotulo: `🔁 Refazer cálculo com folha ${fmtMoeda(folhaMinima)}`,
+        acao: 'perguntar',
+        alvo: `__RECALCULAR_FATOR_R__ RBT12=${rbt12 as number} RECEITA=${receita as number} FOLHA=${folhaMinima} ANEXO_ATUAL=${anexoId}`,
+      }
+    }
+  }
   // Fecho sem "III×V" fora de III/V (evita sugerir Anexo V a quem é I/II/IV).
   const fechoComparativo = USA_FATOR_R
     ? `\n\nPara o comparativo completo (III×V, Conv×Híb) abra o Simples Nacional e gere o relatório analítico.`
@@ -2730,12 +3080,19 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
     graficoSimples = null
   }
   const sugSimples = sugestaoGrafico(alvoGraficoSimples(String(anexoId), rbt12 as number, receita as number, folhaCtx))
+  const botoesSimples: BotaoChat[] = [
+    ...(botaoRefazerFolha ? [botaoRefazerFolha] : []),
+    { rotulo: '⚖️ Comparar com outros anexos', acao: 'perguntar', alvo: payloadAnexos },
+    { rotulo: '🔀 Comparar com regime híbrido', acao: 'perguntar', alvo: payloadHibrido },
+    ...sugSimples.botoes,
+    { rotulo: 'Abrir Simples Nacional', acao: 'navegar', alvo: 'simples' },
+  ]
   return {
     texto:
       `${ctxLinha}` +
       `• Anexo ${anexoId} · ${conv.faixa}ª faixa · RBT12 ${fmtMoeda(rbt12 as number)} · receita ${fmtMoeda(receita as number)}\n` +
       `• Alíquota efetiva ${(conv.aliquotaEfetiva * 100).toFixed(4)}% → DAS **${fmtMoeda(conv.das)}** (CBS dentro do DAS: ${fmtMoeda(conv.cbsDentroDAS)})` +
-      `${linhaFatorR}${avisoInferidoV}${alertaReceita}` +
+      `${linhaFatorR}${blocoFatorBaixo}${avisoInferidoV}${alertaReceita}` +
       `${fechoComparativo}` +
       `${graficoSimples ? `\n\n📊 Gráfico **${graficoSimples.titulo}** gerado abaixo (altere o modelo no cartão).` : `\n\n${sugSimples.frase}`}`,
     confianca: herdados.length ? 0.8 : 0.9,
@@ -2744,13 +3101,8 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
       ? ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)', 'Fator R (folha/RBT12 ≥ 28% → III)']
       : ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)'],
     grafico: graficoSimples,
-    sugestoes: ['Gera um relatório dessa conversa', ...sugSimples.sugestoes],
-    botoes: [
-      { rotulo: '⚖️ Comparar com outros anexos', acao: 'perguntar', alvo: payloadAnexos },
-      { rotulo: '🔀 Comparar com regime híbrido', acao: 'perguntar', alvo: payloadHibrido },
-      ...sugSimples.botoes,
-      { rotulo: 'Abrir Simples Nacional', acao: 'navegar', alvo: 'simples' },
-    ],
+    sugestoes: [...(botaoRefazerFolha ? ['Refazer com folha sugerida'] : []), 'Gera um relatório dessa conversa', ...sugSimples.sugestoes],
+    botoes: botoesSimples,
     pensamento: pensar([PENSAR.entender, PENSAR.validar, PENSAR.calcularDas], `Anexo ${anexoId} · RBT12 ${fmtMoeda(rbt12 as number)}${herdados.length ? ' (com contexto)' : ''}`, Date.now() - t0),
   }
 }
@@ -3482,6 +3834,9 @@ export async function responderChat(pergunta: string, historico: MensagemHistori
   }
   if (texto.startsWith('__COMPARAR_ANEXOS__')) return responderComparativoMatriz(texto, historico)
   if (texto.startsWith('__COMPARAR_HIBRIDO__')) return responderComparativoHibrido(texto, historico)
+  // Fine-tuning v6: botão "Refazer cálculo com folha sugerida" — rota direta
+  // ao Simples (o payload já traz RBT12/RECEITA/FOLHA; ver `responderSimples`).
+  if (texto.startsWith('__RECALCULAR_FATOR_R__')) return responderSimples(texto, historico)
   // Detector primeiro (puro, sem I/O) + refino com contexto memoizado (puro):
   // rotina vai pelo fluxo simples (recursos nativos, 1 leitura de perfil),
   // o resto pelo caminho completo.

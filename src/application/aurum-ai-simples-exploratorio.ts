@@ -17,15 +17,26 @@ import {
   calcularHibrido,
   debitoCBS,
   type RegraCreditoCBS,
+  type RegraDebitoCBS,
 } from '@/simples/calculo';
 import { ANEXOS_SIMPLES, CBS_REF_PADRAO, type AnexoSimplesId } from '@/simples/tabelas';
 import { fmtMoeda } from '@/domain/services/format';
 import { extrairSlotsSimples, extrairTodosValores } from '@/domain/services/valores-chat';
+import {
+  extrairPercentualRobusto,
+  regraCreditoDePercentual,
+  regraDebitoDePercentual,
+  temRegraIntegral,
+  temVedacaoCredito,
+} from '@/domain/services/percentual-chat';
+import { casaToken, expandirSinonimoFiscal } from '@/domain/services/vocabulario';
 
 export interface DespesaChat {
   rotulo: string;
   valor: number;
   regra: RegraCreditoCBS;
+  /** v9 — `true` quando a regra veio explícita do texto ("com redução de 30%"). */
+  regraExplicita?: boolean;
 }
 
 export interface EntradaExploratoria {
@@ -157,13 +168,158 @@ const ROTULOS_CONHECIDOS: { chave: string; rx: RegExp; rotulo: string }[] = [
   { chave: 'estoque', rx: /estoque|\bcmv\b|insumo/i, rotulo: 'Estoque / CMV' },
 ];
 
-function regraPertoDe(texto: string, indice: number): RegraCreditoCBS {
-  const janela = String(texto ?? '').slice(Math.max(0, indice - 40), indice + 40).toLowerCase();
-  if (/sem cr[eé]dito|n[aã]o.*cr[eé]dito|folha|pr[oó][ -]?labore|sal[aá]rio|inss|fgts|encargo|n[aã]o onerada/i.test(janela)) return 'semCredito';
-  if (/al[ií]quota zero|zerad|isenta|isento|sem cbs/i.test(janela)) return 'zero';
-  if (/red.{0,8}60|40%\s*da/i.test(janela)) return 'red60';
-  if (/red.{0,8}30|70%\s*da/i.test(janela)) return 'red30';
-  return 'integral';
+/** Compat: regra sem fonte (prefira `regraPertoDeComFonte`). */
+export function regraPertoDe(texto: string, indice: number): RegraCreditoCBS {
+  return regraPertoDeComFonte(texto, indice).regra;
+}
+
+/**
+ * v9 — regra COM fonte: distingue "integral explícito" de "integral assumido".
+ * Usa o motor de porcentagem (`percentual-chat.ts`): "redução de 30%",
+ * "30% da alíquota", "integral", "sem crédito".
+ */
+export function regraPertoDeComFonte(texto: string, indice: number): { regra: RegraCreditoCBS; explicita: boolean } {
+  const t = String(texto ?? '');
+  const janela = t.slice(Math.max(0, indice - 40), indice + 40).toLowerCase();
+  if (/sem cr[eé]dito|n[aã]o.*cr[eé]dito|folha|pr[oó][ -]?labore|sal[aá]rio|inss|fgts|encargo|n[aã]o onerada/i.test(janela)) return { regra: 'semCredito', explicita: true };
+  if (/al[ií]quota zero|zerad|isenta|isento|sem cbs/i.test(janela)) return { regra: 'zero', explicita: true };
+  if (/red.{0,8}60|40%\s*da/i.test(janela)) return { regra: 'red60', explicita: true };
+  if (/red.{0,8}30|70%\s*da/i.test(janela)) return { regra: 'red30', explicita: true };
+  try {
+    if (temVedacaoCredito(janela)) return { regra: 'semCredito', explicita: true };
+    const det = extrairPercentualRobusto(janela);
+    if (det != null && det.contexto !== 'direto') {
+      const r = regraCreditoDePercentual(det.fracao, det.contexto);
+      if (r != null) return { regra: r, explicita: true };
+    }
+    if (temRegraIntegral(janela)) return { regra: 'integral', explicita: true };
+  } catch {
+    /* motor nunca trava a extração */
+  }
+  return { regra: 'integral', explicita: false };
+}
+
+/** Rótulo canônico tem redução conhecida por tipo (aluguel = 30% da alíquota). */
+export function ehReducaoPorTipo(rotulo: string): boolean {
+  return /aluguel/i.test(String(rotulo ?? ''));
+}
+
+/* -------------------- léxico de despesas (RAG + LEXICAL) --------------- */
+
+/**
+ * Sinônimos por tipo de despesa. A classificação usa `casaToken` + expansão
+ * de sinônimos — os mesmos primitivos léxicos do RAG de NCM — sobre estes
+ * verbetes, com a tabela de regras como verdade determinística (nada é
+ * chutado pelo modelo: sem lastro, o rótulo segue livre e a regra é
+ * perguntada).
+ */
+const SINONIMOS_DESPESA: Record<string, string[]> = {
+  Aluguel: ['aluguel', 'alugue', 'locacao', 'locação', 'rent', 'aluguel comercial'],
+  'Energia elétrica': ['energia', 'eletrica', 'elétrica', 'luz', 'conta de luz'],
+  'Telefone / Internet': ['telefone', 'internet', 'fone', 'net', 'wifi', 'wi-fi', 'banda larga'],
+  'Água / Saneamento': ['agua', 'água', 'saneamento'],
+  'Material de escritório': ['material', 'escritorio', 'escritório', 'expediente', 'papelaria', 'uso e consumo'],
+  Contabilidade: ['contabilidade', 'contabil', 'contábil', 'contador'],
+  Advocacia: ['advocacia', 'advogado'],
+  'Estoque / CMV': ['estoque', 'cmv', 'insumo', 'mercadoria'],
+};
+
+function tokensLex(s: string): string[] {
+  return String(s ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 2);
+}
+
+/**
+ * Canonicaliza um rótulo livre para o tipo conhecido mais próximo via
+ * léxico tolerante (`casaToken` + sinônimos). Retorna null sem lastro — o
+ * rótulo segue livre e a regra será perguntada no fluxo do híbrido.
+ */
+export function classificarRotuloDespesaLexical(frase: string): { rotulo: string; escore: number } | null {
+  const base = tokensLex(frase);
+  if (!base.length) return null;
+  const toks: string[] = [];
+  for (const w of base) {
+    toks.push(w);
+    try {
+      const e = expandirSinonimoFiscal(w);
+      if (e && e !== w) toks.push(...tokensLex(e));
+    } catch {
+      /* léxico nunca trava */
+    }
+  }
+  let melhor: { rotulo: string; escore: number } | null = null;
+  let melhorExato: { rotulo: string; escore: number } | null = null;
+  for (const [rotulo, chaves] of Object.entries(SINONIMOS_DESPESA)) {
+    let casa = 0;
+    let exato = 0;
+    for (const chave of chaves) {
+      const ck = tokensLex(chave);
+      if (ck.some((k) => toks.includes(k))) {
+        casa++;
+        exato++;
+        continue;
+      }
+      if (ck.some((k) => toks.some((w) => { try { return casaToken(w, k); } catch { return false; } }))) casa++;
+    }
+    // Substring casa fácil demais ("conta" dentro de "contabil"): o desempate
+    // prioriza o casamento EXATO ("conta de luz" → Energia, não Contabilidade).
+    const escoreExato = exato / chaves.length;
+    if (exato > 0 && (melhorExato == null || escoreExato > melhorExato.escore)) {
+      melhorExato = { rotulo, escore: escoreExato };
+    }
+    const escore = casa / chaves.length;
+    if (casa > 0 && (melhor == null || escore > melhor.escore)) melhor = { rotulo, escore };
+  }
+  return melhorExato ?? melhor;
+}
+
+/**
+ * Detecta regra de DÉBITO sobre a receita ("receita com redução de 30%",
+ * "faturamento com 70% da alíquota", "venda isenta"). "X% do RBT" e
+ * "receita bruta" são ignorados (folha e RBT12, não débito). Retorna a última
+ * menção decisiva; `incerta` pede a pergunta ("tem redução? qual %?").
+ */
+export function detectarRegraDebitoReceita(texto: string): { regra: RegraDebitoCBS | null; incerta: boolean } {
+  const t = String(texto ?? '');
+  if (!t.trim()) return { regra: null, incerta: false };
+  const RX_REC = /receita(?!\s*bruta)|faturamento(?!\s*bruto)|vendas?|nota\s*fiscal/gi;
+  let m: RegExpExecArray | null;
+  let ultima: { regra: RegraDebitoCBS | null; incerta: boolean } | null = null;
+  RX_REC.lastIndex = 0;
+  while ((m = RX_REC.exec(t)) !== null) {
+    const win = t.slice(Math.max(0, m.index - 10), m.index + 70);
+    if (/rbt/i.test(win)) continue;
+    const wl = win.toLowerCase();
+    if (/al[ií]quota\s*zero|zerad|isenta?|imune|sem\s*cbs/.test(wl)) { ultima = { regra: 'zero', incerta: false }; continue; }
+    if (/sem\s*redu[cç][aã]o|\bcheia\b|integral/.test(wl)) { ultima = { regra: 'cheia', incerta: false }; continue; }
+    const det = extrairPercentualRobusto(win);
+    if (det) {
+      if (det.contexto === 'direto' && Math.abs(det.fracao - 0.5) < 0.001) {
+        ultima = { regra: 'red50', incerta: false };
+        continue;
+      }
+      if (det.contexto !== 'direto') {
+        const r = regraDebitoDePercentual(det.fracao, det.contexto);
+        ultima = r ? { regra: r, incerta: false } : { regra: null, incerta: true };
+        continue;
+      }
+      ultima = { regra: null, incerta: true };
+      continue;
+    }
+    if (/redu[cç][aã]o|\bred\b|desconto/.test(wl)) { ultima = { regra: null, incerta: true }; continue; }
+    if (m[0].length === 0) RX_REC.lastIndex++;
+  }
+  return ultima ?? { regra: null, incerta: false };
+}
+
+/** `true` quando a frase menciona redução sobre a receita (com ou sem %). */
+export function mencionaReducaoReceita(texto: string): boolean {
+  const d = detectarRegraDebitoReceita(texto);
+  return d.regra != null || d.incerta;
 }
 
 const RX_NUM_DESPESA = /(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d+)?)\s*(bilh[õo]es|bilh[ãa]o|\bbi\b|milh[õo]es|milh[ãa]o|\bmil\b|\bmi\b|\bk\b|M\b)?/;
@@ -214,7 +370,8 @@ export function extrairDespesasDoTexto(texto: string): DespesaChat[] {
       if (valor == null) continue;
       if (usados.some((u) => li < u.fim && fim > u.inicio)) continue;
       usados.push({ inicio: li, fim });
-      out.push({ rotulo: item.rotulo, valor, regra: regraPertoDe(t, li) });
+      const detRegra = regraPertoDeComFonte(t, li);
+      out.push({ rotulo: item.rotulo, valor, regra: detRegra.regra, regraExplicita: detRegra.explicita });
     }
   }
 
@@ -232,7 +389,17 @@ export function extrairDespesasDoTexto(texto: string): DespesaChat[] {
     const li = mn.index;
     if (usados.some((u) => li < u.fim && li + mn![0].length > u.inicio)) continue;
     usados.push({ inicio: li, fim: li + mn[0].length });
-    out.push({ rotulo: rotulo.charAt(0).toUpperCase() + rotulo.slice(1), valor, regra: regraPertoDe(t, li) });
+    // v9 — léxico tolerante: typo ("alugel") ou sinônimo ("locação") cai no
+    // tipo canônico; sem lastro, o rótulo segue livre e a regra é perguntada.
+    let rotuloFinal = rotulo.charAt(0).toUpperCase() + rotulo.slice(1);
+    try {
+      const lex = classificarRotuloDespesaLexical(rotulo);
+      if (lex) rotuloFinal = lex.rotulo;
+    } catch {
+      /* léxico nunca trava */
+    }
+    const detRegraNova = regraPertoDeComFonte(t, li);
+    out.push({ rotulo: rotuloFinal, valor, regra: detRegraNova.regra, regraExplicita: detRegraNova.explicita });
   }
   return out;
 }
@@ -467,7 +634,7 @@ export function textoExploratorioCompleto(e: EntradaExploratoria, r: ResultadoEx
   });
   parts.push('---');
   parts.push('## Insights da simulação');
-  parts.push(textoInsightsExploratorio(e, r));
+  parts.push(textoInsightsExploratorio(e, r, { mostrarHibrido }));
   parts.push('---');
   parts.push('## Próximos passos');
   const passos: string[] = [];
@@ -479,7 +646,8 @@ export function textoExploratorioCompleto(e: EntradaExploratoria, r: ResultadoEx
   return parts.join('\n\n');
 }
 
-export function textoInsightsExploratorio(e: EntradaExploratoria, r: ResultadoExploratorio): string {
+export function textoInsightsExploratorio(e: EntradaExploratoria, r: ResultadoExploratorio, opts?: { mostrarHibrido?: boolean }): string {
+  const mostrarHibrido = opts?.mostrarHibrido ?? true;
   const iii = r.linhas.find((l) => l.anexo === 'III')!;
   const v = r.linhas.find((l) => l.anexo === 'V')!;
   const economiaConv = Math.round((v.das - iii.das) * 100) / 100;
@@ -494,7 +662,17 @@ export function textoInsightsExploratorio(e: EntradaExploratoria, r: ResultadoEx
   } else {
     out.push(`3. **Fator R pendente:** sem folha, o III × V acima é referência. Com "folha 200 mil" eu confirmo o anexo efetivo e o gap de pró-labore.`);
   }
-  const algumHibVence = r.linhas.some((l) => l.vencedorRegime === 'HIB');
+  const algumHibVence = mostrarHibrido && r.linhas.some((l) => l.vencedorRegime === 'HIB');
+  if (!mostrarHibrido) {
+    // v8 — duelo com o híbrido só sob demanda (clique): aqui só o convite.
+    out.push(
+      `4. **Híbrido sob demanda:** o duelo com o regime híbrido (DAS sem CBS + DARF da CBS) só aparece se você pedir — diga "comparar com híbrido" ou informe despesas ("aluguel 2000").`,
+    );
+    void algumHibVence;
+    void e;
+    void economiaHib;
+    return out.join('\n');
+  }
   out.push(
     algumHibVence
       ? `4. **Híbrido compensa onde há crédito:** com créditos de ${fmtMoeda(r.creditosCbs)} contra débitos de ${fmtMoeda(r.debitosCbs)}, o híbrido vence em ao menos um anexo. Mais despesa com crédito = mais vantagem híbrida.`
@@ -503,6 +681,23 @@ export function textoInsightsExploratorio(e: EntradaExploratoria, r: ResultadoEx
   void e;
   void economiaHib;
   return out.join('\n');
+}
+
+/**
+ * v8 — há thread híbrida ativa? Últimas 6 mensagens citam híbrido/CBS fora/
+ * débitos, ou há despesas acumuladas nas falas. Puro. Decide SE o híbrido
+ * pode aparecer (clique/pedido) e PARA ONDE vai o refino ("aluguel 2000").
+ */
+export function contextoHibridoAtivo(mensagens: string[]): boolean {
+  const lista = Array.isArray(mensagens) ? mensagens : [];
+  if (!lista.length) return false;
+  const ultimas = lista.slice(-6).join('\n');
+  if (/h[ií]brido|usar refer[eê]ncia|cbs fora|d[eé]bitos/i.test(ultimas)) return true;
+  try {
+    return acumularDespesas(lista).length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /* ------------------------------------------------- relatório ----------- */

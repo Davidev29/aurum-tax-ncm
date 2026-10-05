@@ -6,6 +6,7 @@
  * canhoto com ITF real ). Documento sempre branco, sem dark-mode.
  */
 import { useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { fmtCnpj, fmtMoeda } from '@/domain/services/format';
 import type { ResultadoConvencional } from './calculo';
 import type { TributoSimples } from './tabelas';
@@ -256,9 +257,13 @@ export function BotaoReparticao({ onClick }: { onClick: () => void }) {
 export function DasModal({ aberto, onFechar, dados }: { aberto: boolean; onFechar: () => void; dados: DadosDas | null }) {
   const grupos = useMemo(() => (dados ? gruposArrecadacao(dados) : []), [dados]);
   if (!aberto || !dados) return null;
+  if (typeof document === 'undefined') return null;
   const cnpjFmt = dados.cnpj ? fmtCnpj(dados.cnpj) : '—';
   const linhaArrecadacao = grupos.map((g) => `${g.n} ${g.dv}`).join('  ');
-  return (
+  // Portal no `document.body`: garante centralização na viewport mesmo quando
+  // a tela do Simples está dentro de `Pagina`/`Entrada` (transform). Mesmo
+  // motivo do `Modal` em `kit.tsx`.
+  return createPortal(
     <div
       className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-2 backdrop-blur-sm sm:p-4"
       onMouseDown={(e) => {
@@ -421,6 +426,7 @@ export function DasModal({ aberto, onFechar, dados }: { aberto: boolean; onFecha
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
