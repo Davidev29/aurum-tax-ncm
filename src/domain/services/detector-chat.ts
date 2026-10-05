@@ -4,7 +4,7 @@
  * Taxonomia v2 (fine-tuning — ordem de checagem no orquestrador):
  * `capacidades` | `ajuda` | `navegar` | `status` | `tempo` | `conta` |
  * `saudacao` |
- * `conversa_leve` | `conceito` | `comparativo` | `legislacao` |
+ * `conversa_leve` | `conceito` | `projecao` | `comparativo` | `legislacao` |
  * `cadastrar_produto` | `relatorio` | `clientes` | `dados` | `simples` |
  * `calculo` | `nbs` | `ncm` | `fora-escopo` | `generico`.
  *
@@ -50,6 +50,7 @@ export type IntencaoChat =
   | 'conversa_leve'
   | 'conceito'
   | 'comparativo'
+  | 'projecao'
   | 'fora-escopo'
   | 'generico'
 
@@ -124,9 +125,84 @@ const SINAIS_CALCULO = [
 const SINAIS_SIMPLES = [
   'simples', 'das', 'anexo', 'anexo i', 'anexo ii', 'anexo iii', 'anexo iv', 'anexo v',
   'anexo 1', 'anexo 2', 'anexo 3', 'anexo 4', 'anexo 5', 'rbt12', 'fator r',
-  'sublimite', 'receita bruta', 'folha', 'rbt', 'receita', 'comercio', 'industria', 'construcao', 'advocacia', 'advogado', 'medico', 'engenheiro', 'contador', 'consultoria', 'programador', 'software', 'salao', 'barbeiro', 'academia', 'mei',
+  'sublimite', 'receita bruta', 'folha', 'rbt', 'receita', 'faturamento', 'fatura', 'comercio', 'industria', 'construcao', 'advocacia', 'advogado', 'medico', 'engenheiro', 'contador', 'consultoria', 'programador', 'software', 'salao', 'barbeiro', 'academia', 'mei',
   'hibrido', 'hibrida', 'convencional', 'todos os anexos', 'cada anexo', 'sem empresa', 'nao tenho empresa', 'despesa', 'credito cbs', 'cbs por fora',
 ]
+
+/**
+ * Projeção multi-empresa (Etapa 6 — mãe/nova + fine-tuning de variações).
+ * "dividir o faturamento em duas empresas?", "vale a pena abrir uma nova
+ * empresa?", "compensa abrir um segundo CNPJ?", "30% na nova, mãe no III".
+ * Mais específica que `comparativo`/`simples`: checada ANTES das duas.
+ * Pura e testável. Ver `tests/chat-projecao-finetuning-2000.test.ts`
+ * (milhares de variações geradas por produto cartesiano).
+ *
+ * Regras (todas exigem âncora empresarial/fiscal — verbo sozinho não basta):
+ * 1/1b) verbo de divisão + empresa/CNPJ/filial/faturamento/RBT/Simples
+ *       ("fatiar o RBT12 em dois CNPJs", "dividir a receita em duas empresas");
+ * 2) verbos fracos (quebrar/repartir/…) exigem empresa + dualidade/faturamento
+ *    ("a reforma quebrou minha empresa" NÃO casa — sem dualidade);
+ * 3) abrir/criar/montar/constituir + empresa ("abrir uma nova empresa");
+ * 4) decisão (vale a pena/compensa/…) + alvo de abertura/divisão;
+ * 5) fatia na nova + âncora fiscal ("30% na nova" com RBT12/receita/anexo);
+ * 6) mãe × nova / matriz × filial explícitos + âncora fiscal;
+ * 7) simula/projeta/compara + divisão em duas.
+ *
+ * Guardas (precision first): XML/notas, boleto/2ª via, culinária, NCM/NBS
+ * explícito, tutorial ("como abrir…"), parcelamento ("em X parcelas") e
+ * "qual anexo?" puro (vai ao Simples) nunca viram projeção.
+ */
+export function ehPedidoProjecaoDividida(texto: string): boolean {
+  // normalizarEntrada aplica os typos/abreviações (fine-tuning de entrada).
+  const n = normalizarEntrada(texto)
+  if (!n.trim()) return false
+  // Guardas negativos primeiro (evitam roubo de dados/boleto/culinária/NCM).
+  if (/\bxml\b|xmls|nota fiscal|\bnfe\b|\bnfce\b|fornecedor|boleto|segunda via|2a via|\b2 via\b/.test(n)) return false
+  if (/bolo\b|culinaria|cozinha|receita de (bolo|torta|pao)|feiticeira/.test(n)) return false
+  if (/\bncm\b|\bnbs\b/.test(n)) return false
+  if (/^\s*como\s+(abrir|criar|montar|constituir)\b/.test(n)) return false
+  if (/parcela|parcelamento|\bvezes\b|vencimento/.test(n)) return false
+  if (/qual\b[^.\n]{0,16}?\banexo|quais anexos/.test(n) && !/dividir|divisao|duas|nova|segunda|outra|percentual|%|mae\b|matriz/.test(n)) return false
+  // Procedimento/documentação ("qual o procedimento para abrir?") é tutorial,
+  // não simulação — a menos que cite divisão/faturamento/fatia.
+  if (/procedimento|quais documentos|documentos necessarios|o que preciso (para|pra) abrir/.test(n) &&
+    !/dividir|divisao|faturamento|fatiar|fracionar|desmembrar|duas|percentual|%|na nova|mae\b/.test(n)) return false
+  const temEmpresa = /empresa|cnpj|filial|firma|negocio|empreendimento|sociedade|estabelecimento|matriz/.test(n)
+  // 1) verbo forte de divisão (infinitivo + 1ª pessoa + gerúndio) + alvo.
+  // "separado" como advérbio ("calcula separado") NÃO vale aqui — tem regra
+  // própria 1c com âncora empresarial estrita.
+  if (/dividir|dividi\b|divido|dividido|dividindo|divisao|fatiar|fatio|fatiado|fatiando|fracionar|fraciono|fracionando|separar|separo|separando|desmembrar|desmembro|desmembrando|desmembramento/.test(n) &&
+    /empresa|cnpj|filial|firma|negocio|sociedade|faturamento|rbt|\bsimples\b|\bdas\b|anexo|duas|\bdois\b|nova|segunda|outra/.test(n)) return true
+  // 1c) "separado" particípio exige empresa/dualidade explícita
+  // ("faturamento separado entre mãe e nova" sim; "calcula separado" não).
+  if (/separado/.test(n) && /empresa|cnpj|filial|duas|\bdois\b|nova|segunda|outra/.test(n)) return true
+  // 1b) dividir + receita/fatura + marcador de dualidade ("em duas", "na nova").
+  if (/dividir|dividi\b|divido|dividindo|divisao|fatiar|fatiando|separar|separando|desmembrar|desmembrando|fracionar|fracionando/.test(n) &&
+    /receita|fatura/.test(n) &&
+    /duas|\b2\b|dois|segunda|segundo|outra|outro|nova|novo|empresas|cnpj|filial/.test(n)) return true
+  // 2) verbos fracos exigem empresa + (dualidade ou objeto fiscal).
+  if (/quebrar|quebro|quebrado|quebrando|repartir|reparto|repartindo|distribuir|distribuo|distribuindo|ratear|rateio|rateando|segregar|segrego|segregando|desdobrar|desdobro|desdobrando|desdobramento/.test(n) &&
+    temEmpresa &&
+    /duas|\b2\b|dois|segunda|segundo|outra|outro|nova|novo|faturamento|rbt|receita/.test(n)) return true
+  // 3) abrir/criar/montar/constituir + empresa.
+  if (/abrir|abro|aberto|criar|crio|criado|montar|monto|constituir|constituo/.test(n) && temEmpresa) return true
+  // 4) verbo de decisão + alvo de abertura/divisão.
+  if (/vale a pena|compensa|compensaria|faz sentido|faria sentido|e melhor|seria melhor|vantag|devo\b|deveria|sera que vale/.test(n) &&
+    /abrir|dividir|divisao|criar|montar|constituir|nova empresa|segundo cnpj|outro cnpj|dois cnpjs|\b2 cnpjs|duas empresas|mais uma empresa|uma empresa a mais|outra empresa|segunda empresa|matriz e filial/.test(n)) return true
+  // 5) fatia na nova + âncora fiscal ("30% na nova", "meio a meio", "70/30").
+  // Alvo inclui "ambas/duas" ("meio a meio, ambas no III" não cita "nova").
+  if ((/\d{1,2}\s*%|meio a meio|metade|terco|\d+\s*\/\s*\d+/.test(n)) &&
+    /(nova|segunda|outra|filial|ambas|ambos|duas|\bdois\b)/.test(n) &&
+    /rbt|faturamento|receita|anexo|\bsimples\b|\bdas\b|mae\b|matriz|folha|fatia|proje|simula/.test(n)) return true
+  // 6) mãe × nova / matriz × filial explícitos + âncora fiscal.
+  if (/mae\b/.test(n) && /nova\b/.test(n) &&
+    /rbt|faturamento|receita|anexo|\bsimples\b|\bdas\b|folha|simula|proje|no iii|no v\b|iii| v\b/.test(n)) return true
+  if (/matriz/.test(n) && /filial/.test(n) && /faturamento|rbt|receita|\bsimples\b|\bdas\b|anexo|separar|dividir|fatiar|fatia|simula|proje/.test(n)) return true
+  // 7) simula/projeta/compara + divisão em duas.
+  if (/simula|proje|compara/.test(n) &&
+    /divisao|dividir|dividindo|fatiar|fatiando|desmembr|duas empresas|dois cnpjs|mae\b.*nova|matriz.*filial|na nova/.test(n)) return true
+  return false
+}
 
 /**
  * 08-01: sinais de atividade para rotear "sou comercio/medico ..." ao Simples
@@ -279,12 +355,13 @@ const SINAIS_COMPARATIVO = [
 
 /**
  * 'Qual anexo' sozinho ("qual anexo do simples para 80 mil?") é pergunta do
- * Simples — só vira comparativo com disjunção ou verbo de comparação
- * ("qual anexo compensa/melhor?", "qual anexo, III ou V?").
+ * Simples — só vira comparativo com disjunção ou verbo de comparação DEPOIS
+ * dele ("qual anexo compensa/melhor?", "qual anexo, III ou V?"). A vírgula
+ * ANTES ("nova empresa no simples, qual anexo?") é só separador de oração.
  */
 function contemComparativo(n: string): boolean {
   if (SINAIS_COMPARATIVO.some((s) => n.includes(s))) return true
-  return /qual anexo/.test(n) && /( ou | ou\?| x | vs |,|melhor|compensa|vale|compar|fica melhor)/.test(n)
+  return /qual anexo.{0,32}( ou | ou\?| x | vs |,|melhor|compensa|vale|compar|fica melhor)/.test(n)
 }
 
 /**
@@ -398,6 +475,11 @@ const SINAIS_AJUDA = [
   'como gero', 'como gerar', 'como uso', 'como usar', 'como faco',
   'me ensina', 'me explica como', 'me ajuda a usar', 'tutorial',
   'passo a passo', 'como funciona o', 'como funciona a',
+  // Abertura de empresa/CNPJ (tutorial — "como abrir uma empresa?").
+  // "Como ..." pergunta o procedimento; a SIMULAÇÃO (mãe × nova, com
+  // divisão/faturamento/fatia) continua na `projecao` — ver guarda abaixo.
+  'como abrir uma empresa', 'como criar uma empresa', 'como montar uma empresa',
+  'como constituir uma empresa', 'como abrir um cnpj', 'como criar um cnpj',
 ]
 
 /** Pedido para ir até uma tela do sistema. */
@@ -734,7 +816,9 @@ function extrairDigitos(texto: string): string | null {
  * Formatos aceitos:
  * - oficial `XXXX-X/XX` (ex.: `6201-5/01`) — vale mesmo sem a palavra "cnae";
  * - 7 dígitos isolados (`\b\d{7}\b`) SOMENTE com lastro ("cnae"/"anexo" na
- *   frase) para não confundir com CEST ou fragmento de outro código.
+ *   frase, ou — Phase 9 / 09-05 — "nbs"/"benefício", ex.: "CNAE 0161001 quais
+ *   NBS e benefícios?") para não confundir com CEST ou fragmento de outro
+ *   código.
  *
  * Retorna os 7 dígitos ou null. Puro e testável.
  */
@@ -749,6 +833,13 @@ export function extrairCnae(texto: string): string | null {
   }
   // "qual anexo para 6201501?" — anexo + 7 dígitos também é CNAE.
   if (/\banexo\b/i.test(cru)) {
+    const m7 = cru.match(/\b\d{7}\b/)
+    if (m7) return m7[0]
+  }
+  // Phase 9 / 09-05: "quais NBS do 0161001?" / "benefícios do CNAE 0161001" —
+  // nbs/benefício + 7 dígitos também é CNAE (nunca CEST: CEST tem 7 dígitos
+  // mas nunca anda com lastro de NBS/benefício).
+  if (/\bnbs\b/i.test(cru) || /benef[ií]cio/i.test(cru)) {
     const m7 = cru.match(/\b\d{7}\b/)
     if (m7) return m7[0]
   }
@@ -786,6 +877,24 @@ const NORMALIZACAO_ENTRADA: Array<[RegExp, string]> = [
   [/\bvlw\b/g, 'valeu'],
   [/\bblz\b/g, 'beleza'],
   [/\bpfv?\b/g, 'por favor'],
+  // Projeção mãe/nova (fine-tuning de variações — typos comuns de digitação).
+  [/\bdividr\b/g, 'dividir'],
+  [/\bdivirdir\b/g, 'dividir'],
+  [/\bdevidir\b/g, 'dividir'],
+  [/\bfaturamnto\b/g, 'faturamento'],
+  [/\bfaturameto\b/g, 'faturamento'],
+  [/\bfaturament\b/g, 'faturamento'],
+  [/\bempressa\b/g, 'empresa'],
+  [/\bempressas\b/g, 'empresas'],
+  [/\benpresa\b/g, 'empresa'],
+  [/\bepmresa\b/g, 'empresa'],
+  [/\breceuta\b/g, 'receita'],
+  [/\brecita\b/g, 'receita'],
+  [/\bcpnj\b/g, 'cnpj'],
+  [/\bcnp\b/g, 'cnpj'],
+  [/\bfiliau\b/g, 'filial'],
+  [/\bmeiomeio\b/g, 'meio a meio'],
+  [/\bmei a meio\b/g, 'meio a meio'],
 ]
 
 /** Normaliza a entrada para a detecção: caixa/acento + typos/abreviações. */
@@ -910,7 +1019,14 @@ export function detectarIntencaoChat(mensagem: unknown): AnaliseChat {
     return { intencao: 'capacidades', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
   }
   if (contem(SINAIS_AJUDA, n)) {
-    return { intencao: 'ajuda', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
+    // Tutorial de abertura com contexto de divisão ("como abrir uma empresa
+    // para dividir o faturamento?") é SIMULAÇÃO, não tutorial — deixa passar
+    // para a `projecao` abaixo.
+    const ehTutorialAbertura = /como (abrir|criar|montar|constituir) (uma empresa|um cnpj)/.test(n)
+    const temContextoDivisao = /dividir|divisao|faturamento|fatiar|fracionar|desmembrar|duas|segunda empresa|outra empresa|segundo cnpj|na nova|percentual|%/.test(n)
+    if (!(ehTutorialAbertura && temContextoDivisao)) {
+      return { intencao: 'ajuda', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
+    }
   }
   if (contemNavegar(n)) {
     const destino = extrairDestino(n)
@@ -951,13 +1067,27 @@ export function detectarIntencaoChat(mensagem: unknown): AnaliseChat {
   }
   // "salvar essa empresa" sem CNPJ na frase atual → cnpj por contexto
   // (o orquestrador promove via refinarIntencaoComContexto; aqui cobre o
-  // caso com verbo explícito mesmo sem dígitos).
-  if (/cadastrar|cadastrad|salvar|gravar/i.test(n) && /cnpj|empresa|cliente|emissor/i.test(n)) {
+  // caso com verbo explícito mesmo sem dígitos). Com contexto de divisão
+  // ("cadastrar uma nova empresa para dividir o faturamento"), a projeção
+  // vence — ver checagem `projecao` abaixo.
+  if (/cadastrar|cadastrad|salvar|gravar/i.test(n) && /cnpj|empresa|cliente|emissor/i.test(n) &&
+    !/dividir|divisao|fatiar|fracionar|faturamento|na nova|duas empresas|segundo cnpj|desmembrar|separar.*(empresa|faturamento)/i.test(cru)) {
     return { intencao: 'cnpj', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
+  }
+  // 2ª via de documento/boleto/fatura: o app não emite guias — vai a
+  // esclarecimento honesto (generico), nunca a cálculo ou RAG.
+  if (/segunda via|2a vias?|\b2 vias?\b|duas vias/.test(n) && /boleto|fatura|guia|\bdas\b|pagamento|documento/.test(n)) {
+    return { intencao: 'generico', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
   }
   // Conversa leve antes do comparativo (evita "obrigado" virar outra coisa).
   if (ehConversaLeveDetector(n) && n.split(/\s+/).length <= 6 && !codigoDigitos && !cnpj && !cnae && valorBase == null && !contem(SINAIS_FISCAL_GERAL, n) && !contem(TERMOS_CONCEITO, n)) {
     return { intencao: 'conversa_leve', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
+  }
+  // Projeção mãe/nova ANTES do comparativo: "vale a pena abrir nova
+  // empresa?" e "dividir o faturamento em duas empresas?" são simulação de
+  // 2 CNPJs (motor simples-projection), não regra geral III×V.
+  if (ehPedidoProjecaoDividida(cru)) {
+    return { intencao: 'projecao', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
   }
   // Comparativo antes do Simples: "qual melhor III ou V?" tem "anexo" mas
   // a intenção é comparar, não calcular um DAS isolado. "Qual anexo" puro
@@ -1012,6 +1142,27 @@ export function detectarIntencaoChat(mensagem: unknown): AnaliseChat {
   if (cnae) {
     return { intencao: 'cnae', codigoDigitos, cnpj, cnae, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
   }
+  // Phase 9 / 09-05 — pergunta SOBRE o CNAE (regra do Simples + NBS/Reforma):
+  // "meu cnae tem benefício?", "esse cnae é vedado?", "qual anexo do meu
+  // cnae e seus NBS?". Com código, o `if (cnae)` acima já retornou; aqui o
+  // CNAE vem por contexto (meu/esse/desse) ou status ("tem benefício", "é
+  // vedado") + atributo (nbs|benefício|reforma|anexo|vedação|fator R) → a
+  // tool `consultarCnaeNbs` resolve (pede o código ou herda do contexto).
+  // Ordem: antes do Simples/NBS genérico, depois de conceito/legislação/
+  // comparativo (já retornaram acima) — nunca rouba `__COMPARAR_*__` /
+  // `__RECALCULAR_*__` (payloads de botão, sem a palavra "cnae").
+  // Guardas (vocab-s03 intacto): "me diz o cnae e o nbs PARA <atividade>"
+  // pede OS códigos da atividade → continua NBS; com slots do Simples
+  // (RBT/receita/folha) a intenção é calcular o DAS → continua Simples.
+  if (
+    /\bcnae\b/i.test(cru) &&
+    !/^__\w+__/.test(cru.trim()) &&
+    /nbs|benef[ií]cio|reforma|anexo|vedad|fator\s*r/i.test(n) &&
+    /meu|minha|meus|minhas|esse|essa|esses|essas|este|esta|estes|estas|desse|dessa|desses|dessas|deste|desta|dele|dela|deles|delas|tem (algum )?benef|e[h]?\s+vedad|est[aá]\s+vedad|possui|da direito|quais nbs|que nbs/i.test(n) &&
+    !/rbt12?|receita|folha|faturamento/i.test(n)
+  ) {
+    return { intencao: 'cnae', codigoDigitos, cnpj, cnae, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
+  }
   // Pedido explícito de código (NBS/NCM) vence a heurística do Simples:
   // "quais seriam os NBS para consultoria?" contém "consultoria" (sinal do
   // Simples), mas a intenção é consultarNBS, não calcular DAS. Sem esse
@@ -1025,6 +1176,13 @@ export function detectarIntencaoChat(mensagem: unknown): AnaliseChat {
   }
   if (temNcmExplicito && !temSinalCalculo) {
     return { intencao: 'ncm', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
+  }
+  // Culinária ("receita de bolo") nunca é fiscal: sem isso o token "receita"
+  // puxava NCM ("receita de bolo de cenoura") ou Simples ("dividir a receita
+  // do bolo em duas partes"). Vem DEPOIS do NCM/NBS explícito para preservar
+  // "qual o NCM do bolo de chocolate?". Vai a esclarecimento honesto.
+  if (/receita de (bolo|torta|pao|pizza|brigadeiro|pudim|lasanha|feijoada)|receita culinaria|culinaria|como fazer bolo|como cozinhar|\bbolo\b/.test(n)) {
+    return { intencao: 'generico', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
   }
   if (contemSimples(n)) {
     return { intencao: 'simples', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
@@ -1062,6 +1220,16 @@ export function detectarIntencaoChat(mensagem: unknown): AnaliseChat {
   // Fica DEPOIS de NBS/NCM para que "qual NBS para aula de yoga?" não vire conceito.
   if (/^(o que|qual|como|por que|porque|quando|onde)\b/.test(n) && contem(TERMOS_CONCEITO, n) && !codigoDigitos && !cnpj && !cnae && valorBase == null) {
     return { intencao: 'conceito', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
+  }
+  // Lamento/queixa sem pedido ("a reforma quebrou minha empresa", "tive
+  // prejuízo"): sem palavra de pergunta, código ou valor, é desabafo — vai a
+  // esclarecimento honesto em vez de RAG/NCM pelo token "reforma". Com
+  // pergunta real junto ("tive prejuízo, como recupero?"), segue o fluxo.
+  if (!codigoDigitos && !cnpj && !cnae && valorBase == null &&
+    /quebrou|quebrada|quebrado|faliu|falencia|prejuizo|injust|absurd|revoltad/.test(n) &&
+    !/^(o que|qual|como|quanto|onde|quando|por que|porque|quem)\b/.test(n) &&
+    !/como|qual|quanto|o que|e possivel|tem como|consigo/.test(n)) {
+    return { intencao: 'generico', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
   }
   // Hedge puro ("hmm, sei lá", "não sei"): 'lá' normaliza para 'la' (= lã,
   // produto!) e puxaria NCM via temSinalFiscal. Vago de verdade → generico.

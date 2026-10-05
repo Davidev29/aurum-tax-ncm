@@ -29,9 +29,9 @@ import { REF_DEFAULT } from '@/domain/constants'
 import { buscarArtigoLC214, disponibilidadeLC214, explicarArtigoLC214, extrairNumeroArtigoLC214, pesquisarLC214 } from '@/domain/services/lc214'
 import { detectarForaDeEscopo, MENSAGEM_FORA_DE_ESCOPO, ehConversaLeve, temSinalFiscal } from '@/domain/services/escopo-consulta'
 import { detectarIntencaoChat, classificarDominio, extrairCnae, extrairNucleoBusca, extrairSlotsProduto, type AnaliseChat } from '@/domain/services/detector-chat'
-import { extrairSlotsSimples, extrairTodosValores, aplicarEdicaoSimples, resolverFolhaPercentual, historicoSlotsSimples, anexoExigeFolha, ehPedidoOutroAnexoAmbiguo, resolverAnexoPorReferencia, observarIntencaoSimples } from '@/domain/services/valores-chat'
+import { extrairSlotsSimples, extrairTodosValores, aplicarEdicaoSimples, resolverFolhaPercentual, historicoSlotsSimples, anexoExigeFolha, ehPedidoOutroAnexoAmbiguo, resolverAnexoPorReferencia, observarIntencaoSimples, detectarPerguntaAliquota } from '@/domain/services/valores-chat'
 import { inferirAnexoPorAtividade } from '@/domain/services/anexo-inferencia'
-import { codigo7De, exigePerguntaFatorR, rotuloAnexoSimples } from '@/domain/services/cnae'
+import { codigo7De, exigePerguntaFatorR } from '@/domain/services/cnae'
 import { fmtCnae } from '@/infrastructure/base/normalizacao'
 import { calcularTributos } from '@/domain/services/calculo'
 import { fmtCnpj, fmtMoeda, fmtNcm, fmtNbs, norm } from '@/domain/services/format'
@@ -69,6 +69,7 @@ import {
 import { VIEWS_AURUM_AI, botoesCapacidades, type BotaoChat } from './aurum-ai-recursos'
 import { encontrarConceito, textoConceito } from './aurum-ai-conhecimento'
 import { precisaCaminhoCompleto, sugestoesParaPadrao } from './aurum-ai-fluxos'
+import { responderProjecaoDividida, ehFollowUpProjecao } from './aurum-ai-projecao'
 import { contextoBaseDoTurno, refinarIntencaoComContexto, anexarPedidoGrafico } from './aurum-ai-tools'
 import {
   NOME_MASCOTE,
@@ -117,6 +118,7 @@ import {
   type MemoriaSistema,
 } from './aurum-ai-artefatos'
 import { conversarLivre } from './aurum-ai-livre'
+import type { ConsultaCnae } from './consultar-por-cnae'
 
 export type { BotaoChat }
 
@@ -334,6 +336,7 @@ function responderAjuda(pergunta: string): RespostaChat {
   const n = pergunta.toLowerCase()
   let dica = 'Digite sua dúvida com 1–2 detalhes (material, uso, estado) que eu consulto a base oficial na hora.'
   if (/ncm|produto|classifica/.test(n)) dica = 'Para consultar um NCM: diga o produto ("tem ncm de banana?") ou o código ("08031000"). Com composição ("camiseta 100% algodão", "composição: ...") eu cruzo material + uso. Detalhe CST/cClassTrib e simulo IBS/CBS.'
+  else if (/abrir|criar|montar|constituir/.test(n) && /empresa|cnpj/.test(n)) dica = 'Para abrir empresa: o registro é na Junta Comercial + CNPJ na Receita (contador resolve em dias). Aqui eu respondo a parte fiscal: diga "vale a pena abrir uma nova empresa?" ou "consegue dividir o faturamento em duas empresas?" com RBT12 + receita + % da nova que eu projeto mãe × nova (economia, payback e alertas) — ou pergunte "qual o anexo do CNAE 6201-5/01?" para o enquadramento.'
   else if (/nbs|serviço|servico|atividade|cnpj|cnae/.test(n)) dica = 'Para NBS/CNPJ/CNAE: descreva o serviço ("nbs para programação de computadores?"), diga o CNAE direto ("CNAE 6201-5/01 qual anexo?") ou diga "Quais atividades o CNPJ 53.795.990/0001-68 tem?" (com ou sem formatação). Listo CNAEs + Anexo do Simples + NBS e já ofereço simular o DAS e salvar como cliente.'
   else if (/calcul|ibs|cbs|simula/.test(n)) dica = 'Para calcular: diga valor + código (ex.: "quanto fica R$ 2.500 no NCM 0803.10.00?"). Sem valor, uso R$ 1.000 como exemplo e aviso.'
   else if (/simples|das|anexo|rbt/.test(n)) dica = 'Para o Simples: diga anexo + RBT12 + receita (ex.: "DAS Anexo III, RBT12 500 mil, receita 40 mil"). Sem os dados, projeto com exemplo e aviso.'
@@ -476,6 +479,10 @@ function responderConceito(pergunta: string, perfil?: PerfilMemoria | null): Res
 }
 
 function responderComparativo(pergunta: string, historico: MensagemHistorico[] = []): RespostaChat {
+  // Etapa 6 — pedido mãe/nova tem prioridade sobre a regra geral III×V:
+  // "dividir o faturamento em duas empresas?" nunca cai no texto genérico.
+  // Follow-ups curtos ("e com 50% na nova?") herdam o histórico de projeção.
+  if (ehFollowUpProjecao(pergunta, historico.filter((m) => m.papel === 'user').map((m) => m.texto))) return responderProjecaoDividida(pergunta, historico);
   const n = pergunta.toLowerCase()
   // v8 — normaliza acentos para os gates ("híbrido" com í deve casar).
   const nn = n.normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -1319,11 +1326,14 @@ function responderCodigoNaoEncontrado(
 }
 
 /**
- * CNAE direto → Anexo do Simples Nacional (tabela viva).
+ * CNAE direto → regra do Simples + NBS/Reforma (Phase 9 / 09-05).
  *
+ * Motor em duas camadas (`consultarPorCnae`, offline): bloco Regras para
+ * QUALQUER dos 1.090 (Anexo Simples, Situação, Fator R, vedação textual) +
+ * bloco NBS condicional (só com link CNAE→NBS + resolvedor oficial + ano).
  * Dado exato: 100% match não mostra "nível de confiança". Inexistente cai no
- * funil (`responderCodigoNaoEncontrado`). "Depende da atividade" existe na
- * base, mas o anexo só sai com o contexto — então pergunta o refinamento.
+ * funil (`responderCodigoNaoEncontrado`). Sem lastro = honesto, nunca NBS
+ * inventado.
  */
 async function responderCnae(
   pergunta: string,
@@ -1352,43 +1362,138 @@ async function responderCnae(
       pensamento: pensar([PENSAR.entender, PENSAR.validar], 'CNAE ausente — pedir o código ou a atividade'),
     }
   }
-  let registro: import('@/domain/entities').CnaeAnexo | null = null
+  const anoPergunta = extrairAnoReferenciaCnae(pergunta)
+  let consulta: ConsultaCnae | null = null
   try {
-    const { db } = await import('@/infrastructure/db/schema')
-    registro = (await db.cnae.get(codigo7De(cnae7))) ?? null
+    const { consultarPorCnae } = await import('./consultar-por-cnae')
+    consulta = await consultarPorCnae(cnae7, ...(anoPergunta != null ? [{ anoReferencia: anoPergunta }] as const : []))
   } catch {
-    registro = null
+    consulta = null
   }
-  if (!registro) return responderCodigoNaoEncontrado('cnae', cnae7, t0)
-  const anexos = Array.isArray(registro.anexos) ? registro.anexos : []
-  const rotuloAnexo = rotuloAnexoSimples(anexos)
-  const fatorTxt = registro.fatorR || exigePerguntaFatorR(registro)
+  if (!consulta || consulta.regra.estado !== 'ok') return responderCodigoNaoEncontrado('cnae', cnae7, t0)
+  const regra = consulta.regra
+  const rotuloAnexo = regra.rotuloAnexo
+  const fatorTxt = regra.fatorR || exigePerguntaFatorR({ fatorR: regra.fatorR, anexos: regra.anexoSimples })
     ? `\n**Fator R:** a folha de salários (incluindo pró-labore) dos últimos 12 meses representa 28% ou mais do faturamento? Se sim, tende ao Anexo Simples III; se não, ao V.`
     : ''
-  const dependeTxt = registro.situacao === 'Depende da atividade'
+  const dependeTxt = regra.situacao === 'Depende da atividade'
     ? `\n**Atenção:** a situação é "Depende da atividade" — o CNAE existe, mas o anexo só fecha com o contexto. Me diga o que a empresa faz (comércio/indústria/serviço + atividade) que eu funilo.`
-    : registro.situacao === 'Permitido com ressalvas'
+    : regra.situacao === 'Permitido com ressalvas'
       ? `\n**Atenção:** situação "Permitido com ressalvas" — confira as ressalvas do CNAE antes de escriturar.`
       : ''
-  void ctx
+  const vedacaoTxt = regra.vedacaoTextual.length
+    ? `\n**Vedação:** ${regra.vedacaoTextual.join(' ')}`
+    : ''
+  const blocoNbs = blocoNbsDoCnae(consulta)
+  const fontes = consulta.estadoNbs === 'mapeado'
+    ? ['Tabela CNAE × Anexo Simples + Fator R', 'Vínculos NBS × CST × cClassTrib (LC 214/2025)']
+    : ['Tabela CNAE × Anexo Simples + Fator R']
+  const detalheNbs = consulta.estadoNbs === 'mapeado'
+    ? ` + ${consulta.vereditos.length} NBS (ref. ${consulta.anoReferencia})`
+    : consulta.estadoNbs === 'bens→NCM'
+      ? ' + bens→NCM'
+      : ' + sem-mapeamento NBS'
   return {
     texto:
-      `**CNAE ${registro.codigoFormatado} — ${registro.descricao}**\n` +
-      `**${rotuloAnexo}**${registro.fatorR ? ' (Fator R)' : ''} · Situação: ${registro.situacao}${fatorTxt}${dependeTxt}\n` +
+      `**CNAE ${regra.codigoFormatado} — ${regra.descricao}**\n` +
+      `**${rotuloAnexo}**${regra.fatorR ? ' (Fator R)' : ''} · Situação: ${regra.situacao}${fatorTxt}${dependeTxt}${vedacaoTxt}\n` +
+      `${blocoNbs}\n` +
       `**Base:** tabela viva CNAE × Anexo Simples + Fator R (1.090 CNAEs).\n` +
-      `**Próximo passo sugerido:** quer simular o DAS? Me diga RBT12 + receita${registro.fatorR || anexos.includes('V') ? ' (+ folha 12m para o Fator R)' : ''} — ou diga "comparar anexos" que mostro todos.`,
+      `**Próximo passo sugerido:** quer simular o DAS? Me diga RBT12 + receita${regra.fatorR || regra.anexoSimples.includes('V') ? ' (+ folha 12m para o Fator R)' : ''} — ou diga "comparar anexos" que mostro todos.`,
     codigo: codigo7De(cnae7),
     tipoCodigo: 'cnae',
     confianca: 0.95,
     nivel: 'alta',
     exato: true,
-    fontes: ['Tabela CNAE × Anexo Simples + Fator R'],
+    fontes,
     sugestoes: ['Meu DAS no Anexo III com RBT12 500 mil e receita 40 mil', 'Qual melhor: Anexo III ou V?'],
     botoes: [
+      { rotulo: 'Abrir Consulta de CNAEs', acao: 'navegar', alvo: 'cnaes' },
       { rotulo: 'Abrir Simples Nacional', acao: 'navegar', alvo: 'simples' },
       { rotulo: 'Consultar por CNPJ', acao: 'perguntar', alvo: 'Quais atividades o CNPJ 53.795.990/0001-68 tem?' },
     ],
-    pensamento: pensar([PENSAR.entender, PENSAR.consultar(1), PENSAR.validar], `CNAE ${registro.codigoFormatado} → ${rotuloAnexo} (exato, sem confiança)`, Date.now() - t0),
+    pensamento: pensar([PENSAR.entender, PENSAR.consultar(consulta.vereditos.length), PENSAR.validar], `CNAE ${regra.codigoFormatado} → ${rotuloAnexo} (exato, sem confiança)${detalheNbs}`, Date.now() - t0),
+  }
+}
+
+/**
+ * Ano de referência citado na pergunta (2026–2033). `null` = padrão 2033.
+ * Puro e testável.
+ */
+export function extrairAnoReferenciaCnae(pergunta: string): number | null {
+  const m = String(pergunta ?? '').match(/\b(2026|2027|2028|2029|2030|2031|2032|2033)\b/)
+  if (!m) return null
+  const ano = Number(m[1])
+  return Number.isFinite(ano) ? ano : null
+}
+
+/**
+ * Bloco NBS condicional do `responderCnae` (Phase 9 / 09-05). Puro.
+ *
+ * - `mapeado`: destaque (NBS mais provável + benefício só com lastro do
+ *   resolvedor) + ranking resumido + ano de referência explícito;
+ * - `bens→NCM`: faixa bens (NBS é só serviços — nunca silêncio);
+ * - `sem-mapeamento-NBS`: honesto (regra vale, NBS ausente na base).
+ * NUNCA inventa NBS/benefício.
+ */
+export function blocoNbsDoCnae(consulta: ConsultaCnae): string {
+  const ano = consulta.anoReferencia
+  const transicao = consulta.emTransicao ? ' (ano em transição — valores de 2033, confirmar a operação)' : ''
+  if (consulta.estadoNbs === 'bens→NCM') {
+    return (
+      `**NBS:** sem NBS aplicável — atividade de bens (ver NCM). ` +
+      `Para classificar o produto, use a Consulta NCM. (ref. ${ano})`
+    )
+  }
+  if (consulta.estadoNbs === 'sem-mapeamento-NBS' || !consulta.vereditos.length) {
+    return (
+      `**NBS:** sem mapeamento NBS para este CNAE na base atual — a regra do Simples acima vale normalmente. ` +
+      `Se a atividade for serviço com benefício da Reforma, me descreva o que a empresa faz que verifico. (ref. ${ano})`
+    )
+  }
+  const total = consulta.vereditos.length
+  const comBeneficio = consulta.vereditos.filter((v) => v.temBeneficio).length
+  const destaque = (consulta.maisProvavel
+    ? consulta.vereditos.find((v) => v.nbs === consulta.maisProvavel)
+    : null) ?? consulta.vereditos[0]
+  const linhaDestaque = destaque.semLastro
+    ? `**NBS mais provável: ${fmtNbs(destaque.nbs)}** — ${descricaoLimpa(destaque.descricao ?? 'serviço vinculado ao CNAE')} (sem benefício vinculado — regra geral, tributação integral).`
+    : `**NBS mais provável: ${fmtNbs(destaque.nbs)}** — ${descricaoLimpa(destaque.descricao ?? 'serviço vinculado ao CNAE')} ` +
+      `(benefício: redução IBS ${destaque.reducaoIBS}% / CBS ${destaque.reducaoCBS}% · CST ${destaque.cst} · cClassTrib ${destaque.cClassTrib}` +
+      `${destaque.anexoLC214 ? ` · Anexo LC 214 ${destaque.anexoLC214}` : ''}` +
+      `${destaque.baseLegal ? ` · ${destaque.baseLegal}` : ''}).`
+  const topItens = [...consulta.ranking].slice(0, 3)
+  const top = topItens
+    .map((r) => {
+      const v = consulta.vereditos.find((x) => x.nbs === r.nbs)
+      const ben = v && v.temBeneficio && !v.semLastro ? ` (red. IBS ${v.reducaoIBS}%/CBS ${v.reducaoCBS}%)` : ''
+      return `• NBS ${fmtNbs(r.nbs)}${ben}`
+    })
+    .join('\n')
+  const resto = total > topItens.length ? `\n…e mais ${total - topItens.length} NBS — refine na Consulta de CNAEs.` : ''
+  return (
+    `**NBS vinculadas (${total}, ${comBeneficio} com benefício, ref. ${ano})${transicao}:**\n` +
+    `${linhaDestaque}\n${top}${resto}`
+  )
+}
+
+/**
+ * Sufixo NBS de UMA atividade do CNPJ (Phase 9 / 09-05 — caminho CNPJ).
+ * Offline e best-effort: falha de base vira string vazia (nunca quebra a
+ * linha da atividade). Formato: `NBS: N (M com benefício, ref. <ano>)` ou a
+ * faixa de bens.
+ */
+async function sufixoNbsAtividade(cnae7: string, anoReferencia: number): Promise<string> {
+  try {
+    const { consultarPorCnae } = await import('./consultar-por-cnae')
+    const c = await consultarPorCnae(cnae7, { anoReferencia })
+    if (c.estadoNbs === 'bens→NCM') return ' · sem NBS aplicável — atividade de bens (ver NCM)'
+    if (c.estadoNbs === 'sem-mapeamento-NBS') return ' · sem mapeamento NBS'
+    const n = c.vereditos.length
+    const m = c.vereditos.filter((v) => v.temBeneficio).length
+    return ` · NBS: ${n} (${m} com benefício, ref. ${c.anoReferencia})`
+  } catch {
+    return ''
   }
 }
 
@@ -2183,11 +2288,17 @@ async function responderCnpj(pergunta: string, analise: AnaliseChat, historico: 
         pensamento: pensar([PENSAR.entender, PENSAR.consultar(0), PENSAR.validar], `CNPJ ${fmtCnpj(cnpj)} sem CNAEs`, Date.now() - t0),
       }
     }
-    const linhas = v.atividades.slice(0, 8).map((a) => {
+    // Phase 9 / 09-05 (caminho CNPJ): cada atividade anexa o resumo NBS do ano
+    // (`NBS: N (M com benefício, ref. <ano>)` ou a faixa de bens) via
+    // `consultarPorCnae` — offline e best-effort, sem rede nova e sem tocar
+    // no motor do CNPJ (`consultar-por-cnpj.ts`) nem nos números do Simples.
+    const anoCnpj = extrairAnoReferenciaCnae(pergunta) ?? 2033
+    const linhas = (await Promise.all(v.atividades.slice(0, 8).map(async (a) => {
       const anexo = a.cnaeTabela ? ` · Anexo ${a.cnaeTabela.anexos}${a.cnaeTabela.fatorR ? ' (Fator R)' : ''}` : ''
       const nbs = a.resultado?.codigoEscolhido ? ` → NBS ${a.resultado.codigoEscolhido}` : (a.hipoteses[0] ? ` · hipótese a verificar` : ' · integral')
-      return `• **${a.codigoFormatado}** — ${a.descricao}${a.principal ? ' (principal)' : ''}${anexo}${nbs}`
-    }).join('\n')
+      const sufixo = await sufixoNbsAtividade(a.cnae7, anoCnpj)
+      return `• **${a.codigoFormatado}** — ${a.descricao}${a.principal ? ' (principal)' : ''}${anexo}${nbs}${sufixo}`
+    }))).join('\n')
     const extras = v.atividades.length > 8 ? `\n…e mais ${v.atividades.length - 8} — veja todas em Serviços (NBS) → consulta por CNPJ.` : ''
     const simplesLinha = v.opcaoSimples != null ? `\nSimples: ${v.opcaoSimples ? 'sim' : 'não'} · Porte: ${v.porte ?? '—'} · ${v.situacao ?? '—'}` : ''
     return {
@@ -2699,6 +2810,10 @@ async function responderCalculo(pergunta: string, analise: AnaliseChat, historic
 
 async function responderSimples(pergunta: string, historico: MensagemHistorico[] = []): Promise<RespostaChat> {
   const t0 = Date.now()
+  // Etapa 6 — mãe/nova tem prioridade sobre o DAS isolado: "dividir o
+  // faturamento em duas empresas?" vai à projeção, nunca ao cálculo único.
+  // Follow-ups curtos ("e com 50% na nova?") herdam o histórico de projeção.
+  if (ehFollowUpProjecao(pergunta, historico.filter((m) => m.papel === 'user').map((m) => m.texto))) return responderProjecaoDividida(pergunta, historico);
   // Contexto SÓ do domínio Simples ("e com folha 200 mil?" herda anexo/RBT12/
   // receita da conversa; base R$ 1.000 de um cálculo IBS nunca vira receita).
   const ctx = contextoBaseDoTurno(historico)
@@ -2984,7 +3099,17 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
   }
   // Fator R só existe para serviços III/V (LC 123, art. 18 §5º-C … §5º-I):
   // I/II/IV nunca exibem linha Fator R, fonte Fator R, nem pedido de folha III×V.
-  const USA_FATOR_R = anexoId === 'III' || anexoId === 'V'
+  // Anexo explícito (usuário nomeou o anexo): Fator R é opt-in, nunca exigido —
+  // sem folha e sem pergunta sobre enquadramento, entrega só o DAS no anexo pedido.
+  // A folha só é pedida quando a análise está no Anexo V (explícito, inferido
+  // como "sou medico", ou herdado): no III explícito, sem folha, não há Fator R.
+  // Com folha informada ou pergunta explícita (Fator R, III×V, enquadramento),
+  // exibe o status. Anexo inferido ("sou medico") mantém o fluxo que pede folha.
+  const anexoFoiEscolhido = slots.anexo != null || pilhaSimples.turnos.some((t) => t.anexo != null)
+  const pediuFatorR = /fator\s*r|iii\s*[x×]\s*v|iii\s*ou\s*v|enquadra|qual anexo|vale a pena|compar/i.test(
+    `${pergunta} ${falasUser.slice(-2).join(' ')}`,
+  )
+  const USA_FATOR_R = (anexoId === 'III' || anexoId === 'V') && (!anexoFoiEscolhido || folhaCtx != null || pediuFatorR || anexoId === 'V')
   const conv = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: receita as number })
   const fr = USA_FATOR_R ? fatorR(folhaCtx ?? 0, rbt12 as number) : null
   // Só herdados do DOMÍNIO Simples (nunca do IBS) — e sem avisos de exemplo.
@@ -3080,6 +3205,20 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
     graficoSimples = null
   }
   const sugSimples = sugestaoGrafico(alvoGraficoSimples(String(anexoId), rbt12 as number, receita as number, folhaCtx))
+  // Intervalo "entre X e Y": média como referência + cenários min/max (nunca 2 slots).
+  const ivRec = slots.receitaIntervalo ?? null
+  const ivRbt = slots.rbt12Intervalo ?? null
+  let blocoIntervalo = ''
+  if (ivRec != null) {
+    try {
+      const cMin = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: ivRec.min })
+      const cMax = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: ivRec.max })
+      blocoIntervalo += `\n• Faixa informada: entre ${fmtMoeda(ivRec.min)} e ${fmtMoeda(ivRec.max)} — cálculo acima usa a média ${fmtMoeda(ivRec.media)} como referência (piso → DAS ${fmtMoeda(cMin.das)} · teto → DAS ${fmtMoeda(cMax.das)}).`
+    } catch { /* cenário min/max é informativo — nunca quebra o DAS principal */ }
+  }
+  if (ivRbt != null) {
+    blocoIntervalo += `\n• RBT12 por faixa: entre ${fmtMoeda(ivRbt.min)} e ${fmtMoeda(ivRbt.max)} — cálculo acima usa a média ${fmtMoeda(ivRbt.media)} como referência.`
+  }
   const botoesSimples: BotaoChat[] = [
     ...(botaoRefazerFolha ? [botaoRefazerFolha] : []),
     { rotulo: '⚖️ Comparar com outros anexos', acao: 'perguntar', alvo: payloadAnexos },
@@ -3087,13 +3226,65 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
     ...sugSimples.botoes,
     { rotulo: 'Abrir Simples Nacional', acao: 'navegar', alvo: 'simples' },
   ]
+  // Phase 9 / 09-05 (caminho CNPJ/CNAE): se a pergunta ou o contexto citam um
+  // CNAE, anexa o resumo NBS do ano (`NBS: N (M com benefício, ref. <ano>)`
+  // ou a faixa de bens) — offline e best-effort. NUNCA altera os números do
+  // DAS/Simples (proibição 09-05).
+  let linhaNbsSimples = ''
+  {
+    const cnaeCtx = extrairCnae(pergunta) ?? ctx.ultimoCnae ?? null
+    if (cnaeCtx) {
+      try {
+        const { consultarPorCnae } = await import('./consultar-por-cnae')
+        const cc = await consultarPorCnae(cnaeCtx, {})
+        linhaNbsSimples = cc.estadoNbs === 'bens→NCM'
+          ? `\n**NBS: sem NBS aplicável — atividade de bens (ver NCM).**`
+          : cc.estadoNbs === 'sem-mapeamento-NBS' || !cc.vereditos.length
+            ? `\n**NBS: sem mapeamento NBS para este CNAE (regra do Simples acima vale normalmente).**`
+            : `\n**NBS: ${cc.vereditos.length} (${cc.vereditos.filter((x) => x.temBeneficio).length} com benefício, ref. ${cc.anoReferencia}).**`
+      } catch {
+        linhaNbsSimples = ''
+      }
+    }
+  }
+  // Pergunta de alíquota ("qual a alíquota efetiva/base desse cálculo?"):
+  // responde com base + efetiva do último cálculo (turno ou contexto),
+  // sem recalcular nada novo. Vale para qualquer anexo.
+  const perguntaAliquota = detectarPerguntaAliquota(pergunta)
+  if (perguntaAliquota != null) {
+    const faixaAtual = anexo.faixas.find((f) => f.faixa === conv.faixa) ?? null
+    const nominal = faixaAtual?.aliquotaNominal ?? 0
+    const deducao = faixaAtual?.parcelaDeduzir ?? 0
+    return {
+      texto:
+        `${ctxLinha}` +
+        `Alíquotas do cálculo — Anexo ${anexoId} · ${conv.faixa}ª faixa (RBT12 ${fmtMoeda(rbt12 as number)} · receita ${fmtMoeda(receita as number)}):\n` +
+        `• Base (nominal): **${(nominal * 100).toFixed(2).replace('.', ',')}%** (dedução de ${fmtMoeda(deducao)})\n` +
+        `• Efetiva aplicada: **${(conv.aliquotaEfetiva * 100).toFixed(4).replace('.', ',')}%** → DAS **${fmtMoeda(conv.das)}**\n` +
+        `Fórmula: (${fmtMoeda(rbt12 as number)} × ${(nominal * 100).toFixed(2).replace('.', ',')}% − ${fmtMoeda(deducao)}) ÷ ${fmtMoeda(rbt12 as number)}` +
+        `${blocoIntervalo}` +
+        `${linhaFatorR}${blocoFatorBaixo}${avisoInferidoV}${alertaReceita}` +
+        `${fechoComparativo}${linhaNbsSimples}` +
+        `${graficoSimples ? `\n\n📊 Gráfico **${graficoSimples.titulo}** gerado abaixo (altere o modelo no cartão).` : `\n\n${sugSimples.frase}`}`,
+      confianca: herdados.length ? 0.8 : 0.9,
+      nivel: 'alta',
+      fontes: USA_FATOR_R
+        ? ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)', 'Fator R (folha/RBT12 ≥ 28% → III)']
+        : ['Tabela Simples Nacional — Anexos I–V + Reforma (CBS/IBS)'],
+      grafico: graficoSimples,
+      sugestoes: [...(botaoRefazerFolha ? ['Refazer com folha sugerida'] : []), 'Gera um relatório dessa conversa', ...sugSimples.sugestoes],
+      botoes: botoesSimples,
+      pensamento: pensar([PENSAR.entender, PENSAR.validar, PENSAR.calcularDas], `Anexo ${anexoId} · alíquotas base/efetiva${herdados.length ? ' (com contexto)' : ''}`, Date.now() - t0),
+    }
+  }
   return {
     texto:
       `${ctxLinha}` +
       `• Anexo ${anexoId} · ${conv.faixa}ª faixa · RBT12 ${fmtMoeda(rbt12 as number)} · receita ${fmtMoeda(receita as number)}\n` +
       `• Alíquota efetiva ${(conv.aliquotaEfetiva * 100).toFixed(4)}% → DAS **${fmtMoeda(conv.das)}** (CBS dentro do DAS: ${fmtMoeda(conv.cbsDentroDAS)})` +
+      `${blocoIntervalo}` +
       `${linhaFatorR}${blocoFatorBaixo}${avisoInferidoV}${alertaReceita}` +
-      `${fechoComparativo}` +
+      `${fechoComparativo}${linhaNbsSimples}` +
       `${graficoSimples ? `\n\n📊 Gráfico **${graficoSimples.titulo}** gerado abaixo (altere o modelo no cartão).` : `\n\n${sugSimples.frase}`}`,
     confianca: herdados.length ? 0.8 : 0.9,
     nivel: 'alta',
@@ -4167,6 +4358,8 @@ async function responderChatFull(texto: string, historico: MensagemHistorico[] =
         return responderViaModelo(await responderDados(texto, historico), texto, historico, perfil, 'dados')
       case 'simples':
         return responderViaModelo(await responderSimples(texto, historico), texto, historico, perfil, 'simples')
+      case 'projecao':
+        return responderViaModelo(responderProjecaoDividida(texto, historico), texto, historico, perfil, 'projecao')
       case 'calculo':
         return responderViaModelo(await responderCalculo(texto, analise, historico, memoria), texto, historico, perfil, 'calculo')
       case 'cnpj':

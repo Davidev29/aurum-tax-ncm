@@ -127,6 +127,8 @@ export function sugestoesParaPadrao(perfil: PerfilMemoria | null | undefined): s
       return ['Que horas são?', 'Que dia é hoje?', 'O que você pode fazer?']
     case 'simples':
       return ['Meu DAS no Anexo III com RBT12 500 mil e receita 40 mil', 'O que é Fator R?', 'Qual melhor: Anexo III ou V?']
+    case 'projecao':
+      return ['Vale a pena abrir uma nova empresa?', 'Dividir o faturamento em duas empresas?', 'RBT12 1,2M, receita 120 mil/mês, 30% na nova']
     case 'dados':
       return ['Qual fornecedor me dá mais crédito?', 'Existe algum produto diferido?', 'Tem XML de algum cliente?']
     case 'legislacao':

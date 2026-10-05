@@ -15,6 +15,14 @@ export interface ValorExtraido {
   fim: number
 }
 
+export interface IntervaloValor {
+  min: number
+  max: number
+  /** Média aritmética — usada como referência do cálculo. */
+  media: number
+  bruto: string
+}
+
 export interface SlotsSimples {
   anexo: AnexoId | null
   rbt12: number | null
@@ -22,6 +30,10 @@ export interface SlotsSimples {
   folha12: number | null
   rba: number | null
   valorBase: number | null
+  /** Quando o usuário diz "entre X e Y": média vai para o slot, faixa fica aqui. */
+  receitaIntervalo?: IntervaloValor | null
+  rbt12Intervalo?: IntervaloValor | null
+  folha12Intervalo?: IntervaloValor | null
 }
 
 const RX_NUM = String.raw`(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d+)?)`
@@ -75,10 +87,14 @@ function mascararNaoDinheiro(texto: string): string {
     .replace(/anexo\s*(i{1,3}|iv|v|[1-5]|primeiro|segundo|terceiro|quarto|quinto)/gi, ' ')
     .replace(/\b\d{4}\.\d{2}\.\d{2}\b/g, ' ')
     .replace(/\b\d{8,9}\b/g, ' ')
+    // Hora "16:49" nunca é dinheiro (evita receita fantasma de 16/49).
+    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ')
     .replace(/(\d[\d.,]*)\s*%/g, ' ')
     // "12" do rótulo RBT12 e "12 m/meses" (período) nunca são dinheiro:
     // sem isso, "RBT12 500 mil" gerava receita fantasma de R$ 12.
+    // Inclui o typo comum "RTB 12" (inversão) — normalizado para RBT.
     .replace(/rbt\s*12/gi, 'RBT')
+    .replace(/rtb\s*12/gi, 'RBT')
     .replace(/\b12\s*m(eses?)?\b/gi, ' ')
 }
 
@@ -115,14 +131,154 @@ export function extrairValorRobusto(texto: string): number | null {
   return todos.length ? todos[todos.length - 1].valor : null
 }
 
-const LBL_RBT12 = String.raw`(?:rbt\s*12|\brbt\b|rba\s*12|receita\s*bruta|faturamento(?:\s*(?:bruto|anual|12\s*m(?:eses?)?|acumulad[oa]|dos\s+ultimos\s+12))?)`
-const LBL_RECEITA = String.raw`(?:receita(?:\s*(?:do\s*m[eê]s|mensal|atual|compet[eê]ncia))?|faturamento\s*(?:do\s*m[eê]s|mensal|atual|desse\s+mes|este\s+mes)|fatura(?:mento)?\s*(?:do\s*mes|mensal)?|rec\b)`
+const LBL_RBT12 = String.raw`(?:rbt\s*12|rtb\s*12|\brbt\b|\brtb\b|rba\s*12|receita\s*bruta|faturamento(?:\s*(?:bruto|anual|12\s*m(?:eses?)?|acumulad[oa]|dos\s+ultimos\s+12))?)`
+const LBL_RECEITA = String.raw`(?:receita(?:\s*(?:do\s*m[eê]s|mensal|atual|compet[eê]ncia))?|faturamento\s*(?:do\s*m[eê]s|mensal|atual|desse\s+mes|este\s+mes|por\s*m[eê]s)?|fatura(?:mento)?\s*(?:do\s*mes|mensal|por\s*m[eê]s)?|rec\b)`
 const LBL_FOLHA = String.raw`(?:folha(?:\s*de\s*(?:pagamento|sal[aá]rios))?(?:\s*(?:12\s*m(?:eses?)?|12|anual|12m))?|massa\s*salarial|sal[aá]rios?(?:\s*12)?|folha\s*12m?|flh\b|pagamento\s*(?:de\s*)?salarios?|colaboradores?|funcion[aá]rios?|pro[\s-]?labore|prolabore|encargos?(?:\s*sociais)?|mao\s*de\s*obra)`
 const LBL_RBA = String.raw`(?:\brba\b|rba\s*12|receita\s*bruta\s*anual)`
 const LBL_BASE = String.raw`(?:base|valor(?:\s*base)?|total)`
 
 /** Preposições entre rótulo e valor ("receita pra 50 mil", "folha de 200k"). */
-const RX_PREP = String.raw`(?:de|do|da|dos|das|no|na|em|para|pra|p\/|por|com|como|em torno de|cerca de|:|=|-|—|→)?`
+const RX_PREP = String.raw`(?:de|do|da|dos|das|no|na|em|para|pra|p\/|por|com|como|entre|em torno de|cerca de|:|=|-|—|→)?`
+
+/* ------------------------- intervalos "entre X e Y" -------------------- */
+/**
+ * "Por mês fatura entre 63 e 65 mil": sem valor exato, a regra é
+ * média como referência + cenários min/max. Puro e testável.
+ *
+ * Cobre: "entre 63 e 65 mil", "entre 63 a 65 mil", "de 63 a 65 mil",
+ * "63 a 65 mil", "63-65 mil", "63/65 mil", "63 e 65 mil" (ancorado).
+ * Sufixo compartilhado: "63 e 65 mil" = 63k–65k (não 63 reais).
+ */
+
+export interface IntervaloDetectado extends IntervaloValor {
+  inicio: number
+  fim: number
+}
+
+const RX_NUM_CAP = String.raw`(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d+)?)`
+const RX_SUF_CAP = String.raw`(?:\s*(bilh[õo]es|bilh[ãa]o|bilhao|bilhoes|bi\b|milh[õo]es|milh[ãa]o|milhao|milhoes|mil\b|mi\b|k\b|M\b|paus?\b|pilas?\b|contos?\b|prata\b|mangos?\b|reais?\b|real\b|brl\b))?`
+const RX_SEP_INTERVALO = String.raw`(?:\s*(?:e|a|at[eé]|at[eé]\s+m[aá]ximo|—|–|-|\/)\s*)`
+
+function valorIntervaloExtremo(num: string, suf: string | undefined, sufOutro: string | undefined): number {
+  const s = (suf ?? '').trim() ? suf : sufOutro
+  const n = parseNumeroBR(num, !!s)
+  return n * multSufixo(s)
+}
+
+function montarIntervalo(num1: string, suf1: string | undefined, num2: string, suf2: string | undefined, bruto: string, inicio: number, fim: number): IntervaloDetectado | null {
+  const v1 = valorIntervaloExtremo(num1, suf1, suf2)
+  const v2 = valorIntervaloExtremo(num2, suf2, suf1)
+  if (!Number.isFinite(v1) || !Number.isFinite(v2) || !(v1 > 0) || !(v2 > 0)) return null
+  // Guarda anti-data/hora: "2026-01", "16:49" nunca viram intervalo.
+  if (v1 > 10000000 && v2 < 100) return null
+  const min = Math.min(v1, v2)
+  const max = Math.max(v1, v2)
+  if (min === max) return null
+  // Faixa implausível (>100x) provavelmente são dois slots distintos, não intervalo.
+  // Ex.: "RBT12 500 mil e receita 40 mil" tem 12,5x — passa; "12 e 720 mil" tem 60.000x — bloqueia.
+  if (max / min > 100) return null
+  const media = Math.round(((min + max) / 2) * 100) / 100
+  return { min: Math.round(min * 100) / 100, max: Math.round(max * 100) / 100, media, bruto, inicio, fim }
+}
+
+/** Todos os candidatos "X ... Y" do texto, com posição (para mascarar o fallback). */
+export function extrairIntervalos(texto: string): IntervaloDetectado[] {
+  const t = normalizarTyposValores(String(texto ?? ' '))
+  const out: IntervaloDetectado[] = []
+  const vistos = new Set<string>()
+  // 1) Forma forte com "entre": "entre 63 e 65 mil", "entre R$ 63 mil e 65 mil".
+  const rxEntre = new RegExp(
+    `entre\\s*(?:R\\$\\s*)?${RX_NUM_CAP}${RX_SUF_CAP}${RX_SEP_INTERVALO}(?:R\\$\\s*)?${RX_NUM_CAP}${RX_SUF_CAP}`,
+    'gi',
+  )
+  let m: RegExpExecArray | null
+  while ((m = rxEntre.exec(t)) !== null) {
+    const iv = montarIntervalo(m[1] ?? '', m[2], m[3] ?? '', m[4], m[0], m.index, m.index + m[0].length)
+    if (iv) {
+      const k = `${iv.min}-${iv.max}-${iv.inicio}`
+      if (!vistos.has(k)) { vistos.add(k); out.push(iv) }
+    }
+    if (m[0].length === 0) rxEntre.lastIndex++
+  }
+  // 2) Forma "de X a Y": "de 63 a 65 mil". Exige sufixo em ao menos um extremo
+  // (sem isso, "de 2026 a 2027" ou "dia 12 a 13" virariam dinheiro).
+  const rxDeA = new RegExp(
+    `\\bde\\s*(?:R\\$\\s*)?${RX_NUM_CAP}${RX_SUF_CAP}\\s*(?:a|at[eé])\\s*(?:R\\$\\s*)?${RX_NUM_CAP}${RX_SUF_CAP}`,
+    'gi',
+  )
+  while ((m = rxDeA.exec(t)) !== null) {
+    const temSuf = !!((m[2] ?? '').trim() || (m[4] ?? '').trim()) || /R\$/.test(m[0])
+    if (!temSuf) continue
+    const iv = montarIntervalo(m[1] ?? '', m[2], m[3] ?? '', m[4], m[0], m.index, m.index + m[0].length)
+    if (iv) {
+      const k = `${iv.min}-${iv.max}-${iv.inicio}`
+      if (!vistos.has(k)) { vistos.add(k); out.push(iv) }
+    }
+    if (m[0].length === 0) rxDeA.lastIndex++
+  }
+  // 3) Forma compacta "63-65 mil", "63/65 mil", "63 a 65 mil" (sem "entre/de").
+  // Só vale com sufixo/R$ (evita datas) e sem segundo rótulo no meio.
+  const rxCompacto = new RegExp(
+    `(?:R\\$\\s*)?${RX_NUM_CAP}${RX_SUF_CAP}\\s*(?:-|–|—|\\/|\\ba\\b|\\bat[eé]\\b)\\s*(?:R\\$\\s*)?${RX_NUM_CAP}${RX_SUF_CAP}`,
+    'gi',
+  )
+  while ((m = rxCompacto.exec(t)) !== null) {
+    const temSuf = !!((m[2] ?? '').trim() || (m[4] ?? '').trim()) || /R\$/.test(m[0])
+    if (!temSuf) continue
+    // "2026-01" (ano-mês) nunca é intervalo de dinheiro.
+    if (/^\s*\d{4}\s*-\s*\d{1,2}\s*$/.test(m[0])) continue
+    const iv = montarIntervalo(m[1] ?? '', m[2], m[3] ?? '', m[4], m[0], m.index, m.index + m[0].length)
+    if (iv) {
+      const k = `${iv.min}-${iv.max}-${iv.inicio}`
+      if (!vistos.has(k)) { vistos.add(k); out.push(iv) }
+    }
+    if (m[0].length === 0) rxCompacto.lastIndex++
+  }
+  return out.sort((a, b) => a.inicio - b.inicio)
+}
+
+/** Janela de rótulos ao redor do intervalo (60 antes / 40 depois). */
+function rotuloProximoDeIntervalo(textoNormalizado: string, iv: IntervaloDetectado): 'rbt12' | 'receitaMes' | 'folha12' | null {
+  const t = textoNormalizado
+  const antes = t.slice(Math.max(0, iv.inicio - 60), iv.inicio)
+  const depois = t.slice(iv.fim, iv.fim + 40)
+  const janela = `${antes} ▓ ${depois}`
+  const n = normSimples(janela)
+  // Se dois rótulos distintos cercam o intervalo ("RBT 500 mil e receita 40 mil"
+  // NÃO é intervalo — o extrator nem deveria ter capturado, mas aqui é a trava final).
+  const temRbt = /\brbt\b|receita\s*bruta|faturamento\s*(bruto|anual|12|acumulado)/.test(n)
+  const temRec = /receita|fatura|\brec\b/.test(n) && !/receita\s*bruta/.test(n)
+  const temFolha = /folha|massa\s*salarial|salario|colaborador|funcionario|pro[\s-]?labore|encargo|mao\s*de\s*obra/.test(n)
+  const qtd = [temRbt, temRec, temFolha].filter(Boolean).length
+  if (qtd !== 1) {
+    // Com 0 rótulos: só assume receita se há sinal mensal ("mês/mes/mensal/por mês").
+    if (qtd === 0) {
+      if (/m[eê]s|mensal|por\s*m[eê]s|fatura/.test(n)) return 'receitaMes'
+      return null
+    }
+    // Com 2+ rótulos: escolhe o mais próximo do intervalo.
+    const nn = normSimples(t)
+    const pos = (re: RegExp): number => {
+      const idx: number[] = []
+      let mm: RegExpExecArray | null
+      const rx = new RegExp(re.source, 'g')
+      while ((mm = rx.exec(nn)) !== null) { idx.push(mm.index); if (mm[0].length === 0) rx.lastIndex++ }
+      if (!idx.length) return Infinity
+      return Math.min(...idx.map((i) => Math.abs(i - iv.inicio)))
+    }
+    const dRbt = temRbt ? pos(/\brbt\b|receita\s*bruta|faturamento/) : Infinity
+    const dRec = temRec ? pos(/receita|fatura|\brec\b/) : Infinity
+    const dFolha = temFolha ? pos(/folha|salario|pro[\s-]?labore/) : Infinity
+    const best = Math.min(dRbt, dRec, dFolha)
+    if (best === Infinity) return null
+    if (best === dRec) return 'receitaMes'
+    if (best === dRbt) return 'rbt12'
+    return 'folha12'
+  }
+  if (temRec) return 'receitaMes'
+  if (temRbt) return 'rbt12'
+  return 'folha12'
+}
 
 /** Typos comuns de digitação rápida (normaliza antes de ancorar). */
 function normalizarTyposValores(texto: string): string {
@@ -131,6 +287,7 @@ function normalizarTyposValores(texto: string): string {
     .replace(/\breceta\b/gi, 'receita')
     .replace(/\bfolhs\b/gi, 'folha')
     .replace(/\bfolah\b/gi, 'folha')
+    .replace(/\brtb\s*12\b/gi, 'RBT12')
     .replace(/\brbt12\b/gi, 'RBT12')
     .replace(/\banx\b/gi, 'anexo')
     .replace(/\banex\b/gi, 'anexo')
@@ -218,6 +375,50 @@ export function resolverFolhaPercentual(texto: string, rbt12: number | null): nu
   const pct = extrairPercentualDeRBT(texto)
   if (pct == null || !(Number(rbt12) > 0)) return null
   return Math.round(Number(rbt12) * pct * 100) / 100
+}
+
+/** Typos de "alíquota" no chat rápido ("aquiquota", "alicota"). */
+function normalizarTyposAliquota(texto: string): string {
+  return String(texto ?? ' ')
+    .replace(/aquiquota/gi, 'aliquota')
+    .replace(/aliquata/gi, 'aliquota')
+    .replace(/alicota/gi, 'aliquota')
+    .replace(/alequota/gi, 'aliquota')
+    .replace(/aliguota/gi, 'aliquota')
+    .replace(/alquota/gi, 'aliquota')
+}
+
+export type PerguntaAliquota = 'efetiva' | 'base' | null
+
+/**
+ * Detecta pergunta sobre a alíquota do cálculo ("qual a alíquota efetiva
+ * desse cálculo?", "qual o percentual efetivo?", "qual a alíquota base?").
+ * Puro e testável. O roteador só promove ao Simples com conversa Simples
+ * ativa — sem contexto, "o que é alíquota?" continua conceito.
+ */
+export function detectarPerguntaAliquota(texto: string): PerguntaAliquota {
+  const n = normSimples(normalizarTyposAliquota(texto))
+  // Pergunta definicional ("o que é alíquota?") é conceito, não número.
+  if (/o que e\b|o que significa|conceito de|definicao de/.test(n)) return null
+  const temNucleo = /aliquota/.test(n)
+  const temSinonimo = /percentual|taxa|carga|imposto/.test(n)
+  // "qual a efetiva?" elíptico — só com referência ao cálculo ("desse
+  // cálculo", "no Anexo II", "mesmos valores" não basta sozinho: exige
+  // interrogativa para não roubar "pagamento efetivado").
+  if (!temNucleo && !temSinonimo) {
+    const temEfet = /efetiv/.test(n)
+    const temRefCalculo = /calcul|das\b|anexo|simples|nesse|neste|desse|deste|disso|nessa|dessa/.test(n)
+    if (temEfet && temRefCalculo && /qual|que|quanto|como/.test(n)) return 'efetiva'
+    return null
+  }
+  const temEfet = /efetiv|aplicad|utilizad|\busad[oa]s?\b|considerad|incident|result|final|med/.test(n)
+  const temBase = /\bbase\b|nominal/.test(n)
+  const temRefCalculo = /calcul|das\b|anexo|simples|nesse|neste|desse|deste|disso|nessa|dessa/.test(n)
+  // Sinônimo sozinho ("qual a taxa?", "qual o imposto?") é vago demais.
+  if (temSinonimo && !temNucleo && !temEfet && !temRefCalculo) return null
+  if (!temEfet && !temBase && !temRefCalculo) return null
+  if (temBase && !temEfet) return 'base'
+  return 'efetiva'
 }
 
 /* ------------------------------------------------------------------ */
@@ -428,33 +629,76 @@ export function extrairAnexoRobusto(texto: string): AnexoId | null {
  * Extrai os slots do Simples com desambiguação fixa (sem chute):
  * ancorado por rótulo vence; receita qualificada nunca é roubada pelo
  * faturamento genérico; sobras sem rótulo vão por ordem (RBT12, receita).
+ * Intervalo "entre X e Y" vence o valor avulso: média vai para o slot e a
+ * faixa (min/max) fica em `*Intervalo` para cenários. Os dois extremos nunca
+ * viram dois slots distintos (ex.: "fatura entre 63 e 65 mil" ≠ RBT12 63k).
  */
 export function extrairSlotsSimples(texto: string): SlotsSimples {
   const t = String(texto ?? ' ')
-  const receitaMes = pegaAncorado(t, LBL_RECEITA)
-  let rbt12 = pegaAncorado(t, LBL_RBT12)
+  const tNorm = normalizarTyposValores(t)
+  // 1) Intervalos primeiro — consomem os dois extremos de uma vez.
+  const intervalos = extrairIntervalos(t)
+  let receitaIntervalo: IntervaloValor | null = null
+  let rbt12Intervalo: IntervaloValor | null = null
+  let folhaIntervalo: IntervaloValor | null = null
+  for (const iv of intervalos) {
+    const alvo = rotuloProximoDeIntervalo(tNorm, iv)
+    if (alvo === 'receitaMes' && receitaIntervalo == null) receitaIntervalo = { min: iv.min, max: iv.max, media: iv.media, bruto: iv.bruto }
+    else if (alvo === 'rbt12' && rbt12Intervalo == null) rbt12Intervalo = { min: iv.min, max: iv.max, media: iv.media, bruto: iv.bruto }
+    else if (alvo === 'folha12' && folhaIntervalo == null) folhaIntervalo = { min: iv.min, max: iv.max, media: iv.media, bruto: iv.bruto }
+  }
+  // Intervalo sem rótulo único ("entre 63 e 65 mil" + "por mês" longe):
+  // se há 1 intervalo órfão e nenhum slot ancorado, assume receita mensal
+  // (caso dominante no chat) em vez de partir em RBT12+receita.
+  const orfaos = intervalos.filter((iv) => rotuloProximoDeIntervalo(tNorm, iv) == null)
+  const dentroDeIntervalo = (idx: number): boolean => intervalos.some((iv) => idx >= iv.inicio && idx < iv.fim)
+
+  const receitaAncorada = pegaAncorado(t, LBL_RECEITA)
+  const rbtAncorado = pegaAncorado(t, LBL_RBT12)
+  // Ancorado pega só o 1º extremo ("receita 63" em "receita entre 63 e 65 mil"):
+  // se há intervalo para o slot, a média sempre vence o extremo parcial.
+  let receitaMes = receitaIntervalo?.media ?? receitaAncorada
+  let rbt12 = rbt12Intervalo?.media ?? rbtAncorado
+  if (receitaIntervalo == null && rbt12Intervalo == null && orfaos.length === 1 && receitaAncorada == null && rbtAncorado == null) {
+    const unico = orfaos[0]
+    // Só vira receita se o texto fala de mês/fatura; senão mantém órfão (não chuta RBT).
+    if (/m[eê]s|mensal|fatura|receita|faturamento/i.test(t)) {
+      receitaIntervalo = { min: unico.min, max: unico.max, media: unico.media, bruto: unico.bruto }
+      receitaMes = unico.media
+    }
+  }
   // "faturamento genérico" só vira RBT12 se a receita já não foi ancorada.
   if (rbt12 == null && receitaMes == null) {
-    const todos = extrairTodosValores(t)
+    const todos = extrairTodosValores(t).filter((x) => !dentroDeIntervalo(x.inicio))
     if (todos.length >= 1) rbt12 = todos[0].valor
   }
   let receitaFinal = receitaMes
   if (receitaFinal == null) {
-    const todos = extrairTodosValores(t)
+    const todos = extrairTodosValores(t).filter((x) => !dentroDeIntervalo(x.inicio))
     const livres = todos.map((x) => x.valor).filter((v) => v !== rbt12)
     if (livres.length >= 1) receitaFinal = livres[rbt12 == null ? 1 : 0] ?? livres[0] ?? null
     // Caso "RBT12 500 mil e receita 40 mil": o 2º número é a receita.
     if (rbt12 != null && livres.length === 0) {
-      const todos2 = extrairTodosValores(t)
+      const todos2 = extrairTodosValores(t).filter((x) => !dentroDeIntervalo(x.inicio))
       if (todos2.length >= 2) receitaFinal = todos2[1].valor
     }
   }
   // Folha via percentual ("30% do RBT") não é valor monetário direto:
   // `mascararNaoDinheiro` apaga o "%", então resolve aqui contra o RBT.
-  let folha = pegaAncorado(t, LBL_FOLHA)
+  let folha = folhaIntervalo?.media ?? pegaAncorado(t, LBL_FOLHA)
   if (folha == null && rbt12 != null) {
     const pctFolha = resolverFolhaPercentual(t, rbt12)
     if (pctFolha != null) folha = pctFolha
+  }
+  // Folha em intervalo órfão com rótulo de folha explícito e sem folha ancorada.
+  if (folha == null) {
+    for (const iv of intervalos) {
+      if (rotuloProximoDeIntervalo(tNorm, iv) === 'folha12') {
+        folhaIntervalo = folhaIntervalo ?? { min: iv.min, max: iv.max, media: iv.media, bruto: iv.bruto }
+        folha = iv.media
+        break
+      }
+    }
   }
   return {
     anexo: extrairAnexoRobusto(t),
@@ -463,6 +707,9 @@ export function extrairSlotsSimples(texto: string): SlotsSimples {
     folha12: folha,
     rba: pegaAncorado(t, LBL_RBA),
     valorBase: pegaAncorado(t, LBL_BASE),
+    receitaIntervalo,
+    rbt12Intervalo,
+    folha12Intervalo: folhaIntervalo,
   }
 }
 
@@ -494,12 +741,22 @@ export function aplicarEdicaoSimples(
 ): { rbt12: number | null; receitaMes: number | null; folha12: number | null; anexo: AnexoId | null; slotAlterado: 'rbt12' | 'receitaMes' | 'folha12' | 'anexo' | null; ambiguo: boolean; observacao?: 'volta' | 'primeiro' | 'mesmos_valores' | 'folha_arquivada' | null } {
   const t = normalizarTyposValores(String(pergunta ?? ' '))
   const slotAlvo = classificarSlotEdicao(t)
-  const temRotuloRbt = pegaAncorado(t, LBL_RBT12) != null
-  const temRotuloRec = pegaAncorado(t, LBL_RECEITA) != null
-  const temRotuloFolha = pegaAncorado(t, LBL_FOLHA) != null || extrairPercentualDeRBT(t) != null
+  const temRotuloRbt = pegaAncorado(t, LBL_RBT12) != null || slotsTurno.rbt12Intervalo != null
+  const temRotuloRec = pegaAncorado(t, LBL_RECEITA) != null || slotsTurno.receitaIntervalo != null
+  const temRotuloFolha = pegaAncorado(t, LBL_FOLHA) != null || extrairPercentualDeRBT(t) != null || slotsTurno.folha12Intervalo != null
   const temAnexo = slotsTurno.anexo != null
   const temQualquerRotulo = temRotuloRbt || temRotuloRec || temRotuloFolha || temAnexo
-  const valoresAvulsos = extrairTodosValores(t)
+  // Intervalo "entre X e Y" conta como 1 valor (média), nunca como 2 avulsos —
+  // sem isso, "fatura entre 63 e 65 mil" virava RBT12 63k + receita 65k.
+  const spansIntervalo = extrairIntervalos(t)
+  const dentroDeSpan = (idx: number): boolean => spansIntervalo.some((iv) => idx >= iv.inicio && idx < iv.fim)
+  const valoresAvulsos = extrairTodosValores(t).filter((x) => !dentroDeSpan(x.inicio))
+  // Compensa: cada intervalo rotulado equivale a um valor avulso classificado.
+  const qtdIntervalosRotulados =
+    (slotsTurno.rbt12Intervalo != null ? 1 : 0) +
+    (slotsTurno.receitaIntervalo != null ? 1 : 0) +
+    (slotsTurno.folha12Intervalo != null ? 1 : 0)
+  void qtdIntervalosRotulados
   const temContexto = ctx.ultimoRbt12 != null || ctx.ultimaReceita != null || ctx.ultimaFolha != null || ctx.ultimoAnexo != null
   const nNorm = normSimples(t)
   const pedePrimeiro = /primeiro|primeira|inicial|original/.test(nNorm)

@@ -104,6 +104,18 @@ export const REGISTRO_FERRAMENTAS: SpecFerramenta[] = [
     guardrail: 'Lookup direto; inexistente → funil ("do que se trata?") sem chutar anexo.',
   },
   {
+    nome: 'consultarCnaeNbs',
+    descricao: 'CNAE → regra do Simples (1.090, sempre) + NBS vinculadas com benefício/tributação da Reforma no ano de referência (só com link).',
+    dominio: 'fiscal',
+    leitura: true,
+    parametros: {
+      cnae: { tipo: 'string', descricao: 'CNAE com 7 dígitos (com ou sem máscara).', obrigatorio: true, exemplo: '0161001' },
+      anoReferencia: { tipo: 'integer', descricao: 'Ano de referência: 2026, 2027 ou 2033 (padrão 2033).', exemplo: '2033' },
+    },
+    exemplos: ['consultarCnaeNbs({"cnae":"0161001","anoReferencia":2033})'],
+    guardrail: 'Regra sempre dos 1.090; NBS/benefício só com link CNAE→NBS + resolvedor oficial; bens→NCM; sem lastro → sem-mapeamento honesto, nunca inventar NBS.',
+  },
+  {
     nome: 'calcularIBSCBS',
     descricao: 'Calcula IBS/CBS de um código + base em R$ (motor canônico calcularTributos). Herda código/valor da conversa.',
     dominio: 'calculo',
@@ -153,6 +165,23 @@ export const REGISTRO_FERRAMENTAS: SpecFerramenta[] = [
     },
     exemplos: ['simularComparativo({"anexos":"III,V","rbt12":500000,"receitaMes":40000,"folha12":200000})'],
     guardrail: 'Sem números → explica a regra geral SEM simular.',
+  },
+  {
+    nome: 'simularCenarioDividido',
+    descricao: 'Projeção mãe × nova: divide o faturamento total entre 2 CNPJs (RBT12 deslizante + DAS do motor + economia + payback + alertas sublimite/Fator R/grupo econômico).',
+    dominio: 'simples',
+    leitura: true,
+    parametros: {
+      mesInicio: { tipo: 'string', descricao: 'Primeiro mês projetado (YYYY-MM).', obrigatorio: true, exemplo: '2026-01' },
+      receitaTotalMensal: { tipo: 'string', descricao: 'Receita TOTAL mês a mês a fatiar (JSON de [{mes,receita}]).', obrigatorio: true, exemplo: '[{"mes":"2026-01","receita":120000}]' },
+      percentualNova: { tipo: 'number', descricao: 'Fração 0 < p < 1 para a nova (ex. 0.3).', obrigatorio: true, exemplo: '0.3' },
+      anexoMae: { tipo: 'string', descricao: 'Anexo da mãe: I–V.', obrigatorio: true, exemplo: 'III' },
+      anexoNova: { tipo: 'string', descricao: 'Anexo da nova: I–V.', obrigatorio: true, exemplo: 'III' },
+      folha12Mae: { tipo: 'number', descricao: 'Folha 12m da mãe (Fator R).', exemplo: '400000' },
+      custoMensalNova: { tipo: 'number', descricao: 'Custo mensal da nova (payback líquido).', exemplo: '5000' },
+    },
+    exemplos: ['simularCenarioDividido({"mesInicio":"2026-01","receitaTotalMensal":[...],"percentualNova":0.3,"anexoMae":"III","anexoNova":"III"})'],
+    guardrail: 'Sem RBT12/receita/percentual/anexos → PERGUNTA os valores, nunca simula com exemplo. Todo número do motor simples-projection.',
   },
   {
     nome: 'consultarCNPJ',
@@ -342,7 +371,7 @@ export function ferramentasParaIntencao(intencao: AnaliseChat['intencao']): stri
   switch (intencao) {
     case 'ncm': return ['consultarNCM', 'detalharCodigo', 'calcularIBSCBS']
     case 'nbs': return ['consultarNBS', 'detalharCodigo']
-    case 'cnae': return ['consultarCNAE', 'calcularSimples']
+    case 'cnae': return ['consultarCnaeNbs', 'consultarCNAE', 'calcularSimples']
     case 'cnpj': return ['consultarCNPJ', 'verificarCadastroCnpj', 'calcularSimples']
     case 'cadastrar_produto': return ['cadastrarProdutoAssistido', 'consultarNCM']
     case 'clientes': return ['consultarClientes', 'consultarDadosXml']
@@ -350,8 +379,9 @@ export function ferramentasParaIntencao(intencao: AnaliseChat['intencao']): stri
     case 'calculo': return ['calcularIBSCBS', 'detalharCodigo', 'gerarGrafico']
     case 'conta': return ['calcularContaBasica']
     case 'tempo': return ['responderTempo']
-    case 'simples': return ['calcularSimples', 'simularComparativo', 'gerarGrafico']
-    case 'comparativo': return ['simularComparativo', 'calcularSimples']
+    case 'simples': return ['calcularSimples', 'simularComparativo', 'simularCenarioDividido', 'gerarGrafico']
+    case 'comparativo': return ['simularComparativo', 'simularCenarioDividido', 'calcularSimples']
+    case 'projecao': return ['simularCenarioDividido', 'calcularSimples', 'gerarGrafico']
     case 'conceito': return ['explicarConceito', 'explicarArtigoLC214']
     case 'legislacao': return ['explicarArtigoLC214', 'explicarConceito']
     case 'relatorio': return ['gerarRelatorio', 'gerarRelatorioDados']
@@ -403,6 +433,19 @@ export async function executarFerramenta(
         const normalizado = codigo7De(cnae) ?? cnae.replace(/\D+/g, '')
         return { ok: true, ferramenta: nome, dados: { cnae: normalizado } }
       }
+      case 'consultarCnaeNbs': {
+        // Phase 9 / 09-05: CNAE → regra (1.090, sempre) + NBS/benefício só
+        // com link (resolvedor oficial + ano). 100% offline (Dexie local,
+        // sem rede — o CNPJ continua sendo o único ponto de rede do chat).
+        const cnaeBruto = str(args.cnae)
+        if (!cnaeBruto) return { ok: false, ferramenta: nome, erro: 'cnae-ausente' }
+        const anoBruto = Number(args.anoReferencia)
+        const { consultarPorCnae } = await import('./consultar-por-cnae')
+        const consulta = await consultarPorCnae(cnaeBruto, {
+          ...(Number.isFinite(anoBruto) && anoBruto > 0 ? { anoReferencia: Math.trunc(anoBruto) } : {}),
+        })
+        return { ok: true, ferramenta: nome, dados: consulta }
+      }
       case 'calcularContaBasica': {
         const { detectarConta, calcularConta } = await import('@/domain/services/basico-chat')
         const detectada = detectarConta(str(args.expressao))
@@ -448,6 +491,12 @@ export async function executarFerramenta(
         }
         const r = calcularConvencional({ anexoId: anexo as never, rbt12, receitaMes } as never)
         return { ok: true, ferramenta: nome, dados: r }
+      }
+      case 'simularCenarioDividido': {
+        const { executarFerramentaProjecao } = await import('@/simples-projection/ferramentas')
+        const r = await executarFerramentaProjecao('simularCenarioDividido', args as never);
+        if (!r.ok) return { ok: false, ferramenta: nome, erro: r.erro ?? 'projecao-falhou' }
+        return { ok: true, ferramenta: nome, dados: r.dados }
       }
       case 'consultarClientes':
       case 'consultarDadosXml':

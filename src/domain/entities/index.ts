@@ -142,6 +142,112 @@ export interface ConsultaCnpj {
   quando: string
 }
 
+/* ---------------------------------------------------------------------------
+   Phase 9 (09-01) — ponte CNAE → NBS (fonte não-oficial qualclasstrib).
+   Os links são CANDIDATOS: alíquota/benefício só do resolvedor oficial
+   (`resolverClassificacoesNbs` + `calcularTributos`). Sem lastro no
+   resolvedor → `sem-lastro-reforma`, nunca redução inventada.
+   --------------------------------------------------------------------------- */
+
+/** Origem de um link CNAE → NBS dentro do arquivo ponte. */
+export type FonteLinkCnaeNbs = 'por_codigo' | 'triangulacao'
+
+/**
+ * Link CNAE → NBS (Phase 9, arquivo ponte `CNAE X NBS.qualclasstrib.json`).
+ * Dedupe por `cnae7|nbs`. CNAEs com código divergente do oficial (55 códigos
+ * legados da ponte) entram aqui mesmo assim — a divergência é marcada no
+ * template consolidado, não no link.
+ */
+export interface CnaeNbsLink {
+  /** Chave `++id` (auto-incremento, Dexie). */
+  id?: number
+  /** CNAE 7 dígitos (`0161001`); índice de busca. */
+  cnae7: string
+  /** Formato oficial `XXXX-X/XX` (ex.: `0161-0/01`). */
+  cnae: string
+  /** NBS 9 dígitos (`118032100`). */
+  nbs: string
+  /** De onde veio o par (sempre `por_codigo`; triangulação só valida). */
+  fonte: FonteLinkCnaeNbs
+}
+
+/**
+ * Relação LC 116 → NBS (Phase 9, `fallback-relations.json` da ponte).
+ * Triangulação fina LC × NBS × cClassTrib + descrições (`nbsd`/`cctd`/`lcd`).
+ * Fidelidade à origem: 6 linhas vêm sem NBS e 12 sem cct (guardadas com
+ * `''` — nunca participam de join, só de auditoria/descrição).
+ */
+export interface LcNbsRelation {
+  /** Chave `++id` (auto-incremento, Dexie). */
+  id?: number
+  /** LC 116 (`01.01`); índice de busca. */
+  lc: string
+  /** NBS 9 dígitos (`''` quando a origem não informa). */
+  nbs: string
+  /** cClassTrib 6 dígitos (`''` quando a origem não informa). */
+  cct: string
+  descricaoLc: string
+  descricaoNbs: string
+  descricaoCct: string
+  /** Colunas operacionais da origem (variantes `indop` por local da prestação). */
+  onerosa: string
+  exterior: string
+  indop: string
+  local: string
+}
+
+/** De onde saiu a descrição consolidada (precedência: oficial > qualclasstrib > auxiliar). */
+export type FonteDescricaoCnaeNbs = 'oficial' | 'qualclasstrib' | 'auxiliar'
+
+/** Uma NBS vinculada dentro do template consolidado. */
+export interface NbsVinculadaTemplate {
+  /** NBS 9 dígitos. */
+  nbs: string
+  /** Descrição conferida (precedência oficial > qualclasstrib > auxiliar). */
+  descricao: string | null
+  /** Qual fonte venceu a precedência (`null` quando sem descrição). */
+  fonteDescricao: FonteDescricaoCnaeNbs | null
+  /** `true` quando nenhuma fonte tem descrição (fallback honesto). */
+  semDescricao: boolean
+}
+
+/** Divergência entre fontes — com ela, NÃO se consolida (só se marca). */
+export interface DivergenciaCnae {
+  /** Código ausente da base oficial (55 legados) ou texto divergente (41). */
+  tipo: 'codigo-ausente-oficial' | 'descricao-divergente'
+  detalhe: string
+}
+
+/**
+ * Template consolidado por CNAE (Phase 9, store `classificacoesConsolidadas`,
+ * keyPath `cnae7`). Reutilizável em menu + CNPJ + chat (09-03..09-05).
+ * `beneficiosReforma` nasce vazio na build e é preenchido em runtime pelo
+ * resolvedor oficial com `anoReferencia` (09-02) — nunca inventado na base.
+ */
+export interface ClassificacaoConsolidada {
+  /** CNAE 7 dígitos; keyPath da store. */
+  cnae7: string
+  codigoFormatado: string
+  /** Descrição vencedora da precedência oficial > qualclasstrib > auxiliar. */
+  descricao: string
+  fonteDescricao: FonteDescricaoCnaeNbs
+  /** Anexos I–V do SIMPLES NACIONAL (não da LC 214/2025). */
+  anexoSimples: string[]
+  /** `Permitido` | `Permitido com ressalvas` | `Depende da atividade`. */
+  situacao: 'Permitido' | 'Permitido com ressalvas' | 'Depende da atividade'
+  fatorR: boolean
+  /** Texto de vedação derivado da Situação (sempre presente — invariante A). */
+  vedacoes: string[]
+  /** NBS vinculadas (vazio fora dos 508 / bens). */
+  nbsVinculadas: NbsVinculadaTemplate[]
+  /** Preenchido em runtime pelo resolvedor (09-02); vazio na base. */
+  beneficiosReforma: unknown[]
+  /** Divergência de código → marcada, NÃO consolidada. */
+  divergencia: DivergenciaCnae | null
+  /** `mapeado` (508) | `sem-mapeamento` (fora-508) | `divergencia` (55). */
+  estadoNbs: 'mapeado' | 'sem-mapeamento' | 'divergencia'
+}
+
 /**
  * Linha da tabela de Classificação de Produtos de um DFe (CFF
  * `ConsultaClassificacaoProduto?sistema=NFCom|NFAg|NF3e|NFGas`).

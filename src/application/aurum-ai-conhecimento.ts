@@ -143,6 +143,15 @@ export const CONCEITOS_AURUM_AI: VerbeteConceito[] = [
       'Diga o CNPJ com ou sem formatação ("Quais atividades o CNPJ 53.795.990/0001-68 tem?") que busco na BrasilAPI e listo CNAEs + Anexo do Simples + Fator R + NBS/hipóteses. Depois posso simular o DAS, comparar convencional × híbrido ou salvar como cliente do emissor.',
     ondeVer: 'Serviços (NBS) → consulta por CNPJ, ou direto no chat.',
   },
+  {
+    chave: 'cnae_nbs',
+    titulo: 'CNAE→NBS (regra sempre; NBS condicional; ano ref.)',
+    aliases: ['cnae nbs', 'cnae para nbs', 'regra do cnae', 'ano de referencia do cnae'],
+    resumo:
+      'Todo CNAE tem regra do Simples (Anexo I–V, Situação, Fator R) — NBS é enriquecimento condicional, só onde há link CNAE→NBS. Cada NBS vinculada passa pelo resolvedor oficial e o veredito sai precificado no ano de referência (2026 ano-teste, 2027 CBS plena, 2033 regime pleno). CNAE de bens aponta para a NCM; sem link, o sistema diz sem-mapeamento — nunca inventa benefício.',
+    ondeVer: 'Consulta de CNAEs → busque o código, veja regra + NBS com ano; o mesmo aparece no CNPJ e no chat.',
+    exemplo: 'Ex.: "CNAE 0161-0/01 quais NBS e benefícios?"',
+  },
 ];
 
 function normSimples(s: string): string {

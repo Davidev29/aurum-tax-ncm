@@ -39,9 +39,21 @@ describe('08-00/08-01 guard Fator R', () => {
       expect(r.texto).not.toMatch(/Fator R/i)
     }
   })
-  it('Anexo III mantem Fator R', async () => {
+  it('Anexo III explícito sem folha calcula direto, sem Fator R', async () => {
     const r = await responderChat('Anexo III, RBT12 500 mil, receita 40 mil', [])
+    expect(r.texto).toMatch(/Anexo III/)
+    expect(r.texto).toMatch(/DAS/)
+    expect(r.texto).not.toMatch(/Fator R/i)
+    expect(r.fontes.join(' ')).not.toMatch(/Fator R/)
+  })
+  it('Anexo III explícito com folha exibe Fator R', async () => {
+    const r = await responderChat('Anexo III, RBT12 500 mil, receita 40 mil, folha 200 mil', [])
     expect(r.texto).toMatch(/Fator R/i)
+  })
+  it('Anexo V explícito sem folha pede a folha (análise parte do V)', async () => {
+    const r = await responderChat('Anexo V, RBT12 500 mil, receita 40 mil', [])
+    expect(r.texto).toMatch(/Fator R/i)
+    expect(r.texto).toMatch(/folha/i)
   })
   it('sou comercio com valores calcula Anexo I sem Fator R', async () => {
     const r = await responderChat('sou comercio, RBT12 12 mil e receita 36 mil', [])

@@ -17,6 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 3: Search & UI** - Busca/filtro performática, tabela virtualizada, dashboard, atalhos
 - [ ] **Phase 4: Reporting & Export** - Excel/PDF/CSV, backup/restore, validação final
 - [x] **Phase 7: Menu Serviços (NBS + CNAE + CNPJ)** - Consulta NBS manual + automática por CNPJ com a Aurum AI — **IMPLEMENTADA** (ver Phase Details)
+- [ ] **Phase 9: Consulta de CNAEs (CNAE → NBS → Reforma)** - Menu novo + tabela CNAE×NBS (508 links qualclasstrib) + confronto Reforma por NBS + CNPJ e chat enriquecidos (ver Phase Details, `.planning/phase-09/09-PLAN.md`)
 
 ## Phase Details
 
@@ -178,6 +179,26 @@ Plans:
 - [x] 08-05: Memória curto + longo prazo por emitente (Dexie v12 conversasEmitente + TTL 90d/teto 30)
 - [x] 08-06: Chaos 22 casos + FineTuning + eval ≥85% + docs/UAT (90,9% — docs/chaos-phase-08.md)
   (ver `.planning/phase-08/08-PLAN.md`)
+
+### Phase 9: Consulta de CNAEs (CNAE → NBS → Reforma) — IMPLEMENTADA (2026-10-05)
+**Goal**: Menu "Consulta de CNAEs" nos 1.090 (regra sempre; NBS condicional em 508) + template consolidado + veredito com ano de referência + CNPJ e chat enriquecidos
+**Depends on**: Phase 7 (ponte CNAE→NBS heurística) + Phase 8 (dispatcher/tools)
+**Requirements**: [CNAE-01..CNAE-07]
+**Success Criteria** (all TRUE, ver `.planning/phase-09/09-PLAN.md §7 rev. 2):
+  1. `npm run base`: `cnaesComRegras: 1090`, `cnaesComNbs: 508`, `descricoesConferidas/Divergentes`, ~6,6k links, sem regredir
+  2. `0161-0/01` com Anexo, vedação, 1 NBS e veredito + `anoReferencia`
+  3. CNPJ lista NBS com flags; bens→NCM; fora-508 = regra + sem-NBS + fallback
+  4. Chat: regra p/ 1.090, NBS só com link; sem lastro honesto
+  5. `tsc 0 + npm test` verde + chaos 22 casos ≥85% + UAT
+**Plans**: 7 plans (tracer 09-00 + 09-01..09-06)
+- [ ] 09-00: Tracer duplo `0161-0/01` (regra+NBS+ano) + CNAE bens fora-508 (regra→NCM) — verify first
+- [x] 09-01: Base viva + conferência + template + Dexie v13 (proveniência, `cnaesComRegras/cnaesComNbs`, `descricoes*`)
+- [x] 09-02: Motor duas camadas (`regrasDoCnae` + enriquecimento c/ cache por NBS, `refPorAno`, ranking 98-NBS)
+- [x] 09-03: UI Consulta de CNAEs nos 1.090 (invariante zero-sem-regra, destaque + escolha)
+- [x] 09-04: CNPJ enriquecido (regra sempre; bens→NCM; DAS intocado)
+- [x] 09-05: IA chat (regra p/ 1.090, NBS só com link + ano)
+- [x] 09-06: Chaos 22 + docs/UAT (rev. 2) — 22/22 100% (`docs/chaos-phase-09.md`, `docs/uat-phase-09.md` 5/5)
+  (ver `.planning/phase-09/09-PLAN.md` + `09-RESEARCH.md`)
 
 ## Progress
 

@@ -5,8 +5,8 @@
 
 /** Nome/versão do IndexedDB legado (paridade com a v1). */
 export const DB_NAME = 'aurum_tax_ncm_v1'
-/** Versão do IndexedDB. A v10 adiciona `anexos` + `produtos_dfe` (formatos reais CFF). */
-export const DB_VERSION = 12
+/** Versão do IndexedDB. A v13 adiciona `cnaeNbs` + `lcNbs` + `classificacoesConsolidadas` (Phase 9, ponte CNAE → NBS). */
+export const DB_VERSION = 13
 
 /** Itens por página nas listagens. */
 export const PAGE_SIZE = 10
@@ -104,6 +104,12 @@ export const STORES = {
   CONSULTAS_CNPJ: 'consultasCnpj',
   /** Conversas da Aurum AI por emitente (Phase 8, memória longo prazo). */
   CONVERSAS_EMITENTE: 'conversasEmitente',
+  /** Links CNAE → NBS da fonte ponte (Phase 9, `CNAE X NBS.qualclasstrib.json`). */
+  CNAE_NBS: 'cnaeNbs',
+  /** Relações LC 116 → NBS da fonte ponte (Phase 9, `fallback-relations.json`). */
+  LC_NBS: 'lcNbs',
+  /** Templates consolidados por CNAE (Phase 9, conferência entre fontes). */
+  CLASS_CONSOLIDADA: 'classificacoesConsolidadas',
 } as const
 
 export type StoreName = (typeof STORES)[keyof typeof STORES]

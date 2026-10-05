@@ -28,6 +28,15 @@ import { db } from '@/infrastructure/db/schema'
 import { classificarComIAServicos } from '@/infrastructure/ia/classificacao-ia-servicos-repo'
 import type { ResultadoConsultaIaServicos } from '@/infrastructure/ia/classificacao-ia-servicos-repo'
 import { registrarAuditoria } from '@/application/auditoria'
+import { consultarPorCnae } from '@/application/consultar-por-cnae'
+import {
+  ANO_REFERENCIA_PADRAO,
+  normalizarAnoReferencia,
+  regrasDoCnae,
+  type EstadoNbsCnae,
+  type RegraCnae,
+  type VereditoNbs,
+} from '@/domain/services/cnae-nbs'
 
 /** Validade do cache de CNPJ (30 dias). */
 export const TTL_CONSULTA_CNPJ_MS = 30 * 24 * 60 * 60 * 1000
@@ -60,7 +69,27 @@ export interface AtividadeCnae {
    * sistema. Cada item tem `apenasInformativo: true` — nunca decisão final.
    */
   preditivas: import('@/domain/services/preditivo-servicos').SugestaoPreditivaServico[]
+  /* ------------------------------------------------ Phase 9 / 09-04 --- */
+  /** Camada 1 (`regrasDoCnae`) — sempre presente após o GATE (null só se o banco falhar). */
+  regras: RegraCnae | null
+  /** Camada 2 (`consultarPorCnae`, best-effort) — vereditos NBS no ano de referência. */
+  nbsLista: VereditoNbs[]
+  /** Quantos vereditos têm benefício (`temBeneficio`). */
+  nbsComBeneficio: number
+  /** NBS mais provável do ranking (null quando sem mapeamento/bens). */
+  maisProvavel: string | null
+  /** Estado do enriquecimento NBS (badge da UI). */
+  estadoNbs: EstadoNbsAtividade
+  /** Ano de referência da precificação (default 2033 — regime pleno). */
+  anoReferencia: number
 }
+
+/**
+ * Estado do enriquecimento NBS por atividade (Phase 9 / 09-04).
+ * Reaproveita `EstadoNbsCnae` do motor (`mapeado | sem-mapeamento-NBS |
+ * bens→NCM`) + `cnae-desconhecido` quando o CNAE está fora dos 1.090.
+ */
+export type EstadoNbsAtividade = EstadoNbsCnae | 'cnae-desconhecido'
 
 export interface VereditoEmpresa {
   cnpj: string
@@ -72,6 +101,8 @@ export interface VereditoEmpresa {
   dataConsulta: string
   doCache: boolean
   atividades: AtividadeCnae[]
+  /** Ano de referência do enriquecimento NBS (Phase 9 / 09-04, default 2033). */
+  anoReferencia: number
   resumo: {
     classificadas: number
     comBeneficio: number
@@ -117,11 +148,17 @@ async function lerCache(cnpj: string): Promise<ConsultaCnpj | null> {
   }
 }
 
-async function classificarAtividade(
+/** Base Phase 7 sem o enriquecimento Phase 9 (o GATE nunca quebra). */
+type BaseAtividadeCnae = Omit<
+  AtividadeCnae,
+  'regras' | 'nbsLista' | 'nbsComBeneficio' | 'maisProvavel' | 'estadoNbs' | 'anoReferencia'
+>
+
+async function classificarAtividadeGate(
   cnae7: string,
   descricaoApi: string,
   principal: boolean,
-): Promise<AtividadeCnae> {
+): Promise<BaseAtividadeCnae> {
   const base = {
     cnae7,
     codigoFormatado: fmtCnae(cnae7),
@@ -264,14 +301,73 @@ async function classificarAtividade(
   }
 }
 
+/* ------------------------------------------------- Phase 9 / 09-04: enriquecimento --- */
+
+/** Enriquecimento vazio (fallback honesto — nunca quebra o GATE Phase 7). */
+function enriquecimentoVazio(
+  regras: RegraCnae | null,
+): Pick<AtividadeCnae, 'estadoNbs' | 'nbsLista' | 'nbsComBeneficio' | 'maisProvavel'> {
+  if (regras?.estado === 'ok' && regras.ehBens) {
+    return { estadoNbs: 'bens→NCM', nbsLista: [], nbsComBeneficio: 0, maisProvavel: null }
+  }
+  return { estadoNbs: 'sem-mapeamento-NBS', nbsLista: [], nbsComBeneficio: 0, maisProvavel: null }
+}
+
+/**
+ * Camada 2 best-effort via `consultarPorCnae` (cache por NBS — no CNPJ com
+ * 98 NBS o cache evita 98× `calcularTributos`, B.3). Nunca lança: falha vira
+ * enriquecimento vazio e o fallback Phase 7 segue intacto.
+ */
+async function enriquecimentoBestEffort(
+  cnae7: string,
+  anoReferencia: number,
+  regras: RegraCnae | null,
+): Promise<Pick<AtividadeCnae, 'estadoNbs' | 'nbsLista' | 'nbsComBeneficio' | 'maisProvavel'>> {
+  try {
+    const c = await consultarPorCnae(cnae7, { anoReferencia })
+    return {
+      estadoNbs: c.estadoNbs,
+      nbsLista: c.vereditos,
+      nbsComBeneficio: c.vereditos.filter((v) => v.temBeneficio).length,
+      maisProvavel: c.maisProvavel,
+    }
+  } catch {
+    return enriquecimentoVazio(regras)
+  }
+}
+
+/**
+ * GATE Phase 7 + camadas Phase 9 (09-04): após o GATE, camada 1
+ * `regrasDoCnae` SEMPRE + camada 2 best-effort via `consultarPorCnae`.
+ * `anoReferencia` default 2033 (regime pleno).
+ */
+async function classificarAtividade(
+  cnae7: string,
+  descricaoApi: string,
+  principal: boolean,
+  opts?: { anoReferencia?: number },
+): Promise<AtividadeCnae> {
+  const ano = normalizarAnoReferencia(opts?.anoReferencia ?? ANO_REFERENCIA_PADRAO)
+  const base = await classificarAtividadeGate(cnae7, descricaoApi, principal)
+  let regras: RegraCnae | null = null
+  try {
+    regras = await regrasDoCnae(cnae7)
+  } catch {
+    regras = null
+  }
+  const enr = await enriquecimentoBestEffort(cnae7, ano, regras)
+  return { ...base, regras, ...enr, anoReferencia: ano }
+}
+
 /**
  * Consulta completa por CNPJ. `forcarAtualizacao` ignora o cache.
  * Nunca lança — erro de rede/DV vira `Error` apenas para DV inválido;
  * demais falhas retornam veredito parcial com atividades em `falha`.
+ * `anoReferencia` (default 2033) precifica o enriquecimento NBS (09-04).
  */
 export async function consultarPorCnpj(
   cnpjBruto: string,
-  opts?: { forcarAtualizacao?: boolean; fetchFn?: typeof fetch },
+  opts?: { forcarAtualizacao?: boolean; fetchFn?: typeof fetch; anoReferencia?: number },
 ): Promise<VereditoEmpresa> {
   const validado = validarCnpj(cnpjBruto)
   if (!validado.ok) {
@@ -331,10 +427,11 @@ export async function consultarPorCnpj(
 
   const atividades: AtividadeCnae[] = new Array(fila.length)
   const CONCORRENCIA = 5
+  const ano = normalizarAnoReferencia(opts?.anoReferencia ?? ANO_REFERENCIA_PADRAO)
   for (let i = 0; i < fila.length; i += CONCORRENCIA) {
     const fatia = fila.slice(i, i + CONCORRENCIA)
     const resultados = await Promise.all(
-      fatia.map((f) => classificarAtividade(f.codigo, f.descricao, f.principal)),
+      fatia.map((f) => classificarAtividade(f.codigo, f.descricao, f.principal, { anoReferencia: ano })),
     )
     resultados.forEach((r, k) => {
       atividades[i + k] = r
@@ -352,6 +449,7 @@ export async function consultarPorCnpj(
     doCache,
     atividades,
     resumo: resumir(atividades),
+    anoReferencia: ano,
   }
   void registrarAuditoria('consultas_cnpj', `${cnpj} — ${razaoSocial}`.slice(0, 80), 'criar', null, {
     atividades: atividades.length,

@@ -78,8 +78,17 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **SER-04**: Consulta por CNPJ via BrasilAPI (DV local, CNAE principal+secundários, cache Dexie 30d, 1 cartão elegante por atividade)
 - [x] **SER-05**: Paridade UX/Aurum AI (mesmo GATE determinístico→fallback, ficha absoluta NBS, trilha `audit_log`+`.jsonl`, alíquotas de `calcularTributos`+`REF_DEFAULT`)
 
-### Persistence & Settings (PER)
+### Consulta de CNAEs — CNAE → NBS → Reforma (CNAE) — IMPLEMENTADA (Phase 9, 2026-10-05)
 
+- [x] **CNAE-01**: Ingerir `qualclasstrib_completo.json` (508 CNAEs, ~6,6k links, +677 LC +1.739 LC×NBS) via `npm run base` com `fixLatin1`, descarte do tracking Google, **conferência de descrições entre fontes + template consolidado (`classificacoesConsolidadas`)**, MANIFEST com proveniência (origem/licença/captura/cadência) + `cnaesComRegras:1090, cnaesComNbs:508, descricoesConferidas/Divergentes`, Dexie v13 aditiva
+- [x] **CNAE-02**: Motor em **duas camadas**: (1) `regrasDoCnae` sempre nos 1.090 (+ caminho bens→NCM); (2) enriquecimento NBS nos 508 × resolvedor → `VereditoNbs{…, anoReferencia}` (2026/2027/2033 via `refPorAno`), **cache por NBS**, ranking + destaque p/ 98-NBS
+- [x] **CNAE-03**: Menu novo "Consulta de CNAEs" (**busca nos 1.090**, invariante: zero CNAE sem regra); coluna NBS = contagem ou badge `sem-NBS`; painel = bloco Regras (sempre) + bloco NBS/Reforma (condicional, destaque + ranking + escolha) + template
+- [x] **CNAE-04**: CNPJ enriquecido — Serviços + Simples: regra sempre; NBS com flags/ano onde há link; **bens → faixa NCM**; fora-508 → regra + `sem-mapeamento-NBS` + fallback (DAS intocado)
+- [x] **CNAE-05**: Chat IA — regra (anexo/situação/vedação) p/ qualquer dos 1.090; NBS/benefício (+ano) só com link; sem lastro honesto
+- [x] **CNAE-06**: Chaos 22 casos (sorteio fora-508, 3 anos, cache, divergência, template, bens, 98-NBS; preserva `__COMPARAR`/rollback/degradação), gate `tsc 0 + npm test` ≥85%
+- [x] **CNAE-07**: Docs + UAT (MANIFEST completo, precedência oficial>ponte>auxiliar documentada, aceite incl. bens e 98-NBS)
+
+### Persistence & Settings (PER)
 - [ ] **PER-01**: Persistir classificações do usuário em IndexedDB (sobrevivem a reinícios)
 - [ ] **PER-02**: Persistir configurações: tema, caminho último arquivo importado, preferências de exportação
 - [ ] **PER-03**: Backup/exportar banco local (arquivo .json ou .sqlite) para portabilidade
@@ -162,6 +171,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | IA-08 | Phase 6 | Pending |
 | IA-09 | Phase 6 | Pending |
 | IA-10 | Phase 6 | Pending |
+| CNAE-01 | Phase 9 | Implemented |
+| CNAE-02 | Phase 9 | Implemented |
+| CNAE-03 | Phase 9 | Implemented |
+| CNAE-04 | Phase 9 | Implemented |
+| CNAE-05 | Phase 9 | Implemented |
+| CNAE-06 | Phase 9 | Implemented |
+| CNAE-07 | Phase 9 | Implemented |
 
 **Coverage:**
 - v1 requirements: 42 total (31 + 11 IA NCM-only com spike 06-00)

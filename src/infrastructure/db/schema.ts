@@ -7,10 +7,13 @@ import {
 import type {
   AnexoNcm,
   AuditLog,
+  ClassificacaoConsolidada,
   ClassificacaoProdutoSistema,
   CnaeAnexo,
+  CnaeNbsLink,
   ConsultaCnpj,
   Empresa,
+  LcNbsRelation,
   NomenclaturaNcm,
   Produto,
   ProdutoDfe,
@@ -239,6 +242,13 @@ export class AurumDatabase extends Dexie {
   consultasCnpj!: Table<ConsultaCnpj, string>
   conversasEmitente!: Table<ConversaEmitente, string>
 
+  /** Links CNAE → NBS da fonte ponte (Phase 9, Dexie v13). */
+  cnaeNbs!: Table<CnaeNbsLink, number>
+  /** Relações LC 116 → NBS da fonte ponte (Phase 9, Dexie v13). */
+  lcNbs!: Table<LcNbsRelation, number>
+  /** Templates consolidados por CNAE (Phase 9, Dexie v13, keyPath `cnae7`). */
+  classificacoesConsolidadas!: Table<ClassificacaoConsolidada, string>
+
   constructor() {
     super(DB_NAME)
     // v6: schema anterior (sem `classificacaoProduto`). Mantido para a
@@ -357,6 +367,36 @@ export class AurumDatabase extends Dexie {
         [STORES.CONSULTAS_CNPJ]: 'cnpj',
       })
     // v12 (Phase 8 / 08-05): adiciona `conversasEmitente`; demais intactas.
+    // Congelada: bancos em v12 sobem para v13 sem perder dados.
+    this.version(12)
+      .stores({
+        [STORES.NCM]: 'id, codigo, cst, cClassTrib',
+        [STORES.NBS]: 'id, codigo, cst, cClassTrib',
+        [STORES.CST]: 'codigo',
+        [STORES.CSTCT]: 'id, cst, cClassTrib',
+        [STORES.REFERENCIA]: 'id, cst, cClassTrib',
+        [STORES.NCMNOM]: 'codigo, descricao',
+        [STORES.EMPRESAS]: '++id, razaoSocial, cnpj',
+        [STORES.PRODUTOS]: '++id, empresaId, ncm, codigo, cstReforma',
+        [STORES.META]: 'chave',
+        [STORES.CFOP]: 'codigo',
+        [STORES.CSTICMS]: 'codigo',
+        [STORES.CSTPISCOFINS]: 'codigo',
+        [STORES.NFENOTAS]: '++id, empresaId, dataEmissao, direcao, emitCnpj, chave, &[empresaId+chave]',
+        [STORES.RECLASS]: 'ncm',
+        [STORES.CLASSPROD]: 'id, sistema, cClassTrib',
+        [STORES.AUDIT]: '++id, quando, tabela, chave, autor',
+        [STORES.CEST]: 'codigo, ncm',
+        [STORES.IAFEEDBACK]: '++id, quando, via, decisao',
+        [STORES.ANEXOS]: 'id, codigo, nroAnexo',
+        [STORES.PRODUTOSDFE]: 'id, sistema, codClassProd',
+        [STORES.CNAE]: 'codigo7, descricao',
+        [STORES.CONSULTAS_CNPJ]: 'cnpj',
+        [STORES.CONVERSAS_EMITENTE]: 'conversaId, emitenteId, updatedAt',
+      })
+    // v13 (Phase 9 / 09-01): adiciona `cnaeNbs` + `lcNbs` +
+    // `classificacoesConsolidadas` (ponte CNAE → NBS); demais intactas.
+    // Migração aditiva: nenhum `clear()`, nenhum dado existente é tocado.
     this.version(DB_VERSION)
       .stores({
         [STORES.NCM]: 'id, codigo, cst, cClassTrib',
@@ -382,6 +422,9 @@ export class AurumDatabase extends Dexie {
         [STORES.CNAE]: 'codigo7, descricao',
         [STORES.CONSULTAS_CNPJ]: 'cnpj',
         [STORES.CONVERSAS_EMITENTE]: 'conversaId, emitenteId, updatedAt',
+        [STORES.CNAE_NBS]: '++id, cnae7, nbs, [cnae7+nbs]',
+        [STORES.LC_NBS]: '++id, lc, nbs, cct, [lc+nbs]',
+        [STORES.CLASS_CONSOLIDADA]: 'cnae7',
       })
     // Aliases snake_case -> camelCase (Dexie injeta this[storeName]).
     this.auditLog ??= this.table(STORES.AUDIT) as unknown as typeof this.auditLog
@@ -427,6 +470,7 @@ export async function contarTodos(): Promise<Record<string, number>> {
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
     cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
     anexos, produtosDfe, cnae, consultasCnpj, conversasEmitente,
+    cnaeNbs, lcNbs, classificacoesConsolidadas,
   ] = await Promise.all([
     contar(STORES.NCM),
     contar(STORES.NBS),
@@ -450,10 +494,14 @@ export async function contarTodos(): Promise<Record<string, number>> {
     contar(STORES.CNAE),
     contar(STORES.CONSULTAS_CNPJ),
     contar(STORES.CONVERSAS_EMITENTE),
+    contar(STORES.CNAE_NBS),
+    contar(STORES.LC_NBS),
+    contar(STORES.CLASS_CONSOLIDADA),
   ])
   return {
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
     cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
     anexos, produtosDfe, cnae, consultasCnpj, conversasEmitente,
+    cnaeNbs, lcNbs, classificacoesConsolidadas,
   }
 }

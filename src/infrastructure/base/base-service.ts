@@ -1,6 +1,9 @@
 import { META_KEYS, REF_DEFAULT } from '@/domain/constants'
 import { SISTEMAS_CFF } from '@/domain/constants/cff-apis'
 import type {
+  ClassificacaoConsolidada,
+  CnaeNbsLink,
+  LcNbsRelation,
   NomenclaturaNcm,
   ReferenciaCClassTrib,
   TabelaCst,
@@ -15,6 +18,7 @@ import {
   normalizarAnexosCff,
   normalizarClassTribCff,
   normalizarCnaeAnexo,
+  normalizarCnaeNbs,
   normalizarCreditoPresumido,
   normalizarCst,
   normalizarCstClassTrib,
@@ -56,6 +60,9 @@ export const META_BASES_CFF = {
   /** Phase 7 — arquivos vivos de Serviços. */
   CNAE: 'importacao_cnae',
   NBS_SERVICOS: 'importacao_nbs_servicos',
+  /** Phase 9 — ponte CNAE → NBS (merge, nunca `clear()` em `cnae`/`nbs`). */
+  CNAE_NBS: 'importacao_cnae_nbs',
+  CLASS_CONSOLIDADA: 'importacao_class_consolidada',
 } as const
 
 export interface StatusBase {
@@ -71,6 +78,14 @@ export interface StatusBase {
   produtosDfe: number
   credPresumido: number
   indOper: number
+  /** Phase 9 — links CNAE → NBS (`db.cnaeNbs`). */
+  cnaeNbs: number
+  /** Phase 9 — relações LC × NBS (`db.lcNbs`). */
+  lcNbs: number
+  /** Phase 9 — templates consolidados (`db.classificacoesConsolidadas`). */
+  classificacoesConsolidadas: number
+  /** Phase 9 — `"1.090 regras · 508 com NBS"` (regras sempre; NBS condicional). */
+  resumoCnaeNbs: string
   ultimaImportacao: MetaRecord | null
   ultimaNomenclatura: MetaRecord | null
   embutida: boolean
@@ -327,6 +342,8 @@ export const ARQUIVOS_BASE = [
   'reforma.json',
   'nomenclatura.json',
   'cnae.json',
+  'cnae-nbs.json',
+  'classificacoes-consolidadas.json',
 ] as const
 
 /**
@@ -356,6 +373,7 @@ export async function semearBaseEmbutida(
   // fica com `cnae` vazia e todo CNAE cai em "fora da tabela viva".
   if ((await baseCompleta()) && !forcar) {
     await completarStoresFase7().catch(() => false)
+    await completarStoresFase9().catch(() => false)
     return statusBase()
   }
 
@@ -403,15 +421,46 @@ export async function semearBaseEmbutida(
     cnae = []
   }
 
+  // Phase 9 — ponte CNAE → NBS + templates (ausentes = stores vazias, sem falhar).
+  onProgress('Carregando ponte CNAE → NBS', 44)
+  let linksCnaeNbs: CnaeNbsLink[] = []
+  let relacoesLcNbs: LcNbsRelation[] = []
+  try {
+    const ponteJson = JSON.parse(await lerArquivoBase('cnae-nbs.json')) as ArquivoRef & {
+      links: unknown
+      lcNbs: unknown
+    }
+    const norm = normalizarCnaeNbs(ponteJson.links !== undefined || ponteJson.lcNbs !== undefined ? ponteJson : [])
+    linksCnaeNbs = norm.links
+    relacoesLcNbs = norm.lcNbs
+  } catch {
+    linksCnaeNbs = []
+    relacoesLcNbs = []
+  }
+  let consolidadas: ClassificacaoConsolidada[] = []
+  try {
+    const consolidadoJson = JSON.parse(await lerArquivoBase('classificacoes-consolidadas.json')) as ArquivoRef & {
+      itens: unknown
+    }
+    const itens = Array.isArray(consolidadoJson.itens) ? consolidadoJson.itens : []
+    consolidadas = (itens as ClassificacaoConsolidada[]).filter((t) => t && typeof t.cnae7 === 'string')
+  } catch {
+    consolidadas = []
+  }
+
   onProgress('Limpando base anterior', 45)
+  // Phase 9 — merge, não replace: `db.cnae`/`db.nbs` NUNCA com `clear()` aqui
+  // (só `bulkPut` abaixo); as derivadas da ponte são recalculadas no reseed.
   await Promise.all([
     db.ncm.clear(),
     db.cst.clear(),
     db.cstClassTrib.clear(),
     db.referencia.clear(),
     db.ncmNomenclatura.clear(),
-    db.nbs.clear(),
-    db.cnae.clear(),
+    // Phase 9 — stores derivadas da ponte (reseed total explícito).
+    db.cnaeNbs.clear().catch(() => undefined),
+    db.lcNbs.clear().catch(() => undefined),
+    db.classificacoesConsolidadas.clear().catch(() => undefined),
   ])
 
   const agora = new Date().toISOString()
@@ -430,6 +479,25 @@ export async function semearBaseEmbutida(
   await bulkPut(db.ncmNomenclatura, nomenclatura, reg(80, 18))
   if (nbs.length) await bulkPut(db.nbs, nbs)
   if (cnae.length) await bulkPut(db.cnae, cnae)
+  // Phase 9 — merge sem `clear()` em `db.cnae`/`db.nbs` (as derivadas foram
+  // limpas acima no reseed total; aqui só grava).
+  if (linksCnaeNbs.length) await bulkPut(db.cnaeNbs, linksCnaeNbs)
+  if (relacoesLcNbs.length) await bulkPut(db.lcNbs, relacoesLcNbs)
+  if (consolidadas.length) await bulkPut(db.classificacoesConsolidadas, consolidadas)
+  if (linksCnaeNbs.length || consolidadas.length) {
+    await db.meta.put({
+      chave: META_BASES_CFF.CNAE_NBS,
+      data: agora,
+      arquivo: 'base embutida (Phase 9)',
+      total: linksCnaeNbs.length,
+    })
+    await db.meta.put({
+      chave: META_BASES_CFF.CLASS_CONSOLIDADA,
+      data: agora,
+      arquivo: 'base embutida (Phase 9)',
+      total: consolidadas.length,
+    })
+  }
 
   await db.meta.put({
     chave: META_KEYS.IMPORTACAO,
@@ -459,7 +527,7 @@ export async function semearBaseEmbutida(
 }
 
 export async function statusBase(): Promise<StatusBase> {
-  const [ncm, cst, cstClassTrib, referencia, nomenclatura, nbs, cnae, anexos, produtosDfe, metaCred, metaInd, ultima, ultimaNom] =
+  const [ncm, cst, cstClassTrib, referencia, nomenclatura, nbs, cnae, anexos, produtosDfe, metaCred, metaInd, ultima, ultimaNom, cnaeNbs, lcNbs, classificacoesConsolidadas] =
     await Promise.all([
       db.ncm.count(),
       db.cst.count(),
@@ -474,9 +542,20 @@ export async function statusBase(): Promise<StatusBase> {
       db.meta.get(META_BASES_CFF.IND_OPER).catch(() => undefined),
       db.meta.get(META_KEYS.IMPORTACAO),
       db.meta.get(META_KEYS.IMPORTACAO_NOMENCLATURA),
+      db.cnaeNbs.count().catch(() => 0),
+      db.lcNbs.count().catch(() => 0),
+      db.classificacoesConsolidadas.count().catch(() => 0),
     ])
   const embutida = await db.meta.get('base_embutida')
   const valorEmbutida = embutida?.valor as { geradoEm?: unknown } | undefined
+  // CNAEs distintos com NBS (links cobrem 508; regras cobrem os 1.090).
+  let cnaesComNbs = 0
+  try {
+    cnaesComNbs = (await db.cnaeNbs.orderBy('cnae7').uniqueKeys()).length
+  } catch {
+    cnaesComNbs = 0
+  }
+  const pt = (v: number): string => v.toLocaleString('pt-BR')
   return {
     ncm,
     cst,
@@ -489,6 +568,10 @@ export async function statusBase(): Promise<StatusBase> {
     produtosDfe,
     credPresumido: typeof metaCred?.total === 'number' ? metaCred.total : 0,
     indOper: typeof metaInd?.total === 'number' ? metaInd.total : 0,
+    cnaeNbs,
+    lcNbs,
+    classificacoesConsolidadas,
+    resumoCnaeNbs: `${pt(cnae)} regras · ${pt(cnaesComNbs)} com NBS`,
     ultimaImportacao: ultima ?? null,
     ultimaNomenclatura: ultimaNom ?? null,
     embutida: Boolean(embutida),
@@ -580,6 +663,67 @@ export async function completarStoresFase7(): Promise<boolean> {
   return completou
 }
 
+/**
+ * Completa as stores da Phase 9 em bancos já semeados (v12 → v13).
+ *
+ * Merge, nunca replace: usa `bulkPut` SEM `clear()` em `db.cnae`/`db.nbs`
+ * (intactas) e insere só o que falta nas derivadas (`cnaeNbs` por
+ * `cnae7|nbs` via índice composto; `lcNbs`/`classificacoesConsolidadas` por
+ * contagem vazia). Idempotente e best-effort: nunca quebra o boot.
+ *
+ * Devolve `true` quando preencheu ao menos uma store.
+ */
+export async function completarStoresFase9(): Promise<boolean> {
+  let completou = false
+  try {
+    const [nLinks, nLc, nTpl] = await Promise.all([
+      db.cnaeNbs.count().catch(() => 0),
+      db.lcNbs.count().catch(() => 0),
+      db.classificacoesConsolidadas.count().catch(() => 0),
+    ])
+    if (nLinks === 0 || nLc === 0 || nTpl === 0) {
+      let norm: { links: CnaeNbsLink[]; lcNbs: LcNbsRelation[] } | null = null
+      let itens: ClassificacaoConsolidada[] = []
+      try {
+        const ponteJson = JSON.parse(await lerArquivoBase('cnae-nbs.json')) as {
+          links?: unknown
+          lcNbs?: unknown
+        }
+        norm = normalizarCnaeNbs(ponteJson)
+      } catch {
+        norm = null
+      }
+      try {
+        const consolidadoJson = JSON.parse(await lerArquivoBase('classificacoes-consolidadas.json')) as {
+          itens?: unknown
+        }
+        const lista = Array.isArray(consolidadoJson.itens) ? consolidadoJson.itens : []
+        itens = (lista as ClassificacaoConsolidada[]).filter((t) => t && typeof t.cnae7 === 'string')
+      } catch {
+        itens = []
+      }
+      const agora = new Date().toISOString()
+      if (norm && nLinks === 0 && norm.links.length) {
+        await bulkPut(db.cnaeNbs, norm.links)
+        await db.meta.put({ chave: META_BASES_CFF.CNAE_NBS, data: agora, arquivo: 'base embutida (top-up Phase 9)', total: norm.links.length })
+        completou = true
+      }
+      if (norm && nLc === 0 && norm.lcNbs.length) {
+        await bulkPut(db.lcNbs, norm.lcNbs)
+        completou = true
+      }
+      if (nTpl === 0 && itens.length) {
+        await bulkPut(db.classificacoesConsolidadas, itens)
+        await db.meta.put({ chave: META_BASES_CFF.CLASS_CONSOLIDADA, data: agora, arquivo: 'base embutida (top-up Phase 9)', total: itens.length })
+        completou = true
+      }
+    }
+  } catch {
+    return false
+  }
+  return completou
+}
+
 /** Apaga apenas a base importada (SPEC R10.12). */
 export async function apagarBaseImportada(): Promise<void> {  await Promise.all([
     db.ncm.clear(),
@@ -589,6 +733,9 @@ export async function apagarBaseImportada(): Promise<void> {  await Promise.all(
     db.ncmNomenclatura.clear(),
     db.nbs.clear(),
     db.cnae.clear().catch(() => undefined),
+    db.cnaeNbs.clear().catch(() => undefined),
+    db.lcNbs.clear().catch(() => undefined),
+    db.classificacoesConsolidadas.clear().catch(() => undefined),
     db.anexos.clear().catch(() => undefined),
     db.produtosDfe.clear().catch(() => undefined),
     db.classificacaoProduto.clear(),
@@ -597,6 +744,8 @@ export async function apagarBaseImportada(): Promise<void> {  await Promise.all(
     db.meta.delete(META_BASES_CFF.ANEXOS),
     db.meta.delete(META_BASES_CFF.CNAE),
     db.meta.delete(META_BASES_CFF.NBS_SERVICOS),
+    db.meta.delete(META_BASES_CFF.CNAE_NBS),
+    db.meta.delete(META_BASES_CFF.CLASS_CONSOLIDADA),
     db.meta.delete(META_BASES_CFF.CRED_PRESUMIDO),
     db.meta.delete(META_BASES_CFF.IND_OPER),
     db.meta.delete('base_embutida'),

@@ -15,10 +15,10 @@
  */
 
 import type { AnaliseChat } from '@/domain/services/detector-chat';
-import { extrairNucleoBusca } from '@/domain/services/detector-chat';
+import { extrairNucleoBusca, ehPedidoProjecaoDividida } from '@/domain/services/detector-chat';
 import { ehProvavelDados } from '@/domain/services/acoes-dados';
 import { temSinalFiscal } from '@/domain/services/escopo-consulta';
-import { extrairSlotsSimples, extrairTodosValores, historicoSlotsSimples } from '@/domain/services/valores-chat';
+import { extrairSlotsSimples, extrairTodosValores, historicoSlotsSimples, detectarPerguntaAliquota } from '@/domain/services/valores-chat';
 import {
   ehConfirmacao,
   ehNegacao,
@@ -36,6 +36,7 @@ export type ToolName =
   | 'consultarNCM'
   | 'consultarNBS'
   | 'consultarCNAE'
+  | 'consultarCnaeNbs'
   | 'consultarCNPJ'
   | 'verificarCadastroCnpj'
   | 'cadastrarProdutoAssistido'
@@ -51,6 +52,7 @@ export type ToolName =
   | 'responderTempo'
   | 'calcularSimples'
   | 'simularComparativo'
+  | 'simularCenarioDividido'
   | 'explicarConceito'
   | 'gerarRelatorio'
   | 'navegarPara'
@@ -89,6 +91,14 @@ export const PLANO_TOOL_CALLING: ToolSpec[] = [
     inputs: ['cnae (7 dígitos normalizados)'],
     exemplo: ['"qual anexo do CNAE 6201-5/01?" → consultarCNAE("6201501") + Anexo Simples III/V + Fator R'],
     guardrail: 'Lookup direto na tabela viva CNAE × Anexo Simples; inexistente → funil ("do que se trata?") sem chutar anexo. Sem confiança quando exato.',
+    escreveNoSistema: false,
+  },
+  {
+    tool: 'consultarCnaeNbs',
+    quandoUsar: 'intenção cnae COM pergunta sobre NBS/benefício/Reforma ("CNAE 0161-0/01 quais NBS e benefícios?", "meu cnae tem benefício?"): regra do Simples (sempre, 1.090) + NBS vinculadas com benefício/tributação especial no ano de referência.',
+    inputs: ['cnae (7 dígitos normalizados)', 'anoReferencia? (2026 | 2027 | 2033; padrão 2033)'],
+    exemplo: ['"CNAE 0161-0/01 quais NBS e benefícios?" → consultarCnaeNbs("0161001", 2033) + Anexo Simples III + 1 NBS + veredito com ano'],
+    guardrail: 'Regra (anexo/situação/Fator R/vedação) SEMPRE dos 1.090; NBS/benefício SÓ com link CNAE→NBS + resolvedor oficial + ano explícito; bens→NCM (sem NBS aplicável); sem lastro → `sem-mapeamento` honesto, NUNCA inventar NBS/benefício.',
     escreveNoSistema: false,
   },
   {
@@ -209,6 +219,14 @@ export const PLANO_TOOL_CALLING: ToolSpec[] = [
     inputs: ['anexo', 'rbt12', 'receitaMes', 'folha12?', 'despesas? (da conversa ou "usar referência")', 'cbsRef?'],
     exemplo: ['"comparar com híbrido ..." (com contexto) → 2 guias', '"Anexo III ... no híbrido" → 2 guias', '"aluguel 2000" (thread híbrida) → recalcula híbrido'],
     guardrail: 'Sem números → explica regra geral SEM simular; com números → usa o motor via responderHibridoAnexo (única saída do híbrido), nunca estima.',
+    escreveNoSistema: false,
+  },
+  {
+    tool: 'simularCenarioDividido',
+    quandoUsar: 'intenção projecao: dividir o faturamento entre mãe e nova empresa ("dividir em duas empresas?", "vale a pena abrir uma nova empresa?", "30% na nova"). RBT12 deslizante + DAS do motor + economia + payback + alertas (sublimite 3,6M, 4,8M, Fator R, grupo econômico).',
+    inputs: ['rbt12 (12m mãe)', 'receitaMes total/mês', 'percentualNova 0 < p < 1', 'anexoMae I–V', 'anexoNova I–V', 'folha12Mae? (Fator R)', 'custoMensalNova? (payback líquido)', 'mesInicio YYYY-MM (default próximo mês)', 'horizonte 12m'],
+    exemplo: ['"RBT12 1,2M, receita 120 mil/mês, 30% na nova, mãe no III e nova no III" → simularCenarioDividido + veredito compensa/não compensa'],
+    guardrail: 'Sem RBT12/receita/percentual/anexos → PERGUNTA os valores (passo 1-4), nunca simula com exemplo. Série honesta: histórico=RBT12/12, projeção=receita repetida 12m. Todo número do motor; grupo econômico exige contador.',
     escreveNoSistema: false,
   },
   {
@@ -502,7 +520,7 @@ export function toolParaIntencao(intencao: AnaliseChat['intencao']): ToolName {
   switch (intencao) {
     case 'ncm': return 'consultarNCM';
     case 'nbs': return 'consultarNBS';
-    case 'cnae': return 'consultarCNAE';
+    case 'cnae': return 'consultarCnaeNbs';
     case 'cnpj': return 'consultarCNPJ';
     case 'cadastrar_produto': return 'cadastrarProdutoAssistido';
     case 'clientes': return 'consultarClientes';
@@ -512,6 +530,7 @@ export function toolParaIntencao(intencao: AnaliseChat['intencao']): ToolName {
     case 'tempo': return 'responderTempo';
     case 'simples': return 'calcularSimples';
     case 'comparativo': return 'simularComparativo';
+    case 'projecao': return 'simularCenarioDividido';
     case 'conceito': return 'explicarConceito';
     case 'legislacao': return 'explicarArtigoLC214';
     case 'relatorio': return 'gerarRelatorio';
@@ -574,6 +593,37 @@ export function refinarIntencaoComContexto(
       /* visual nunca trava o refinamento */
     }
   }
+  // Projeção mãe/nova por contexto: "e se eu abrir outra?" / "e dividindo?"
+  // com conversa Simples ativa herda a projeção (o detector puro só vê a
+  // frase atual). Follow-ups curtos ("e com 50% na nova?") herdam o histórico
+  // de projeção. Checada antes do cadastro para não virar fluxo de produto.
+  if (analise.intencao === 'generico') {
+    try {
+      if (ehPedidoProjecaoDividida(texto)) return { ...analise, intencao: 'projecao' };
+      const ctxP = contextoBaseDoTurno(historico);
+      const nP = String(texto ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const histUserP = historico.filter((m) => m.papel === 'user').map((m) => m.texto);
+      const veioDeProjecao = histUserP.some((t) => {
+        try {
+          return ehPedidoProjecaoDividida(t);
+        } catch {
+          return false;
+        }
+      });
+      if (!/bolo|culinaria|\bxml\b|nota fiscal|\bncm\b|\bnbs\b|boleto|segunda via/.test(nP) &&
+        veioDeProjecao && /%|na nova|nesta nova|mae\b|anexo|custo|fatia|meio a meio|\d+\s*\/\s*\d+|terco|metade|rbt|receita|faturamento|folha/.test(nP)) {
+        return { ...analise, intencao: 'projecao' };
+      }
+      if (
+        (ctxP.houveSimples || ctxP.ultimoRbt12 != null || ctxP.ultimoAnexo != null) &&
+        /abrir|divid|duas|nova empresa|segund|outra empresa|fatia|percentual|na nova|cnpj/.test(nP)
+      ) {
+        return { ...analise, intencao: 'projecao' };
+      }
+    } catch {
+      /* projeção nunca trava o refinamento */
+    }
+  }
   // Fluxo de cadastro de produto em andamento (fine-tuning v4): precede o
   // guard de intenção — dígitos e slots ("10051000", "sku QM-01, ncm ...",
   // "cfop 5102") que o detector marcaria como ncm/calculo (valor casual em
@@ -631,6 +681,29 @@ export function refinarIntencaoComContexto(
           temVocabSimples &&
           !ctxPre2.houveDados &&
           (ctxPre2.houveSimples || ctxPre2.ultimoRbt12 != null || ctxPre2.ultimoAnexo != null)
+        ) {
+          return { ...analise, intencao: 'simples' }
+        }
+      } catch {
+        /* segue o fluxo */
+      }
+    }
+    // v9b — pergunta de alíquota do último DAS ("qual a alíquota efetiva
+    // desse cálculo?", "qual o percentual efetivo?"): com conversa Simples
+    // ativa e sem código NCM/NBS/CNPJ/CNAE, é follow-up do Simples — nunca
+    // cálculo IBS nem conceito isolado. Sem contexto Simples, mantém a rota
+    // (conceito explica; cálculo IBS segue com o código).
+    if ((analise.intencao === 'calculo' || analise.intencao === 'conceito') && detectarPerguntaAliquota(texto) != null) {
+      try {
+        const ctxAliq = contextoBaseDoTurno(historico)
+        const nnAliq = String(texto ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        const semCodigoExplicito =
+          !/\bncm\b|\bnbs\b|\bcnpj\b|\bcnae\b/.test(nnAliq) &&
+          !(analise.codigoDigitos?.length === 8 || analise.codigoDigitos?.length === 9) &&
+          !analise.cnpj && !analise.cnae
+        if (
+          semCodigoExplicito &&
+          (ctxAliq.houveSimples || ctxAliq.ultimoAnexo != null || ctxAliq.ultimoRbt12 != null)
         ) {
           return { ...analise, intencao: 'simples' }
         }
@@ -764,9 +837,10 @@ export function refinarIntencaoComContexto(
   // "e com folha maior?" — vocabulário do Simples ou conversa de Simples.
   // Fine-tuning v6: cobre dialetos (paus/conto/pila/mi/bi, verbos de edição,
   // "30% do RBT", "refaz/recalcula", "corrige/muda/troca/bota/aumenta").
-  if (/folha|rbt|receita|anexo|das|fator|sublimite|flh\b|salario|prolabore|colaborador|funcionario|troca|muda|corrige|altera|bota|coloca|aumenta|reduz|baixa|refaz|recalcula|e se|e com|mantem|folha minima|fator r/.test(n) || ctx.houveSimples) {
+  // v9b: pergunta de alíquota ("qual a alíquota efetiva?") também herda.
+  if (/folha|rbt|receita|anexo|das|fator|sublimite|flh\b|salario|prolabore|colaborador|funcionario|troca|muda|corrige|altera|bota|coloca|aumenta|reduz|baixa|refaz|recalcula|e se|e com|mantem|folha minima|fator r|aliquota|aquiquota|alicota|percentual|efetiv/.test(n) || ctx.houveSimples) {
     // Só promove se há algo do Simples no ar (termo atual ou contexto).
-    if (/folha|rbt|receita|anexo|das|fator|sublimite|mil|milh|mi\b|k\b|bi\b|pau|pila|conto|prata|r\$|\d|%/.test(n) && (ctx.ultimoRbt12 != null || ctx.ultimaReceita != null || ctx.ultimoAnexo != null || /folha|rbt|receita|anexo|das|troca|muda|corrige|altera|bota|aumenta|refaz|recalcula/.test(n))) {
+    if (/folha|rbt|receita|anexo|das|fator|sublimite|mil|milh|mi\b|k\b|bi\b|pau|pila|conto|prata|r\$|\d|%|aliquota|efetiv|percentual/.test(n) && (ctx.ultimoRbt12 != null || ctx.ultimaReceita != null || ctx.ultimoAnexo != null || /folha|rbt|receita|anexo|das|troca|muda|corrige|altera|bota|aumenta|refaz|recalcula/.test(n))) {
       return { ...analise, intencao: 'simples' };
     }
   }

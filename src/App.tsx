@@ -9,6 +9,7 @@ import { AurumChat } from '@/pages/AurumChat';
 import { SimplesNacional } from '@/simples/page';
 import { Consulta } from '@/pages/Consulta';
 import { ConsultaServicos } from '@/pages/ConsultaServicos';
+import { ConsultaCnaes } from '@/pages/ConsultaCnaes';
 import { DebugIA } from '@/pages/DebugIA';
 import { Lote } from '@/pages/Lote';
 import { NfeXml } from '@/pages/NfeXml';
@@ -38,6 +39,9 @@ export function App() {
       break;
     case 'servicos':
       pagina = <ConsultaServicos />;
+      break;
+    case 'cnaes':
+      pagina = <ConsultaCnaes />;
       break;
     case 'lote':
       pagina = <Lote />;

@@ -20,6 +20,7 @@ export type ViewId =
   | 'simples'
   | 'consulta'
   | 'servicos'
+  | 'cnaes'
   | 'lote'
   | 'nfe'
   | 'produtos'
@@ -44,6 +45,10 @@ export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = 
   servicos: {
     titulo: 'Consulta Serviços (NBS)',
     subtitulo: 'Busque por NBS, descreva o serviço ou consulte pelo CNPJ',
+  },
+  cnaes: {
+    titulo: 'Consulta de CNAEs',
+    subtitulo: 'CNAE → regra do Simples + NBS e benefício da Reforma (ref. anual)',
   },
   lote: {
     titulo: 'Classificação em lote',

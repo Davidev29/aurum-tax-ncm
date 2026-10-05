@@ -16,6 +16,7 @@ import type { HipoteseLegal } from '@/domain/services/verificacao-servicos'
 import type { AtividadeCnae } from '@/application/consultar-por-cnpj'
 import { VALOR_BASE_IA } from '@/infrastructure/ia/classificacao-ia-repo'
 import { NOME_IA, nivelDeConfianca } from '@/domain/aurum-ai'
+import { useUi } from '@/store/ui'
 import { Btn, Painel } from './kit'
 import { FaixaTributaria } from './faixa-tributaria'
 import { CartaoEnxuto, DetalhesEnxutos } from './consulta-enxuta'
@@ -188,6 +189,220 @@ export function BlocoContextoNbs({
   )
 }
 
+/* ------------------------------------------------- Phase 9 / 09-04: regras + NBS -- */
+
+/**
+ * Bloco Regras compacto (09-04) — SEMPRE renderiza.
+ * Prefere a camada 1 (`atividade.regras`); sem ela, usa `cnaeTabela`;
+ * sem tabela, orienta o modo manual (nunca silêncio).
+ */
+export function BlocoRegrasCnae({ atividade }: { atividade: AtividadeCnae }): ReactElement {
+  const r = atividade.regras
+  if (r?.estado === 'ok') {
+    return (
+      <div
+        className="rounded-xl border border-slate-200 bg-slate-50/60 p-2.5 dark:border-slate-800 dark:bg-slate-950/40"
+        aria-label={`Regras do CNAE ${r.codigoFormatado}`}
+      >
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-black">
+          <span className="uppercase tracking-wide text-slate-500 dark:text-slate-400">📋 Regras</span>
+          <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200">
+            {r.rotuloAnexo}
+          </span>
+          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            {r.situacao}
+          </span>
+          {r.fatorR ? (
+            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200">
+              Fator R
+            </span>
+          ) : null}
+          <span
+            className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+            title="Ano de referência da Reforma (precificação IBS/CBS)"
+          >
+            ref. {atividade.anoReferencia}
+          </span>
+        </div>
+        {r.vedacaoTextual.length ? (
+          <p className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+            {r.vedacaoTextual[0]}
+          </p>
+        ) : null}
+      </div>
+    )
+  }
+  const t = atividade.cnaeTabela
+  if (t) {
+    return (
+      <div
+        className="rounded-xl border border-slate-200 bg-slate-50/60 p-2.5 dark:border-slate-800 dark:bg-slate-950/40"
+        aria-label={`Regras do CNAE ${atividade.codigoFormatado}`}
+      >
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-black">
+          <span className="uppercase tracking-wide text-slate-500 dark:text-slate-400">📋 Regras</span>
+          <span className="rounded-full bg-cyan-100 px-2 py-0.5 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200">
+            {rotuloAnexoSimples(t.anexos)}
+          </span>
+          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            {t.situacao}
+          </span>
+          {t.fatorR ? (
+            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200">
+              Fator R
+            </span>
+          ) : null}
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            ref. {atividade.anoReferencia}
+          </span>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <p
+      className="rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300"
+      aria-label={`Regras do CNAE ${atividade.codigoFormatado}`}
+    >
+      📋 Regras: CNAE fora da tabela viva — classifique no modo manual.
+    </p>
+  )
+}
+
+/**
+ * Seção NBS colapsável (09-04): destaque do mais provável + ranking resumido
+ * + lista completa com scroll (`max-h`) para os 98 itens. Bens → faixa
+ * `sem NBS aplicável — atividade de bens (ver NCM)` + botão à Consulta NCM.
+ */
+export function SecaoNbsCnae({ atividade }: { atividade: AtividadeCnae }): ReactElement | null {
+  const estado = atividade.estadoNbs
+  const ano = atividade.anoReferencia
+  if (estado === 'cnae-desconhecido') return null
+  if (estado === 'bens→NCM') {
+    return (
+      <div
+        className="space-y-2 rounded-xl border border-sky-300 bg-sky-50 p-3 dark:border-sky-800 dark:bg-sky-950/40"
+        role="note"
+        aria-label={`CNAE ${atividade.codigoFormatado} sem NBS aplicável — atividade de bens`}
+      >
+        <p className="text-xs font-bold text-sky-900 dark:text-sky-200">
+          🏭 sem NBS aplicável — atividade de bens (ver NCM)
+        </p>
+        <p className="text-[11px] text-sky-800/80 dark:text-sky-200/70">
+          NBS cobre só serviços. Consulte o NCM do produto para a tributação da Reforma.
+        </p>
+        <Btn tam="sm" onClick={() => useUi.getState().trocarView('consulta')}>
+          🔍 Ir à Consulta NCM
+        </Btn>
+      </div>
+    )
+  }
+  if (estado === 'sem-mapeamento-NBS') {
+    return (
+      <div
+        className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400"
+        role="note"
+        aria-label={`CNAE ${atividade.codigoFormatado} sem mapeamento NBS`}
+      >
+        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          s/ mapeamento NBS
+        </span>
+        <span>
+          Regra completa acima · fallback Phase 7 mantido · ref. {ano} (informativo)
+        </span>
+      </div>
+    )
+  }
+  const lista = atividade.nbsLista ?? []
+  if (!lista.length) return null
+  const destaque = lista.find((v) => v.nbs === atividade.maisProvavel) ?? lista[0]
+  const ordenados = [...lista].sort((a, b) => {
+    if (a.nbs === atividade.maisProvavel) return -1
+    if (b.nbs === atividade.maisProvavel) return 1
+    if (a.temBeneficio !== b.temBeneficio) return a.temBeneficio ? -1 : 1
+    return a.nbs.localeCompare(b.nbs)
+  })
+  const resumidos = ordenados.slice(0, 5)
+  return (
+    <details
+      className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-950/40"
+      open={lista.length <= 3}
+      aria-label={`NBS do CNAE ${atividade.codigoFormatado}`}
+    >
+      <summary className="cursor-pointer text-xs font-black text-slate-600 dark:text-slate-300">
+        🧾 NBS disponíveis: {lista.length} ({atividade.nbsComBeneficio} com benefício, ref. {ano}) — ver lista
+      </summary>
+      <div className="mt-2 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-2 dark:border-emerald-800 dark:bg-emerald-950/40">
+        <p className="text-[10px] font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+          ★ Mais provável
+        </p>
+        <p className="mt-0.5 text-xs text-emerald-900 dark:text-emerald-200">
+          <span className="font-mono font-black">{destaque.nbsFormatado}</span>
+          {destaque.descricao ? <span className="ml-1.5">{destaque.descricao}</span> : null}
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] font-black">
+          {destaque.temBeneficio ? (
+            <span className="rounded-full bg-emerald-200/70 px-1.5 py-0.5 text-emerald-900 dark:bg-emerald-900/50 dark:text-emerald-200">
+              benefício Reforma
+            </span>
+          ) : (
+            <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              sem benefício
+            </span>
+          )}
+          {destaque.semLastro ? (
+            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200">
+              sem-lastro-reforma
+            </span>
+          ) : (
+            <span className="rounded-full bg-cyan-100 px-1.5 py-0.5 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200">
+              {destaque.cst}/{destaque.cClassTrib}{destaque.anexoLC214 ? ` · Anexo LC 214 ${destaque.anexoLC214}` : ''}
+            </span>
+          )}
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 font-mono text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            ref. {destaque.anoReferencia}
+          </span>
+        </div>
+      </div>
+      <ol className="mt-2 space-y-1">
+        {resumidos.map((v) => (
+          <li key={v.nbs} className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+            <span className="font-mono font-bold text-brand-700 dark:text-aurum-200">{v.nbsFormatado}</span>
+            <span className="min-w-0 flex-1 truncate" title={v.descricao ?? ''}>{v.descricao ?? '—'}</span>
+            {v.nbs === atividade.maisProvavel ? (
+              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">★</span>
+            ) : null}
+            {v.temBeneficio ? (
+              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">benefício</span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+      {ordenados.length > resumidos.length ? (
+        <>
+          <p className="mt-2 text-[10px] font-black uppercase tracking-wide text-slate-400">
+            Todos ({ordenados.length})
+          </p>
+          <ul className="mt-1 max-h-64 space-y-1 overflow-y-auto pr-1">
+            {ordenados.map((v) => (
+              <li key={v.nbs} className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+                <span className="font-mono font-bold text-brand-700 dark:text-aurum-200">{v.nbsFormatado}</span>
+                <span className="min-w-0 flex-1 truncate" title={v.descricao ?? ''}>{v.descricao ?? '—'}</span>
+                {v.temBeneficio ? (
+                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">benefício</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      <p className="mt-2 text-[10px] text-slate-400">
+        Informativo antes de qualquer cálculo — confirme com o contador antes de escriturar.
+      </p>
+    </details>
+  )
+}
+
 /* ------------------------------------------------- cartão CNAE completo -- */
 
 export function CartaoCnae({
@@ -209,6 +424,8 @@ export function CartaoCnae({
       aria-label={`CNAE ${atividade.codigoFormatado} — ${atividade.descricao}`}
     >
       <FaixaCnae atividade={atividade} />
+
+      <BlocoRegrasCnae atividade={atividade} />
 
       {atividade.estado === 'cnae-desconhecido' ? (
         <p className="rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300">
@@ -256,6 +473,8 @@ export function CartaoCnae({
       ) : null}
 
       <BlocoConferenciaReforma hipoteses={atividade.hipoteses} coerencia={atividade.coerencia} />
+
+      <SecaoNbsCnae atividade={atividade} />
 
       {decisao && resultado ? (
         <MolduraAurumAI detalhe={`classificou o NBS da atividade ${atividade.codigoFormatado}`}>
@@ -369,6 +588,9 @@ export function FichaEmpresaCnpj({
   doCache,
   onAtualizar,
   atualizando,
+  totalNbs,
+  nbsComBeneficio,
+  anoReferencia,
 }: {
   razaoSocial: string
   fantasia: string
@@ -380,6 +602,12 @@ export function FichaEmpresaCnpj({
   doCache: boolean
   onAtualizar: () => void
   atualizando: boolean
+  /** Contador NBS (09-04) — soma dos `nbsLista` das atividades. */
+  totalNbs?: number
+  /** Quantos NBS têm benefício da Reforma. */
+  nbsComBeneficio?: number
+  /** Ano de referência da precificação (default 2033). */
+  anoReferencia?: number
 }): ReactElement {
   return (
     <Painel className="p-4">
@@ -393,6 +621,15 @@ export function FichaEmpresaCnpj({
         {situacao ? ` · ${situacao}` : ''}
         {opcaoSimples === true ? ' · Simples Nacional' : opcaoSimples === false ? ' · Fora do Simples' : ''}
       </p>
+      {typeof totalNbs === 'number' ? (
+        <p
+          className="mt-1.5 inline-flex flex-wrap items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 font-mono text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+          aria-label={`NBS das atividades: ${totalNbs}`}
+        >
+          🧾 NBS: {totalNbs} ({nbsComBeneficio ?? 0} com benefício
+          {typeof anoReferencia === 'number' ? `, ref. ${anoReferencia}` : ''})
+        </p>
+      ) : null}
       <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
         <span>
           Dados da Receita via BrasilAPI em {dataConsulta.slice(0, 10)}

@@ -1,7 +1,10 @@
 import type {
   AnexoNcm,
+  CnaeNbsLink,
   CreditoPresumido,
   DocumentosHabilitados,
+  FonteDescricaoCnaeNbs,
+  LcNbsRelation,
   LocalOperacao,
   NomenclaturaNcm,
   ProdutoDfe,
@@ -457,6 +460,290 @@ export function normalizarNbsServicos(bruto: unknown): ResultadoNormalizacaoNbsS
     })
   })
   return { vinculos, duplicados }
+}
+
+/* --------------------------------------------------------------------------
+   Phase 9 — ponte CNAE → NBS (fonte NÃO-oficial `CNAE X NBS.qualclasstrib.json`).
+   Os links são CANDIDATOS; alíquota/benefício só do resolvedor oficial.
+   Precedência de descrição: oficial > qualclasstrib > auxiliar (PLAN 09-01/E).
+   -------------------------------------------------------------------------- */
+
+/**
+ * Repara mojibake latin1 (`ServiÃ§o` → `Serviço`) sem corromper texto já
+ * correto (`NÃO-METÁLICOS`, `Âmbito` passam intactos).
+ *
+ * Só reinterpreta bytes que formam sequências UTF-8 VÁLIDAS (2–4 bytes com
+ * continuações `0x80–0xBF`, sem overlong/surrogate); bytes avulsos (ex.: `À`
+ * isolado = `0xC0`) passam como latin1. Strings fora do latin1 (`> 0xFF`)
+ * voltam intactas (não é mojibake recuperável).
+ *
+ * Medido na fonte ponte (09-01): zero mojibake real (UTF-8 íntegro) — aqui é
+ * rede de segurança documentada + cobertura de teste com caso sintético.
+ */
+export function fixLatin1(v: unknown): string {
+  if (typeof v !== 'string') return String(v ?? '')
+  if (!/[ÃÂ]/.test(v)) return v
+  const bytes: number[] = []
+  for (const ch of v) {
+    const cp = ch.codePointAt(0) ?? 0
+    if (cp > 0xff) return v
+    bytes.push(cp)
+  }
+  let out = ''
+  let i = 0
+  while (i < bytes.length) {
+    const b = bytes[i]
+    let len = 0
+    if (b >= 0xc2 && b <= 0xdf) len = 2
+    else if (b >= 0xe0 && b <= 0xef) len = 3
+    else if (b >= 0xf0 && b <= 0xf4) len = 4
+    if (len > 0 && i + len <= bytes.length && bytes.slice(i + 1, i + len).every((x) => x >= 0x80 && x <= 0xbf)) {
+      let cp = 0
+      if (len === 2) cp = ((b & 0x1f) << 6) | (bytes[i + 1] & 0x3f)
+      else if (len === 3) cp = ((b & 0x0f) << 12) | ((bytes[i + 1] & 0x3f) << 6) | (bytes[i + 2] & 0x3f)
+      else cp = ((b & 0x07) << 18) | ((bytes[i + 1] & 0x3f) << 12) | ((bytes[i + 2] & 0x3f) << 6) | (bytes[i + 3] & 0x3f)
+      const minimo = len === 2 ? 0x80 : len === 3 ? 0x800 : 0x10000
+      if (cp >= minimo && cp <= 0x10ffff && !(cp >= 0xd800 && cp <= 0xdfff)) {
+        out += String.fromCodePoint(cp)
+        i += len
+        continue
+      }
+    }
+    out += String.fromCharCode(b)
+    i += 1
+  }
+  return out
+}
+
+/** `XXXX-X/XX` → `XXXXXXX` (7 dígitos, chave de lookup). Fora do padrão → `''`. */
+export const somenteDigitosCnaeNbs = (v: unknown): string => {
+  const d = digits(v)
+  return d.length === 7 ? d : ''
+}
+
+/** NBS `X.XXXX.XX.XX` → 9 dígitos. Fora do padrão → `''`. */
+export const somenteDigitosNbsPonte = (v: unknown): string => {
+  const d = digits(v)
+  return d.length === 9 ? d : ''
+}
+
+/**
+ * Normaliza UM link CNAE → NBS (aceita o bruto da ponte ou o artefato
+ * `cnae-nbs.json` já normalizado — idempotente). Devolve `null` quando o par
+ * é inválido (NBS fora de 9 dígitos ou CNAE fora de `XXXX-X/XX`).
+ */
+export function normalizarCnaeNbsLink(raw: unknown): CnaeNbsLink | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  const cnae7 = somenteDigitosCnaeNbs(r.cnae7 ?? r.cnae ?? r.codigoFormatado ?? r.codigo)
+  const nbs = somenteDigitosNbsPonte(r.nbs ?? r.codigo)
+  if (!cnae7 || !nbs) return null
+  const fonte = r.fonte === 'triangulacao' ? 'triangulacao' : 'por_codigo'
+  return { cnae7, cnae: fmtCnae(cnae7), nbs, fonte }
+}
+
+export interface ResultadoNormalizacaoCnaeNbs {
+  /** Links `por_codigo` com dedupe por `cnae7|nbs` (vão para `db.cnaeNbs`). */
+  links: CnaeNbsLink[]
+  /** Relações `fallback-relations.json` (1.739, fidelidade total — vão para `db.lcNbs`). */
+  lcNbs: LcNbsRelation[]
+  /** Pares CNAE × LC de `fallback-cnae-links.json` (só triangulação/validação). */
+  cnaeLc: Array<{ cnae7: string; cnae: string; lc: string }>
+  /** Descrições auxiliares `cnaed` por cnae7 (precedência mais baixa). */
+  descricoesAuxiliares: Record<string, string>
+  /** Pares `cnae7|nbs` triangulados via LC comum (validação cruzada, não viram links). */
+  paresTriangulados: string[]
+  /** Entradas `respostas_de_rede` descartadas por tracking (url com `google`). */
+  descartadosRede: number
+  /** Pares repetidos removidos no dedupe. */
+  duplicados: number
+  /** Pares com CNAE/NBS inválidos descartados. */
+  invalidos: number
+}
+
+/**
+ * Normaliza a fonte ponte (`por_codigo` + `fallback-cnae-links` [677] +
+ * `fallback-relations` [1739]) ou o artefato `cnae-nbs.json` já normalizado
+ * (`{ links, lcNbs }` — idempotente). `respostas_de_rede` com url contendo
+ * `google` é tracking e é DESCARTADA (nunca vira dado).
+ */
+export function normalizarCnaeNbs(bruto: unknown): ResultadoNormalizacaoCnaeNbs {
+  const vazio: ResultadoNormalizacaoCnaeNbs = {
+    links: [], lcNbs: [], cnaeLc: [], descricoesAuxiliares: {}, paresTriangulados: [], descartadosRede: 0, duplicados: 0, invalidos: 0,
+  }
+  if (!bruto || typeof bruto !== 'object') return vazio
+  const b = bruto as Record<string, unknown>
+
+  // Artefato já normalizado (`cnae-nbs.json`): revalida sem perda.
+  if (Array.isArray(b.links)) {
+    const vistos = new Set<string>()
+    for (const raw of b.links as unknown[]) {
+      const link = normalizarCnaeNbsLink(raw)
+      if (!link) {
+        vazio.invalidos++
+        continue
+      }
+      const chave = `${link.cnae7}|${link.nbs}`
+      if (vistos.has(chave)) {
+        vazio.duplicados++
+        continue
+      }
+      vistos.add(chave)
+      vazio.links.push(link.cnae7 && link.nbs ? { ...link } : link)
+    }
+    for (const raw of (Array.isArray(b.lcNbs) ? (b.lcNbs as unknown[]) : [])) {
+      const rel = normalizarLcNbsRelation(raw)
+      if (rel) vazio.lcNbs.push(rel)
+    }
+    return vazio
+  }
+
+  const porCodigo = (b.por_codigo ?? {}) as Record<string, unknown>
+  const respostas = (b.respostas_de_rede ?? []) as Array<Record<string, unknown>>
+
+  // Links `por_codigo`: 508 CNAEs × NBS, dedupe por `cnae7|nbs`.
+  const vistos = new Set<string>()
+  for (const [codigoCnae, entrada] of Object.entries(porCodigo)) {
+    const e = (entrada ?? {}) as Record<string, unknown>
+    const vinc = (e.vinculos ?? {}) as Record<string, unknown>
+    const listaNbs = (vinc.NBS ?? []) as unknown[]
+    if (!Array.isArray(listaNbs)) continue
+    for (const nbsBruto of listaNbs) {
+      const link = normalizarCnaeNbsLink({ cnae: codigoCnae, nbs: nbsBruto, fonte: 'por_codigo' })
+      if (!link) {
+        vazio.invalidos++
+        continue
+      }
+      const chave = `${link.cnae7}|${link.nbs}`
+      if (vistos.has(chave)) {
+        vazio.duplicados++
+        continue
+      }
+      vistos.add(chave)
+      vazio.links.push(link)
+    }
+  }
+
+  // `respostas_de_rede`: [0] cnae×lc (677), [1] lc×nbs (1739), [2+] tracking.
+  const porLc = new Map<string, string[]>()
+  for (const resp of respostas) {
+    const url = String(resp.url ?? '')
+    const dados = resp.dados as unknown
+    if (/google/i.test(url)) {
+      vazio.descartadosRede++
+      continue
+    }
+    if (!Array.isArray(dados)) continue
+    if (/fallback-cnae-links/i.test(url)) {
+      for (const raw of dados) {
+        if (!raw || typeof raw !== 'object') continue
+        const r = raw as Record<string, unknown>
+        const cnae7 = somenteDigitosCnaeNbs(r.cnae)
+        const lc = String(r.lc ?? '').trim()
+        if (!cnae7 || !lc) {
+          vazio.invalidos++
+          continue
+        }
+        vazio.cnaeLc.push({ cnae7, cnae: fmtCnae(cnae7), lc })
+        const cnaed = fixLatin1(String(r.cnaed ?? '').trim())
+        if (cnaed && !vazio.descricoesAuxiliares[cnae7]) vazio.descricoesAuxiliares[cnae7] = cnaed
+      }
+    } else if (/fallback-relations/i.test(url)) {
+      // Fidelidade à origem: guarda as 1.739 linhas (3 exatas repetidas
+      // inclusas — contadas em `duplicados`, sem descarte). Linhas sem NBS/cct
+      // ficam com `''` e nunca participam de join (só auditoria/descrição).
+      const vistosLc = new Set<string>()
+      for (const raw of dados) {
+        const rel = normalizarLcNbsRelation(raw)
+        if (!rel) {
+          vazio.invalidos++
+          continue
+        }
+        const chave = JSON.stringify(rel)
+        if (vistosLc.has(chave)) vazio.duplicados++
+        else vistosLc.add(chave)
+        vazio.lcNbs.push(rel)
+        if (rel.nbs) {
+          const lista = porLc.get(rel.lc) ?? []
+          lista.push(rel.nbs)
+          porLc.set(rel.lc, lista)
+        }
+      }
+    }
+  }
+
+  // Triangulação CNAE → LC → NBS (validação cruzada; NÃO vira link).
+  const triangulados = new Set<string>()
+  for (const { cnae7, lc } of vazio.cnaeLc) {
+    for (const nbs of porLc.get(lc) ?? []) triangulados.add(`${cnae7}|${nbs}`)
+  }
+  vazio.paresTriangulados = [...triangulados]
+  return vazio
+}
+
+/**
+ * Normaliza UMA relação LC → NBS (`fallback-relations.json` ou artefato).
+ * Fidelidade total à origem (1.739 linhas): só exige objeto — `lc`/NBS/cct
+ * ausentes viram `''` (3 linhas sem LC, 6 sem NBS, 12 sem cct; com chave vazia
+ * nunca participam de join, só auditoria/descrição). Descrições passam por
+ * `fixLatin1()` (rede de segurança — fonte medida sem mojibake real).
+ */
+export function normalizarLcNbsRelation(raw: unknown): LcNbsRelation | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  return {
+    lc: String(r.lc ?? '').trim(),
+    nbs: somenteDigitosNbsPonte(r.nbs ?? r.codigo),
+    cct: padCct(r.cct ?? r.cClassTrib) ?? '',
+    descricaoLc: fixLatin1(String(r.lcd ?? r.descricaoLc ?? '').trim()),
+    descricaoNbs: fixLatin1(String(r.nbsd ?? r.descricaoNbs ?? '').trim()),
+    descricaoCct: fixLatin1(String(r.cctd ?? r.descricaoCct ?? '').trim()),
+    onerosa: String(r.onerosa ?? '').trim(),
+    exterior: String(r.exterior ?? '').trim(),
+    indop: String(r.indop ?? '').trim(),
+    local: fixLatin1(String(r.local ?? '').trim()),
+  }
+}
+
+/**
+ * Texto de vedação derivado da Situação (vedação = Situação — PLAN 09 princípio 5).
+ * Todo CNAE tem regra textual; nunca vazio (invariante A).
+ */
+export function textoVedacaoCnae(situacao: string, anexos: string[]): string[] {
+  if (situacao === 'Permitido com ressalvas') {
+    return [`Permitido com ressalvas no Simples Nacional${anexos.length ? ` (Anexo Simples ${anexos.join('/')})` : ''} — verificar ressalvas da atividade.`]
+  }
+  if (situacao === 'Depende da atividade') {
+    return ['Enquadramento depende da atividade exercida — confirmar CNAE e objeto social antes de optar.']
+  }
+  return [`Atividade permitida no Simples Nacional${anexos.length ? ` (Anexo Simples ${anexos.join('/')})` : ''}.`]
+}
+
+/** Normaliza texto para conferência (minúsculas, sem acento, espaços colapsados). */
+export function normalizarTextoConferencia(v: unknown): string {
+  return String(v ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
+/**
+ * Escolhe a descrição vencedora (precedência oficial > qualclasstrib > auxiliar).
+ * Devolve a descrição + a fonte vencedora.
+ */
+export function escolherDescricaoConferida(
+  oficial: string,
+  qualclasstrib: string,
+  auxiliar: string,
+): { descricao: string; fonte: FonteDescricaoCnaeNbs } {
+  const of = oficial.trim()
+  if (of) return { descricao: of, fonte: 'oficial' }
+  const q = qualclasstrib.trim()
+  if (q) return { descricao: q, fonte: 'qualclasstrib' }
+  return { descricao: auxiliar.trim(), fonte: 'auxiliar' }
 }
 
 /* --------------------------------------------------------------------------

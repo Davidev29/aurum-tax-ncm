@@ -34,6 +34,7 @@ const NAV: { secao?: string; itens: { id: ViewId; icone: NomeIcone; rotulo: stri
       { id: 'simples', icone: 'moeda', rotulo: 'Simples Nacional' },
       { id: 'consulta', icone: 'lupa', rotulo: 'Consulta NCM' },
       { id: 'servicos', icone: 'fornecedor', rotulo: 'Serviços (NBS)' },
+      { id: 'cnaes', icone: 'empresa', rotulo: 'Consulta de CNAEs' },
       { id: 'lote', icone: 'pasta', rotulo: 'Classificação em lote' },
       { id: 'nfe', icone: 'nota', rotulo: 'Notas Fiscais (XML)' },
     ],

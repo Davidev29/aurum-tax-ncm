@@ -83,6 +83,14 @@
       "ferramentas": ["calcularSimples", "simularComparativo"]
     },
     {
+      "id": "projecao-dividida",
+      "arquivo": "src/simples-projection/cenario-dividido.ts + src/application/aurum-ai-projecao.ts",
+      "tipo": "motor-calculo",
+      "cobre": "Projeção mãe × nova: RBT12 deslizante, DAS do motor, economia, payback, alertas sublimite/Fator R/grupo econômico",
+      "quandoUsar": "simularCenarioDividido: dividir o faturamento em duas empresas / abrir nova empresa",
+      "ferramentas": ["simularCenarioDividido"]
+    },
+    {
       "id": "motor-ibs-cbs",
       "arquivo": "src/domain/services/calculo.ts",
       "tipo": "motor-calculo",

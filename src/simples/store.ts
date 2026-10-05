@@ -23,6 +23,15 @@ import {
   type ResultadoHibrido,
 } from './calculo';
 import { codigo7De } from '@/domain/services/cnae';
+import {
+  ANO_REFERENCIA_PADRAO,
+  normalizarAnoReferencia,
+  regrasDoCnae,
+  type RegraCnae,
+  type VereditoNbs,
+} from '@/domain/services/cnae-nbs';
+import { consultarPorCnae } from '@/application/consultar-por-cnae';
+import type { EstadoNbsAtividade } from '@/application/consultar-por-cnpj';
 import { buscarCnpj } from '@/infrastructure/receita/brasilapi';
 import { db } from '@/infrastructure/db/schema';
 import { registrarLimpeza, toast } from '@/store/ui';
@@ -45,6 +54,19 @@ export interface CnaeOpcao {
   tabela: CnaeAnexo | null;
   anexos: string[];
   exigeFatorR: boolean;
+  /* --------------------------------------------- Phase 9 / 09-04 --- */
+  /** Camada 1 (`regrasDoCnae`) — sempre (null só se o banco falhar). */
+  regras: RegraCnae | null;
+  /** Camada 2 best-effort — vereditos NBS no ano de referência (INFORMATIVO). */
+  nbsLista: VereditoNbs[];
+  /** Quantos vereditos têm benefício da Reforma. */
+  nbsComBeneficio: number;
+  /** NBS mais provável do ranking (null sem mapeamento/bens). */
+  maisProvavel: string | null;
+  /** Estado do enriquecimento NBS. */
+  estadoNbs: EstadoNbsAtividade;
+  /** Ano de referência da precificação (default 2033). */
+  anoReferencia: number;
 }
 
 interface SimplesState {
@@ -79,7 +101,7 @@ interface SimplesState {
   setDespesas: (d: DespesaSimples[]) => void;
   tocarEntrada: () => void;
   calcular: () => void;
-  buscarPorCnpj: () => Promise<void>;
+  buscarPorCnpj: (opts?: { anoReferencia?: number }) => Promise<void>;
   escolherCnae: (cnae7: string) => void;
   limpar: () => void;
 }
@@ -252,13 +274,16 @@ export const useSimples = create<SimplesState>((set, get) => ({
     set({ convencional: conv, hibrido: hib, debitosCBS: debitos, creditosCBS: creditos, relatorioVisivel: true });
   },
 
-  buscarPorCnpj: async () => {
+  buscarPorCnpj: async (opts) => {
     const s = get();
     const dig = s.cnpj.replace(/\D+/g, '');
     if (dig.length !== 14) {
       toast('Informe um CNPJ com 14 dígitos.', 'warn');
       return;
     }
+    // Ano de referência do enriquecimento NBS (09-04, default 2033 — regime
+    // pleno). Só precifica o bloco INFORMATIVO; o DAS (`calculo.ts`) nem vê.
+    const ano = normalizarAnoReferencia(opts?.anoReferencia ?? ANO_REFERENCIA_PADRAO);
     set({ buscandoCnpj: true });
     try {
       const dados = await buscarCnpj(dig);
@@ -280,6 +305,27 @@ export const useSimples = create<SimplesState>((set, get) => ({
         }
         const anexos = normalizarListaAnexosSimples(tabela?.anexos ?? []);
         const exigeFatorR = Boolean(tabela && (tabela.fatorR || anexos.includes('V')));
+        // Mesma regra do CNPJ Serviços (09-04): camada 1 sempre + camada 2
+        // best-effort (cache por NBS). Nunca quebra a lista se falhar.
+        let regras: RegraCnae | null = null;
+        try {
+          regras = await regrasDoCnae(c7);
+        } catch {
+          regras = null;
+        }
+        let estadoNbs: EstadoNbsAtividade = 'sem-mapeamento-NBS';
+        let nbsLista: VereditoNbs[] = [];
+        let nbsComBeneficio = 0;
+        let maisProvavel: string | null = null;
+        try {
+          const c = await consultarPorCnae(c7, { anoReferencia: ano });
+          estadoNbs = c.estadoNbs;
+          nbsLista = c.vereditos;
+          nbsComBeneficio = c.vereditos.filter((v) => v.temBeneficio).length;
+          maisProvavel = c.maisProvavel;
+        } catch {
+          estadoNbs = regras?.estado === 'ok' && regras.ehBens ? 'bens→NCM' : 'sem-mapeamento-NBS';
+        }
         opcoes.push({
           cnae7: c7,
           codigoFormatado: tabela?.codigoFormatado ?? t.codigo,
@@ -288,6 +334,12 @@ export const useSimples = create<SimplesState>((set, get) => ({
           tabela,
           anexos,
           exigeFatorR,
+          regras,
+          nbsLista,
+          nbsComBeneficio,
+          maisProvavel,
+          estadoNbs,
+          anoReferencia: ano,
         });
       }
       // Fluxo sem scroll: NÃO pré-seleciona. O usuário escolhe 1 CNAE na lista

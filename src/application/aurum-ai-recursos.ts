@@ -42,6 +42,13 @@ export const VIEWS_AURUM_AI: RecursoView[] = [
     navegavel: true,
   },
   {
+    view: 'cnaes',
+    rotulo: 'Consulta de CNAEs',
+    descricao: 'Busque nos 1.090 CNAEs: regra do Simples sempre (Anexo/Situação/Fator R) + NBS vinculadas com benefício da Reforma no ano de referência (2026/2027/2033).',
+    acoes: ['buscar por código ou descrição', 'ver regra + NBS com ano', 'escolher NBS quando ambíguo', 'ir à Consulta NCM (bens)'],
+    navegavel: true,
+  },
+  {
     view: 'calculadora',
     rotulo: 'Calculadora Tributária',
     descricao: 'Simule IBS/CBS por item com as regras cadastradas (reduções, referência IBS/CBS).',
@@ -99,6 +106,7 @@ export const TOOLS_AURUM_AI = [
   'consultarNCM (termo + composição/destinação/uso → NCM validado + CST/cClassTrib + template §6)',
   'consultarNBS (termo → NBS validado + CST/cClassTrib; TI genérico com desambiguação CNAE/LC116)',
   'consultarCNPJ (CNPJ com/sem máscara → CNAEs + Anexo Simples + NBS + upsell Simples/Híbrido)',
+  'consultarCnaeNbs (cnae + anoReferencia? → regra do Simples sempre + NBS vinculadas com veredito anual; sem link = sem-mapeamento honesto, bens → NCM)',
   'consultarClientes (clientes cadastrados + movimento: qtd notas, base, tributos)',
   'consultarDadosXml (XMLs ↔ clientes: fornecedor que dá crédito, produto de débito/crédito, diferidos, reduções, NCM/CFOP/CST, período, filtros)',
   'gerarRelatorioDados (PDF customizado dos dados no padrão do sistema: timbrado + blocos com dado)',
@@ -127,6 +135,7 @@ export const CONCEITOS_AURUM_AI = [
   'DAS (alíquota efetiva)',
   'Sublimite R$ 3,6 mi',
   'Convencional × Híbrido',
+  'CNAE→NBS (regra sempre, NBS condicional, ano de referência)',
   'Relatórios e Simples Nacional',
 ] as const
 

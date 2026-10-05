@@ -15,7 +15,7 @@ Pré-requisitos: **Node.js 20+**, `npm install` já executado, ~1 GB livre.
 
 ## 1. Quais arquivos ficam nesta pasta
 
-O `npm run base` (`scripts/build-base.mjs`) lê **5 arquivos**. Ordem de procura:
+O `npm run base` (`scripts/build-base.mjs`) lê **6 arquivos**. Ordem de procura:
 
 1. `$env:AURUM_BASE_DIR` (se definida — uso avançado)
 2. **`bases-fonte/` (esta pasta — USE ESTA)**
@@ -30,6 +30,7 @@ Vale o que o log chama de `origem efetiva`. Confira sempre essa linha.
 | `Tabela_NCM_Vigente_AAAA-MM-DD.json` | **Sim** | Nomenclatura vigente (~15.156 itens) | Portal Único Siscomex: https://portalunico.siscomex.gov.br/classif/api/publico/nomenclatura/download/json. Vale qualquer data no nome, desde que comece com `Tabela_NCM_Vigente_` e termine com `.json`. Se vier mais de um, o programa usa o **primeiro que achar — deixe só o mais novo aqui** |
 | `CNAE X ANEXO.json` | Não (vivo) | CNAE × Anexo Simples + Fator R (1.090 CNAEs) | Arquivo vivo mantido no projeto, sem URL oficial única. Sem ele a store `cnae` nasce vazia, sem quebrar a build |
 | `NBS SERVIÇOS.json` | Não (vivo) | Vínculos NBS de serviços (137 linhas → 112 únicos após dedupe) + 10 NBS do Anexo IX resgatados do overflow de 9 dígitos da lista `NCM` (total 122) | Arquivo vivo mantido no projeto. Sem ele o NBS cai no legado dentro de `reforma.json` |
+| `CNAE X NBS.qualclasstrib.json` | **Sim (Phase 9)** | Ponte CNAE → NBS (fonte **não-oficial** qualclasstrib.com.br): 508 CNAEs × 6.641 links (`por_codigo`) + 677 CNAE×LC (`fallback-cnae-links`) + 1.739 LC×NBS (`fallback-relations`). Tracking Google (`respostas_de_rede` com url `google`) descartado no import | Copiado de `C:\Users\david\Downloads\CNAE X NBS\qualclasstrib_completo.json`. Links são **candidatos** — alíquota/benefício só do resolvedor oficial. Sem ele a build falha (ou mantém `public/base/` versionado) |
 | `cfop.json` | Não (vivo) | Tabela CFOP oficial — 619 operações (CFOP, descrição, grupo, âmbito) para o módulo XML comparar natureza/CFOP × crédito (venda × diferente de venda × imobilizado × imunidades LC 214/2025) | Arquivo vivo mantido no projeto (não entra no `npm run base`; a curadoria fiscal fica em `src/infrastructure/nfe/cfop.ts`) |
 
 > `cnae.json` e `mei_cnaes.json`, se existirem soltos nesta pasta, são **ignorados**
@@ -86,14 +87,23 @@ Roda 4 scripts em sequência. Qualquer `✖` aborta com exit 1.
 
 ### 3.1 `node scripts/build-base.mjs` (base tributária)
 
-- Entrada: os 5 arquivos do §1.
+- Entrada: os 6 arquivos do §1.
 - Saída em `public/base/` (versionada no git — é por isso que
   `git clone + npm ci + npm run dist:win` funciona mesmo sem os JSONs brutos):
   - `classificacao-tributaria.json` — referência normalizada (chave `cst|cClassTrib`)
   - `reforma.json` — `cst` + `cstClassTrib` + vínculos `ncm` + `nbs`
   - `nomenclatura.json` — nomenclatura vigente
   - `cnae.json` — CNAE × Anexo (vazio se o vivo estiver ausente — tolerado)
-  - `MANIFEST.json` — `origem.baseDir` + `origem.arquivos` + `estatisticas` + `codigosIgnorados` + sha256
+  - `cnae-nbs.json` (Phase 9) — 6.641 links CNAE→NBS (`por_codigo`, dedupe `cnae7|nbs`) + 1.739 relações LC×NBS
+  - `classificacoes-consolidadas.json` (Phase 9) — 1.145 templates por CNAE (1.090 regras + 55 divergências de código marcadas, sem regra consolidada). Precedência de descrição: oficial > qualclasstrib > auxiliar. `beneficiosReforma` nasce vazio (runtime resolve com ano de referência)
+  - `MANIFEST.json` — `origem.baseDir` + `origem.arquivos` + `estatisticas` + `fontesVivas.qualclasstrib{origem, licenca, capturaEm, cadencia, notaRede}` + `codigosIgnorados` + sha256
+- Contagens esperadas hoje (qualquer divergência aparece no log e no `verificar`):
+  `referencia 164 · ncm 2335 · cst 17 · cstClassTrib 132 · nomenclatura ~15156 ·`
+  `cnae 1090 · nbs 122 (25 dups removidos + 10 do Anexo IX resgatados do overflow NCM) ·`
+  `ignorados 0 · ncmSemNomenclatura 6 ·`
+  `cnaesComRegras 1090 · cnaesComNbs 508 · cnaeNbsLinks 6641 · nbsUnicas 588 ·`
+  `lcLinks 677 · lcNbs 1739 · descricoesConferidas 434 · descricoesDivergentes 74`
+  `(55 códigos legados + 19 textos) · nbsSemDescricao 0`.
 - Contagens esperadas hoje (qualquer divergência aparece no log e no `verificar`):
   `referencia 164 · ncm 2335 · cst 17 · cstClassTrib 132 · nomenclatura ~15156 ·`
   `cnae 1090 · nbs 122 (25 dups removidos + 10 do Anexo IX resgatados do overflow NCM) ·`
@@ -207,7 +217,7 @@ Comandos úteis:
 - `JS SEM ofuscação / sourcemap vazando` → rode `node scripts/ofuscar-build.cjs`
   (nunca publique `release/` com `.map`).
 
-São esses 5 de `public/base/` (+ IA em `recursos-ia/`) que viajam dentro do
+São esses 7 de `public/base/` (+ IA em `recursos-ia/`) que viajam dentro do
 instalador (`dist/base` + `resources/recursos-ia`). É por isso que depois do
 `npm run base:completa` você precisa gerar um Release novo — senão o usuário
 continua na base antiga.
