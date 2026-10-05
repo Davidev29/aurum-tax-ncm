@@ -13,6 +13,8 @@
  */
 import { normalizarBusca, pareceCodigoNcm, tokenizarBusca } from './busca-texto'
 import { SINONIMOS_FISCAIS, expandirSinonimoFiscal } from './vocabulario'
+import { secaoDoCapitulo } from './hierarquia-fiscal'
+import { EXCECOES_FAMILIA } from './regras-hierarquicas'
 
 /** Entrada do classificador: descrição livre + contexto opcional. */
 export interface EntradaDescricao {
@@ -49,6 +51,8 @@ export type SinalFiscal =
   | 'MADEIRA_PAPEL'
   | 'MAQUINA_EQUIPAMENTO'
   | 'INSTRUMENTO_OTICA'
+  | 'ESTADO_CORTE'
+  | 'ESTADO_CONSERVACAO'
 
 export interface AnaliseDescricao {
   /** Texto combinado (descrição + contexto), normalizado. */
@@ -61,6 +65,14 @@ export interface AnaliseDescricao {
   ambiguidades: string[]
   /** Capítulos NCM prioritários para desempate (ex.: ['01']). */
   capitulosPrioritarios: string[]
+  /** Seções SH prioritárias (derivadas dos capítulos — contexto p/ RAG/lexical). */
+  secoesPrioritarias: string[]
+  /**
+   * Exceções de família ativas: condições presentes no texto que QUEBRAM a
+   * herança automática do benefício (sal, cozido, destinação condicional…).
+   * A IA deve citar o alerta em vez de herdar em silêncio.
+   */
+  excecoesFamiliaAtivas: string[]
   /** Variações de consulta para a busca textual oficial. */
   consultasExpandidas: string[]
   /** RGIs citadas na justificativa. */
@@ -117,7 +129,7 @@ const REGRAS_SINAL: { sinal: SinalFiscal; gatilhos: string[]; capitulos: string[
     gatilhos: ['horticola', 'verdura', 'legume', 'fruta', 'ovo', 'ovos', 'hortalica', 'tomate', 'alface', 'batata'],
     capitulos: ['07', '08'],
   },
-  { sinal: 'CARNE', gatilhos: ['carne', 'carcaca', 'miudeza', 'bovina', 'suina', 'frango'], capitulos: ['02'] },
+  { sinal: 'CARNE', gatilhos: ['carne', 'carnes', 'carcaca', 'carcacas', 'miudeza', 'miudezas', 'bovina', 'bovino', 'bovin', 'suina', 'suino', 'suin', 'frango', 'ave', 'aves', 'ovina', 'caprina', 'equina'], capitulos: ['02', '03', '16'] },
   {
     sinal: 'CEREAL',
     gatilhos: ['cereal', 'cereais', 'milho', 'trigo', 'arroz', 'cevada', 'aveia', 'sorgo', 'grao'],
@@ -131,7 +143,13 @@ const REGRAS_SINAL: { sinal: SinalFiscal; gatilhos: string[]; capitulos: string[
   { sinal: 'MOVEIS', gatilhos: ['assento', 'mesa', 'cama', 'armario', 'estante', 'colchao', 'panela', 'talher', 'copo', 'prato', 'moveis', 'mobilia'], capitulos: ['44', '73', '82', '94'] },
   { sinal: 'VEICULO', gatilhos: ['veiculo', 'motocicleta', 'caminhao', 'onibus', 'bicicleta', 'pneu', 'retrovisor', 'farol', 'automovel', 'carro', 'moto', 'pneumatico', 'amortecedor', 'embreagem', 'reboque', 'barco', 'aviao', 'helicoptero', 'locomotiva', 'vagao'], capitulos: ['86', '87', '88', '89'] },
   { sinal: 'COZIDO', gatilhos: ['cozido', 'cozida', 'cozidos', 'cozimento', 'precozido'], capitulos: [] },
-  { sinal: 'IN_NATURA', gatilhos: ['natura', 'fresco', 'fresca', 'cru', 'crua', 'resfriado', 'congelado'], capitulos: [] },
+  { sinal: 'IN_NATURA', gatilhos: ['natura', 'fresco', 'fresca', 'frescas', 'frescos', 'cru', 'crua', 'resfriado', 'resfriada', 'congelado', 'congelada'], capitulos: [] },
+  // --- funil rigoroso animal: corte e conservação decidem 01×02×03 ---
+  // 01 = vivo · 02.01 = bovina fresca/refrigerada · 02.02 = bovina congelada ·
+  // 02.03 = suína · 02.07 = aves em pedaços/miudezas. Sem o estado, o NCM
+  // de 8 dígitos é chute — o sinal força o refino antes do ranque.
+  { sinal: 'ESTADO_CORTE', gatilhos: ['pedaco', 'pedacos', 'cortada', 'cortado', 'cortadas', 'cortados', 'carcaca', 'carcacas', 'desossada', 'desossado', 'desossadas', 'desossados', 'miudeza', 'miudezas', 'quarto', 'quartos', 'perna', 'pernas', 'pe', 'asa', 'coxa', 'sobrecoxa', 'inteiro', 'inteira', 'parte', 'partes'], capitulos: ['02', '03'] },
+  { sinal: 'ESTADO_CONSERVACAO', gatilhos: ['congelada', 'congelado', 'congeladas', 'congelados', 'refrigerada', 'refrigerado', 'refrigeradas', 'refrigerados', 'resfriada', 'resfriado', 'resfriadas', 'resfriados', 'fresca', 'fresco', 'frescas', 'frescos'], capitulos: ['02', '03'] },
   // --- contexto preditivo v2: químicos / plásticos / madeira / máquinas / instrumentos ---
   // Cada sinal novo carrega capítulos prioritários para o desempate + perguntas
   // de refino. Gatilhos já normalizados (sem acento) e expandidos via
@@ -271,6 +289,17 @@ export function analisarDescricao(entrada: EntradaDescricao): AnaliseDescricao {
   if (sinais.includes('VIVO') && !sinais.includes('REPRODUTOR') && !sinais.includes('ABATE')) {
     ambiguidades.push('Animal vivo sem destinação clara (reprodução x abate) — a subposição depende do uso.')
   }
+  // Funil animal rigoroso: carne sem estado (corte + conservação) não fecha
+  // 8 dígitos — 0201 (fresca) × 0202 (congelada) × 0203/0207 (pedaços).
+  // Vira pergunta de refino + trava a confiança no máximo em média.
+  if (sinais.includes('CARNE') && !sinais.includes('VIVO')) {
+    if (!sinais.includes('ESTADO_CONSERVACAO')) {
+      ambiguidades.push('Carne sem estado de conservação (fresca/refrigerada x congelada) — a posição muda (ex.: bovina 02.01 x 02.02). Informe se está fresca, refrigerada ou congelada.')
+    }
+    if (!sinais.includes('ESTADO_CORTE')) {
+      ambiguidades.push('Carne sem corte declarado (carcaça x peças x desossada / inteiro x pedaços) — a subposição depende do corte. Informe: carcaça inteira, peças com osso, desossada ou em pedaços?')
+    }
+  }
 
   const capitulosPrioritarios = [
     ...new Set(
@@ -278,8 +307,21 @@ export function analisarDescricao(entrada: EntradaDescricao): AnaliseDescricao {
     ),
   ]
 
+  // Fine-tuning família (RAG + lexical): seção como contexto e exceções que
+  // quebram a herança. Seção nunca decide benefício sozinha (ampla demais),
+  // mas orienta o desempate lexical e a trilha auditável.
+  // `vivo-sem-destinacao` só vale SEM destinação (com REPRODUTOR/ABATE o uso
+  // está declarado — sem exceção, sem trava de confiança).
+  const secoesPrioritarias = [...new Set(capitulosPrioritarios.map((c) => secaoDoCapitulo(c)?.numero ?? '').filter(Boolean))]
+  const excecoesFamiliaAtivas = EXCECOES_FAMILIA.filter((e) => {
+    if (e.id === 'vivo-sem-destinacao') {
+      return (sinais as string[]).includes('VIVO') && !(sinais as string[]).includes('REPRODUTOR') && !(sinais as string[]).includes('ABATE')
+    }
+    return e.sinais.some((s) => (sinais as string[]).includes(s))
+  }).map((e) => e.id)
+
   const rgiAplicaveis = ['RGI 1 (texto das posições)', 'RGI 6 (texto das subposições)']
-  if (entrada.destinacao?.trim() || entrada.uso?.trim()) {
+  if (entrada.destinacao?.trim() || entrada.uso?.trim() || excecoesFamiliaAtivas.length) {
     rgiAplicaveis.push('Notas de Seção/Capítulo (uso e destinação)')
   }
 
@@ -296,6 +338,8 @@ export function analisarDescricao(entrada: EntradaDescricao): AnaliseDescricao {
     sinais,
     ambiguidades,
     capitulosPrioritarios,
+    secoesPrioritarias,
+    excecoesFamiliaAtivas,
     consultasExpandidas: expandirConsultas(tokens),
     rgiAplicaveis,
     insuficiente,
@@ -315,6 +359,15 @@ export function perguntasComplementares(analise: AnaliseDescricao): string[] {
   if (analise.sinais.includes('VIVO') && !analise.sinais.includes('REPRODUTOR') && !analise.sinais.includes('ABATE')) {
     perguntas.push('O animal está vivo? Qual a destinação — reprodução (raça pura?), abate/frigorífico ou outro uso?')
   }
+  // Funil animal: sem corte/conservação, pede o estado antes de cravar 8 dígitos.
+  if ((analise.sinais as string[]).includes('CARNE') && !(analise.sinais as string[]).includes('VIVO')) {
+    if (!(analise.sinais as string[]).includes('ESTADO_CONSERVACAO')) {
+      perguntas.push('A carne está fresca, refrigerada/resfriada ou congelada? (Ex.: bovina fresca 02.01 x congelada 02.02.)')
+    }
+    if (!(analise.sinais as string[]).includes('ESTADO_CORTE')) {
+      perguntas.push('Qual o corte/apresentação — carcaça/meia-carcaça, peças com osso, desossada, em pedaços ou miudezas? (Ex.: frango inteiro x pedaços 02.07.)')
+    }
+  }
   if (analise.sinais.includes('RACAO_ANIMAL') && analise.sinais.includes('SAL_ADICIONADO')) {
     perguntas.push('Qual o teor de sal/aditivos e a composição da ração? É preparação completa ou suplemento à base de sal?')
   }
@@ -323,6 +376,11 @@ export function perguntasComplementares(analise: AnaliseDescricao): string[] {
   }
   if (analise.sinais.includes('SEMENTE_PLANTIO')) {
     perguntas.push('É semente para semeadura (plantio) ou grão para consumo/industrialização?')
+  }
+  // Fine-tuning família: exceção ativa sem pergunta específica acima ganha
+  // uma pergunta de confirmação (a herança exige destinação/composição).
+  if (analise.excecoesFamiliaAtivas.includes('destinacao-condicional') && !analise.sinais.includes('SEMENTE_PLANTIO')) {
+    perguntas.push('Qual a destinação do produto (plantio, consumo, ração, produtor rural, adm. pública)? O benefício da família depende do uso real.')
   }
   if (analise.sinais.includes('VESTUARIO')) {
     perguntas.push('Qual o tecido/composição (algodão, sintético, malha?) e o tipo de peça (camisa, calça, vestido?)?')

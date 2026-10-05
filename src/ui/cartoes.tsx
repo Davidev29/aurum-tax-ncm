@@ -24,12 +24,13 @@ import {
   observacoesDiferimento,
   observacoesLegais,
 } from '@/domain/services/calculo'
-import { chipCondicao, isNcmExtinto, observacaoExtincaoNcm, observacaoVigenciaCct } from '@/domain/services/classificacao'
+import { chipCondicao, isNcmExtinto, observacaoExtincaoNcm, observacaoHerancaFamilia, observacaoVigenciaCct } from '@/domain/services/classificacao'
 import { observacaoRevogacao } from '@/domain/services/revogacao'
 import { fmtMoeda, fmtNcm, parseMoeda } from '@/domain/services/format'
 import { useCalculadora } from '@/store/calculadora'
 import { AnexoBadge, Btn, Pill, Texto, type CorPill } from './kit'
 import { AtribuicaoAurumAI, FontesAurumAI, SeloAurumAI } from './aurum-ai'
+import { SeletorTributacao, useOpcaoTributacao } from './diferimento-opcoes'
 import { ModalLegislacao, type DestinoLegislacao } from './ModalLegislacao'
 
 /* --------------------------------------------------------------- helpers -- */
@@ -105,23 +106,26 @@ export function AvisoVigenciaCct({
 }
 
 /**
- * Selo de anexos oficiais do NCM — só renderiza quando a tabela de anexos
- * cita o NCM (descoberta para abrir o detalhe). Carrega sozinho do Dexie.
+ * Selo de anexos oficiais do código — só renderiza quando a tabela de anexos
+ * cita o NCM (8 dígitos) ou o NBS (9 dígitos). Descoberta para abrir o
+ * detalhe. Carrega sozinho do Dexie.
  */
-export function PillAnexos({ ncm }: { ncm: string }) {
+export function PillAnexos({ ncm, codigo }: { ncm?: string; codigo?: string }) {
+  const alvo = codigo ?? ncm ?? ''
   const [total, setTotal] = useState<number | null>(null)
   const [negado, setNegado] = useState(false)
   useEffect(() => {
     let vivo = true
-    const cod = String(ncm ?? '').replace(/\D/g, '')
-    if (cod.length !== 8) {
+    const cod = String(alvo ?? '').replace(/\D/g, '')
+    const ehNbs = cod.length === 9
+    if (cod.length !== 8 && !ehNbs) {
       setTotal(null)
       return
     }
     void (async () => {
       try {
-        const { anexosDoNcm } = await import('@/infrastructure/base/info-adicional')
-        const linhas = await anexosDoNcm(cod)
+        const { anexosDoCodigo } = await import('@/infrastructure/base/info-adicional')
+        const linhas = await anexosDoCodigo(cod)
         if (!vivo) return
         setTotal(linhas.length || null)
         setNegado(linhas.some((l) => l.permissao === 'negado'))
@@ -132,10 +136,12 @@ export function PillAnexos({ ncm }: { ncm: string }) {
     return () => {
       vivo = false
     }
-  }, [ncm])
+  }, [alvo])
   if (!total) return null
+  const codLimpo = String(alvo ?? '').replace(/\D/g, '')
+  const rotulo = codLimpo.length === 9 ? 'NBS' : 'NCM'
   return (
-    <span className="mt-2 flex flex-wrap gap-1.5" title={`${total} linha(s) da tabela oficial de anexos citam este NCM — veja em Detalhes fiscais`}>
+    <span className="mt-2 flex flex-wrap gap-1.5" title={`${total} linha(s) da tabela oficial de anexos citam este ${rotulo} — veja em Detalhes fiscais`}>
       <Pill cor={negado ? 'red' : 'slate'}>
         {negado ? '⛔' : '📎'} {total} anexo{total > 1 ? 's' : ''}
       </Pill>
@@ -458,21 +464,27 @@ export function CartaoClassificacao({
   nomenclatura?: NomenclaturaNcm | null
   /** Permitido × negado por DFe (tabela CFF local). Ausente = sem cobertura. */
   bloqueios?: BloqueioSistema[] | null
-  onSalvar?: () => void
-  onAddCalc?: () => void
+  /** Recebe a classificação ATIVA (respeita a opção de diferimento escolhida). */
+  onSalvar?: (cl: Classificacao) => void
+  /** Recebe a classificação ATIVA (respeita a opção de diferimento escolhida). */
+  onAddCalc?: (cl: Classificacao) => void
   /** Abre a edição da reclassificação manual (só faz sentido no cartão manual). */
   onReclassificar?: () => void
   destaqueIA?: boolean
 }) {
-  const r = cl.resumo
-  const cct = cl.cstClassTribDetalhes
+  // Anexo IX condicional: o cartão ganha a 2ª opção (diferimento, 0%) e
+  // TUDO abaixo decorre da ativa — selos, CST/cClassTrib, avisos, simulador.
+  const { opcao, setOpcao, ativa } = useOpcaoTributacao(cl)
+  const visivel = ativa ?? cl
+  const r = visivel.resumo
+  const cct = visivel.cstClassTribDetalhes
   const redIBS = Number(r.percentualReducaoIBS ?? cct?.pRedIBS ?? 0)
   const redCBS = Number(r.percentualReducaoCBS ?? cct?.pRedCBS ?? 0)
-  const anexo = r.anexo ?? cl.referencia?.anexo ?? null
-  const url = r.urlLegislacao ?? cl.referencia?.urlLegislacao ?? null
-  const lc = cct?.lcRef || cl.baseLegal || ''
+  const anexo = r.anexo ?? visivel.referencia?.anexo ?? null
+  const url = r.urlLegislacao ?? visivel.referencia?.urlLegislacao ?? null
+  const lc = cct?.lcRef || visivel.baseLegal || ''
   const redacao = cct?.lcRedacao
-  const ehManual = cl.manual != null
+  const ehManual = visivel.manual != null
   const temVigenciaCct = Boolean(cct?.inicioVigencia || cct?.fimVigencia)
   // Textos informativos: diferimento efetivo (violeta) ou condicional
   // Anexo IX (âmbar) SEMPRE primeiro.
@@ -482,11 +494,12 @@ export function CartaoClassificacao({
   // por faixa é exibido — a fundamentação é a da base oficial (cabeçalho +
   // base legal + avisos específicos). Só a regra geral usa a faixa.
   // Prouni/misto precisa das duas reduções (art. 308 só aparece com redCBS).
-  const obsDiferimento = observacoesDiferimento(cl)
+  const obsDiferimento = observacoesDiferimento(visivel)
   const obsTipo = observacaoTipoAliquota(cct?.tipoAliquota)
-  const obsLegais = cl.regraGeral ? observacoesLegais(cl.codigo, redIBS, redCBS) : []
-  const obsRev = observacaoRevogacao(cl.revogado)
-  const observacoes = [...(obsRev ? [obsRev] : []), ...obsDiferimento, ...(obsTipo ? [obsTipo] : obsLegais)]
+  const obsLegais = visivel.regraGeral ? observacoesLegais(visivel.codigo, redIBS, redCBS) : []
+  const obsRev = observacaoRevogacao(visivel.revogado)
+  const obsHer = observacaoHerancaFamilia(visivel.heranca)
+  const observacoes = [...(obsRev ? [obsRev] : []), ...(obsHer ? [obsHer] : []), ...obsDiferimento, ...(obsTipo ? [obsTipo] : obsLegais)]
 
   return (
     <div
@@ -505,10 +518,16 @@ export function CartaoClassificacao({
         </Pill>
         {anexo ? <AnexoBadge anexo={anexo} /> : null}
         <BadgesReducao redIBS={redIBS} redCBS={redCBS} />
-        {cl.regraGeral ? <Pill cor="amber">⚠ Regra geral</Pill> : null}
+        {opcao === 'diferimento' ? <Pill cor="brand">⏳ Com diferimento</Pill> : null}
+        {visivel.regraGeral ? <Pill cor="amber">⚠ Regra geral</Pill> : null}
+        {visivel.heranca ? (
+          <Pill cor={visivel.heranca.aConfirmar ? 'amber' : 'emerald'}>
+            🧬 Herdado · {visivel.heranca.origem} {visivel.heranca.prefixo}{visivel.heranca.aConfirmar ? ' — a confirmar' : ''}
+          </Pill>
+        ) : null}
         {ehManual ? <PillManual /> : null}
         {isNcmExtinto(nomenclatura) ? <Pill cor="red">⛔ NCM extinto</Pill> : null}
-        {cl.revogado ? <Pill cor="red">⛔ Revogado</Pill> : null}
+        {visivel.revogado ? <Pill cor="red">⛔ Revogado</Pill> : null}
         {temVigenciaCct ? <Pill cor="amber">⏳ Vigência cClassTrib</Pill> : null}
         {bloqueios?.some((b) => b.permitido === false) ? <Pill cor="red">⛔ Negado em DFe</Pill> : null}
       </div>
@@ -527,34 +546,36 @@ export function CartaoClassificacao({
 
       {ehManual ? (
         <div className="mb-3">
-          <AvisoManual fonteDescricao={cl.manual?.fonteDescricao} fonteUrl={cl.manual?.fonteUrl} />
+          <AvisoManual fonteDescricao={visivel.manual?.fonteDescricao} fonteUrl={visivel.manual?.fonteUrl} />
         </div>
       ) : null}
 
+      <SeletorTributacao cl={cl} opcao={opcao} onChange={setOpcao} />
+
       <div className="mb-3">
         <div className="font-mono text-2xl font-black tracking-tight text-brand-700 dark:text-aurum-200">
-          {cl.codigoFormatado || fmtNcm(cl.codigo)}
+          {visivel.codigoFormatado || fmtNcm(visivel.codigo)}
         </div>
-        <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{cl.descricao || '—'}</div>
+        <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{visivel.descricao || '—'}</div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Dado rotulo="CST" valor={cl.cst || '000'} sub={cl.cstDetalhes?.descricao} />
-        <Dado rotulo="cClassTrib" valor={cl.cClassTrib || '000001'} />
+        <Dado rotulo="CST" valor={visivel.cst || '000'} sub={visivel.cstDetalhes?.descricao} />
+        <Dado rotulo="cClassTrib" valor={visivel.cClassTrib || '000001'} />
         <div className="col-span-2 rounded-xl bg-slate-50 p-2.5 dark:bg-slate-950/40">
           <div className="text-[10px] font-bold uppercase text-slate-500">Classificação</div>
-          <div className="text-xs font-semibold">{r.descricaoCClassTrib || cl.baseLegal || '—'}</div>
+          <div className="text-xs font-semibold">{r.descricaoCClassTrib || visivel.baseLegal || '—'}</div>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
-        <ChipCondicao rotulo="Redução alíquota" valor={cl.referencia?.reducaoAliquota ?? cl.cstDetalhes?.indReducao} />
-        <ChipCondicao rotulo="Redução BC" valor={cl.referencia?.reducaoBcCst ?? cct?.indRedutorBC} />
-        <ChipCondicao rotulo="Monofásica" valor={cl.referencia?.monofasica ?? (cct?.indMono === 1 ? 1 : 0)} />
-        <ChipCondicao rotulo="Crédito presumido" valor={cl.referencia?.creditoPresumido ?? (cct?.indCredPres === 1 ? 1 : 0)} />
+        <ChipCondicao rotulo="Redução alíquota" valor={visivel.referencia?.reducaoAliquota ?? visivel.cstDetalhes?.indReducao} />
+        <ChipCondicao rotulo="Redução BC" valor={visivel.referencia?.reducaoBcCst ?? cct?.indRedutorBC} />
+        <ChipCondicao rotulo="Monofásica" valor={visivel.referencia?.monofasica ?? (cct?.indMono === 1 ? 1 : 0)} />
+        <ChipCondicao rotulo="Crédito presumido" valor={visivel.referencia?.creditoPresumido ?? (cct?.indCredPres === 1 ? 1 : 0)} />
       </div>
 
-      <DocsHabilitados docs={r.documentosHabilitados ?? cl.referencia?.documentos} />
+      <DocsHabilitados docs={r.documentosHabilitados ?? visivel.referencia?.documentos} />
 
       {!compact ? <SelosPorSistema bloqueios={bloqueios} /> : null}
 
@@ -569,12 +590,12 @@ export function CartaoClassificacao({
       {onSalvar || onAddCalc || onReclassificar ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {onSalvar ? (
-            <Btn variante="primary" tam="sm" onClick={onSalvar}>
+            <Btn variante="primary" tam="sm" onClick={() => onSalvar(visivel)}>
               💾 Salvar como produto
             </Btn>
           ) : null}
           {onAddCalc ? (
-            <Btn tam="sm" onClick={onAddCalc}>
+            <Btn tam="sm" onClick={() => onAddCalc(visivel)}>
               🧮 Adicionar à calculadora
             </Btn>
           ) : null}

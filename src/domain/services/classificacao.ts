@@ -192,6 +192,70 @@ export function montarRegraGeral(
     referencia,
     resumo,
     regraGeral: true,
+    heranca: null,
+  }
+}
+
+/**
+ * Herança por família: monta a classificação de um NCM sem vínculo exato a
+ * partir do vínculo-modelo de um irmão (mesma subposição/posição/capítulo).
+ *
+ * O join 3NF (`ctx`) é o do vínculo-modelo — reduções, anexo, docs e base
+ * legal vêm da base oficial, nunca inventados. O carimbo `heranca` + o
+ * sufixo na `baseLegal` deixam auditável que o enquadramento foi herdado
+ * (nível, prefixo, cobertura) e se exige confirmação (`aConfirmar`).
+ */
+export function montarClassificacaoHerdada(
+  codigoConsultado: string,
+  vinculoModelo: VinculoNcm | VinculoNbs,
+  ctx: ContextoClassificacao,
+  heranca: NonNullable<Classificacao['heranca']>,
+): Classificacao {
+  const base = montarClassificacao(vinculoModelo, ctx)
+  const cod = norm(codigoConsultado)
+  const nivelRotulo =
+    heranca.nivel === 'subposicao' ? 'Subposição SH6' : heranca.nivel === 'posicao' ? 'Posição SH4' : 'Capítulo'
+  return {
+    ...base,
+    id: `HERDADO|${heranca.origem}|${cod}`,
+    codigo: cod,
+    codigoFormatado: fmtNcm(cod),
+    descricao: ctx.nomenclatura?.descricao || base.descricao,
+    baseLegal: `${base.baseLegal} (herdado por família — ${nivelRotulo} ${heranca.prefixo})`,
+    regraGeral: false,
+    heranca,
+  }
+}
+
+/**
+ * Observação de herança para os cartões (cor `amber` quando a confirmar,
+ * `emerald` quando cobertura total). Retorna `null` sem herança.
+ */
+export function observacaoHerancaFamilia(
+  heranca: Classificacao['heranca'],
+): import('../entities').Observacao | null {
+  if (!heranca) return null
+  const nivelRotulo =
+    heranca.nivel === 'subposicao' ? 'subposição SH6' : heranca.nivel === 'posicao' ? 'posição SH4' : 'capítulo'
+  const pct = heranca.vigentesNoPrefixo > 0
+    ? Math.round((heranca.irmaosVinculados / heranca.vigentesNoPrefixo) * 100)
+    : 0
+  if (heranca.aConfirmar) {
+    return {
+      titulo: `🟡 Benefício herdado por família (${nivelRotulo} ${heranca.prefixo}) — a confirmar`,
+      texto:
+        `Este NCM não tem vínculo exato na base da Reforma, mas ${heranca.irmaosVinculados} irmão(s) da mesma ${nivelRotulo} ` +
+        `têm o mesmo enquadramento (cobertura ${pct}%). A tributação abaixo é herdada por família e vale como hipótese ` +
+        `qualificada: confirme a destinação/composição do produto e o anexo da LC 214/2025 antes de operar ou salvar.`,
+      cor: 'amber',
+    }
+  }
+  return {
+    titulo: `🟢 Benefício herdado por família (${nivelRotulo} ${heranca.prefixo})`,
+    texto:
+      `Este NCM não tem vínculo exato na base, mas todos os irmãos vigentes da mesma ${nivelRotulo} ` +
+      `têm o mesmo enquadramento oficial — a tributação abaixo é herdada por família, com lastro integral.`,
+    cor: 'emerald',
   }
 }
 

@@ -1136,6 +1136,11 @@ function celulaLote(
       <div className="lote-celula min-w-[170px]">
         <div className="font-mono text-[11px] font-bold">
           {c.cst} · {c.cClassTrib} <span className="lote-ok" title={a?.resumo ?? 'Tributação única oficial.'}>✓ IA</span>
+          {c.heranca ? (
+            <span className="lote-sugere" title={`Enquadramento herdado por família (${c.heranca.origem} ${c.heranca.prefixo}, ${c.heranca.irmaosVinculados} irmãos) — sem vínculo exato na base.${c.heranca.aConfirmar ? ' Confirme antes de operar.' : ''}`}>
+              {' '}🧬 família
+            </span>
+          ) : null}
         </div>
         <div className="truncate text-[10px] text-slate-500" title={r?.descricaoCClassTrib}>
           {r?.descricaoCClassTrib || c.baseLegal}

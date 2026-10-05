@@ -25,6 +25,7 @@ import {
   normalizarNbs,
   normalizarProdutoDfe,
   normalizarReferencia,
+  unirVinculosNbs,
 } from './normalizacao'
 
 export type Progresso = (etapa: string, pct: number) => void
@@ -158,7 +159,10 @@ export async function importarBase(
     // chave canônica do artefato já normalizado da base embutida.
     const cst = normalizarCst(tab.cst ?? j.cst)
     const cstct = normalizarCstClassTrib(tab.cstClassTrib ?? j.cstClassTrib)
-    const nbs = normalizarNbs(j.NBS ?? j.nbs)
+    // A fonte publica 10 NBS do Anexo IX (art. 138, 200/200038) DENTRO da
+    // lista `NCM` — sem esta união eles são descartados e a conferência do
+    // serviço cai em regra geral (sem descrição, redução, anexo ou LC).
+    const nbs = unirVinculosNbs(normalizarNbs(j.NBS ?? j.nbs), normalizarNbs(ncmBruto))
 
     onProgress('Limpando base', 3)
     await Promise.all([db.ncm.clear(), db.cst.clear(), db.cstClassTrib.clear()])
@@ -504,6 +508,11 @@ export async function statusBase(): Promise<StatusBase> {
  * todo CNAE cai em "fora da tabela viva". Idempotente e best-effort: nunca
  * quebra o boot (`semearBaseEmbutida` a chama no caminho rápido).
  *
+ * Também preenche NBS FALTANTES sem limpar a store: bancos semeados antes do
+ * resgate do overflow NCM têm 112 vínculos e perdem os 10 NBS do Anexo IX
+ * (art. 138, 200/200038) — sem backfill, a conferência desses serviços
+ * continua caindo em regra geral mesmo com o app atualizado.
+ *
  * Devolve `true` quando preencheu ao menos uma store.
  */
 export async function completarStoresFase7(): Promise<boolean> {
@@ -542,6 +551,27 @@ export async function completarStoresFase7(): Promise<boolean> {
         }
       } catch {
         /* sem reforma.json embutido: mantém vazia, sem falhar */
+      }
+    } else {
+      // Backfill dos 10 NBS do Anexo IX resgatados do overflow NCM: bancos
+      // com 112 vínculos não têm esses códigos — insere só os faltantes
+      // (chave `codigo|cst|cClassTrib`), sem tocar no que já existe.
+      try {
+        const reformaJson = JSON.parse(await lerArquivoBase('reforma.json')) as ArquivoRef & {
+          nbs: unknown[]
+        }
+        const oficiais = normalizarNbs(reformaJson.nbs)
+        if (oficiais.length > nbs) {
+          const atuais = await db.nbs.toArray().catch(() => [])
+          const vistos = new Set(atuais.map((v) => `${v.codigo}|${v.cst}|${v.cClassTrib}`))
+          const faltantes = oficiais.filter((v) => !vistos.has(`${v.codigo}|${v.cst}|${v.cClassTrib}`))
+          if (faltantes.length) {
+            await bulkPut(db.nbs, faltantes)
+            completou = true
+          }
+        }
+      } catch {
+        /* sem reforma.json embutido: mantém como está, sem falhar */
       }
     }
   } catch {

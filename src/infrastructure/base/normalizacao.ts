@@ -303,7 +303,7 @@ export function normalizarNbs(bruto: unknown): VinculoNbs[] {
       const codigo = digits(n.codigo)
       if (codigo.length !== 9) return null
       return {
-        id: typeof n.id === 'string' && n.id ? n.id : `${codigo}|${i}`,
+        id: typeof n.id === 'string' && n.id ? n.id : `${codigo}|${padCct(n.cClassTrib) ?? ''}|${i}`,
         codigo,
         cst: padCst(n.cst) ?? '',
         cClassTrib: padCct(n.cClassTrib) ?? '',
@@ -316,6 +316,30 @@ export function normalizarNbs(bruto: unknown): VinculoNbs[] {
       } satisfies VinculoNbs
     })
     .filter((n): n is VinculoNbs => n !== null)
+}
+
+/**
+ * Une vínculos NBS com dedupe por `codigo|cst|cClassTrib` (paridade com
+ * `unirNbs` de `scripts/build-base.mjs`).
+ *
+ * A fonte publica 10 NBS do Anexo IX (art. 138, 200/200038) DENTRO da lista
+ * `NCM` — sem esta união eles são descartados e a conferência do serviço
+ * cai em regra geral (sem descrição, redução, anexo ou LC).
+ */
+export function unirVinculosNbs(base: VinculoNbs[], complemento: VinculoNbs[] = []): VinculoNbs[] {
+  const vistos = new Set<string>()
+  const unicos: VinculoNbs[] = []
+  for (const v of [...(base ?? []), ...(complemento ?? [])]) {
+    if (!v || typeof v !== 'object') continue
+    const chave = `${v.codigo}|${v.cst}|${v.cClassTrib}`
+    if (vistos.has(chave)) continue
+    vistos.add(chave)
+    unicos.push(v)
+  }
+  unicos.forEach((v, k) => {
+    v.id = `${v.codigo}|${v.cClassTrib}|${k}`
+  })
+  return unicos
 }
 
 /* --------------------------------------------------------------------------

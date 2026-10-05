@@ -39,6 +39,8 @@ import {
 import { buscarNoDicionarioComercial } from '@/domain/constants/dicionario-comercial'
 import { pareceCodigoNcm } from '@/domain/services/busca-texto'
 import { detectarForaDeEscopo, MENSAGEM_FORA_DE_ESCOPO } from '@/domain/services/escopo-consulta'
+import { regraDoCapitulo, EXCECOES_FAMILIA } from '@/domain/services/regras-hierarquicas'
+import { secaoDoCapitulo } from '@/domain/services/hierarquia-fiscal'
 import { db } from '@/infrastructure/db/schema'
 
 /**
@@ -96,6 +98,13 @@ export interface SugestaoNcmJson {
 
 /** Bônus de desempate quando o capítulo do candidato é prioritário. */
 const BONUS_CAPITULO = 40
+/**
+ * Bônus de família curada (fine-tuning RAG + lexical): candidato cujo capítulo
+ * está nos 7 capítulos 100% mapeados da LC (`REGRAS_CAPITULO`) ganha lastro
+ * extra — a lei opera por família ali, então o match lexical nesse capítulo
+ * tem respaldo normativo além do texto. Nunca decide sozinho (soma ao score).
+ */
+const BONUS_FAMILIA_CURADA = 25
 /** Penalidade para NCM extinto (histórico: só aparece se nada vigente servir). */
 const PENALIDADE_EXTINTO = 1000
 
@@ -235,7 +244,7 @@ export async function classificarPorDescricao(
   }
   const analise = analisarDescricao(entrada)
   const trilha: EtapaTrilha[] = [
-    { etapa: 'Análise da descrição', detalhe: `tokens úteis: ${analise.tokens.join(', ') || '—'} · sinais: ${analise.sinais.join(', ') || '—'}` },
+    { etapa: 'Análise da descrição', detalhe: `tokens úteis: ${analise.tokens.join(', ') || '—'} · sinais: ${analise.sinais.join(', ') || '—'} · capítulos: ${analise.capitulosPrioritarios.join(', ') || '—'} · seções: ${analise.secoesPrioritarias.join(', ') || '—'}${analise.excecoesFamiliaAtivas.length ? ` · exceções de família: ${analise.excecoesFamiliaAtivas.join(', ')}` : ''}` },
     { etapa: 'RGIs aplicadas', detalhe: analise.rgiAplicaveis.join(' · ') },
   ]
 
@@ -271,7 +280,14 @@ export async function classificarPorDescricao(
       const achados = await buscarNomenclaturaPorTexto(consulta, 30, { tolerante: false })
       for (const item of achados) {
         let score = item.score
-        if (analise.capitulosPrioritarios.includes(capituloDe(item.codigo))) score += BONUS_CAPITULO
+        const cap = capituloDe(item.codigo)
+        if (analise.capitulosPrioritarios.includes(cap)) score += BONUS_CAPITULO
+        // Fine-tuning família: capítulo curado (100% mapeado na LC) reforça o
+        // match lexical — a lei opera por família ali (RAG + lexical com lastro).
+        if (regraDoCapitulo(cap)) score += BONUS_FAMILIA_CURADA
+        // Seção prioritária como contexto fraco (nunca decide sozinha).
+        const sec = secaoDoCapitulo(cap)?.numero
+        if (sec && analise.secoesPrioritarias.includes(sec)) score += 5
         if (item.dataFim) score -= PENALIDADE_EXTINTO
         const atual = agregados.get(item.codigo)
         if (!atual || score > atual.score) {
@@ -378,10 +394,18 @@ export async function classificarPorDescricao(
   }
 
   // Etapa 3 — verificação de exceções (join oficial por candidato).
-  const resolvidos: { cand: CandidatoRanckeado; lista: Classificacao[]; regraGeral: boolean }[] = []
+  // `resolverClassificacoes` já tenta herança por família quando não há
+  // vínculo exato — aqui reaproveitamos o resultado (herança + hipótese).
+  const resolvidos: { cand: CandidatoRanckeado; lista: Classificacao[]; regraGeral: boolean; heranca?: Classificacao['heranca']; hipotese?: string | null }[] = []
   for (const cand of ranckeados) {
     const r = await resolverClassificacoes(cand.item.codigo)
-    resolvidos.push({ cand, lista: r.lista, regraGeral: r.regraGeral })
+    resolvidos.push({
+      cand,
+      lista: r.lista,
+      regraGeral: r.regraGeral,
+      heranca: r.heranca ?? r.lista[0]?.heranca ?? null,
+      hipotese: r.hipoteseFamilia ? `${r.hipoteseFamilia.cst}/${r.hipoteseFamilia.cClassTrib} (família ${r.hipoteseFamilia.prefixo} — ${r.hipoteseFamilia.motivo})` : null,
+    })
   }
   const comBeneficio = resolvidos.filter((r) => !r.regraGeral)
   trilha.push({
@@ -389,11 +413,32 @@ export async function classificarPorDescricao(
     detalhe: resolvidos
       .map((r) =>
         r.regraGeral
-          ? `${fmtNcm(r.cand.item.codigo)}: sem vínculo → regra geral ${REGRA_GERAL.cst}/${REGRA_GERAL.cClassTrib}`
-          : `${fmtNcm(r.cand.item.codigo)}: ${r.lista.map((c) => `${c.cst}/${c.cClassTrib}`).join(', ')}`,
+          ? r.hipotese
+            ? `${fmtNcm(r.cand.item.codigo)}: sem vínculo exato → hipótese por família ${r.hipotese}`
+            : `${fmtNcm(r.cand.item.codigo)}: sem vínculo → regra geral ${REGRA_GERAL.cst}/${REGRA_GERAL.cClassTrib}`
+          : r.heranca
+            ? `${fmtNcm(r.cand.item.codigo)}: herdado por família ${r.heranca.origem} ${r.heranca.prefixo} → ${r.lista.map((c) => `${c.cst}/${c.cClassTrib}`).join(', ')}`
+            : `${fmtNcm(r.cand.item.codigo)}: ${r.lista.map((c) => `${c.cst}/${c.cClassTrib}`).join(', ')}`,
       )
       .join(' · '),
   })
+  // Etapa 3b — herança por família (RAG + lexical): detalha a origem para a
+  // trilha e cita exceções ativas que quebram a herança automática.
+  const herdados = resolvidos.filter((r) => r.heranca)
+  if (herdados.length) {
+    trilha.push({
+      etapa: 'Herança por família (RAG + lexical)',
+      detalhe: herdados
+        .map((r) => `${fmtNcm(r.cand.item.codigo)}: ${r.heranca?.origem} ${r.heranca?.prefixo} (${r.heranca?.irmaosVinculados} irmãos, confiança ${r.heranca?.confianca}${r.heranca?.aConfirmar ? ', a confirmar' : ''})`)
+        .join(' · '),
+    })
+  }
+  if (analise.excecoesFamiliaAtivas.length) {
+    const alertas = EXCECOES_FAMILIA.filter((e) => analise.excecoesFamiliaAtivas.includes(e.id)).map((e) => e.alerta)
+    if (alertas.length) {
+      trilha.push({ etapa: 'Exceções de família', detalhe: alertas.join(' ') })
+    }
+  }
 
   // Escolha: melhor score textual; vínculo oficial enriquece, não filtra.
   // (Um NCM vigente sem vínculo é resposta válida: tributação integral.)
@@ -434,13 +479,23 @@ export async function classificarPorDescricao(
   const margem = segundo ? topo.cand.score - segundo.cand.score : 999
   const principal = topo.lista[0]
   const temVinculo = !topo.regraGeral
-  const temRisco = analise.ambiguidades.length > 0
-  const confianca = calcularConfianca({
+  const herdado = topo.heranca ?? principal.heranca ?? null
+  // Risco: ambiguidades do texto + herança a confirmar + hipótese de família
+  // com exceção ativa. Exceção de família com vínculo EXATO não trava (a base
+  // oficial já resolveu a destinação) e regra geral pura sem hipótese também
+  // não (não há benefício afirmado para confirmar) — sem isso, descrições
+  // claras ("boi para reprodução") cairiam para o worker sem motivo.
+  const temRiscoBase = analise.ambiguidades.length > 0
+  const familiaEnvolvida = (herdado?.aConfirmar ?? false) || topo.hipotese != null
+  const temRisco = temRiscoBase || familiaEnvolvida
+  let confianca = calcularConfianca({
     totalCandidatos: resolvidos.length,
     margemTopo: margem,
     tokensUteis: analise.tokens.length,
     temCondicaoRisco: temRisco,
   })
+  // Herança "a confirmar" nunca alcança alta (exige confirmação do usuário).
+  if (herdado?.aConfirmar && confianca === 'alta') confianca = 'media'
 
   const codigoFmt = fmtNcm(topo.cand.item.codigo)
   const descricaoNcm = topo.cand.item.descricao || principal.descricao || ''
@@ -467,14 +522,25 @@ export async function classificarPorDescricao(
     url = primeiro.url
     justificativa =
       `Posição ${codigoFmt} — "${descricaoNcm}"${caminho}, pela ${analise.rgiAplicaveis.join(' + ')}. ` +
-      `Vínculo oficial ${principal.cst}/${principal.cClassTrib} (${principal.resumo.descricaoCClassTrib})` +
+      (herdado
+        ? `Enquadramento herdado por família (${herdado.origem} ${herdado.prefixo}, ${herdado.irmaosVinculados} irmãos) — vínculo-modelo oficial ${principal.cst}/${principal.cClassTrib} (${principal.resumo.descricaoCClassTrib})`
+        : `Vínculo oficial ${principal.cst}/${principal.cClassTrib} (${principal.resumo.descricaoCClassTrib})`) +
       `${anexo ? `, Anexo ${anexo}` : ''}${baseLegal ? `, ${baseLegal}` : ''}.`
+    if (herdado?.aConfirmar) justificativa += ' Confirme a destinação/composição antes de operar (herança a confirmar).'
   } else {
     justificativa =
       `Posição ${codigoFmt} — "${descricaoNcm}"${caminho}, pela ${analise.rgiAplicaveis.join(' + ')}. ` +
       `Sem vínculo específico na base da Reforma: tributação integral (CST ${REGRA_GERAL.cst}/cClassTrib ${REGRA_GERAL.cClassTrib}), sem exceção enquadrável.`
+    if (topo.hipotese) justificativa += ` Hipótese por família a confirmar: ${topo.hipotese} — informe destinação/composição para validar.`
   }
   if (temRisco) justificativa += ` Atenção: ${analise.ambiguidades.join(' ')}`
+  // Alertas de família só quando há algo a confirmar (risco textual,
+  // herança ou hipótese) — regra geral pura ou vínculo exato sem risco
+  // não ganham ressalva sem objeto.
+  if (analise.excecoesFamiliaAtivas.length && (temRiscoBase || herdado != null || topo.hipotese != null)) {
+    const alertas = EXCECOES_FAMILIA.filter((e) => analise.excecoesFamiliaAtivas.includes(e.id)).map((e) => e.alerta)
+    if (alertas.length) justificativa += ` ${alertas.join(' ')}`
+  }
   if (comBeneficio.length > 1 && !temVinculo) {
     // Nunca ocorre (topo sem vínculo), mantido como guarda explícita.
     justificativa += ''

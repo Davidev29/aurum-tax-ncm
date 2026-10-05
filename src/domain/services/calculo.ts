@@ -11,6 +11,7 @@ import { CAPITULOS_IN_NATURA, CAPITULOS_NCM } from '../constants/capitulos'
 import type { Classificacao, NomenclaturaNcm, Observacao, ResultadoCalculo } from '../entities'
 import { norm } from './format'
 import { observacaoExtincaoNcm } from './classificacao'
+import { observacaoHerancaFamilia } from './classificacao'
 import { observacaoRevogacao } from './revogacao'
 
 /**
@@ -388,6 +389,11 @@ export function observacoesFiscais(
   if (ext) obs.push(ext)
   const rev = observacaoRevogacao(cl.revogado)
   if (rev) obs.push(rev)
+  // Herança por família: mesmo criticidade da revogação — explica de onde
+  // veio o benefício quando não há vínculo exato (vale em NF-e, SPED, Lote,
+  // revalidação e consultas que usam este funil único).
+  const her = observacaoHerancaFamilia(cl.heranca)
+  if (her) obs.push(her)
   obs.push(...observacoesDiferimento(cl))
   const tipo = observacaoTipoAliquota(cl.cstClassTribDetalhes?.tipoAliquota)
   if (tipo) {
@@ -579,11 +585,12 @@ export function observacoesDiferimento(cl: Classificacao | null | undefined): Ob
   }
 
   if (ehDiferimentoCondicionalAnexoIX(cl)) {
+    const rotulo = norm(cl.codigo).length === 9 ? 'NBS' : 'NCM'
     return [
       {
         titulo: '⚠ Anexo IX — diferimento condicional (verificar a operação)',
         texto:
-          'Este NCM é insumo agropecuário/aquícola do Anexo IX com redução de 60% das alíquotas (CST 200 da base oficial) — NÃO é automaticamente diferido. ' +
+          `Este ${rotulo} é insumo agropecuário/aquícola do Anexo IX com redução de 60% das alíquotas (CST 200 da base oficial) — NÃO é automaticamente diferido. ` +
           'O diferimento do art. 138, §2º depende da operação concreta: só há diferimento no fornecimento entre contribuintes do regime regular, ' +
           'para produtor rural qualificado ou na importação (na proporção do §3º). Se a sua operação se enquadrar, o CST passa a ser 515 (diferimento com redução); ' +
           'caso contrário, tributa-se normalmente com a redução de 60%. Verifique que produto/operação é antes de escriturar como diferido.',
@@ -595,4 +602,80 @@ export function observacoesDiferimento(cl: Classificacao | null | undefined): Ob
   }
 
   return []
+}
+
+/* ------------------------------------- opção de diferimento (Anexo IX) -- */
+
+/**
+ * Classificação VIRTUAL da hipótese de diferimento para um item do Anexo IX
+ * com diferimento condicional (caso típico: CST 200 / cClassTrib 200038 com
+ * redução de 60%).
+ *
+ * Representa "e se a operação se enquadrar no art. 138, §2º": o CST passa a
+ * ser 515 (diferimento com redução) e a redução vai a 100% — ou seja,
+ * alíquota 0% de IBS/CBS nesta etapa (o recolhimento fica adiado para quem
+ * encerrar a fase do diferimento).
+ *
+ * NÃO é um enquadramento oficial novo: deriva tudo do `cl` original (mesmo
+ * NCM, descrição, vínculo e vigência) e só troca o necessário para simular.
+ * `ehDiferimento(virtual) === true` (via CST 515) e `ehAnexoIX === true`
+ * (via cClassTrib 515001), então os avisos violetas passam a valer.
+ *
+ * A UI oferece esta hipótese como SEGUNDA opção de tributação ao lado da
+ * tributação normal — a escolha é do usuário, por operação.
+ */
+export function classificacaoDiferimentoAnexoIX(cl: Classificacao): Classificacao {
+  return {
+    ...cl,
+    id: `${cl.id}__diferimento`,
+    cst: '515',
+    cClassTrib: '515001',
+    baseLegal: 'Art. 138, §2º da LC 214/2025 — diferimento na operação (CST 515 · cClassTrib 515001)',
+    resumo: {
+      ...cl.resumo,
+      descricaoCClassTrib:
+        'Operações, sujeitas a diferimento, com insumos agropecuários e aquícolas, observado o art. 138 da LC 214/2025 — diferimento na operação (alíquota 0% IBS/CBS)',
+      percentualReducaoIBS: 100,
+      percentualReducaoCBS: 100,
+    },
+    referencia: cl.referencia ? { ...cl.referencia, diferimento: true } : cl.referencia,
+    cstDetalhes: cl.cstDetalhes ? { ...cl.cstDetalhes, indDiferimento: true } : cl.cstDetalhes,
+  }
+}
+
+/**
+ * Tem SEGUNDA opção de tributação (diferimento)? Verdadeiro apenas para o
+ * Anexo IX condicional — tributação normal com redução + hipótese de
+ * diferimento a verificar por operação. Diferimento efetivo (CST 510/515)
+ * já é diferido e não ganha opção extra; demais casos também não.
+ */
+export function temOpcaoDiferimento(cl: Classificacao | null | undefined): boolean {
+  return ehDiferimentoCondicionalAnexoIX(cl)
+}
+
+/** Chave da opção de tributação exibida no seletor (normal × diferimento). */
+export type OpcaoTributacaoChave = 'normal' | 'diferimento'
+
+/**
+ * Opções de tributação de uma classificação: sempre a tributação normal
+ * (enquadramento oficial) + a hipótese de diferimento (alíquota 0%) quando
+ * o Anexo IX condicional permitir. A normal é a primeira (padrão vigente).
+ */
+export function opcoesTributacao(cl: Classificacao): { chave: OpcaoTributacaoChave; classificacao: Classificacao }[] {
+  if (!temOpcaoDiferimento(cl)) return [{ chave: 'normal', classificacao: cl }]
+  return [
+    { chave: 'normal', classificacao: cl },
+    { chave: 'diferimento', classificacao: classificacaoDiferimentoAnexoIX(cl) },
+  ]
+}
+
+/**
+ * Expande uma lista de classificações com as hipóteses de diferimento:
+ * cada item do Anexo IX condicional ganha, logo após si, a sua versão
+ * virtual diferida (CST 515, redução 100%). Listas sem Anexo IX condicional
+ * voltam intactas (mesma referência, sem cópia).
+ */
+export function expandirOpcoesComDiferimento(lista: Classificacao[]): Classificacao[] {
+  if (!lista.some((cl) => temOpcaoDiferimento(cl))) return lista
+  return lista.flatMap((cl) => (temOpcaoDiferimento(cl) ? [cl, classificacaoDiferimentoAnexoIX(cl)] : [cl]))
 }

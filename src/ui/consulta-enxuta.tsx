@@ -11,7 +11,7 @@
  */
 import { useState, type ReactElement, type ReactNode } from 'react'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
-import { fmtNcm } from '@/domain/services/format'
+import { fmtNbs, fmtNcm, norm } from '@/domain/services/format'
 import { observacoesFiscais } from '@/domain/services/calculo'
 import { FaixaTributaria } from './faixa-tributaria'
 import { Btn } from './kit'
@@ -20,6 +20,7 @@ import { BotaoDetalhePremium, ModalDetalheFiscal } from './consulta-premium'
 import { BotaoVerLegislacao, type BloqueioSistema } from './cartoes'
 import { ListaObservacoes } from './cartoes'
 import { PillAnexos } from './cartoes'
+import { SeletorTributacao, useOpcaoTributacao } from './diferimento-opcoes'
 
 /* ------------------------------------------------- cartão enxuto (1 por vez) -- */
 
@@ -36,24 +37,35 @@ export function CartaoEnxuto({
   nomenclatura?: NomenclaturaNcm | null
   bloqueios?: BloqueioSistema[] | null
   destaqueIA?: boolean
-  onSalvar?: () => void
-  onAddCalc?: () => void
+  /** Recebe a classificação ATIVA (respeita a opção de diferimento escolhida). */
+  onSalvar?: (cl: Classificacao) => void
+  /** Recebe a classificação ATIVA (respeita a opção de diferimento escolhida). */
+  onAddCalc?: (cl: Classificacao) => void
   onReclassificar?: () => void
 }): ReactElement {
-  const r = cl.resumo
-  const cct = cl.cstClassTribDetalhes
+  // Anexo IX condicional: o cartão ganha a 2ª opção (diferimento, 0%) e
+  // TUDO abaixo decorre da ativa — faixa, CST/cClassTrib, fiscal, simulador.
+  const { opcao, setOpcao, ativa } = useOpcaoTributacao(cl)
+  const visivel = ativa ?? cl
+  const r = visivel.resumo
+  const cct = visivel.cstClassTribDetalhes
   const redIBS = Number(r.percentualReducaoIBS ?? cct?.pRedIBS ?? 0)
   const redCBS = Number(r.percentualReducaoCBS ?? cct?.pRedCBS ?? 0)
-  const anexo = r.anexo ?? cl.referencia?.anexo ?? null
-  const baseLegal = cct?.lcRef || cl.baseLegal || null
-  const url = r.urlLegislacao ?? cl.referencia?.urlLegislacao ?? null
-  const ehManual = cl.manual != null
+  const anexo = r.anexo ?? visivel.referencia?.anexo ?? null
+  const baseLegal = cct?.lcRef || visivel.baseLegal || null
+  const url = r.urlLegislacao ?? visivel.referencia?.urlLegislacao ?? null
+  const ehManual = visivel.manual != null
   const negado = bloqueios?.some((b) => b.permitido === false) ?? false
-  const obs = observacoesFiscais(cl.codigo, cl, nomenclatura ?? null)
+  const obs = observacoesFiscais(visivel.codigo, visivel, nomenclatura ?? null)
   const [fiscalAberto, setFiscalAberto] = useState(false)
+  // O mesmo cartão serve a NCM (8 dígitos) e NBS (9 dígitos, tela Serviços):
+  // rótulos e ficha acompanham o tipo do código.
+  const ehNbs = norm(visivel.codigo).length === 9
+  const rotuloCodigo = ehNbs ? 'NBS' : 'NCM'
+  const codigoFormatado = visivel.codigoFormatado || (ehNbs ? fmtNbs(visivel.codigo) : fmtNcm(visivel.codigo))
 
   return (
-    <article className={`panel animate-fade-up p-4 sm:p-5 ${destaqueIA ? 'aurum-ai-destaque' : ''}`} aria-label={`NCM ${fmtNcm(cl.codigo)} — ${r.descricaoCClassTrib ?? 'classificação'}`}>
+    <article className={`panel animate-fade-up p-4 sm:p-5 ${destaqueIA ? 'aurum-ai-destaque' : ''}`} aria-label={`${rotuloCodigo} ${codigoFormatado} — ${r.descricaoCClassTrib ?? 'classificação'}`}>
       {destaqueIA ? (
         <div className="mb-2 flex items-center gap-2">
           <SeloAurumAI variante="compacto" />
@@ -61,25 +73,28 @@ export function CartaoEnxuto({
       ) : null}
       <FaixaTributaria redIBS={redIBS} redCBS={redCBS} anexo={anexo} baseLegal={baseLegal} />
 
-      <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="font-mono text-xl font-black tracking-tight text-brand-700 dark:text-aurum-200">
-          {cl.codigoFormatado || fmtNcm(cl.codigo)}
-        </span>
-        <span className="text-sm text-slate-600 dark:text-slate-300">{cl.descricao || nomenclatura?.descricao || '—'}</span>
+      <SeletorTributacao cl={cl} opcao={opcao} onChange={setOpcao} />
+
+      <div className="mt-3">
+        <div className="font-mono text-xl font-black tracking-tight text-brand-700 dark:text-aurum-200">
+          {codigoFormatado}
+        </div>
+        <div className="mt-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{visivel.descricao || nomenclatura?.descricao || '—'}</div>
       </div>
       <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400">
-        CST {cl.cst || '000'} · cClassTrib {cl.cClassTrib || '000001'}
+        CST {visivel.cst || '000'} · cClassTrib {visivel.cClassTrib || '000001'}
+        {opcao === 'diferimento' ? ' · ⏳ com diferimento' : ''}
         {negado ? ' · ⛔ negado em DFe' : ''}
         {ehManual ? ' · 👤 manual' : ''}
       </p>
-      <PillAnexos ncm={cl.codigo} />
+      <PillAnexos codigo={visivel.codigo} />
 
       <div className="mt-3 flex flex-wrap gap-2">
         {onSalvar ? (
-          <Btn variante="primary" tam="sm" onClick={onSalvar}>💾 Salvar</Btn>
+          <Btn variante="primary" tam="sm" onClick={() => onSalvar(visivel)}>💾 Salvar</Btn>
         ) : null}
         {onAddCalc ? (
-          <Btn tam="sm" onClick={onAddCalc}>🧮 Calculadora</Btn>
+          <Btn tam="sm" onClick={() => onAddCalc(visivel)}>🧮 Calculadora</Btn>
         ) : null}
         {onReclassificar ? (
           <Btn tam="sm" onClick={onReclassificar}>✋ Reclassificar</Btn>
@@ -92,7 +107,9 @@ export function CartaoEnxuto({
           icone="📋"
           rotulo="Detalhes fiscais"
           contagem={obs.length || undefined}
-          titulo="Ficha completa do produto: NCM, enquadramento, condições, documentos, DFe, observações, simulação e redação — abre em modal glass"
+          titulo={ehNbs
+            ? 'Ficha completa do serviço: NBS, enquadramento, condições, documentos, observações, simulação e redação — abre em modal glass'
+            : 'Ficha completa do produto: NCM, enquadramento, condições, documentos, DFe, observações, simulação e redação — abre em modal glass'}
           onClick={() => setFiscalAberto(true)}
         />
         {url ? (

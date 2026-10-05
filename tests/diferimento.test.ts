@@ -8,10 +8,15 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  calcularTributos,
+  classificacaoDiferimentoAnexoIX,
   ehAnexoIX,
   ehDiferimento,
   ehDiferimentoCondicionalAnexoIX,
+  expandirOpcoesComDiferimento,
   observacoesDiferimento,
+  opcoesTributacao,
+  temOpcaoDiferimento,
 } from '@/domain/services/calculo'
 import type { Classificacao } from '@/domain/entities'
 
@@ -129,5 +134,80 @@ describe('diferimento Anexo IX', () => {
         fake({ cst: '000', cClassTrib: '000001', resumo: { descricaoCClassTrib: 'integral', percentualReducaoIBS: 0, percentualReducaoCBS: 0, anexo: null, urlLegislacao: null, documentosHabilitados: null }, baseLegal: '' }),
       ),
     ).toEqual([])
+  })
+})
+
+describe('opção de tributação com diferimento (Anexo IX)', () => {
+  it('só o Anexo IX condicional ganha a 2ª opção', () => {
+    expect(temOpcaoDiferimento(fake())).toBe(true)
+    // Diferimento efetivo já é diferido — sem opção extra
+    expect(temOpcaoDiferimento(fake({ cst: '515', cClassTrib: '515001' }))).toBe(false)
+    // Tributação integral — sem opção extra
+    expect(
+      temOpcaoDiferimento(
+        fake({ cst: '000', cClassTrib: '000001', resumo: { descricaoCClassTrib: 'integral', percentualReducaoIBS: 0, percentualReducaoCBS: 0, anexo: null, urlLegislacao: null, documentosHabilitados: null }, baseLegal: '' }),
+      ),
+    ).toBe(false)
+    expect(temOpcaoDiferimento(null)).toBe(false)
+  })
+
+  it('hipótese diferida: CST 515, redução 100% e diferimento efetivo', () => {
+    const dif = classificacaoDiferimentoAnexoIX(fake())
+    expect(dif.cst).toBe('515')
+    expect(dif.cClassTrib).toBe('515001')
+    expect(dif.resumo.percentualReducaoIBS).toBe(100)
+    expect(dif.resumo.percentualReducaoCBS).toBe(100)
+    // Continua sendo o mesmo NCM/operação — só muda o enquadramento
+    expect(dif.codigo).toBe(fake().codigo)
+    expect(ehDiferimento(dif)).toBe(true)
+    expect(ehAnexoIX(dif)).toBe(true)
+    expect(ehDiferimentoCondicionalAnexoIX(dif)).toBe(false)
+    const [o] = observacoesDiferimento(dif)
+    expect(o.cor).toBe('violet')
+  })
+
+  it('hipótese diferida simula com alíquota 0% de IBS/CBS', () => {
+    const dif = classificacaoDiferimentoAnexoIX(fake())
+    const c = calcularTributos(
+      1000,
+      dif.resumo.percentualReducaoIBS,
+      dif.resumo.percentualReducaoCBS,
+      17.7,
+      10.4,
+    )
+    expect(c.aliqIBS).toBe(0)
+    expect(c.aliqCBS).toBe(0)
+    expect(c.total).toBe(0)
+    // A tributação normal do mesmo NCM continua tributando com a redução de 60%
+    const normal = calcularTributos(1000, 60, 60, 17.7, 10.4)
+    expect(normal.total).toBeGreaterThan(0)
+  })
+
+  it('opcoesTributacao: normal + diferimento para Anexo IX condicional', () => {
+    const base = fake()
+    const opcoes = opcoesTributacao(base)
+    expect(opcoes.map((o) => o.chave)).toEqual(['normal', 'diferimento'])
+    expect(opcoes[0].classificacao).toBe(base)
+    expect(opcoes[1].classificacao.cst).toBe('515')
+    // Demais casos: só a tributação normal
+    expect(
+      opcoesTributacao(
+        fake({ cst: '000', cClassTrib: '000001', resumo: { descricaoCClassTrib: 'integral', percentualReducaoIBS: 0, percentualReducaoCBS: 0, anexo: null, urlLegislacao: null, documentosHabilitados: null }, baseLegal: '' }),
+      ),
+    ).toHaveLength(1)
+  })
+
+  it('expandirOpcoesComDiferimento insere a hipótese logo após a normal', () => {
+    const normal = fake()
+    const integral = fake({ id: 'y', cst: '000', cClassTrib: '000001', resumo: { descricaoCClassTrib: 'integral', percentualReducaoIBS: 0, percentualReducaoCBS: 0, anexo: null, urlLegislacao: null, documentosHabilitados: null }, baseLegal: '' })
+    const expandida = expandirOpcoesComDiferimento([normal, integral])
+    expect(expandida).toHaveLength(3)
+    expect(expandida[0]).toBe(normal)
+    expect(expandida[1].cst).toBe('515')
+    expect(expandida[1].resumo.percentualReducaoIBS).toBe(100)
+    expect(expandida[2]).toBe(integral)
+    // Lista sem Anexo IX condicional volta intacta (mesma referência)
+    const semCondicional = [integral]
+    expect(expandirOpcoesComDiferimento(semCondicional)).toBe(semCondicional)
   })
 })

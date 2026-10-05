@@ -2,6 +2,8 @@
  * Informações adicionais da classificação — leituras tipadas das tabelas CFF.
  *
  * - `anexosDoNcm`: match por NCM (8 dígitos) na store `anexos`;
+ * - `anexosDoNbs` / `anexosDoCodigo`: match por NBS (9 dígitos) ou qualquer
+ *   código (8/9) na store `anexos`;
  * - `regrasCreditoPresumido` / `locaisOperacao`: tabelas de referência
  *   versionadas em `meta` (sem chave com o NCM — exibidas quando a regra
  *   casa, ex.: classificação com crédito presumido).
@@ -20,6 +22,25 @@ export async function anexosDoNcm(ncm: unknown): Promise<AnexoNcm[]> {
   } catch {
     return []
   }
+}
+
+/** Anexos que citam o NBS (9 dígitos). */
+export async function anexosDoNbs(nbs: unknown): Promise<AnexoNcm[]> {
+  const cod = norm(nbs)
+  if (cod.length !== 9) return []
+  try {
+    return await db.anexos.where('codigo').equals(cod).toArray()
+  } catch {
+    return []
+  }
+}
+
+/** Anexos que citam o código, seja NCM (8) ou NBS (9). */
+export async function anexosDoCodigo(codigo: unknown): Promise<AnexoNcm[]> {
+  const cod = norm(codigo)
+  if (cod.length === 8) return anexosDoNcm(cod)
+  if (cod.length === 9) return anexosDoNbs(cod)
+  return []
 }
 
 /** Lote: anexos por NCM para vários códigos de uma vez (uma consulta). */

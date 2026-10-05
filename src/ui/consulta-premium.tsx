@@ -11,13 +11,15 @@
  */
 import { useState, type ReactNode } from 'react'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
-import { fmtNcm, fmtPct } from '@/domain/services/format'
+import { fmtNbs, fmtNcm, fmtPct, norm } from '@/domain/services/format'
 import { NOME_IA } from '@/domain/aurum-ai'
 import { Modal, Pill } from './kit'
 import { FontesAurumAI, IconeAurumPremium, LinhaPreferidaAurumAI } from './aurum-ai'
 import { anexoOficial, observacoesFiscais } from '@/domain/services/calculo'
 import { rotuloAnexoOficial } from '@/domain/constants/tributarios'
+import { nomeCapitulo } from '@/domain/constants/capitulos'
 import { Campo, Secao, SecaoInformacoesAdicionais } from './detalhes'
+import { SeletorTributacao, useOpcaoTributacao } from './diferimento-opcoes'
 import {
   AvisoManual,
   AvisoNcmExtinto,
@@ -82,6 +84,7 @@ export function ModalNcmsAnalisados({
   codigoPreferido,
   titulo = 'NCMs analisados pela Aurum AI',
   subtitulo,
+  rotuloCodigo: rotuloProp,
   onEscolher,
 }: {
   aberto: boolean
@@ -91,10 +94,13 @@ export function ModalNcmsAnalisados({
   codigoPreferido?: string | null
   titulo?: string
   subtitulo?: string
+  /** Rótulo do código nos textos do modal (`NCM` no Consulta, `NBS` em Serviços). */
+  rotuloCodigo?: 'NCM' | 'NBS'
   /** Opcional: sem ele, o clique só fecha (modo somente-leitura, ex.: cartões CNAE). */
   onEscolher?: (codigo: string) => void
 }) {
   const norm = (c: string) => c.replace(/\D+/g, '')
+  const rotulo = rotuloProp ?? (/NBS/i.test(titulo ?? '') ? 'NBS' : 'NCM')
   return (
     <Modal
       aberto={aberto}
@@ -122,7 +128,7 @@ export function ModalNcmsAnalisados({
                   {it.titulo}
                 </span>
                 {preferido ? (
-                  <span className="aurum-ai-selo-preferido" title={`A ${NOME_IA} usou este NCM como referência preferida`}>
+                  <span className="aurum-ai-selo-preferido" title={`A ${NOME_IA} usou este ${rotulo} como referência preferida`}>
                     <IconeAurumPremium tamanho="sm" /> Referência preferida
                   </span>
                 ) : it.selo ? (
@@ -253,13 +259,51 @@ export function ModalAuditoriaIA({
 
 /* -------------------------------------------------- detalhe fiscal (modal) -- */
 
+/** Remove tags HTML da nomenclatura oficial (`<i>Gallus…</i>`), entidades e excesso de espaço. */
+function limparTextoFiscal(v: unknown): string {
+  return String(v ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .replace(/^[-–—\s]+/, '')
+    .trim()
+}
+
+/** `2025-05-05T00:00:00` / `2025-05-05` / `05/05/2025` → `05/05/2025`. Sentinela 9999 / vazio → null. */
+function fmtDataBr(v: unknown): string | null {
+  const s = String(v ?? '').trim()
+  if (!s || /9999|31\/12\/9999/i.test(s)) return null
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  const b = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (b) return `${b[1]}/${b[2]}/${b[3]}`
+  return s || null
+}
+
+function vigenciaCctTexto(inicio: unknown, fim: unknown): string | null {
+  const i = fmtDataBr(inicio)
+  const f = fmtDataBr(fim)
+  if (!i && !f) return null
+  if (i && f) return `${i} → ${f}`
+  if (i) return `a partir de ${i}`
+  return `vigente até ${f}`
+}
+
 /**
  * Ficha fiscal completa do produto (modal "Detalhes fiscais").
  *
- * Visão detalhada de quem clicou para inspecionar: identificação do NCM,
- * enquadramento da Reforma, condições tributárias, documentos/DFe,
- * informações adicionais, simulação, redação legal e observações.
- * Apresentação pura — nenhum dado aqui altera a `Classificacao` resolvida.
+ * Layout refinado (pós-auditoria multi-agente):
+ * 1) **O que é** — NCM herói + descrição abaixo + 1 linha de metadados
+ *    (`Cap. 01 · Animais vivos · Pos. 0105 · Vigente desde …`);
+ * 2) **Quanto paga** — CST/cClassTrib em destaque + reduções em badges
+ *    grandes + 1 parágrafo único de significado (sem triplicar);
+ * 3) **Condições** — chips; 4) **Prova** — docs/simulação/observações.
+ * Campos vazios (`—`) nunca renderizam no modal; detalhe técnico vai para
+ * `<details>Dedados técnicos</details>`. Apresentação pura.
  */
 export function ModalDetalheFiscal({
   aberto,
@@ -276,122 +320,195 @@ export function ModalDetalheFiscal({
   bloqueios?: BloqueioSistema[] | null
   titulo?: string
 }) {
-  const r = cl.resumo
-  const cst = cl.cstDetalhes
-  const cct = cl.cstClassTribDetalhes
-  const ref = cl.referencia
-  const vinc = cl.vinculo
+  // Anexo IX condicional: a ficha ganha a 2ª opção (diferimento, 0%) e o
+  // enquadramento + simulador decorrem da ativa.
+  const { opcao, setOpcao, ativa } = useOpcaoTributacao(cl)
+  const visivel = ativa ?? cl
+  const r = visivel.resumo
+  const cst = visivel.cstDetalhes
+  const cct = visivel.cstClassTribDetalhes
+  const ref = visivel.referencia
+  const vinc = visivel.vinculo
   const redIBS = Number(r.percentualReducaoIBS ?? cct?.pRedIBS ?? 0)
   const redCBS = Number(r.percentualReducaoCBS ?? cct?.pRedCBS ?? 0)
-  const url = r.urlLegislacao ?? cl.referencia?.urlLegislacao ?? null
-  const baseLegal = cct?.lcRef || cl.baseLegal || null
+  const url = r.urlLegislacao ?? visivel.referencia?.urlLegislacao ?? null
+  const baseLegal = cct?.lcRef || visivel.baseLegal || null
   const redacao = cct?.lcRedacao ?? null
-  const obsFiscais = observacoesFiscais(cl.codigo, cl, nomenclatura ?? null)
-  const digitos = String(cl.codigo ?? '').replace(/\D+/g, '')
-  const capitulo = digitos.length >= 2 ? digitos.slice(0, 2) : '—'
-  const posicao = digitos.length >= 4 ? digitos.slice(0, 4) : '—'
-  const anexo = anexoOficial(cl)
-  const descricaoNcm = nomenclatura?.descricao || cl.descricao || '—'
-  const extinto = Boolean(nomenclatura?.dataFim)
-  const origem = cl.manual ? 'Manual (usuário)' : cl.regraGeral ? 'Regra geral' : 'Base oficial'
-  const vigenciaCct =
-    cct?.inicioVigencia || cct?.fimVigencia
-      ? `${cct?.inicioVigencia ?? '—'} → ${cct?.fimVigencia ?? 'vigente'}`
-      : '—'
+  const obsFiscais = observacoesFiscais(visivel.codigo, visivel, nomenclatura ?? null)
+  const digitos = String(visivel.codigo ?? '').replace(/\D+/g, '')
+  // NBS (9 dígitos) tem ficha própria: sem capítulo/posição, sem vigência de
+  // NCM e sem selo de extinção — a conferência é CST/cClassTrib + reduções +
+  // anexo + base legal da LC 214/2025.
+  const ehNbs = norm(visivel.codigo).length === 9
+  const rotuloCodigo = ehNbs ? 'NBS' : 'NCM'
+  const codigoFormatado = ehNbs ? fmtNbs(visivel.codigo) : fmtNcm(visivel.codigo)
+  const capNum = digitos.length >= 2 ? digitos.slice(0, 2) : ''
+  const nomeCap = capNum ? nomeCapitulo(capNum) : ''
+  const posicao = digitos.length >= 4 ? digitos.slice(0, 4) : ''
+  const anexo = anexoOficial(visivel)
+  const descricaoNcm = limparTextoFiscal(nomenclatura?.descricao || visivel.descricao || '—')
+  const descricaoServico = limparTextoFiscal(visivel.descricao || '—')
+  const extinto = !ehNbs && Boolean(nomenclatura?.dataFim)
+  const inicioNcm = !ehNbs ? fmtDataBr(nomenclatura?.dataInicio) : null
+  const fimNcm = !ehNbs ? fmtDataBr(nomenclatura?.dataFim) : null
+  const vigenciaCct = vigenciaCctTexto(cct?.inicioVigencia, cct?.fimVigencia)
+  const atualizadoEm = fmtDataBr(cct?.atualizadoEm)
+  // Descrição única do enquadramento: prioriza o texto mais específico e
+  // descarta repetições (cct ≈ resumo ≈ vínculo na maioria dos casos).
+  const significado = (() => {
+    const candidatos = [cct?.descricao || cct?.nome, r.descricaoCClassTrib, cst?.descricao].map((t) =>
+      limparTextoFiscal(t || ''),
+    )
+    const normaliza = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').trim()
+    const vistos = new Set<string>()
+    const unicos = candidatos.filter((t) => {
+      if (!t) return false
+      const k = normaliza(t)
+      if (vistos.has(k)) return false
+      vistos.add(k)
+      return true
+    })
+    if (!unicos.length) return null
+    // Se o 2º texto só repete o 1º com outro prefixo, mantém só o 1º.
+    if (unicos.length > 1 && (unicos[1].includes(unicos[0]) || unicos[0].includes(unicos[1]))) return unicos[0]
+    return unicos[0]
+  })()
+  const vinculoExtra =
+    vinc && (vinc.reducao != null || vinc.aliquotaIBS != null || vinc.aliquotaCBS != null)
+      ? `Vínculo oficial${vinc.reducao != null ? ` · redução ${fmtPct(vinc.reducao)}` : ''}${
+          vinc.aliquotaIBS != null || vinc.aliquotaCBS != null
+            ? ` · alíq. IBS ${vinc.aliquotaIBS ?? '—'} / CBS ${vinc.aliquotaCBS ?? '—'}`
+            : ''
+        }`
+      : null
+  const temReducao = redIBS > 0 || redCBS > 0
+  const reducaoTexto =
+    Math.abs(redIBS - redCBS) < 0.005 ? `−${fmtPct(Math.max(redIBS, redCBS))}` : `IBS −${fmtPct(redIBS)} / CBS −${fmtPct(redCBS)}`
   return (
     <Modal
       aberto={aberto}
       onFechar={onFechar}
       titulo={`📋 ${titulo}`}
-      subtitulo={`${fmtNcm(cl.codigo)} · CST ${cl.cst || '000'} · cClassTrib ${cl.cClassTrib || '000001'}`}
+      subtitulo={`${rotuloCodigo} ${codigoFormatado} · CST ${visivel.cst || '000'} · cClassTrib ${visivel.cClassTrib || '000001'}${opcao === 'diferimento' ? ' · ⏳ com diferimento' : ''}`}
       largura="max-w-2xl"
     >
       <div className="space-y-4 text-xs">
-        {nomenclatura?.dataFim ? <AvisoNcmExtinto nomenclatura={nomenclatura} /> : null}
-        {cl.manual ? (
+        <SeletorTributacao cl={cl} opcao={opcao} onChange={setOpcao} />
+        {!ehNbs && nomenclatura?.dataFim ? <AvisoNcmExtinto nomenclatura={nomenclatura} /> : null}
+        {visivel.manual ? (
           <AvisoManual
             compact
-            fonteDescricao={cl.manual?.fonteDescricao}
-            fonteUrl={cl.manual?.fonteUrl}
+            fonteDescricao={visivel.manual?.fonteDescricao}
+            fonteUrl={visivel.manual?.fonteUrl}
           />
         ) : null}
         {cct?.inicioVigencia || cct?.fimVigencia ? <AvisoVigenciaCct cct={cct} /> : null}
 
         <div className="flex flex-wrap gap-1.5">
-          <Pill cor={cl.regraGeral ? 'amber' : 'brand'}>
-            {cl.regraGeral ? '⚠ Regra geral' : '✓ Enquadramento oficial'}
+          <Pill cor={visivel.regraGeral ? 'amber' : 'brand'}>
+            {visivel.regraGeral ? '⚠ Regra geral' : '✓ Enquadramento oficial'}
           </Pill>
-          {cl.manual ? <Pill cor="amber">👤 Manual</Pill> : null}
-          {cl.revogado ? <Pill cor="red">⛔ Revogado</Pill> : null}
-          {extinto ? <Pill cor="red">⛔ NCM extinto</Pill> : <Pill cor="emerald">✓ NCM vigente</Pill>}
+          {opcao === 'diferimento' ? <Pill cor="brand">⏳ Com diferimento</Pill> : null}
+          {visivel.manual ? <Pill cor="amber">👤 Manual</Pill> : null}
+          {visivel.revogado ? <Pill cor="red">⛔ Revogado</Pill> : null}
+          {ehNbs ? (
+            visivel.regraGeral ? null : <Pill cor="emerald">✓ NBS oficial</Pill>
+          ) : extinto ? (
+            <Pill cor="red">⛔ NCM extinto</Pill>
+          ) : (
+            <Pill cor="emerald">✓ NCM vigente</Pill>
+          )}
         </div>
 
-        <Secao titulo="Produto / NCM" icone="📦">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4">
-            <Campo rotulo="NCM" valor={fmtNcm(cl.codigo)} mono forte />
-            <Campo rotulo="Código (dígitos)" valor={digitos || '—'} mono />
-            <Campo rotulo="Capítulo" valor={capitulo} mono />
-            <Campo rotulo="Posição" valor={posicao} mono />
-            <Campo rotulo="Situação" valor={extinto ? `Extinto em ${nomenclatura?.dataFim}` : 'Vigente'} />
-            <Campo rotulo="Origem" valor={origem} />
-            <Campo rotulo="Início vigência NCM" valor={nomenclatura?.dataInicio ?? '—'} mono />
-            <Campo rotulo="Fim vigência NCM" valor={nomenclatura?.dataFim ?? '—'} mono />
-          </div>
-          <p className="mt-3 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200" title={descricaoNcm}>
-            {descricaoNcm}
-          </p>
-          {nomenclatura?.ato ? (
-            <p className="mt-1.5 text-[10px] leading-relaxed text-slate-400" title={nomenclatura.ato}>
-              📎 {nomenclatura.ato}
+        {ehNbs ? (
+          <Secao titulo="Serviço / NBS" icone="🧾">
+            <div className="font-mono text-lg font-black tracking-tight text-slate-900 dark:text-white" title={digitos}>
+              {codigoFormatado}
+            </div>
+            <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200" title={descricaoServico}>
+              {descricaoServico}
             </p>
-          ) : null}
-          {nomenclatura?.atoFim ? (
-            <p className="mt-1.5 text-[10px] leading-relaxed text-slate-400" title={nomenclatura.atoFim}>
-              ⛔ Ato de extinção: {nomenclatura.atoFim}
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              {visivel.regraGeral ? 'Regra geral' : 'Vínculo oficial'}
+              {visivel.manual ? ' · Classificado por você' : ''}
             </p>
-          ) : null}
-        </Secao>
+          </Secao>
+        ) : (
+          <Secao titulo="Produto / NCM" icone="📦">
+            <div className="font-mono text-lg font-black tracking-tight text-slate-900 dark:text-white" title={digitos ? `Dígitos: ${digitos}` : undefined}>
+              {codigoFormatado}
+            </div>
+            <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200" title={descricaoNcm}>
+              {descricaoNcm}
+            </p>
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              {capNum ? `Cap. ${capNum}${nomeCap ? ` · ${nomeCap}` : ''}` : ''}
+              {posicao ? ` · Pos. ${posicao}` : ''}
+              {extinto && fimNcm ? ` · Extinto em ${fimNcm}` : inicioNcm ? ` · Vigente desde ${inicioNcm}` : ' · Vigente'}
+            </p>
+            {nomenclatura?.ato ? (
+              <p className="mt-1 text-[10px] leading-relaxed text-slate-400" title={nomenclatura.ato}>
+                📎 {nomenclatura.ato}
+              </p>
+            ) : null}
+            {nomenclatura?.atoFim ? (
+              <p className="mt-1 text-[10px] leading-relaxed text-slate-400" title={nomenclatura.atoFim}>
+                ⛔ Ato de extinção: {nomenclatura.atoFim}
+              </p>
+            ) : null}
+            <details className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+              <summary className="cursor-pointer font-semibold">Dados técnicos do código</summary>
+              <p className="mt-1 font-mono" title={digitos}>Dígitos: {digitos || '—'}</p>
+              {inicioNcm || fimNcm ? (
+                <p className="mt-0.5 font-mono">
+                  Vigência NCM: {inicioNcm ?? '?'} → {fimNcm ?? 'vigente'}
+                </p>
+              ) : null}
+            </details>
+          </Secao>
+        )}
 
         <Secao titulo="Enquadramento — Reforma (LC 214/2025)" icone="💠">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-4 md:grid-cols-3">
-            <Campo rotulo="CST" valor={cl.cst || '000'} mono forte titulo={cst?.descricao} />
-            <Campo rotulo="cClassTrib" valor={cl.cClassTrib || '000001'} mono forte titulo={cct?.nome ?? cct?.descricao ?? undefined} />
-            <Campo rotulo="Tipo alíquota" valor={cct?.tipoAliquota ?? '—'} />
-            <Campo rotulo="Redução IBS" valor={fmtPct(redIBS)} mono />
-            <Campo rotulo="Redução CBS" valor={fmtPct(redCBS)} mono />
-            <Campo rotulo="Vigência cClassTrib" valor={vigenciaCct} mono />
-            <Campo largo rotulo="Anexo oficial" valor={anexo ? `${anexo} · ${rotuloAnexoOficial(anexo)}` : '—'} titulo={anexo ?? undefined} />
-            <Campo largo rotulo="Base legal" valor={baseLegal ?? '—'} titulo={baseLegal ?? undefined} />
-            <Campo largo rotulo="Crédito para" valor={cct?.creditoPara ?? '—'} />
-            <Campo rotulo="Atualizado em" valor={cct?.atualizadoEm ?? '—'} mono />
-          </div>
-          {cst?.descricao || cct?.nome || cct?.descricao || r.descricaoCClassTrib || vinc ? (
-            <div className="mt-3 space-y-2 border-t border-dashed border-slate-200 pt-3 dark:border-slate-700">
-              {cst?.descricao ? (
-                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400" title={cst.descricao}>
-                  <strong>CST:</strong> {cst.descricao}
-                </p>
-              ) : null}
-              {cct?.nome || cct?.descricao ? (
-                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400" title={[cct?.nome, cct?.descricao].filter(Boolean).join(' — ')}>
-                  <strong>cClassTrib:</strong> {[cct?.nome, cct?.descricao].filter(Boolean).join(' — ') || '—'}
-                </p>
-              ) : null}
-              {r.descricaoCClassTrib ? (
-                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400" title={r.descricaoCClassTrib}>
-                  <strong>Classificação:</strong> {r.descricaoCClassTrib}
-                </p>
-              ) : null}
-              {vinc ? (
-                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400" title={vinc.descricao || vinc.baseLegal}>
-                  <strong>Vínculo oficial:</strong> {vinc.descricao || vinc.baseLegal || '—'}
-                  {vinc.reducao != null ? ` · redução ${fmtPct(vinc.reducao)}` : ''}
-                  {vinc.aliquotaIBS != null || vinc.aliquotaCBS != null
-                    ? ` · alíq. IBS ${vinc.aliquotaIBS ?? '—'} / CBS ${vinc.aliquotaCBS ?? '—'}`
-                    : ''}
-                </p>
-              ) : null}
+          <div className="flex flex-wrap items-stretch gap-2">
+            <div className="min-w-[7rem] flex-1 rounded-xl bg-slate-950 px-3 py-2 text-white dark:bg-white dark:text-slate-950">
+              <div className="text-[10px] font-bold uppercase opacity-60">CST</div>
+              <div className="font-mono text-lg font-black leading-tight" title={cst?.descricao}>{visivel.cst || '000'}</div>
             </div>
+            <div className="min-w-[7rem] flex-1 rounded-xl bg-slate-950 px-3 py-2 text-white dark:bg-white dark:text-slate-950">
+              <div className="text-[10px] font-bold uppercase opacity-60">cClassTrib</div>
+              <div className="font-mono text-lg font-black leading-tight" title={cct?.nome ?? cct?.descricao ?? undefined}>{visivel.cClassTrib || '000001'}</div>
+            </div>
+            <div className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-center font-black ${temReducao ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
+              <span title={`Redução IBS ${fmtPct(redIBS)} / CBS ${fmtPct(redCBS)}`}>
+                {temReducao ? reducaoTexto : 'Alíquota cheia'}
+                <span className="block text-[10px] font-bold uppercase opacity-80">IBS/CBS</span>
+              </span>
+            </div>
+          </div>
+          {significado ? (
+            <p className="mt-3 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300" title={significado}>
+              {significado}
+            </p>
+          ) : null}
+          {vinculoExtra ? (
+            <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">{vinculoExtra}</p>
+          ) : null}
+          <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2">
+            {anexo ? (
+              <Campo largo rotulo="Anexo oficial" valor={`${anexo} · ${rotuloAnexoOficial(anexo)}`} titulo={anexo ?? undefined} />
+            ) : null}
+            {baseLegal ? <Campo largo rotulo="Base legal" valor={baseLegal} titulo={baseLegal ?? undefined} /> : null}
+          </div>
+          {cct?.tipoAliquota || vigenciaCct || cct?.creditoPara || atualizadoEm ? (
+            <details className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+              <summary className="cursor-pointer font-semibold">Dados técnicos do enquadramento</summary>
+              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-3">
+                {cct?.tipoAliquota ? <Campo rotulo="Tipo alíquota" valor={cct.tipoAliquota} /> : null}
+                {vigenciaCct ? <Campo rotulo="Vigência cClassTrib" valor={vigenciaCct} mono /> : null}
+                {cct?.creditoPara ? <Campo largo rotulo="Crédito para" valor={cct.creditoPara} /> : null}
+                {atualizadoEm ? <Campo rotulo="Atualizado em" valor={atualizadoEm} mono /> : null}
+              </div>
+            </details>
           ) : null}
         </Secao>
 
@@ -405,20 +522,16 @@ export function ModalDetalheFiscal({
             <ChipCondicao rotulo="Mono diferimento" valor={cct?.indMonoDif} />
             <ChipCondicao rotulo="Crédito presumido" valor={ref?.creditoPresumido ?? (cct?.indCredPres === 1 ? 1 : 0)} />
             <ChipCondicao rotulo="Diferimento" valor={ref?.diferimento ?? cst?.indDiferimento} />
-            <ChipCondicao rotulo="Trib. regular" valor={cct?.indTribRegular} />
-            <ChipCondicao rotulo="Transf. crédito" valor={cst?.indTransferenciaCredito} />
-            <ChipCondicao rotulo="IBS/CBS" valor={cst?.indIBSCBS} />
-            <ChipCondicao rotulo="IBS/CBS mono" valor={cst?.indIBSCBSMono} />
           </div>
         </Secao>
 
-        <DocsHabilitados docs={r.documentosHabilitados ?? cl.referencia?.documentos} />
+        <DocsHabilitados docs={r.documentosHabilitados ?? visivel.referencia?.documentos} />
         <SelosPorSistema bloqueios={bloqueios} />
         <SecaoInformacoesAdicionais
-          ncm={cl.codigo}
+          ncm={visivel.codigo}
           temCredito={
-            cl.referencia?.creditoPresumido === true ||
-            cl.referencia?.creditoPresumido === 'Sim' ||
+            visivel.referencia?.creditoPresumido === true ||
+            visivel.referencia?.creditoPresumido === 'Sim' ||
             cct?.indCredPres === 1
           }
         />

@@ -77,7 +77,7 @@ export function ConsultaServicos() {
   const abrirCalc = useUi((s) => s.abrirCalc)
   const [paraSalvar, setParaSalvar] = useState<Classificacao | null>(null)
 
-  const intencao = useMemo(() => detectarIntencaoConsulta(entrada), [entrada])
+  const intencao = useMemo(() => detectarIntencaoConsulta(entrada, 'nbs'), [entrada])
   const mostrarExata = intencao.deveBuscarExato && norm(entrada).length !== 8
   const mostrarNome = intencao.deveBuscarNome
   const mostrarDescricao = intencao.deveBuscarDescricao || classificando || !!sugestao
@@ -324,8 +324,8 @@ export function ConsultaServicos() {
                       <CartaoEnxuto
                         cl={decisaoIa}
                         nomenclatura={null}
-                        onSalvar={() => setParaSalvar(decisaoIa)}
-                        onAddCalc={() => abrirCalc({ tipo: 'classificacao', classificacao: decisaoIa })}
+                        onSalvar={(cl) => setParaSalvar(cl)}
+                        onAddCalc={(cl) => abrirCalc({ tipo: 'classificacao', classificacao: cl })}
                       />
                       <div className="flex flex-wrap gap-2">
                         <Btn
@@ -382,8 +382,8 @@ export function ConsultaServicos() {
                         key={r.__uid}
                         cl={r.classificacao}
                         nomenclatura={null}
-                        onSalvar={() => setParaSalvar(r.classificacao)}
-                        onAddCalc={() => abrirCalc({ tipo: 'classificacao', classificacao: r.classificacao })}
+                        onSalvar={(cl) => setParaSalvar(cl)}
+                        onAddCalc={(cl) => abrirCalc({ tipo: 'classificacao', classificacao: cl })}
                       />
                     ))}
                   </div>

@@ -269,8 +269,8 @@ export function CartaoCnae({
             <CartaoEnxuto
               cl={decisao}
               nomenclatura={null}
-              onSalvar={() => onSalvar(decisao)}
-              onAddCalc={() => onAddCalc(decisao)}
+              onSalvar={(cl) => onSalvar(cl)}
+              onAddCalc={(cl) => onAddCalc(cl)}
             />
           </div>
           {atividade.motivoEstado ? (
@@ -307,6 +307,7 @@ export function CartaoCnae({
           <ModalNcmsAnalisados
             aberto={modal === 'ncms'}
             onFechar={() => setModal(null)}
+            titulo="NBSs analisados pela Aurum AI"
             itens={resultado.candidatos.slice(0, 8).map((c) => ({
               codigo: c.codigo,
               titulo: fmtNbs(c.codigo),
@@ -415,7 +416,7 @@ export function BlocoFiscalNbs({ cl }: { cl: Classificacao }): ReactElement {
   return (
     <div className="space-y-2">
       <FaixaTributaria redIBS={redIBS} redCBS={redCBS} anexo={r.anexo} baseLegal={cl.baseLegal} />
-      <PillAnexos ncm={cl.codigo} />
+      <PillAnexos codigo={cl.codigo} />
     </div>
   )
 }

@@ -58,9 +58,30 @@ describe('detector com 9 dígitos', () => {
     expect(i.rotulo).toBe('🔢 NBS exato')
   })
 
-  it('8 dígitos continua NCM exato (sem regressão)', () => {
+  it('8 dígitos continua NCM exato (sem regressão no domínio padrão)', () => {
     const i = detectarIntencaoConsulta('02011000')
     expect(i.rotulo).toBe('🔢 NCM exato')
+    expect(i.deveClassificarExato).toBe(true)
+  })
+
+  it('domínio nbs: 8 dígitos NÃO é exato nem ganha selo de NCM', () => {
+    const i = detectarIntencaoConsulta('01053000', 'nbs')
+    expect(i.tipo).toBe('numerica')
+    expect(i.deveBuscarExato).toBe(true)
+    expect(i.deveClassificarExato).toBe(false)
+    expect(i.rotulo).toBe('⌨️ NBS tem 9 dígitos')
+    expect(i.rotulo).not.toContain('NCM')
+  })
+
+  it('domínio nbs: 9 dígitos continua NBS exato e classifica', () => {
+    const i = detectarIntencaoConsulta('122011100', 'nbs')
+    expect(i.deveClassificarExato).toBe(true)
+    expect(i.rotulo).toBe('🔢 NBS exato')
+  })
+
+  it('domínio nbs: texto misto com 8 dígitos não classifica exato', () => {
+    const i = detectarIntencaoConsulta('aula 01053000', 'nbs')
+    expect(i.deveClassificarExato).toBe(false)
   })
 })
 

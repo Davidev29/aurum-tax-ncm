@@ -443,6 +443,28 @@ export interface ReferenciaTributaria {
 }
 
 /**
+ * Herança por família: quando não há vínculo exato de 8 dígitos, o motor
+ * pode herdar o enquadramento dos irmãos (mesma subposição/posição/capítulo)
+ * — ver `regras-hierarquicas.ts`. `null` = classificação exata ou regra geral.
+ */
+export interface HerancaFamilia {
+  /** Nível que originou a herança. */
+  nivel: 'subposicao' | 'posicao' | 'capitulo'
+  /** Prefixo de origem (`071333`, `0713`, `07`). */
+  prefixo: string
+  /** Irmãos vinculados unânimes que lastreiam a herança. */
+  irmaosVinculados: number
+  /** NCMs vigentes no prefixo (denominador da cobertura). */
+  vigentesNoPrefixo: number
+  /** Origem legível (trilha/auditoria). */
+  origem: 'familia-SH6' | 'familia-SH4' | 'familia-capitulo' | 'capitulo-curado'
+  /** Confiança da herança (`alta` = cobertura total; `media` = parcial). */
+  confianca: 'alta' | 'media'
+  /** `true` quando exige confirmação do usuário antes de operar. */
+  aConfirmar: boolean
+}
+
+/**
  * Classificação resolvida — unifica o vínculo importado e a regra geral.
  * `regraGeral === true` apenas quando produzida pelo fallback (SPEC R2.6).
  * `manual !== null` indica reclassificação feita pelo usuário (isenção do sistema).
@@ -462,6 +484,12 @@ export interface Classificacao {
   resumo: ResumoClassificacao
   regraGeral: boolean
   manual?: ReclassificacaoManual | null
+  /**
+   * Herança por família (NCM sem vínculo exato, enquadramento herdado dos
+   * irmãos da mesma subposição/posição/capítulo). Ausente = exata/manual/
+   * regra geral pura.
+   */
+  heranca?: HerancaFamilia | null
   /**
    * Revogação que rebaixou este item para regra geral (anexo/cct revogado).
    * Reduções do vínculo original NÃO valem — ver `revogacao.ts`.

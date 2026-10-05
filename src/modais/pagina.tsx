@@ -7,11 +7,13 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import type { Classificacao } from '@/domain/entities'
-import { calcularTributos } from '@/domain/services/calculo'
+import { calcularTributos, anexoOficial, expandirOpcoesComDiferimento } from '@/domain/services/calculo'
+import { rotuloAnexoOficial } from '@/domain/constants/tributarios'
 import { resolverClassificacoes } from '@/infrastructure/base/classificacao-repo'
 import {
   fmtCarga,
   fmtMoeda,
+  fmtNbs,
   fmtNcm,
   fmtNum,
   fmtPct,
@@ -27,8 +29,18 @@ import { useSessao } from '@/store/sessao'
 import { confirmar as confirmarDialogo } from '@/store/dialogo'
 import { toast, useUi, type FonteCalc } from '@/store/ui'
 import type { PrefillSalvar } from '@/store/consulta'
-import { Btn, Campo, Modal, Pill, Texto, TituloSecao } from '@/ui/kit'
+import { Btn, Campo, Modal, Pill, Texto, TituloSecao, AnexoBadge } from '@/ui/kit'
+import { SeletorTributacao, useOpcaoTributacao } from '@/ui/diferimento-opcoes'
 import { SelectAux } from '@/ui/opcoes'
+
+/** Rótulo + formatação do código conforme o tipo (NCM 8 dígitos × NBS 9 dígitos). */
+function rotuloCodigo(codigo: unknown): 'NBS' | 'NCM' {
+  return norm(codigo).length === 9 ? 'NBS' : 'NCM'
+}
+
+function fmtCodigo(codigo: unknown): string {
+  return norm(codigo).length === 9 ? fmtNbs(codigo) : fmtNcm(codigo)
+}
 
 /* ------------------------------------------------------- salvar classe ---- */
 
@@ -168,7 +180,7 @@ export function ModalSalvarClass({
             {cl.manual ? <Pill cor="amber">✋ Manual · usuário</Pill> : null}
           </div>
           <div className="font-mono text-xl font-black text-brand-700 dark:text-aurum-200">
-            {cl.codigoFormatado || fmtNcm(cl.codigo)}
+            {cl.codigoFormatado || fmtCodigo(cl.codigo)}
           </div>
           <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{cl.descricao || '—'}</div>
           <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -295,6 +307,9 @@ export function ModalCalcCustom({
   // só a última pode escrever no estado (reatividade sem "piscar" opção velha).
   const seqBusca = useRef(0)
   const ultimoCarregado = useRef('')
+  // Anexo IX condicional: cada enquadramento ganha a 2ª opção de tributação
+  // (diferimento na operação, alíquota 0% — CST 515) logo após a normal.
+  const opcoesExibidas = expandirOpcoesComDiferimento(opcoes)
 
   const carregar = async (texto: string) => {
     const digits = norm(texto)
@@ -437,13 +452,15 @@ export function ModalCalcCustom({
                 <div className="mb-2 text-[11px] text-slate-500">{descricaoNcm}</div>
               ) : null}
               <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
-                {opcoes.map((cl, i) => {
+                {opcoesExibidas.map((cl, i) => {
                   const sel = escolhida === cl
                   const rr = cl.resumo
                   const redIBS = rr.percentualReducaoIBS ?? 0
                   const redCBS = rr.percentualReducaoCBS ?? 0
                   const aliqIBS = rateIBS * (1 - redIBS / 100)
                   const aliqCBS = rateCBS * (1 - redCBS / 100)
+                  const ehDiferida = cl.id.endsWith('__diferimento')
+                  const anexo = anexoOficial(cl)
                   return (
                     <button
                       key={cl.id}
@@ -463,6 +480,19 @@ export function ModalCalcCustom({
                         <span className="font-mono text-xs font-black">
                           CST {cl.cst} · {cl.cClassTrib}
                         </span>
+                        {anexo ? (
+                          <span title={rotuloAnexoOficial(anexo)}>
+                            <AnexoBadge anexo={anexo} />
+                          </span>
+                        ) : null}
+                        {ehDiferida ? (
+                          <span
+                            className="pill ml-auto bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200"
+                            title="Diferimento na operação (art. 138, §2º) — redução de 100%, alíquota 0% de IBS/CBS"
+                          >
+                            ⏳ Diferimento — 0%
+                          </span>
+                        ) : null}
                         <span
                           className="pill ml-auto bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
                           title={`Redução de alíquota IBS/CBS aplicada sobre a referência (${fmtPct(rateIBS)} / ${fmtPct(rateCBS)})`}
@@ -474,7 +504,7 @@ export function ModalCalcCustom({
                         {rr.descricaoCClassTrib || cl.baseLegal || '—'}
                       </div>
                       <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-dashed border-slate-200 pt-1.5 text-[10px] text-slate-400 dark:border-slate-700">
-                        <span className="font-bold uppercase tracking-wide">Opção {i + 1}</span>
+                        <span className="font-bold uppercase tracking-wide">Opção {i + 1}{ehDiferida ? ' · ⏳ diferimento' : ''}{anexo ? ` · ${rotuloAnexoOficial(anexo)}` : ''}</span>
                         <span className="font-mono font-bold text-brand-700 dark:text-aurum-200">
                           Efetiva {fmtCarga(aliqIBS)} / {fmtCarga(aliqCBS)}
                         </span>
@@ -633,6 +663,7 @@ interface DadosCalc {
   redIBS: number
   redCBS: number
   regraGeral: boolean
+  anexo: string | null
 }
 
 function dadosCalc(fonte: FonteCalc): DadosCalc {
@@ -649,6 +680,7 @@ function dadosCalc(fonte: FonteCalc): DadosCalc {
       redIBS: Number(r.percentualReducaoIBS ?? cct?.pRedIBS ?? 0),
       redCBS: Number(r.percentualReducaoCBS ?? cct?.pRedCBS ?? 0),
       regraGeral: cl.regraGeral,
+      anexo: anexoOficial(cl),
     }
   }
   const p = fonte.produto
@@ -661,6 +693,7 @@ function dadosCalc(fonte: FonteCalc): DadosCalc {
     redIBS: p.redIBS,
     redCBS: p.redCBS,
     regraGeral: p.regraGeral,
+    anexo: (p as { anexo?: string | null }).anexo ?? null,
   }
 }
 
@@ -701,18 +734,29 @@ export function ModalCalculadora() {
 
   const fechar = () => useUi.getState().abrirCalc(null)
   const visivel = fonte ?? ultima
-  const dados = visivel ? dadosCalc(visivel) : null
+  // Anexo IX condicional: o modal oferece a 2ª opção (diferimento, 0%) e
+  // adiciona à calculadora a classificação ATIVA (a escolhida pelo usuário).
+  const clFonte = visivel?.tipo === 'classificacao' ? visivel.classificacao : null
+  const { opcao, setOpcao, ativa } = useOpcaoTributacao(clFonte)
+  const fonteEfetiva: FonteCalc | null =
+    ativa && visivel?.tipo === 'classificacao' ? { tipo: 'classificacao', classificacao: ativa } : visivel
+  const dados = fonteEfetiva ? dadosCalc(fonteEfetiva) : null
 
   const adicionar = () => {
-    if (!visivel || !dados) return
+    if (!fonteEfetiva || !dados) return
     const quantidade = parseQtd(qtd) || 1
     const valorUnitario = parseMoeda(valor)
-    if (visivel.tipo === 'produto') {
-      adicionarProduto(visivel.produto, { quantidade, valorUnitario })
-      toast(`"${visivel.produto.nome}" adicionado à calculadora.`, 'ok')
+    if (fonteEfetiva.tipo === 'produto') {
+      adicionarProduto(fonteEfetiva.produto, { quantidade, valorUnitario })
+      toast(`"${fonteEfetiva.produto.nome}" adicionado à calculadora.`, 'ok')
     } else {
-      adicionarClassificacao(visivel.classificacao, { quantidade, valorUnitario })
-      toast('Item adicionado à calculadora.', 'ok')
+      adicionarClassificacao(fonteEfetiva.classificacao, { quantidade, valorUnitario })
+      toast(
+        opcao === 'diferimento'
+          ? 'Item adicionado à calculadora com diferimento (alíquota 0%).'
+          : 'Item adicionado à calculadora.',
+        'ok',
+      )
     }
     // Gestão da interação: confirmar leva à Calculadora para conferência
     // imediata do item (antes o modal só fechava e parecia que nada aconteceu).
@@ -726,7 +770,7 @@ export function ModalCalculadora() {
       titulo="🧮 Adicionar à calculadora"
       subtitulo={
         dados
-          ? `NCM ${fmtNcm(dados.ncm)} · confirme para adicionar e ver na Calculadora`
+          ? `${rotuloCodigo(dados.ncm)} ${fmtCodigo(dados.ncm)} · confirme para adicionar e ver na Calculadora`
           : 'Defina quantidade e valor antes de confirmar'
       }
       largura="max-w-2xl"
@@ -749,15 +793,22 @@ export function ModalCalculadora() {
     >
       {dados ? (
         <div className="space-y-4">
+          {clFonte ? <SeletorTributacao cl={clFonte} opcao={opcao} onChange={setOpcao} /> : null}
           <div className="rounded-xl border border-[var(--line)] bg-slate-50 p-4 dark:bg-slate-950/40">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <Pill cor="brand">
                 {visivel?.tipo === 'produto' ? 'Produto cadastrado' : 'Classificação da Reforma'}
               </Pill>
+              {dados.anexo ? (
+                <span title={rotuloAnexoOficial(dados.anexo)}>
+                  <AnexoBadge anexo={dados.anexo} />
+                </span>
+              ) : null}
               {dados.regraGeral ? <Pill cor="amber">⚠ Regra geral</Pill> : null}
+              {opcao === 'diferimento' ? <Pill cor="brand">⏳ Com diferimento</Pill> : null}
             </div>
             <div className="font-mono text-xl font-black text-brand-700 dark:text-aurum-200">
-              {fmtNcm(dados.ncm)}
+              {fmtCodigo(dados.ncm)}
             </div>
             <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">{dados.nome}</div>
             <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -775,6 +826,7 @@ export function ModalCalculadora() {
             </div>
             <div className="mt-2 text-[11px] text-slate-600 dark:text-slate-400">
               <strong>Classificação:</strong> {dados.descClass}
+              {dados.anexo ? ` · ${rotuloAnexoOficial(dados.anexo)}` : ''}
             </div>
           </div>
 

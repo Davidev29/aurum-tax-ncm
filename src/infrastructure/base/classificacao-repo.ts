@@ -1,12 +1,23 @@
 import { REGRA_GERAL } from '@/domain/constants'
-import type { Classificacao, NomenclaturaNcm, VinculoNbs, VinculoNcm } from '@/domain/entities'
+import type { Classificacao, HerancaFamilia, NomenclaturaNcm, VinculoNbs, VinculoNcm } from '@/domain/entities'
 import {
   montarClassificacao,
+  montarClassificacaoHerdada,
   montarRegraGeral,
   isNcmExtinto,
   type ContextoClassificacao,
 } from '@/domain/services/classificacao'
 import { revogacaoDe, type Revogacao } from '@/domain/services/revogacao'
+import {
+  decidirHeranca,
+  ehCondicional,
+  condicaoDoCct,
+  origemDoNivel,
+  regraDoCapitulo,
+  tamanhoDoNivel,
+  type NivelHeranca,
+} from '@/domain/services/regras-hierarquicas'
+import { prefixoDeEntradaTruncada, type NivelNcm } from '@/domain/services/hierarquia-fiscal'
 import {
   comporCaminho,
   normalizarBusca,
@@ -268,14 +279,18 @@ export async function classificacaoRegraGeral(
  * Prioridade (motor único — vale igual em todas as telas):
  * 1. reclassificação manual do usuário (quando existe, puxa a que ele criou,
  *    acima da base oficial; responsabilidade dele, sinalizada na UI);
- * 2. vínculos oficiais da base;
- * 3. regra geral (fallback universal).
+ * 2. vínculos oficiais da base (exatos, 8 dígitos);
+ * 3. herança por família (subposição SH6 → posição SH4 → capítulo curado):
+ *    NCM vigente sem vínculo exato herda o enquadramento unânime dos irmãos;
+ * 4. regra geral (fallback universal).
  *
  * Rebaixamentos (nunca apresentam redução como vigente):
  * - NCM extinto (`dataFim` na nomenclatura) COM vínculo: o vínculo é
  *   histórico — lista vira regra geral com `extinto: true`.
  * - Vínculo com anexo/cct revogado: filtrado; se nada restar, regra geral
  *   com `revogado` (ato + motivo). A manual do usuário prevalece sobre ambos.
+ * - Herança condicional: cct da família que exige destinação/adquirente
+ *   nunca herda sozinho — vira hipótese em `hipoteseFamilia`.
  */
 export async function resolverClassificacoes(
   codigo: unknown,
@@ -287,13 +302,17 @@ export async function resolverClassificacoes(
   manual: boolean
   extinto: boolean
   revogado: Revogacao | null
+  /** Presente quando a lista veio de herança por família. */
+  heranca?: HerancaFamilia | null
+  /** Hipótese qualificada quando há lastro parcial (sem herança automática). */
+  hipoteseFamilia?: HipoteseFamilia | null
 }> {
   const c = norm(codigo)
   const nomenclatura = await buscarNomenclatura(c)
   const vinculos = c.length === 8 ? await db.ncm.where('codigo').equals(c).toArray() : []
   const extinto = isNcmExtinto(nomenclatura) && c.length === 8
   if (c.length !== 8) {
-    return { vinculos: [], lista: [], nomenclatura, regraGeral: false, manual: false, extinto: false, revogado: null }
+    return { vinculos: [], lista: [], nomenclatura, regraGeral: false, manual: false, extinto: false, revogado: null, heranca: null, hipoteseFamilia: null }
   }
   // Manual do usuário vale acima de tudo: existindo, todas as telas puxam a
   // que ele criou (responsabilidade dele, sinalizada na UI) — inclusive
@@ -301,12 +320,12 @@ export async function resolverClassificacoes(
   const manualReg = await buscarReclassificacaoManual(c)
   if (manualReg) {
     const cl = await classificacaoManual(manualReg, nomenclatura)
-    return { vinculos, lista: [cl], nomenclatura, regraGeral: false, manual: true, extinto, revogado: null }
+    return { vinculos, lista: [cl], nomenclatura, regraGeral: false, manual: true, extinto, revogado: null, heranca: null, hipoteseFamilia: null }
   }
   // NCM extinto: o vínculo virou histórico, sem valor como tributação vigente.
   if (extinto) {
     const rg = await classificacaoRegraGeral(c, nomenclatura)
-    return { vinculos, lista: [rg], nomenclatura, regraGeral: true, manual: false, extinto, revogado: null }
+    return { vinculos, lista: [rg], nomenclatura, regraGeral: true, manual: false, extinto, revogado: null, heranca: null, hipoteseFamilia: null }
   }
   // Vínculos vivos: filtra anexo/cct revogado (curadoria + achados do CFF).
   let revogado: Revogacao | null = null
@@ -327,15 +346,196 @@ export async function resolverClassificacoes(
   // telas, independente da ordem de importação da base.
   vivos.sort((a, b) => a.cst.localeCompare(b.cst) || a.cClassTrib.localeCompare(b.cClassTrib))
   if (!vivos.length) {
+    // Sem vínculo exato: tenta herança por família antes da regra geral.
+    // (Só 15,9% dos NCMs vigentes têm vínculo exato — sem este passo,
+    // NCMs novos da mesma família perderiam o benefício do anexo.)
+    const familia = await resolverPorFamilia(c, nomenclatura)
+    if (familia?.classificacao) {
+      return { vinculos, lista: [familia.classificacao], nomenclatura, regraGeral: false, manual: false, extinto, revogado, heranca: familia.classificacao.heranca ?? null, hipoteseFamilia: null }
+    }
     const rg = await classificacaoRegraGeral(c, nomenclatura)
     if (revogado) rg.revogado = revogado
-    return { vinculos, lista: [rg], nomenclatura, regraGeral: true, manual: false, extinto, revogado }
+    return { vinculos, lista: [rg], nomenclatura, regraGeral: true, manual: false, extinto, revogado, heranca: null, hipoteseFamilia: familia?.hipotese ?? null }
   }
   const ctxs = await Promise.all(vivos.map(contextoDe))
   const lista = vivos.map((v, i) =>
     montarClassificacao(v, nomenclatura ? { ...ctxs[i], nomenclatura } : ctxs[i]),
   )
-  return { vinculos, lista, nomenclatura, regraGeral: false, manual: false, extinto: false, revogado: null }
+  return { vinculos, lista, nomenclatura, regraGeral: false, manual: false, extinto: false, revogado: null, heranca: null, hipoteseFamilia: null }
+}
+
+/* -------------------------------- herança por família (LC 214/2025) ------- */
+
+/** Hipótese qualificada de família (lastro parcial — a confirmar). */
+export interface HipoteseFamilia {
+  nivel: NivelHeranca
+  prefixo: string
+  cst: string
+  cClassTrib: string
+  anexo: string | null
+  motivo: string
+  /** Condição a confirmar quando o cct é condicional. */
+  condicao?: string | null
+}
+
+/** Vínculos da Reforma sob um prefixo (irmãos da família). */
+export async function buscarVinculosPorPrefixo(prefixo: unknown): Promise<VinculoNcm[]> {
+  const p = norm(prefixo)
+  if (p.length < 2 || p.length > 7) return []
+  try {
+    return await db.ncm.where('codigo').between(p, `${p}\uffff`, true, true).toArray()
+  } catch {
+    return []
+  }
+}
+
+/** NCMs vigentes (8 dígitos, sem `dataFim`) sob um prefixo. */
+export async function vigentesNoPrefixo(prefixo: unknown): Promise<NomenclaturaNcm[]> {
+  const p = norm(prefixo)
+  if (p.length < 2 || p.length > 7) return []
+  try {
+    const achados = await db.ncmNomenclatura.where('codigo').between(p, `${p}\uffff`, true, true).toArray()
+    return achados.filter((n) => n.codigo.length === 8 && !n.dataFim)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Herança por família para um NCM de 8 dígitos sem vínculo exato.
+ *
+ * Tenta, nesta ordem: subposição SH6 → posição SH4 → capítulo (só nos 7
+ * capítulos curados de `REGRAS_CAPITULO`). Cada nível exige unanimidade dos
+ * irmãos vinculados + limiares de `decidirHeranca` (cobertura dos vigentes).
+ * Vínculo-modelo revogado nunca é herdado. Retorna a classificação herdada
+ * ou, com lastro parcial, a hipótese a confirmar — ou `null` (regra geral).
+ */
+export async function resolverPorFamilia(
+  codigo: unknown,
+  nomenclatura?: NomenclaturaNcm | null,
+): Promise<{ classificacao: Classificacao; hipotese: null } | { classificacao: null; hipotese: HipoteseFamilia } | null> {
+  const c = norm(codigo)
+  if (c.length !== 8) return null
+  const nomen = nomenclatura === undefined ? await buscarNomenclatura(c) : nomenclatura
+  const dinamicas = await obterRevogacoesCff().catch(() => [])
+
+  const niveis: NivelHeranca[] = ['subposicao', 'posicao', 'capitulo']
+  let primeiraHipotese: HipoteseFamilia | null = null
+
+  for (const nivel of niveis) {
+    const tam = tamanhoDoNivel(nivel)
+    // Capítulo só vale nos 7 curados (100% mapeados e unânimes) — nos demais,
+    // a herança por capítulo seria ampla demais (ex.: cap. 29 com 3% de
+    // cobertura herdaria benefício para 1.590 NCMs sem lastro).
+    if (nivel === 'capitulo' && !regraDoCapitulo(c.slice(0, 2))) continue
+    const prefixo = c.slice(0, tam)
+    const [irmaos, vigentes] = await Promise.all([
+      buscarVinculosPorPrefixo(prefixo),
+      vigentesNoPrefixo(prefixo),
+    ])
+    // Exclui o próprio consultado (se um dia ganhar vínculo, o exato vence).
+    const outros = irmaos.filter((v) => v.codigo !== c)
+    if (!outros.length) continue
+    const chaves = new Set(outros.map((v) => `${v.cst}|${v.cClassTrib}`))
+    if (chaves.size !== 1) continue // família divergente: sem herança
+    const [chave] = [...chaves]
+    const [, cct] = String(chave).split('|')
+    const modelo = outros.sort((a, b) => a.codigo.localeCompare(b.codigo))[0]
+    if (!modelo) continue
+    // Modelo revogado não é herdado (redução sem vigência).
+    const ctxModelo = await contextoDe(modelo)
+    if (revogacaoDe(modelo.cClassTrib, ctxModelo.referencia?.anexo, dinamicas)) continue
+    const totalVigentes = vigentes.length > 0 ? vigentes.length : outros.length + 1
+    const decisao = decidirHeranca({
+      nivel,
+      irmaosVinculados: outros.length,
+      vigentesNoPrefixo: totalVigentes,
+      unanime: true,
+      condicional: ehCondicional(cct),
+    })
+    if (decisao.tipo === 'herdar') {
+      const heranca: HerancaFamilia = {
+        nivel,
+        prefixo,
+        irmaosVinculados: outros.length,
+        vigentesNoPrefixo: totalVigentes,
+        origem: origemDoNivel(nivel, nivel === 'capitulo'),
+        confianca: decisao.confianca,
+        aConfirmar: decisao.confianca !== 'alta',
+      }
+      const ctx = nomen ? { ...ctxModelo, nomenclatura: nomen } : ctxModelo
+      const classificacao = montarClassificacaoHerdada(c, modelo, ctx, heranca)
+      return { classificacao, hipotese: null }
+    }
+    if (decisao.tipo === 'hipotese' && !primeiraHipotese) {
+      primeiraHipotese = {
+        nivel,
+        prefixo,
+        cst: modelo.cst,
+        cClassTrib: modelo.cClassTrib,
+        anexo: ctxModelo.referencia?.anexo ?? null,
+        motivo: decisao.motivo,
+        condicao: condicaoDoCct(modelo.cClassTrib),
+      }
+    }
+  }
+  if (primeiraHipotese) return { classificacao: null, hipotese: primeiraHipotese }
+  return null
+}
+
+/**
+ * Classificação por prefixo truncado (2–7 dígitos): a Reforma às vezes
+ * entrega subposição abreviada (4–5 dígitos). O motor classifica pela
+ * família — lista os vínculos dos filhos + a hipótese agregada quando
+ * unânime — em vez de devolver lista vazia.
+ */
+export async function resolverPorPrefixo(
+  entrada: unknown,
+): Promise<{
+  nivel: NivelNcm
+  prefixo: string
+  totalFilhos: number
+  totalVigentes: number
+  lista: Classificacao[]
+  unanime: boolean
+  cst: string | null
+  cClassTrib: string | null
+} | null> {
+  const conv = prefixoDeEntradaTruncada(entrada)
+  if (!conv) return null
+  if (conv.nivel === 'exato') {
+    const r = await resolverClassificacoes(conv.prefixo)
+    return {
+      nivel: conv.nivel,
+      prefixo: conv.prefixo,
+      totalFilhos: r.vinculos.length,
+      totalVigentes: r.nomenclatura ? 1 : 0,
+      lista: r.lista,
+      unanime: r.vinculos.length <= 1,
+      cst: r.lista[0]?.cst ?? null,
+      cClassTrib: r.lista[0]?.cClassTrib ?? null,
+    }
+  }
+  const [irmaos, vigentes] = await Promise.all([
+    buscarVinculosPorPrefixo(conv.prefixo),
+    vigentesNoPrefixo(conv.prefixo),
+  ])
+  const chaves = new Set(irmaos.map((v) => `${v.cst}|${v.cClassTrib}`))
+  const unanime = irmaos.length > 0 && chaves.size === 1
+  const ctxs = await Promise.all(irmaos.slice(0, 20).map(contextoDe))
+  const lista = irmaos.slice(0, 20).map((v, i) => montarClassificacao(v, ctxs[i]))
+  const [chave] = [...chaves]
+  const [cst, cct] = chave ? String(chave).split('|') : [null, null]
+  return {
+    nivel: conv.nivel,
+    prefixo: conv.prefixo,
+    totalFilhos: irmaos.length,
+    totalVigentes: vigentes.length,
+    lista,
+    unanime,
+    cst,
+    cClassTrib: cct ?? null,
+  }
 }
 
 /* ------------------------------------------------- NBS · serviços (Phase 7) -- */

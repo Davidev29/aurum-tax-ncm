@@ -205,7 +205,8 @@ export const useServicos = create<ServicosState>((set, get) => ({
 
   consultarUnificada: async (entrada) => {
     const cru = (entrada ?? get().entrada).trim()
-    const intencao = detectarIntencaoConsulta(cru)
+    // Domínio NBS: 8 dígitos nunca classificam nem ganham selo de NCM.
+    const intencao = detectarIntencaoConsulta(cru, 'nbs')
     set({ entrada: cru, codigo: intencao.digitos ? fmtNbs(intencao.digitos) || cru : cru })
     if (intencao.tipo === 'vazia') {
       seqSugestoes++
@@ -241,7 +242,9 @@ export const useServicos = create<ServicosState>((set, get) => ({
       if (intencao.deveClassificarExato && intencao.digitos.length === 9) {
         tarefas.push(get().consultar(intencao.digitos))
       } else if (!intencao.deveClassificarExato || intencao.digitos.length !== 9) {
-        if (intencao.digitos.length !== 8) {
+        // NBS só tem exato com 9 dígitos: qualquer outro tamanho limpa o
+        // painel exato (8 dígitos é NCM — outra tela, não ancora aqui).
+        if (intencao.digitos.length !== 9) {
           set({ resultados: [], regraGeral: false, avisoInvalido: false })
         }
       }

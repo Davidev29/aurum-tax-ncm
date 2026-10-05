@@ -507,7 +507,7 @@ export function Consulta() {
                   bloqueios={bloqueios}
                   destaqueIA={origemIAOficial}
                   onSalvar={setParaSalvar}
-                  onAddCalc={abrirCalc}
+                  onAddCalc={(cl) => abrirCalc({ tipo: 'classificacao', classificacao: cl })}
                   onReclassificar={() => setReclassificando(true)}
                 />
               )}
@@ -630,7 +630,7 @@ function PainelExato({
   /** Borda animada ouro: este painel foi ancorado a partir da sugestão da IA. */
   destaqueIA?: boolean
   onSalvar: (c: Classificacao) => void
-  onAddCalc: ReturnType<typeof useUi.getState>['abrirCalc']
+  onAddCalc: (cl: Classificacao) => void
   onReclassificar: () => void
 }) {
   if (avisoInvalido && !resultados.length) {
@@ -685,8 +685,8 @@ function PainelExato({
             nomenclatura={nomenclatura}
             bloqueios={bloqueios[resultados[0].classificacao.cClassTrib] ?? null}
             destaqueIA={destaqueIA}
-            onSalvar={() => onSalvar(resultados[0].classificacao)}
-            onAddCalc={() => onAddCalc({ tipo: 'classificacao', classificacao: resultados[0].classificacao })}
+            onSalvar={(cl) => onSalvar(cl)}
+            onAddCalc={onAddCalc}
             onReclassificar={onReclassificar}
           />
         ) : (
@@ -697,8 +697,8 @@ function PainelExato({
               nomenclatura={nomenclatura}
               bloqueios={bloqueios[r.classificacao.cClassTrib] ?? null}
               destaqueIA={destaqueIA}
-              onSalvar={() => onSalvar(r.classificacao)}
-              onAddCalc={() => onAddCalc({ tipo: 'classificacao', classificacao: r.classificacao })}
+              onSalvar={(cl) => onSalvar(cl)}
+              onAddCalc={onAddCalc}
               onReclassificar={r.manual ? onReclassificar : undefined}
             />
           ))
@@ -875,7 +875,12 @@ function ConteudoSugestao({
         </span>
         {sugestao.excecao_enquadravel && sugestao.tipo_excecao ? (
           <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-black text-violet-800 dark:bg-violet-950/60 dark:text-violet-200" title={sugestao.tipo_excecao}>
-            ⚡ benefício
+            ⚡ benefício{sugestao.anexo ? ` · Anexo ${sugestao.anexo}` : ''}
+          </span>
+        ) : null}
+        {sugestao.anexo && !(sugestao.excecao_enquadravel && sugestao.tipo_excecao) ? (
+          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300" title={`Anexo oficial ${sugestao.anexo} — ver classificação oficial`}>
+            Anexo {sugestao.anexo}
           </span>
         ) : null}
       </div>
@@ -1005,8 +1010,8 @@ function RespostaIaValidada({
             cl={decisao}
             nomenclatura={nomenclaturaIa}
             bloqueios={bloqueios[decisao.cClassTrib] ?? null}
-            onSalvar={() => onSalvar(decisao)}
-            onAddCalc={() => onAddCalc({ tipo: 'classificacao', classificacao: decisao })}
+            onSalvar={(cl) => onSalvar(cl)}
+            onAddCalc={(cl) => onAddCalc({ tipo: 'classificacao', classificacao: cl })}
           />
 
           <div className="flex flex-wrap gap-2">

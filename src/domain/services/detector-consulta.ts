@@ -1,10 +1,11 @@
 /**
- * Detector de intenção da busca unificada (Consulta NCM).
+ * Detector de intenção da busca unificada (Consulta NCM / Serviços NBS).
  *
  * Funções puras — sem IndexedDB, sem estado. O orquestrador (store/página)
  * usa a intenção para decidir quais workers disparar em paralelo:
  * - dígitos (≥2) → seção **Exata · via número** (`sugerirNomenclatura` +
- *   `resolverClassificacoes` quando 8 dígitos);
+ *   `resolverClassificacoes` quando 8 dígitos; no domínio `nbs`, `sugerirNbs` +
+ *   `resolverClassificacoesNbs` somente com 9 dígitos);
  * - texto com letras (≥2 chars) → seção **Por nome** (`buscarNomenclaturaPorTexto`);
  * - texto expressivo (frase) → seção **Predição assistiva** (`classificarPorDescricao`).
  *
@@ -15,6 +16,13 @@ import { norm } from './format'
 import { pareceCodigoNcm, tokensRelevantes } from './busca-texto'
 
 export type TipoEntradaConsulta = 'vazia' | 'numerica' | 'textual' | 'mista'
+
+/**
+ * Domínio da tela que consome a intenção: a Consulta NCM classifica 8
+ * dígitos, a Consulta Serviços (NBS) só classifica 9 — 8 dígitos ali é
+ * NCM, não NBS, e o selo precisa dizer isso (nunca "NCM exato" na tela NBS).
+ */
+export type DominioConsulta = 'ncm' | 'nbs'
 
 export interface IntencaoConsulta {
   tipo: TipoEntradaConsulta
@@ -51,12 +59,13 @@ export const LIMITES_ENTRADA_UNIFICADA = {
   descricaoCharsMinimos: 4,
 } as const
 
-export function detectarIntencaoConsulta(entrada: unknown): IntencaoConsulta {
+export function detectarIntencaoConsulta(entrada: unknown, dominio: DominioConsulta = 'ncm'): IntencaoConsulta {
   const cru = String(entrada ?? '')
   const texto = cru.trim()
   const digitos = norm(cru)
   const temLetras = /[A-Za-zÀ-ÖØ-öø-ÿ]/.test(cru)
   const soCodigo = pareceCodigoNcm(cru)
+  const ehNbs = dominio === 'nbs'
 
   if (!texto) {
     return {
@@ -77,7 +86,9 @@ export function detectarIntencaoConsulta(entrada: unknown): IntencaoConsulta {
   if (ehNumerica) {
     const completaNcm = digitos.length === 8
     const completaNbs = digitos.length === 9
-    const completa = completaNcm || completaNbs
+    // No domínio NBS só 9 dígitos classificam: 8 dígitos é NCM (outro
+    // imposto, outra tela) — o selo orienta em vez de afirmar "NCM exato".
+    const completa = ehNbs ? completaNbs : completaNcm || completaNbs
     return {
       tipo: 'numerica',
       digitos,
@@ -86,7 +97,13 @@ export function detectarIntencaoConsulta(entrada: unknown): IntencaoConsulta {
       deveClassificarExato: completa,
       deveBuscarNome: false,
       deveBuscarDescricao: false,
-      rotulo: completaNbs ? '🔢 NBS exato' : completaNcm ? '🔢 NCM exato' : '🔢 Buscando por número…',
+      rotulo: completaNbs
+        ? '🔢 NBS exato'
+        : completaNcm && !ehNbs
+          ? '🔢 NCM exato'
+          : ehNbs
+            ? '⌨️ NBS tem 9 dígitos'
+            : '🔢 Buscando por número…',
     }
   }
 
@@ -104,7 +121,8 @@ export function detectarIntencaoConsulta(entrada: unknown): IntencaoConsulta {
       digitos,
       temLetras: true,
       deveBuscarExato: true,
-      deveClassificarExato: digitos.length === 8 || digitos.length === 9,
+      // No domínio NBS, 8 dígitos no meio do texto também não classificam.
+      deveClassificarExato: ehNbs ? digitos.length === 9 : digitos.length === 8 || digitos.length === 9,
       deveBuscarNome,
       deveBuscarDescricao,
       rotulo: '🔀 Número + texto',
