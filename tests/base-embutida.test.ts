@@ -26,6 +26,7 @@ import {
   normalizarNbs,
   normalizarNomenclatura,
   normalizarReferencia,
+  unirVinculosNbs,
 } from '@/infrastructure/base/normalizacao'
 import { db } from '@/infrastructure/db/schema'
 
@@ -66,9 +67,10 @@ describe('normalização da base embutida', () => {
     expect(nbs).toHaveLength(arquivoReforma.meta.totalNbs)
 
     // Espelha `MANIFEST.json` — atualize junto com a base se ela for recompilada.
-    // NBS vem do arquivo vivo dedupicado (137 linhas → 112 vínculos únicos).
+    // NBS = arquivo vivo dedupicado (137 linhas → 112 únicos) + 10 NBS do
+    // Anexo IX (art. 138) resgatados do overflow de 9 dígitos da lista `NCM`.
     expect([referencia.length, cst.length, cstct.length, ncm.length, nbs.length, nomenclatura.length])
-      .toEqual([164, 17, 132, 2335, 112, 15156])
+      .toEqual([164, 17, 132, 2335, 122, 15156])
   })
 
   it('preserva descrições, documentos, alíquotas e atos', () => {
@@ -251,6 +253,34 @@ describe('importação em tempo de execução (JSON oficiais brutos)', () => {
     expect(normalizarNbs([{ codigo: '12345678', descricaoCompleta: '8 dígitos' }])).toEqual([])
     expect(normalizarCst([{}, { 'CST-IBS/CBS': '' }])).toEqual([])
   })
+
+  it('resgata NBS do overflow de 9 dígitos da lista NCM (Anexo IX, art. 138)', () => {
+    const overflow = [
+      {
+        codigo: '114052200',
+        cst: '200',
+        cClassTrib: '200038',
+        baseLegal: 'Fornecimento dos insumos agropecuários e aquícolas (Anexo IX)',
+        reducao: 0.6,
+        descricaoCompleta: 'Fornecimento dos insumos do Anexo IX da LC 214/2025.',
+        documentosFiscaisRelacionados: 'NFCE, NFE, NFSE',
+      },
+    ]
+    // O normalizador de NCM ignora (8 dígitos), o de NBS aproveita (9 dígitos).
+    expect(normalizarNcm(overflow)).toEqual([])
+    const resgatados = normalizarNbs(overflow)
+    expect(resgatados).toHaveLength(1)
+    expect(resgatados[0]).toMatchObject({ codigo: '114052200', cst: '200', cClassTrib: '200038' })
+
+    // A união elimina repetidos por codigo|cst|cClassTrib e reindexa os ids.
+    const base = normalizarNbs([
+      { codigo: '122011100', cst: '200', cClassTrib: '200028', baseLegal: 'Educação', descricaoCompleta: 'Educação.' },
+    ])
+    const unidos = unirVinculosNbs(base, [...base, ...resgatados])
+    expect(unidos).toHaveLength(2)
+    expect(unidos.map((v) => v.codigo)).toEqual(['122011100', '114052200'])
+    expect(new Set(unidos.map((v) => v.id)).size).toBe(2)
+  })
 })
 
 describe('detecção de formato', () => {
@@ -283,7 +313,7 @@ describe('semeação da base embutida', () => {
         cstClassTrib: 132,
         referencia: 164,
         nomenclatura: 15156,
-        nbs: 112,
+        nbs: 122,
         cnae: 1090,
         embutida: true,
       })
@@ -302,6 +332,13 @@ describe('semeação da base embutida', () => {
       expect((await db.cst.get('200'))?.descricao).not.toBe('')
       expect((await db.cstClassTrib.get('200|200003'))?.descricao).not.toBe('')
       expect((await db.ncmNomenclatura.get('01'))?.ato).not.toBeNull()
+
+      // Regressão: os 10 NBS do Anexo IX (art. 138) publicados dentro da
+      // lista `NCM` da fonte precisam estar na store `nbs` com descrição.
+      const resgatado = await db.nbs.where('codigo').equals('114052200').first()
+      expect(resgatado).toMatchObject({ cst: '200', cClassTrib: '200038' })
+      expect(resgatado?.descricao).toContain('Anexo IX')
+      expect(resgatado?.baseLegal).toContain('Anexo IX')
 
       const gravadas = await statusBase()
       expect(gravadas).toEqual(status)

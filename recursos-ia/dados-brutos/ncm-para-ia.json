@@ -1,8 +1,8 @@
 {
  "meta": {
-  "geradoEm": "2026-10-05T13:49:33.800Z",
+  "geradoEm": "2026-10-05T15:17:28.774Z",
   "fonte": "public/base (reforma.json + nomenclatura.json + classificacao-tributaria.json + MANIFEST.json)",
-  "manifestGeradoEm": "2026-10-05T13:49:33.315Z",
+  "manifestGeradoEm": "2026-10-05T15:09:35.919Z",
   "totalVinculos": 2335,
   "totalCodigosDistintos": 1675,
   "esperadoNcm": 2335,
@@ -13,7 +13,7 @@
    "28273998",
    "30024993"
   ],
-  "ignoradosNoveDigitosManifest": 10,
+  "ignoradosNoveDigitosManifest": 0,
   "excluidosNaoNcmNestaEtapa": 0,
   "filtro": "NCM-only: somente códigos de 8 dígitos; NBS excluído"
  },

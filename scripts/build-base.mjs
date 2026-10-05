@@ -256,8 +256,8 @@ export function normalizarNcm(bruto) {
     reducao: toNum(n.reducao),
     aliquotaIBS: toNum(n.aliquotaIBS),
     aliquotaCBS: toNum(n.aliquotaCBS),
-    documentos: String(n.documentosFiscaisRelacionados ?? '').trim(),
-    descricao: String(n.descricaoCompleta ?? '').trim(),
+    documentos: String(n.documentosFiscaisRelacionados ?? n.documentos ?? '').trim(),
+    descricao: String(n.descricaoCompleta ?? n.descricao ?? '').trim(),
   })).filter((n) => n.codigo.length === 8);
 }
 
@@ -266,7 +266,7 @@ const fmtNcm = (d) => (d.length === 8 ? `${d.slice(0,4)}.${d.slice(4,6)}.${d.sli
 
 export function normalizarNbs(bruto) {
   return (bruto ?? []).map((n, i) => ({
-    id: `${digits(n.codigo)}|${i}`,
+    id: `${digits(n.codigo)}|${padCct(n.cClassTrib) ?? ''}|${i}`,
     codigo: digits(n.codigo),
     cst: padCst(n.cst) ?? '',
     cClassTrib: padCct(n.cClassTrib) ?? '',
@@ -274,9 +274,41 @@ export function normalizarNbs(bruto) {
     reducao: toNum(n.reducao),
     aliquotaIBS: toNum(n.aliquotaIBS),
     aliquotaCBS: toNum(n.aliquotaCBS),
-    descricao: String(n.descricaoCompleta ?? '').trim(),
+    descricao: String(n.descricaoCompleta ?? n.descricao ?? '').trim(),
     documentos: String(n.documentosFiscaisRelacionados ?? n.documentos ?? '').trim(),
   })).filter((n) => n.codigo.length === 9);
+}
+
+/**
+ * Une listas de vínculos NBS com dedupe por `codigo|cst|cClassTrib`
+ * (a fonte publica os mesmos vínculos no arquivo vivo e no legado).
+ *
+ * A ordem é preservada (base primeiro, complemento depois) e os `id`
+ * são reindexados de forma determinística (`codigo|cClassTrib|índice`).
+ * Devolve quantos itens do complemento eram repetidos e quantos códigos
+ * novos o complemento trouxe (`novos` — no fluxo oficial, os 10 NBS do
+ * Anexo IX resgatados do overflow de 9 dígitos da lista `NCM`).
+ */
+export function unirNbs(base, complemento = []) {
+  const chaveDe = (v) => `${v.codigo}|${v.cst}|${v.cClassTrib}`;
+  const baseUnicos = new Set((base ?? []).filter((v) => v && typeof v === 'object').map(chaveDe)).size;
+  const vistos = new Set();
+  const unicos = [];
+  let repetidos = 0;
+  for (const v of [...(base ?? []), ...(complemento ?? [])]) {
+    if (!v || typeof v !== 'object') continue;
+    const chave = chaveDe(v);
+    if (vistos.has(chave)) {
+      repetidos++;
+      continue;
+    }
+    vistos.add(chave);
+    unicos.push(v);
+  }
+  unicos.forEach((v, k) => {
+    v.id = `${v.codigo}|${v.cClassTrib}|${k}`;
+  });
+  return { unicos, repetidos, novos: Math.max(0, unicos.length - baseUnicos) };
 }
 
 /** `0111301` → `0111-3/01` (máscara oficial do CNAE). */
@@ -387,13 +419,17 @@ export function normalizarNomenclatura(bruto) {
 function coletarIgnorados(refReforma, refNomen) {
   const ignorados = [];
 
-  const varrer = (lista, esperado, origem) => {
+  // A lista `NCM` da fonte contém 10 NBS do Anexo IX (9 dígitos, art. 138)
+  // que são RESGATADOS para os vínculos NBS — não são descarte. Só códigos
+  // com outro tamanho são ignorados de verdade. Simétrico na lista `NBS`
+  // (8 dígitos ali seriam NCM resgatado).
+  const varrer = (lista, esperado, origem, resgatado) => {
     (lista ?? []).forEach((item, idx) => {
       const bruto = String(item?.codigo ?? item?.Codigo ?? '').trim();
       const dig = digits(bruto);
       if (!dig) {
         ignorados.push({ origem, indice: idx, codigo: bruto || '(vazio)', motivo: 'código vazio' });
-      } else if (dig.length !== esperado) {
+      } else if (dig.length !== esperado && dig.length !== resgatado) {
         ignorados.push({
           origem,
           indice: idx,
@@ -404,8 +440,8 @@ function coletarIgnorados(refReforma, refNomen) {
     });
   };
 
-  varrer(refReforma.NCM, 8, 'NCM');
-  varrer(refReforma.NBS, 9, 'NBS');
+  varrer(refReforma.NCM, 8, 'NCM', 9);
+  varrer(refReforma.NBS, 9, 'NBS', 8);
 
   (refNomen?.Nomenclaturas ?? []).forEach((item, idx) => {
     const bruto = String(item?.Codigo ?? '').trim();
@@ -442,6 +478,17 @@ function validar(referencia, cst, cstClassTrib, ncm, nomenclatura, ignorados = [
   if (duplicados) problemas.push(`${duplicados} vínculos NCM duplicados`);
   if (ignorados.length) problemas.push(`${ignorados.length} códigos descartados na normalização (ex.: ${ignorados[0].codigo} — ${ignorados[0].motivo})`);
 
+  // NBS: todo vínculo precisa existir na referência e no par CST×cClassTrib —
+  // sem isso a conferência do serviço cai em regra geral (sem descrição,
+  // redução, anexo ou LC). É o que faltava aos 10 NBS do Anexo IX.
+  const nbs = extras.nbs ?? [];
+  const nbsSemRef = nbs.filter((n) => !cctRef.has(n.cClassTrib));
+  const nbsSemPar = nbs.filter((n) => !cctTabela.has(`${n.cst}|${n.cClassTrib}`));
+  const nbsDuplicados = nbs.length - new Set(nbs.map((n) => `${n.codigo}|${n.cst}|${n.cClassTrib}`)).size;
+  if (nbsSemRef.length) problemas.push(`${nbsSemRef.length} NBS sem correspondência na referência cClassTrib (ex.: ${nbsSemRef[0].cClassTrib})`);
+  if (nbsSemPar.length) problemas.push(`${nbsSemPar.length} NBS sem par CST×cClassTrib na tabela auxiliar (ex.: ${nbsSemPar[0].cst}|${nbsSemPar[0].cClassTrib})`);
+  if (nbsDuplicados) problemas.push(`${nbsDuplicados} vínculos NBS duplicados`);
+
   return {
     problemas,
     ignorados,
@@ -455,6 +502,9 @@ function validar(referencia, cst, cstClassTrib, ncm, nomenclatura, ignorados = [
       ncmSemNomenclatura: semNomen.length,
       ncmDuplicados: duplicados,
       codigosIgnorados: ignorados.length,
+      nbs: nbs.length,
+      nbsSemReferencia: nbsSemRef.length,
+      nbsDuplicados,
       ...(extras.estatisticas ?? {}),
     },
   };
@@ -570,18 +620,34 @@ async function main() {
   const cst = normalizarCst(refReforma.tabelasAuxiliares?.cst);
   const cstClassTrib = normalizarCstClassTrib(refReforma.tabelasAuxiliares?.cstClassTrib);
   const ncm = normalizarNcm(refReforma.NCM);
-  // Phase 7 — NBS prefere o arquivo vivo (dedupe); legado como fallback.
-  const nbsVivo = refNbsVivo ? normalizarNbsServicos(refNbsVivo) : { vinculos: normalizarNbs(refReforma.NBS), duplicados: 0 };
-  const nbs = nbsVivo.vinculos;
+  // Phase 7 — NBS prefere o arquivo vivo (dedupe); o legado (`reforma.NBS`) e
+  // o overflow de 9 dígitos publicado DENTRO da lista `NCM` completam o que
+  // faltar. Esse overflow são 10 NBS do Anexo IX (art. 138, 200/200038 —
+  // ex.: 114052200) que antes caíam em `codigosIgnorados` e cuja conferência
+  // voltava em regra geral (sem descrição, redução, anexo ou LC).
+  const nbsLegado = normalizarNbs(refReforma.NBS);
+  const nbsOverflowNcm = normalizarNbs(refReforma.NCM);
+  const nbsVivo = refNbsVivo ? normalizarNbsServicos(refNbsVivo) : { vinculos: [], duplicados: 0 };
+  const baseNbs = refNbsVivo ? nbsVivo.vinculos : nbsLegado;
+  const complementoNbs = refNbsVivo ? [...nbsLegado, ...nbsOverflowNcm] : [...nbsOverflowNcm];
+  const { unicos: nbs, repetidos: nbsRepetidosMerge } = unirNbs(baseNbs, complementoNbs);
+  // `nbsDuplicados` = linhas repetidas na origem efetiva (vivo: 137 linhas →
+  // 112; o legado tem o mesmo conteúdo e entra só como rede de segurança,
+  // sem inflar a métrica — o overflow resgatado não tem repetidos).
+  const nbsDuplicados = refNbsVivo ? nbsVivo.duplicados : nbsRepetidosMerge;
   const cnae = normalizarCnaeAnexo(refCnae);
   const nomenclatura = normalizarNomenclatura(refNomen);
 
   const ignorados = coletarIgnorados(refReforma, refNomen);
   const { problemas, estatisticas } = validar(referencia, cst, cstClassTrib, ncm, nomenclatura, ignorados, {
+    nbs,
     estatisticas: {
       cnae: cnae.length,
       nbsServicos: nbs.length,
-      nbsDuplicados: nbsVivo.duplicados,
+      nbsDuplicados,
+      nbsResgatadosOverflow: nbsOverflowNcm.filter((v) =>
+        nbs.some((u) => u.codigo === v.codigo && u.cst === v.cst && u.cClassTrib === v.cClassTrib),
+      ).length,
       fontesVivas: {
         cnae: arquivos.cnae ? path.basename(arquivos.cnae) : null,
         nbsServicos: arquivos.nbsServicos ? path.basename(arquivos.nbsServicos) : null,
@@ -694,7 +760,15 @@ async function main() {
   const amostraNbs = nbs.find((n) => n.codigo === '122011100') ?? nbs[0];
   if (amostraNbs) {
     console.log(` Amostra NBS ${amostraNbs.codigo}: CST ${amostraNbs.cst} · cClassTrib ${amostraNbs.cClassTrib}`
-      + ` · ${amostraNbs.baseLegal || '—'} (${nbs.length} vínculos, ${nbsVivo.duplicados} dups removidos)`);
+      + ` · ${amostraNbs.baseLegal || '—'} (${nbs.length} vínculos, ${nbsDuplicados} dups removidos)`);
+  }
+  const amostraNbsIx = nbs.find((n) => n.codigo === '114052200');
+  if (amostraNbsIx) {
+    const refIx = referencia.find((r) => r.id === `${amostraNbsIx.cst}|${amostraNbsIx.cClassTrib}`);
+    console.log(` Amostra NBS Anexo IX ${amostraNbsIx.codigo}: CST ${amostraNbsIx.cst} · cClassTrib ${amostraNbsIx.cClassTrib}`
+      + ` · redução IBS ${refIx?.pRedIBS ?? '—'}% · CBS ${refIx?.pRedCBS ?? '—'}% · anexo ${refIx?.anexo ?? '—'} (resgatado do overflow NCM)`);
+  } else {
+    console.log(' Amostra NBS Anexo IX 114052200: AUSENTE — overflow NCM não resgatado (verificar fonte).');
   }
   const amostraCnae = cnae.find((c) => c.codigo7 === '8599601') ?? cnae[0];
   if (amostraCnae) {

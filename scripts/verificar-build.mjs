@@ -4,7 +4,7 @@
  * Garante que a nova versão interpreta TODAS as bases e entrega IA embutida:
  *   1. Base tributária `public/base/`: 4 artefatos + MANIFEST com contagens
  *      oficiais (164 referência, 2335 NCM, 15156 nomenclatura, 1090 CNAE,
- *      112 NBS, 17 CST, 132 CST×cClassTrib).
+ *      122 NBS, 17 CST, 132 CST×cClassTrib).
  *   2. IA offline: `ncm-para-ia.json` (2335) + índice lexical + hash MANIFEST
  *      sincronizado + sinônimos + conhecimento curado + GGUF (~640MB) com
  *      SHA256 conferido contra `CHECKSUMS.txt`.

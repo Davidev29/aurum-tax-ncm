@@ -29,7 +29,8 @@ Vale o que o log chama de `origem efetiva`. Confira sempre essa linha.
 | `reforma_tributaria_por_ncm.json` | **Sim** | Vínculos NCM/NBS × CST × cClassTrib + tabelas `cst` (17) / `cstClassTrib` (132) | Mesmo portal CFF (exportação NCM da Reforma — LC 214/2025) |
 | `Tabela_NCM_Vigente_AAAA-MM-DD.json` | **Sim** | Nomenclatura vigente (~15.156 itens) | Portal Único Siscomex: https://portalunico.siscomex.gov.br/classif/api/publico/nomenclatura/download/json. Vale qualquer data no nome, desde que comece com `Tabela_NCM_Vigente_` e termine com `.json`. Se vier mais de um, o programa usa o **primeiro que achar — deixe só o mais novo aqui** |
 | `CNAE X ANEXO.json` | Não (vivo) | CNAE × Anexo Simples + Fator R (1.090 CNAEs) | Arquivo vivo mantido no projeto, sem URL oficial única. Sem ele a store `cnae` nasce vazia, sem quebrar a build |
-| `NBS SERVIÇOS.json` | Não (vivo) | Vínculos NBS de serviços (137 linhas → 112 únicos após dedupe) | Arquivo vivo mantido no projeto. Sem ele o NBS cai no legado dentro de `reforma.json` |
+| `NBS SERVIÇOS.json` | Não (vivo) | Vínculos NBS de serviços (137 linhas → 112 únicos após dedupe) + 10 NBS do Anexo IX resgatados do overflow de 9 dígitos da lista `NCM` (total 122) | Arquivo vivo mantido no projeto. Sem ele o NBS cai no legado dentro de `reforma.json` |
+| `cfop.json` | Não (vivo) | Tabela CFOP oficial — 619 operações (CFOP, descrição, grupo, âmbito) para o módulo XML comparar natureza/CFOP × crédito (venda × diferente de venda × imobilizado × imunidades LC 214/2025) | Arquivo vivo mantido no projeto (não entra no `npm run base`; a curadoria fiscal fica em `src/infrastructure/nfe/cfop.ts`) |
 
 > `cnae.json` e `mei_cnaes.json`, se existirem soltos nesta pasta, são **ignorados**
 > pela compilação (sobras/derivados antigos — pode apagar). O `cnae.json` que
@@ -95,8 +96,8 @@ Roda 4 scripts em sequência. Qualquer `✖` aborta com exit 1.
   - `MANIFEST.json` — `origem.baseDir` + `origem.arquivos` + `estatisticas` + `codigosIgnorados` + sha256
 - Contagens esperadas hoje (qualquer divergência aparece no log e no `verificar`):
   `referencia 164 · ncm 2335 · cst 17 · cstClassTrib 132 · nomenclatura ~15156 ·`
-  `cnae 1090 · nbs 112 (25 dups removidos) · ignorados 10 (códigos de 9 dígitos) ·`
-  `ncmSemNomenclatura 6`.
+  `cnae 1090 · nbs 122 (25 dups removidos + 10 do Anexo IX resgatados do overflow NCM) ·`
+  `ignorados 0 · ncmSemNomenclatura 6`.
 - Só entram vínculos com NCM de 8 dígitos e NBS de 9; o resto é descartado
   e listado em `MANIFEST.codigosIgnorados` + no log (`Códigos descartados`).
 - Sem os 3 obrigatórios e sem `public/base/` versionado: exit 1.

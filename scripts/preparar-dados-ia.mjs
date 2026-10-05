@@ -88,9 +88,9 @@ async function main() {
 
   for (const v of vinculos) {
     const codigo = onlyDigits(v.codigo);
-    // Filtro NCM-only: exatamente 8 dígitos. NBS (9) e os 10 códigos de 9
-    // dígitos do MANIFEST caem aqui (defesa em profundidade — o build-base
-    // já os removeu de reforma.json).
+    // Filtro NCM-only: exatamente 8 dígitos. NBS (9 dígitos, incluindo os 10
+    // do Anexo IX resgatados para `reforma.json → nbs`) caem aqui — defesa em
+    // profundidade, a IA lexical cobre só NCM.
     if (codigo.length !== 8) {
       excluidosNaoNcm += 1;
       continue;
