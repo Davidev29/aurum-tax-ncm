@@ -159,6 +159,26 @@ Plans:
 - [x] 07-05: UI Serviços completa (2 abas/modos, `CartaoCnae`/`FaixaCnae`, modais glass reutilizados, Ctrl+E via registro)
 - [x] 07-06: Testes (4 suítes novas, 41 testes) + versionamento vivo + docs
 
+### Phase 8: Refinos de Interação Aurum AI (Simples, Tools, Probabilístico, Memória) — PLANNED
+**Goal**: Eliminar contradição Fator R em Anexo I/II/IV, inferir anexo por atividade, comparar anexos e Conv×Híb no chat, dispatcher determinístico RAG+lexical, P(anexo) calibrado, memória por emitente, chaos ≥85% + FineTuning
+**Depends on**: Phase 7
+**Requirements**: [REF-01..REF-12]
+**Success Criteria** (all TRUE):
+  1. Print Anexo I refeito sem `Fator R` nem `III × V`, DAS correto + 2 botões comparativos
+  2. 36 expressões de atividade inferem anexo certo ou perguntam (nunca chute confiante)
+  3. `__COMPARAR_ANEXOS/HIBRIDO__` rodam matriz real com valores da conversa + veredito
+  4. Roteador cobre 15 tools com trilha; P(anexo) com limiares 0.75/0.40; memória por emitente (troca empresa mantém)
+  5. 22 chaos ≥85% documentados + `tsc 0 + npm test` verde + UAT aprovado
+**Plans**: 7 plans (tracer 08-00 + 08-01..08-06)
+- [x] 08-00: Tracer Anexo I sem Fator R + matriz via botão (verify first)
+- [x] 08-01: Inferência de anexo por atividade + guard Fator R (+fix regex iv)
+- [x] 08-02: Botões comparativos (matriz I–V + híbrido) com payload serializado
+- [x] 08-03: Dispatcher central + roteamento dinâmico RAG+lexical (intercept __COMPARAR_*__ + sinais atividade)
+- [x] 08-04: Motor probabilístico P(anexo) + ia_feedback (confiança + precisaConfirmar; FT dataset pronto)
+- [x] 08-05: Memória curto + longo prazo por emitente (Dexie v12 conversasEmitente + TTL 90d/teto 30)
+- [x] 08-06: Chaos 22 casos + FineTuning + eval ≥85% + docs/UAT (90,9% — docs/chaos-phase-08.md)
+  (ver `.planning/phase-08/08-PLAN.md`)
+
 ## Progress
 
 **Execution Order:**

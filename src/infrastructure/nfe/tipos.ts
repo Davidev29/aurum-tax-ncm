@@ -219,6 +219,28 @@ export interface ResumoImportacaoXml {
   duplicadas: number
   quarentena: number
   erros: { arquivo: string; motivo: string }[]
+  /**
+   * Roteamento multi-empresa (reatividade + isolamento):
+   * - `redirecionadas`: linhas gravadas em outro cadastro (não na ativa);
+   * - `orfas`: linhas sem dono cadastrado (estacionadas, invisíveis à ativa);
+   * - `pendentesCadastro`: CNPJs de 14 dígitos vistos nas órfãs, para o
+   *   cadastro 1-clique via BrasilAPI;
+   * - `menorData`/`maiorData`: ISO das novas (expansão reativa do filtro).
+   */
+  redirecionadas?: number
+  orfas?: number
+  pendentesCadastro?: PendenteCadastroXml[]
+  menorData?: string | null
+  maiorData?: string | null
+}
+
+/** Contribuinte visto em nota órfã, ainda sem cadastro no sistema. */
+export interface PendenteCadastroXml {
+  cnpj: string
+  nome: string
+  /** De que lado da nota o CNPJ apareceu. */
+  papel: 'emitente' | 'destinatario' | 'ambos'
+  qtd: number
 }
 
 /* --------------------------------------- relatório XML + RAG/IA (v4) --- */

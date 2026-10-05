@@ -15,6 +15,9 @@
 
 export const NOME_IA = 'Aurum AI' as const
 
+/** Apelido carinhoso da mascote — a IA atende por ele no chat. */
+export const APELIDO_IA = 'Aurinha' as const
+
 export const ROTULO_SUGERIDO_POR = 'Sugerido por Aurum AI' as const
 
 export const ROTULO_FALLBACK = 'Aurum AI · modelo embutido' as const

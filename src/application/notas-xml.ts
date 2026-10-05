@@ -8,6 +8,7 @@ import type {
   CreditoFornecedor,
   FiltrosNfe,
   NotaXml,
+  PendenteCadastroXml,
   ResumoImportacaoXml,
 } from '@/infrastructure/nfe/tipos'
 import { salvarProdutosEmLote, type ItemLoteGravavel } from './produtos'
@@ -17,17 +18,62 @@ import { round2 } from '@/domain/services/calculo'
 import { regimeDoEmitente } from '@/infrastructure/nfe/regime'
 import type { NotaXmlBruta } from '@/infrastructure/nfe/tipos'
 
-/* -------------------------------------------------------------- importação -- */
-
 /**
- * Importa XMLs de NF-e/NFC-e para a empresa ativa.
+ * Estacionamento de notas sem dono cadastrado.
+ *
+ * Quando um XML não pertence a nenhuma empresa do banco (nem à ativa), ele
+ * NÃO vai para a ativa como quarentena visível — vai para este `empresaId`
+ * reservado. Assim o cadastro atual nunca enxerga notas que não são do
+ * perfil dele (`listarNotas` filtra por `empresaId`), e o cadastro futuro do
+ * contribuinte adota as notas automaticamente.
+ *
+ * `0` nunca colide com `++id` do Dexie (começa em 1).
+ */
+export const EMPRESA_ORFA_ID = 0
+
+type OuvinteNotas = (empresaIds: number[]) => void
+const ouvintesNotas = new Set<OuvinteNotas>()
+
+/** Reatividade cruzada: avisa quem exibe notas que os dados mudaram. */
+export function assinarMudancaNotas(fn: OuvinteNotas): () => void {
+  ouvintesNotas.add(fn)
+  return () => {
+    ouvintesNotas.delete(fn)
+  }
+}
+
+function notificarNotasMudaram(empresaIds: number[]): void {
+  if (!empresaIds.length) return
+  const unicos = [...new Set(empresaIds)]
+  for (const fn of [...ouvintesNotas]) {
+    try {
+      fn(unicos)
+    } catch {
+      /* ouvinte nunca quebra o fluxo */
+    }
+  }
+}
+
+ /* -------------------------------------------------------------- importação -- */
+/**
+ * Importa XMLs de NF-e/NFC-e com roteamento por CNPJ.
+ *
+ * - a nota vai para o cadastro cujo CNPJ participa dela (emitente →
+ *   saída, destinatário → entrada), seja a empresa ativa ou outra já
+ *   cadastrada — nunca para um cadastro estranho;
+ * - XML que não pertence a ninguém cadastrado é estacionado como órfão
+ *   (`EMPRESA_ORFA_ID`, invisível à ativa) até o contribuinte ser
+ *   cadastrado — quando isso acontece, as notas são adotadas;
+ * - XML entre dois cadastros do sistema é espelhado (1 linha por dono);
+ * - o motor (totais/apuração) deve ser recarregado após cada retorno com
+ *   `novas > 0` — o resumo traz `menorData`/`maiorData` para expansão
+ *   reativa do filtro e `pendentesCadastro` para o 1-clique BrasilAPI.
  *
  * Garantias:
  * - empresa com `id` é obrigatória (o chamador valida e avisa);
- * - chave de acesso duplicada na empresa é pulada (nunca duplica);
+ * - chave duplicada **na empresa dona** é pulada (nunca duplica);
  * - falha num arquivo não aborta o lote (vira linha de `erros`);
- * - falha ao guardar o XML em disco também vira erro — a nota não é
- *   persistida pela metade.
+ * - falha ao guardar o XML também vira erro — a nota não persiste pela metade.
  */
 export async function importarXmls(
   arquivos: File[],
@@ -37,55 +83,287 @@ export async function importarXmls(
 ): Promise<ResumoImportacaoXml> {
   const empresaId = empresa.id
   if (empresaId == null) throw new Error('Empresa sem identificador.')
-  const resumo: ResumoImportacaoXml = { novas: 0, duplicadas: 0, quarentena: 0, erros: [] }
+  const resumo: ResumoImportacaoXml = {
+    novas: 0,
+    duplicadas: 0,
+    quarentena: 0,
+    erros: [],
+    redirecionadas: 0,
+    orfas: 0,
+    pendentesCadastro: [],
+    menorData: null,
+    maiorData: null,
+  }
+  const pendentes = new Map<string, PendenteCadastroXml>()
+  const anotarPendente = (cnpjBruto: string | undefined, nome: string, papel: PendenteCadastroXml['papel']) => {
+    const cnpj = norm(cnpjBruto)
+    if (cnpj.length !== 14) return
+    const atual = pendentes.get(cnpj)
+    if (!atual) {
+      pendentes.set(cnpj, { cnpj, nome: nome || cnpj, papel, qtd: 1 })
+      return
+    }
+    atual.qtd++
+    if (nome && atual.nome === atual.cnpj) atual.nome = nome
+    if (atual.papel !== papel) atual.papel = 'ambos'
+  }
+
+  // Mapa de donos conhecidos: todas as cadastradas + a ativa passada
+  // (a ativa pode não estar persistida ainda nos testes — ainda assim é dona).
+  let cadastradas: Empresa[] = []
+  try {
+    cadastradas = await db.empresas.toArray()
+  } catch {
+    cadastradas = []
+  }
+  const donos = new Map<string, Empresa>()
+  for (const e of cadastradas) {
+    const k = norm(e.cnpj)
+    if (k && !donos.has(k)) donos.set(k, e)
+  }
+  const chaveAtiva = norm(empresa.cnpj)
+  if (chaveAtiva && !donos.has(chaveAtiva)) donos.set(chaveAtiva, empresa)
+
+  const tocadas = new Set<number>()
+  const tocarData = (iso: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}/.test(iso)) return
+    if (resumo.menorData == null || iso < resumo.menorData) resumo.menorData = iso
+    if (resumo.maiorData == null || iso > resumo.maiorData) resumo.maiorData = iso
+  }
 
   for (let i = 0; i < arquivos.length; i++) {
     const file = arquivos[i]
     try {
       const conteudo = await file.text()
       const bruta = parseXmlNfe(conteudo, file.name)
+      const emit = norm(bruta.emitCnpj)
+      const dest = norm(bruta.destDoc)
+      const donoEmit = emit ? donos.get(emit) : undefined
+      const donoDest = dest ? donos.get(dest) : undefined
 
-      const existente = await db.nfeNotas
-        .where('[empresaId+chave]')
-        .equals([empresaId, bruta.chave])
-        .first()
-      if (existente) {
-        resumo.duplicadas++
-        continue
+      // Alvos: espelha quando emitente e destinatário são cadastros distintos.
+      // Sem CNPJ na ativa (legado manual), o roteamento por CNPJ é impossível:
+      // tudo vai para a ativa como quarentena visível (comportamento anterior).
+      type Alvo = { dono: Empresa | null; direcao: 'entrada' | 'saida' | 'quarentena' }
+      let alvos: Alvo[] = []
+      if (!chaveAtiva) {
+        alvos = [{ dono: empresa, direcao: 'quarentena' }]
+      } else if (donoEmit && donoDest && donoEmit.id != null && donoDest.id != null && donoEmit.id !== donoDest.id) {
+        alvos = [
+          { dono: donoEmit, direcao: classificarDirecao(bruta.emitCnpj, bruta.destDoc, donoEmit.cnpj) },
+          { dono: donoDest, direcao: classificarDirecao(bruta.emitCnpj, bruta.destDoc, donoDest.cnpj) },
+        ]
+      } else if (donoEmit && donoEmit.id != null) {
+        alvos = [{ dono: donoEmit, direcao: classificarDirecao(bruta.emitCnpj, bruta.destDoc, donoEmit.cnpj) }]
+      } else if (donoDest && donoDest.id != null) {
+        alvos = [{ dono: donoDest, direcao: classificarDirecao(bruta.emitCnpj, bruta.destDoc, donoDest.cnpj) }]
+      } else {
+        alvos = [{ dono: null, direcao: 'quarentena' }]
       }
 
-      const direcao = classificarDirecao(bruta.emitCnpj, bruta.destDoc, empresa.cnpj)
-      if (direcao === 'quarentena') resumo.quarentena++
+      const ehOrfa = alvos.length === 1 && alvos[0].dono === null
+      if (ehOrfa) {
+        anotarPendente(bruta.emitCnpj, bruta.emitNome, 'emitente')
+        if (bruta.destDoc) anotarPendente(bruta.destDoc, bruta.destNome, 'destinatario')
+      }
+
+      // Análise uma vez por arquivo (mesmo motor para todos os espelhos).
       const itensAnalisados = await analisarItensNfe(bruta.itens, ref)
       const tot = totaisItensNfe(itensAnalisados)
-      const { arquivo, xmlConteudo } = await salvarXmlImportado(empresa.cnpj, bruta.chave, conteudo)
+      const agora = new Date().toISOString()
 
-      const nota: NotaXml = {
-        ...bruta,
-        empresaId,
-        direcao,
-        arquivo,
-        xmlConteudo,
-        refIBS: ref.refIBS,
-        refCBS: ref.refCBS,
-        totalIBS: tot.totalIBS,
-        totalCBS: tot.totalCBS,
-        totalTributos: tot.totalTributos,
-        importadoEm: new Date().toISOString(),
-        itensAnalisados,
+      let gravouAlguma = false
+      for (const alvo of alvos) {
+        const idDono = alvo.dono?.id ?? EMPRESA_ORFA_ID
+        const existente = await db.nfeNotas
+          .where('[empresaId+chave]')
+          .equals([idDono, bruta.chave])
+          .first()
+        if (existente) {
+          resumo.duplicadas++
+          continue
+        }
+        // Pasta do dono (isolamento também no disco); órfã usa o emitente.
+        const pastaCnpj = (alvo.dono?.cnpj || bruta.emitCnpj || 'avulso') as string
+        const { arquivo, xmlConteudo } = await salvarXmlImportado(pastaCnpj, bruta.chave, conteudo)
+        const nota: NotaXml = {
+          ...bruta,
+          empresaId: idDono,
+          direcao: alvo.direcao,
+          arquivo,
+          xmlConteudo,
+          refIBS: ref.refIBS,
+          refCBS: ref.refCBS,
+          totalIBS: tot.totalIBS,
+          totalCBS: tot.totalCBS,
+          totalTributos: tot.totalTributos,
+          importadoEm: agora,
+          itensAnalisados,
+        }
+        await db.nfeNotas.add(nota)
+        resumo.novas++
+        gravouAlguma = true
+        if (alvo.direcao === 'quarentena') resumo.quarentena++
+        if (alvo.dono === null) resumo.orfas = (resumo.orfas ?? 0) + 1
+        else if (alvo.dono.id !== empresaId) resumo.redirecionadas = (resumo.redirecionadas ?? 0) + 1
+        tocadas.add(idDono)
+        tocarData(bruta.dataEmissao)
+        // Enriquecimento best-effort no DONO (não na ativa alheia).
+        if (alvo.dono?.id != null) {
+          void completarEmpresaComNota(alvo.dono.id, alvo.dono.cnpj, bruta)
+        }
       }
-      await db.nfeNotas.add(nota)
-      resumo.novas++
-      // Enriquecimento best-effort: a nota pode trazer IE/IM/endereço que o
-      // cadastro ainda não tem — completa sem nunca quebrar a importação.
-      void completarEmpresaComNota(empresaId, empresa.cnpj, bruta)
+      void gravouAlguma
     } catch (e) {
       resumo.erros.push({ arquivo: file.name, motivo: e instanceof Error ? e.message : String(e) })
     }
     onProgress?.(i + 1, arquivos.length)
   }
 
+  resumo.pendentesCadastro = [...pendentes.values()].sort((a, b) => b.qtd - a.qtd)
+  notificarNotasMudaram([...tocadas])
   return resumo
+}
+
+/**
+ * Totais + apuração sempre reativos: rode após CADA importação/adoção/
+ * exclusão sobre os documentos da empresa — é o "motor de comparação"
+ * (débitos das saídas − créditos das entradas) que decide saldo ou débito.
+ */
+export async function apuracaoDaEmpresa(empresaId: number): Promise<{
+  qtd: number
+  menorData: string | null
+  maiorData: string | null
+  apuracao: import('@/infrastructure/nfe/apuracao').ApuracaoIbsCbs
+}> {
+  const notas = await db.nfeNotas.where('empresaId').equals(empresaId).toArray()
+  const { apurarIbsCbs } = await import('@/infrastructure/nfe/apuracao')
+  let menor: string | null = null
+  let maior: string | null = null
+  for (const n of notas) {
+    const d = String(n.dataEmissao || '')
+    if (!/^\d{4}-\d{2}-\d{2}/.test(d)) continue
+    if (menor == null || d < menor) menor = d
+    if (maior == null || d > maior) maior = d
+  }
+  return { qtd: notas.length, menorData: menor, maiorData: maior, apuracao: apurarIbsCbs(notas) }
+}
+
+/** Notas estacionadas sem dono (invisíveis a qualquer cadastro). */
+export async function listarNotasOrfas(limite = 200): Promise<NotaXml[]> {
+  const todas = await db.nfeNotas.where('empresaId').equals(EMPRESA_ORFA_ID).toArray()
+  todas.sort((a, b) => (a.dataEmissao < b.dataEmissao ? 1 : -1))
+  return todas.slice(0, Math.max(1, limite))
+}
+
+/**
+ * CNPJs distintos nas órfãs — base do banner "contribuinte novo: cadastrar
+ * via BrasilAPI em 1 clique". Agrega por CNPJ com papel e quantidade.
+ */
+export async function listarCnpjsPendentes(): Promise<PendenteCadastroXml[]> {
+  const orfas = await db.nfeNotas.where('empresaId').equals(EMPRESA_ORFA_ID).toArray()
+  const mapa = new Map<string, PendenteCadastroXml & { comoEmit: number; comoDest: number }>()
+  for (const n of orfas) {
+    const emit = norm(n.emitCnpj)
+    if (emit.length === 14) {
+      const a = mapa.get(emit) ?? { cnpj: emit, nome: n.emitNome || emit, papel: 'emitente' as const, qtd: 0, comoEmit: 0, comoDest: 0 }
+      a.qtd++
+      a.comoEmit++
+      if (n.emitNome && a.nome === a.cnpj) a.nome = n.emitNome
+      mapa.set(emit, a)
+    }
+    const dest = norm((n as NotaXml).destDoc)
+    if (dest.length === 14 && dest !== emit) {
+      const a = mapa.get(dest) ?? { cnpj: dest, nome: (n as NotaXml).destNome || dest, papel: 'destinatario' as const, qtd: 0, comoEmit: 0, comoDest: 0 }
+      a.qtd++
+      a.comoDest++
+      if ((n as NotaXml).destNome && a.nome === a.cnpj) a.nome = (n as NotaXml).destNome
+      mapa.set(dest, a)
+    }
+  }
+  return [...mapa.values()]
+    .map(({ comoEmit, comoDest, ...r }) => ({
+      ...r,
+      papel: (comoEmit > 0 && comoDest > 0 ? 'ambos' : comoEmit > 0 ? 'emitente' : 'destinatario') as PendenteCadastroXml['papel'],
+    }))
+    .sort((a, b) => b.qtd - a.qtd)
+}
+
+/**
+ * Adoção automática: transfere para a empresa tudo que é dela —
+ * órfãs estacionadas + quarentenas legadas gravadas no cadastro errado —
+ * recalculando a direção (entrada/saída) pelo CNPJ dela.
+ *
+ * Nunca rouba entrada/saída de outro cadastro: só move órfãs ou quarentena.
+ */
+export async function adotarNotasParaEmpresa(empresa: Empresa): Promise<{
+  adotadas: number
+  saidas: number
+  entradas: number
+}> {
+  const out = { adotadas: 0, saidas: 0, entradas: 0 }
+  const id = empresa.id
+  if (id == null) return out
+  const cnpj = norm(empresa.cnpj)
+  if (!cnpj) return out
+  // Órfãs dela.
+  const orfas = await db.nfeNotas.where('empresaId').equals(EMPRESA_ORFA_ID).toArray()
+  // Quarentenas legadas que na verdade são dela (base antiga jogava tudo na ativa).
+  let quarentenas: NotaXml[] = []
+  try {
+    quarentenas = await db.nfeNotas.where('direcao').equals('quarentena').toArray()
+  } catch {
+    quarentenas = await db.nfeNotas.toArray().then((t) => t.filter((n) => n.direcao === 'quarentena'))
+  }
+  const candidatas = [
+    ...orfas.filter((n) => norm(n.emitCnpj) === cnpj || norm(n.destDoc) === cnpj),
+    ...quarentenas.filter(
+      (n) => n.empresaId !== id && (norm(n.emitCnpj) === cnpj || norm(n.destDoc) === cnpj),
+    ),
+  ]
+  // Evita processar a mesma linha 2x (órfã também indexada por direção).
+  const vistas = new Set<number>()
+  for (const nota of candidatas) {
+    if (nota.id == null || vistas.has(nota.id)) continue
+    vistas.add(nota.id)
+    const novaDirecao = classificarDirecao(nota.emitCnpj, nota.destDoc, empresa.cnpj)
+    const jaExiste = await db.nfeNotas.where('[empresaId+chave]').equals([id, nota.chave]).first()
+    if (jaExiste) {
+      // A dona já tem a chave (espelho anterior): remove o fantasma.
+      await db.nfeNotas.delete(nota.id)
+      try {
+        if (nota.arquivo) await removerXmlImportado(nota.arquivo)
+      } catch {
+        /* disco best-effort */
+      }
+      out.adotadas++
+      continue
+    }
+    await db.nfeNotas.put({ ...nota, empresaId: id, direcao: novaDirecao })
+    out.adotadas++
+    if (novaDirecao === 'saida') out.saidas++
+    else if (novaDirecao === 'entrada') out.entradas++
+    void completarEmpresaComNota(id, empresa.cnpj, nota)
+  }
+  if (out.adotadas > 0) notificarNotasMudaram([id, EMPRESA_ORFA_ID])
+  return out
+}
+
+/** Atalho para testes/migração: realoca quarentenas para os donos atuais. */
+export async function realocarQuarentenaLegada(): Promise<{ movidas: number }> {
+  let empresas: Empresa[] = []
+  try {
+    empresas = await db.empresas.toArray()
+  } catch {
+    return { movidas: 0 }
+  }
+  let movidas = 0
+  for (const e of empresas) {
+    if (e.id == null) continue
+    const r = await adotarNotasParaEmpresa(e)
+    movidas += r.adotadas
+  }
+  return { movidas }
 }
 
 /**
@@ -321,6 +599,7 @@ export async function excluirNota(nota: NotaXml): Promise<void> {
   } catch {
     /* disco indisponível — o registro já saiu */
   }
+  notificarNotasMudaram([nota.empresaId])
 }
 
 /* ------------------------------------------ reaplicar classificação vigente -- */
@@ -371,5 +650,6 @@ export async function reaplicarClassificacaoNota(
     totalCBS: tot.totalCBS,
     totalTributos: tot.totalTributos,
   })
+  notificarNotasMudaram([nota.empresaId])
   return { ok: true, itens: refeitos.length, alterados }
 }

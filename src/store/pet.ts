@@ -93,15 +93,32 @@ interface PetState {
    * Desliga sozinha em 4,5 s ou ao aquietar.
    */
   eureka: boolean
+  /**
+   * Ambiente sugerido pela IA (`data-ambient` forçado) — ortogonal ao `mood`.
+   * A direção IA→Aurinha (`store/pet-direcao-ia.ts`) escreve aqui; o
+   * `PetAurum` prioriza sobre o sorteio autônomo e limpa sozinho após
+   * `duracaoMs`. `null` = sorteio autônomo manda.
+   */
+  ambientSugerido: string | null
   agir: (mood: PetMood, frase?: string, duracaoMs?: number) => void
   /** Volta ao respiro neutro (usado pelos temporizadores internos). */
   aquietar: () => void
   dispararEureka: () => void
   limparEureka: () => void
+  /** Força um `data-ambient` por `duracaoMs` (0 = limpa na hora). */
+  sugerirAmbiente: (id: string | null, duracaoMs?: number) => void
 }
 
 let timer: number | null = null
 let eurekaTimer: number | null = null
+let ambienteTimer: number | null = null
+
+function limparTimerAmbiente() {
+  if (ambienteTimer !== null) {
+    try { (typeof window !== 'undefined' ? window : globalThis).clearTimeout(ambienteTimer) } catch { /* noop */ }
+    ambienteTimer = null
+  }
+}
 
 function limparTimer() {
   if (timer !== null) {
@@ -122,11 +139,26 @@ export const usePet = create<PetState>((set, get) => ({
   frase: '',
   seq: 0,
   eureka: false,
+  ambientSugerido: null,
 
   agir: (mood, frase = '', duracaoMs) => {
+    const cur = get()
+    const duracao = duracaoMs ?? DURACAO[mood] ?? 2400
+    // Idempotente: mesmo humor + mesma frase só estende o timer, sem `set`
+    // (sem re-render). É o que evita lag ao digitar: antes cada tecla fazia
+    // `set({seq: +1})` e remontava o SVG pesado da pet no meio do input.
+    if (cur.mood === mood && cur.frase === frase) {
+      if (duracao > 0) {
+        limparTimer()
+        const alvo = mood
+        timer = window.setTimeout(() => {
+          if (get().mood === alvo) set({ mood: 'idle', frase: '' })
+        }, duracao)
+      }
+      return
+    }
     limparTimer()
     set((s) => ({ mood, frase, seq: s.seq + 1 }))
-    const duracao = duracaoMs ?? DURACAO[mood] ?? 2400
     // `idle` e `sleeping` não têm retorno automático.
     if (duracao > 0) {
       timer = window.setTimeout(() => {
@@ -139,7 +171,8 @@ export const usePet = create<PetState>((set, get) => ({
   aquietar: () => {
     limparTimer()
     limparTimerEureka()
-    set({ mood: 'idle', frase: '', eureka: false })
+    limparTimerAmbiente()
+    set({ mood: 'idle', frase: '', eureka: false, ambientSugerido: null })
   },
 
   dispararEureka: () => {
@@ -153,6 +186,21 @@ export const usePet = create<PetState>((set, get) => ({
   limparEureka: () => {
     limparTimerEureka()
     if (get().eureka) set({ eureka: false })
+  },
+
+  sugerirAmbiente: (id, duracaoMs = 3000) => {
+    limparTimerAmbiente()
+    if (!id || duracaoMs <= 0) {
+      if (get().ambientSugerido !== null) set({ ambientSugerido: null })
+      return
+    }
+    set({ ambientSugerido: id })
+    try {
+      ambienteTimer = (typeof window !== 'undefined' ? window : globalThis).setTimeout(() => {
+        ambienteTimer = null
+        if (get().ambientSugerido === id) set({ ambientSugerido: null })
+      }, duracaoMs) as unknown as number
+    } catch { /* sem temporizador: a sugestão cai no próximo aquietar */ }
   },
 }))
 

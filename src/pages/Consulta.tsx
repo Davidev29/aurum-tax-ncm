@@ -43,6 +43,7 @@ import {
   ModalSimulacaoIA,
 } from '@/ui/consulta-premium'
 import { Btn, Painel, Texto, Vazio } from '@/ui/kit'
+import { Entrada, Revelar } from '@/ui/motion'
 import {
   SecaoCarregando,
   SkeletonCartaoClassificacao,
@@ -302,6 +303,7 @@ export function Consulta() {
 
   return (
     <div className="mx-auto max-w-5xl">
+      <Entrada>
       <Painel>
         <div className="p-5">
           <h2 className="flex items-center gap-2 text-base font-bold">
@@ -434,17 +436,18 @@ export function Consulta() {
           </details>
         </div>
       </Painel>
+      </Entrada>
 
       {!entrada.trim() ? (
-        <div className="mt-6">
+        <Entrada className="mt-6">
           <Vazio
             icone="🔍"
             titulo="Busque por número, nome ou descrição"
             texto="Ex.: 0201.10.00 (valida na base oficial) · queijo mozarela (a ✨ Aurum AI responde primeiro) · boi vivo Nelore para reprodução (a IA cruza descrição + vigência)."
           />
-        </div>
+        </Entrada>
       ) : (
-        <div className="mt-6 space-y-4">
+        <Revelar className="mt-6 space-y-4">
           {/* UMA resposta protagonista por vez — resto colapsado. */}
           {prioridadeIA ? (
             <section aria-label={`Resposta da ${NOME_IA}`} className="space-y-3">
@@ -577,7 +580,7 @@ export function Consulta() {
               texto="Com 2+ dígitos validamos o número · com letras, a ✨ Aurum AI responde primeiro · a base oficial confirma abaixo."
             />
           ) : null}
-        </div>
+        </Revelar>
       )}
 
       <ModalSalvarClass

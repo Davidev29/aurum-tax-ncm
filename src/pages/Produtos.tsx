@@ -27,6 +27,7 @@ import { useSessao } from '@/store/sessao'
 import { confirmar } from '@/store/dialogo'
 import { toast, useUi } from '@/store/ui'
 import { Vazio, Btn, Painel, Texto, useDebounce } from '@/ui/kit'
+import { Entrada } from '@/ui/motion'
 import { ModalProdutoDetalhe, Olho } from '@/ui/detalhes'
 
 export function Produtos() {
@@ -97,6 +98,7 @@ export function Produtos() {
 
   return (
     <div className="mx-auto max-w-6xl">
+      <Entrada>
       <Painel>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
           <div className="min-w-0">
@@ -188,6 +190,7 @@ export function Produtos() {
                 )}
         </div>
       </Painel>
+      </Entrada>
       <ModalProdutoDetalhe produto={detalhe} onFechar={() => setDetalhe(null)} />
     </div>
   )

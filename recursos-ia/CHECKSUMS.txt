@@ -1,7 +1,7 @@
 # CHECKSUMS — recursos-ia (Phase 6, IA-01/IA-04)
 # Formato: "<sha256-hex>  <caminho-relativo-a-recursos-ia/>"
-# Gerado offline em 2026-09-30 (plan 06-04). O GGUF real (~97MB) ainda NÃO foi
-# adquirido (sem rede). Ao colocar o arquivo em recursos-ia/modelo/, recalcule:
-#   certutil -hashfile recursos-ia\modelo\ailo-152m-v2-q4_k_m.gguf SHA256
-# e substitua a linha PENDENTE abaixo pelo hash real.
-d4413fc146577c6756747e885f55703773d9baaf6fb7708d2b2e95b11f20d273  modelo/ailo-152m-v2-q4_k_m.gguf
+# Modelo atual: Qwen3-0.6B-Instruct Q8_0 (~640MB), fonte:
+# https://huggingface.co/Qwen/Qwen3-0.6B-GGUF (arquivo Qwen3-0.6B-Q8_0.gguf).
+# Para recalcular:
+#   certutil -hashfile recursos-ia\modelo\Qwen3-0.6B-Q8_0.gguf SHA256
+9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031  modelo/Qwen3-0.6B-Q8_0.gguf

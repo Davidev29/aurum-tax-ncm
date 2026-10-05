@@ -135,6 +135,14 @@ const BRACO_DIR: Bloco[] = [
   [18, 24, 2, 1, 'D'],
   [19, 24, 2, 1, 'F'],
 ]
+/** Bracinho esquerdo ESTICADO para a gaveta (consulta: enfia, puxa o livro).
+ * Alcança a lateral esquerda da grade (x 1–5), na altura da gaveta do eco. */
+const BRACO_GAVETA: Bloco[] = [
+  [5, 20, 1, 1, 'K'], [6, 20, 1, 1, 'F'],
+  [4, 21, 1, 1, 'K'], [5, 21, 2, 1, 'F'],
+  [3, 22, 1, 1, 'K'], [4, 22, 2, 1, 'F'],
+  [1, 23, 1, 1, 'K'], [2, 23, 2, 1, 'D'], [4, 23, 1, 1, 'F'],
+]
 /** Rabinho afunilado com pontinha creme (origem do giro = encaixe no corpo). */
 const RABO: Bloco[] = [
   [5, 23, 1, 1, 'K'], [6, 23, 1, 1, 'F'],
@@ -184,6 +192,7 @@ export const OVERLAYS = {
   BRACO_BAIXO_E,
   BRACO_ALTO_E,
   BRACO_DIR,
+  BRACO_GAVETA,
   BRACO_SUPERMAN_E,
   BRACO_SUPERMAN_D,
   RABO,

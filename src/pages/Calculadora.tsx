@@ -39,6 +39,7 @@ import { useProdutos, type ProdutoLinha } from '@/store/produtos'
 import { confirmar } from '@/store/dialogo'
 import { toast } from '@/store/ui'
 import { Btn, IconeBadge, Painel, Texto, useAcaoTatil } from '@/ui/kit'
+import { Entrada, Secao } from '@/ui/motion'
 
 /* ------------------------------------------------------------- alíquotas --- */
 
@@ -448,6 +449,7 @@ export function Calculadora() {
   return (
     <div className={`grid grid-cols-1 gap-6 transition-all duration-500 ease-out ${temItens ? 'lg:grid-cols-[minmax(0,1fr)_390px]' : ''}`}>
       <div className="min-w-0 space-y-6">
+        <Entrada>
         <Painel className="overflow-hidden">
           <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] p-5">
             <IconeBadge nome="calculadora" tom="brand" tamanho="lg" />
@@ -501,9 +503,11 @@ export function Calculadora() {
             </div>
           </div>
         </Painel>
+        </Entrada>
       </div>
 
       {temItens ? (
+      <Entrada atraso={0.08}>
       <aside className="calc-aside-enter space-y-4 lg:sticky lg:top-4 lg:h-fit" aria-live="polite">
         <div className="calc-hero overflow-hidden rounded-2xl">
           <div className="px-5 pb-4 pt-5">
@@ -577,6 +581,7 @@ export function Calculadora() {
           </div>
         </div>
 
+        <Secao>
         <Painel>
           <div className="border-b border-[var(--line)] px-5 py-3">
             <h3 className="calc-step text-slate-500">
@@ -597,13 +602,17 @@ export function Calculadora() {
             Padrão IBS {REF_DEFAULT.IBS}% · CBS {REF_DEFAULT.CBS}% — {REF_FONTE.fonte}.
           </p>
         </Painel>
+        </Secao>
 
+        <Secao atraso={0.05}>
         <div className="rounded-2xl border border-[var(--line)] bg-slate-50/70 p-4 text-[11px] leading-relaxed text-slate-600 dark:bg-slate-950/40 dark:text-slate-300">
           <div className="calc-step mb-1.5 text-slate-500"><span className="calc-step-dot">i</span> Como ler este cálculo</div>
           <span className="font-bold">Alíquota já com redução.</span> Red. 100% ⇒ alíquota zero.
           BC = valor cheio da operação. Carga = tributos ÷ operação. Barra do hero: azul = IBS, dourado = CBS.
         </div>
+        </Secao>
       </aside>
+      </Entrada>
       ) : null}
 
       <ModalCalcCustom

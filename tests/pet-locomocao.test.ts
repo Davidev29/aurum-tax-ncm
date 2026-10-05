@@ -13,6 +13,11 @@ import {
   podePular,
   podeVagar,
   velocidadePasseio,
+  alvoBorda,
+  pedirViagemLonga,
+  consumirViagemLonga,
+  AMBIENTES_VIAGEM_LONGA,
+  podeConsultar,
 } from '@/store/pet-locomocao'
 
 describe('limitesPasseio', () => {
@@ -92,5 +97,26 @@ describe('permissões de movimento', () => {
     expect(podePular('idle', 'arrastando')).toBe(false)
     expect(podePular('sleeping', 'doca')).toBe(false)
     expect(podePular('angry', 'doca')).toBe(false)
+  })
+
+  it('viagem longa mira a borda oposta (travessia total)', () => {
+    expect(alvoBorda({ min: -80, max: 80 }, 50)).toBe(-80)
+    expect(alvoBorda({ min: -80, max: 80 }, -50)).toBe(80)
+    expect(alvoBorda({ min: 0, max: 0 }, 5)).toBe(0)
+    expect(AMBIENTES_VIAGEM_LONGA).toContain('ronda')
+    expect(AMBIENTES_VIAGEM_LONGA).toContain('patrulha-lenta')
+    // Sinal consome uma vez por pedido.
+    pedirViagemLonga(1)
+    expect(consumirViagemLonga()).toBe(true)
+    expect(consumirViagemLonga()).toBe(false)
+  })
+
+  it('consulta ativa (NCM/NBS/cálculos) pede a gaveta — nunca no voo', () => {
+    for (const mood of ['searching', 'reading', 'thinking', 'calculating']) {
+      expect(podeConsultar(mood, 'doca')).toBe(true)
+    }
+    expect(podeConsultar('idle', 'doca')).toBe(false)
+    expect(podeConsultar('searching', 'arrastando')).toBe(false)
+    expect(podeConsultar('sleeping', 'doca')).toBe(false)
   })
 })

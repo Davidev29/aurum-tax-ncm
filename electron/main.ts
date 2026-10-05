@@ -28,10 +28,10 @@ import { autoUpdater } from 'electron-updater'
 import {
   buscarViaIa,
   classificarViaIa,
+  conversarViaIa,
   encerrarIaService,
   iniciarIaService,
   statusIa,
-  traduzirViaIa,
 } from './ia/ia-service.cjs'
 
 /** URL do servidor Vite, definida pelo script `dev:electron` (cross-env). */
@@ -426,9 +426,14 @@ function registrarIpc(): void {
     buscarViaIa(consulta, typeof k === 'number' ? k : 5),
   )
 
-  /** `ia:traduzir` — tradução fiscal PT↔EN em tempo real (dicionário, sem modelo). */
-  ipcMain.handle('ia:traduzir', async (_evento, texto: string, para?: string) =>
-    traduzirViaIa(texto, para === 'pt' ? 'pt' : 'en'),
+  /** `ia:conversar` — conversa livre via Qwen3 real (IA-06, exige modelo; sem modelo `ok:false`). */
+  ipcMain.handle(
+    'ia:conversar',
+    async (
+      _evento,
+      pergunta: string,
+      opts?: { sistema?: string; historico?: { papel: string; texto: string }[]; think?: boolean; maxTokens?: number; temperature?: number },
+    ) => conversarViaIa(pergunta, opts ?? {}),
   )
 
   /** `ia:status` — estado do worker (`desligado`/`mock`/`modelo`/`erro` AI-first). */

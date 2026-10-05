@@ -1,5 +1,5 @@
 /**
- * Ambientes da Aurinha — os 42 comportamentos autônomos que rodam de forma
+ * Ambientes da Aurinha — os 81 comportamentos autônomos que rodam de forma
  * natural e aleatória quando ela está livre (`idle` na doca).
  *
  * Desenho:
@@ -8,16 +8,20 @@
  * - Sorteio PONDERADO por `peso` (raridade): comportamentos comuns (peso 3)
  *   saem ~3x mais que raros (peso 1). `rand` uniform em [0,1) vira faixa
  *   proporcional ao peso acumulado — determinístico nos testes.
- * - O CSS (`pet-aurum.css`, seção AMBIENTES) interpreta `data-ambient`
- *   como overlay de UMA apresentação (`animation … 1`); o hook em
- *   `PetAurum.tsx` (`useAmbienteDaAurinha`) liga/desliga o atributo e
- *   respeita `prefers-reduced-motion`, aba oculta e humor ocupado.
+ * - O CSS (`pet-aurum.css`, seção AMBIENTES + PACOTE 3) interpreta
+ *   `data-ambient` como overlay de UMA apresentação (`animation … 1`); o
+ *   hook em `PetAurum.tsx` (`useAmbienteDaAurinha`) liga/desliga o atributo
+ *   e respeita `prefers-reduced-motion`, aba oculta e humor ocupado.
  * - Durações curtas (2–4 s) + intervalo longo e irregular (9–17 s) = ela
  *   parece viva, nunca mecânica. Sem frase no store (não briga com o balão).
  * - Locomoção de fundo (ir de um lado ao outro da sidebar) NÃO mora aqui:
  *   é o `useLocomocaoDaAurinha` (JS, contínuo, sem snap). Os ambientes de
  *   locomoção abaixo são *estilos* (trote, furtiva, marcha…) que compõem
  *   com o deslocamento — todos começam e terminam neutros.
+ * - Pacote 3 (43–69): 27 novos em 3 levas — EMOÇÃO (social), LOCOMOÇÃO
+ *   (base) e OCIOSO natural (vida/brincadeira/trabalho). Tudo funciona SEM
+ *   input: sorteio idle + variações de ausência/retorno quando a janela
+ *   minimiza ou a aba oculta.
  */
 
 export type CategoriaAmbiente = 'vida' | 'brincadeira' | 'trabalho' | 'social' | 'base'
@@ -35,7 +39,7 @@ export interface AmbientePet {
   categoria?: CategoriaAmbiente
 }
 
-/** Os 42 comportamentos autônomos — ordem = catálogo, não prioridade. */
+/** Os 81 comportamentos autônomos — ordem = catálogo, não prioridade. */
 export const AMBIENTES: readonly AmbientePet[] = [
   { id: 'espiar', duracaoMs: 2600, descricao: 'espia de lado, curiosa com algo fora da tela', peso: 2, categoria: 'base' },
   { id: 'espreguicar', duracaoMs: 2800, descricao: 'espreguiça longa com squash & stretch', peso: 2, categoria: 'base' },
@@ -85,6 +89,50 @@ export const AMBIENTES: readonly AmbientePet[] = [
   { id: 'carimbar', duracaoMs: 2800, descricao: 'carimba NCM OK com a lupinha e brilho', peso: 2, categoria: 'trabalho' },
   { id: 'contar-moedas', duracaoMs: 3400, descricao: 'conta moedinhas empilhando com a patinha', peso: 2, categoria: 'trabalho' },
   { id: 'mandar-beijo', duracaoMs: 2400, descricao: 'manda beijo com coração voando', peso: 2, categoria: 'social' },
+  /* --- Pacote 3 — EMOÇÃO (43–51: roda sozinha no idle, sem input) --- */
+  { id: 'rir-alto', duracaoMs: 2600, descricao: 'gargalha sacudindo a barriga com corações', peso: 2, categoria: 'social' },
+  { id: 'choramingar', duracaoMs: 3200, descricao: 'murcha com soluços e olhos brilhando', peso: 1, categoria: 'social' },
+  { id: 'orgulho', duracaoMs: 2800, descricao: 'estufa o peito com o selo dourado brilhando', peso: 2, categoria: 'social' },
+  { id: 'timidez', duracaoMs: 3000, descricao: 'esconde o focinho e balança o rabo tímida', peso: 2, categoria: 'social' },
+  { id: 'surpresa', duracaoMs: 2200, descricao: 'espanta com pulo curto e olhos arregalados', peso: 2, categoria: 'social' },
+  { id: 'meditar', duracaoMs: 3600, descricao: 'flutua serena em pose de meditação', peso: 1, categoria: 'social' },
+  { id: 'apaixonar', duracaoMs: 2800, descricao: 'suspira apaixonada com corações subindo', peso: 2, categoria: 'social' },
+  { id: 'emburrar', duracaoMs: 2600, descricao: 'cruza os bracinhos e vira o focinho', peso: 1, categoria: 'social' },
+  { id: 'alivio', duracaoMs: 2400, descricao: 'suspira aliviada enxugando a testa', peso: 2, categoria: 'social' },
+  /* --- Pacote 3 — LOCOMOÇÃO (52–60: gaits que compõem com o passeio JS) --- */
+  { id: 'galopar', duracaoMs: 2400, descricao: 'galope largo com stretch horizontal', peso: 2, categoria: 'base' },
+  { id: 'saltitar', duracaoMs: 2600, descricao: 'saltita lateral alternando as patinhas', peso: 2, categoria: 'base' },
+  { id: 'correr-leve', duracaoMs: 2200, descricao: 'corridinha leve com inclinação de arrancada', peso: 2, categoria: 'base' },
+  { id: 'sonambular', duracaoMs: 3600, descricao: 'anda dormindo com passinhos flutuantes', peso: 1, categoria: 'base' },
+  { id: 'escorregar', duracaoMs: 2400, descricao: 'escorrega e recupera o equilíbrio', peso: 2, categoria: 'base' },
+  { id: 'tropecar', duracaoMs: 2200, descricao: 'tropeça, rodopia e finge que foi de propósito', peso: 1, categoria: 'base' },
+  { id: 'rodopiar', duracaoMs: 2600, descricao: 'rodopia andando em espiral curta', peso: 2, categoria: 'base' },
+  { id: 'patrulha-lenta', duracaoMs: 3400, descricao: 'patrulha lenta de sentinela com pausas de olhar', peso: 2, categoria: 'base' },
+  { id: 'zigue-zague', duracaoMs: 3200, descricao: 'costura em zigue-zague farejando o caminho', peso: 2, categoria: 'base' },
+  /* --- Pacote 3 — OCIOSO NATURAL (61–69: vida sozinha, mesmo sem mouse) --- */
+  { id: 'olhar-relogio', duracaoMs: 2800, descricao: 'ergue a lupa como relógio e confere a hora', peso: 2, categoria: 'vida' },
+  { id: 'contar-estrelas', duracaoMs: 3400, descricao: 'conta estrelinhas que piscam ao redor', peso: 1, categoria: 'vida' },
+  { id: 'assobiar', duracaoMs: 3200, descricao: 'assobia com notinhas subindo distraída', peso: 2, categoria: 'brincadeira' },
+  { id: 'ajeitar-oculos', duracaoMs: 2600, descricao: 'ajeita os óculos com a patinha 2x', peso: 2, categoria: 'trabalho' },
+  { id: 'farejar-ar', duracaoMs: 3000, descricao: 'fareja o ar alto em tercinas com brisa', peso: 2, categoria: 'vida' },
+  { id: 'lustrar-selo', duracaoMs: 3000, descricao: 'lustra o selo Aurum até brilhar', peso: 2, categoria: 'trabalho' },
+  { id: 'anotar', duracaoMs: 3200, descricao: 'anota com a lupa virando lápis', peso: 2, categoria: 'trabalho' },
+  { id: 'dobrar-mapa', duracaoMs: 3400, descricao: 'abre e dobra um mapinha com a lupa', peso: 1, categoria: 'trabalho' },
+  { id: 'fazer-sombra', duracaoMs: 2800, descricao: 'brinca com a própria sombra projetada', peso: 2, categoria: 'brincadeira' },
+  /* --- Gaveta de documentos (móvel do eco — abre sozinha ao consultar) --- */
+  { id: 'consultar-gaveta', duracaoMs: 4000, descricao: 'abre a gaveta, pega o livro e lê com a lupa', peso: 2, categoria: 'trabalho' },
+  { id: 'ler-livrinho', duracaoMs: 3600, descricao: 'abre o livrinho e lê balançando a cabeça', peso: 2, categoria: 'trabalho' },
+  /* --- Pacote 4 — BRAÇOS COM FÍSICA (72–81: rig de ombro, rotate suave) --- */
+  { id: 'acenar-duplo', duracaoMs: 2400, descricao: 'tchau com as duas patas em contrafase', peso: 2, categoria: 'social' },
+  { id: 'nadar-lontra', duracaoMs: 3200, descricao: 'remada circular defasada de lontra nadando', peso: 1, categoria: 'brincadeira' },
+  { id: 'escavar', duracaoMs: 2600, descricao: 'cava com patadas alternadas e poeira', peso: 2, categoria: 'brincadeira' },
+  { id: 'malabarismo', duracaoMs: 3400, descricao: 'joga a moedinha entre as patas', peso: 1, categoria: 'brincadeira' },
+  { id: 'aplaudir', duracaoMs: 2200, descricao: 'bate palmas com squash no impacto', peso: 2, categoria: 'social' },
+  { id: 'focar-binoculo', duracaoMs: 3000, descricao: 'leva a lupa ao rosto com as duas mãos', peso: 2, categoria: 'trabalho' },
+  { id: 'carregar-caixa', duracaoMs: 3400, descricao: 'segura peso à frente com tremor de esforço', peso: 2, categoria: 'trabalho' },
+  { id: 'apontar-achado', duracaoMs: 2600, descricao: 'aponta o achado com overshoot elástico', peso: 2, categoria: 'trabalho' },
+  { id: 'espreguicar-bracos', duracaoMs: 2800, descricao: 'esticão em Y com os bracinhos pro alto', peso: 2, categoria: 'vida' },
+  { id: 'abraco-quente', duracaoMs: 2400, descricao: 'fecha as patinhas num abraço com corações', peso: 2, categoria: 'social' },
 ] as const
 
 /** Intervalo entre ambientes (ms) — sorteado a cada ciclo para irregularidade. */
@@ -137,4 +185,79 @@ export const FRASES_TAGARELICE: readonly string[] = [
 
 export function sortearTagarelice(rand: () => number = Math.random): string {
   return FRASES_TAGARELICE[Math.floor(rand() * FRASES_TAGARELICE.length) % FRASES_TAGARELICE.length]!
+}
+
+/* ----------------- AUSÊNCIA / RETORNO (janela minimizada, aba oculta) ------
+   A pet percebe quando o humano some e quando volta. Tudo puro e testável:
+   - `fraseAusencia` = sorteio simples sem repetir a anterior;
+   - `fraseRetorno(awayMs)` = varia por tempo fora: curta (<30s) ela nem
+     estranha, média (<5min) ela sente saudade, longa ela faz festa.
+   O hook em `PetAurum.tsx` (`useVidaPropriaDaAurinha`) grava `awayDesde`
+   no `visibilitychange` e escolhe a fala na volta — só fala se a pet
+   estiver livre (`idle`/`sleeping`) e sem `prefers-reduced-motion`. */
+
+export const LIMITE_RETORNO_CURTO_MS = 30_000
+export const LIMITE_RETORNO_MEDIO_MS = 5 * 60_000
+
+export const FRASES_AUSENCIA: readonly string[] = [
+  'Tô te esperando…',
+  'Vou vigiar as tabelinhas!',
+  'Não demora, hein?',
+  'Vou cochilar de um olho só…',
+  'Guardo seu lugar quentinho!',
+  'Farejo você já já…',
+] as const
+
+export const FRASES_RETORNO_CURTO: readonly string[] = [
+  'Oi de novo!',
+  'Nem senti falta… mentira, senti!',
+  'Voltou rapidinho!',
+  'Bora continuar?',
+] as const
+
+export const FRASES_RETORNO_MEDIO: readonly string[] = [
+  'Voltei! Sentiu saudade?',
+  'Que bom te ver de novo!',
+  'Tava farejando sua volta!',
+  'Senti sua falta, sabia?',
+] as const
+
+export const FRASES_RETORNO_LONGO: readonly string[] = [
+  'VOLTOU! Fiz festa sozinha!',
+  'Quanto tempo! Conta tudo!',
+  'Achei que tinha me abandonado…',
+  'Saudade gigante! Bora classificar?',
+] as const
+
+function sortearDe(
+  lista: readonly string[],
+  anterior: string | null,
+  rand: () => number,
+): string {
+  if (lista.length === 0) throw new Error('sem frases cadastradas')
+  if (lista.length === 1) return lista[0]!
+  let indice = Math.floor(rand() * lista.length) % lista.length
+  let tentativas = 0
+  while (lista[indice] === anterior && tentativas < 4) {
+    indice = (indice + 1) % lista.length
+    tentativas += 1
+  }
+  return lista[indice]!
+}
+
+export function fraseAusencia(
+  anterior: string | null = null,
+  rand: () => number = Math.random,
+): string {
+  return sortearDe(FRASES_AUSENCIA, anterior, rand)
+}
+
+export function fraseRetorno(
+  awayMs: number,
+  anterior: string | null = null,
+  rand: () => number = Math.random,
+): string {
+  if (awayMs >= LIMITE_RETORNO_MEDIO_MS) return sortearDe(FRASES_RETORNO_LONGO, anterior, rand)
+  if (awayMs >= LIMITE_RETORNO_CURTO_MS) return sortearDe(FRASES_RETORNO_MEDIO, anterior, rand)
+  return sortearDe(FRASES_RETORNO_CURTO, anterior, rand)
 }

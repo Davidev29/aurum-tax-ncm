@@ -25,6 +25,7 @@ import {
   StatusAurumAI,
 } from '@/ui/aurum-ai'
 import { Btn, Painel, Texto, Vazio } from '@/ui/kit'
+import { Entrada, Revelar } from '@/ui/motion'
 import { CartaoCnae, DetalhesPerguntasServicos, FichaEmpresaCnpj, BlocoContextoNbs } from '@/ui/servicos'
 
 const DEBOUNCE_MS = 3000
@@ -152,6 +153,7 @@ export function ConsultaServicos() {
 
   return (
     <div className="mx-auto max-w-5xl">
+      <Entrada>
       <Painel>
         <div className="p-5">
           <h2 className="flex items-center gap-2 text-base font-bold">
@@ -274,18 +276,19 @@ export function ConsultaServicos() {
           )}
         </div>
       </Painel>
+      </Entrada>
 
       {modo === 'manual' ? (
         !entrada.trim() ? (
-          <div className="mt-6">
+          <Entrada className="mt-6">
             <Vazio
               icone="🔍"
               titulo="Busque por código, nome ou descrição"
               texto="Ex.: 122.011.100 (valida na base oficial) · aula de inglês (a ✨ Aurum AI responde primeiro) · atendimento médico domiciliar."
             />
-          </div>
+          </Entrada>
         ) : (
-          <div className="mt-6 space-y-4">
+          <Revelar className="mt-6 space-y-4">
             {prioridadeIA ? (
               <section aria-label={`Resposta da ${NOME_IA}`} className="space-y-3">
                 <h3 className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -438,10 +441,10 @@ export function ConsultaServicos() {
                 </div>
               </details>
             ) : null}
-          </div>
+          </Revelar>
         )
       ) : (
-        <div className="mt-6 space-y-4">
+        <Revelar className="mt-6 space-y-4">
           {erroCnpj ? (
             <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-xs text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
               <strong>Não foi possível consultar:</strong> {erroCnpj}
@@ -498,7 +501,7 @@ export function ConsultaServicos() {
               </div>
             </>
           ) : null}
-        </div>
+        </Revelar>
       )}
 
       <ModalSalvarClass

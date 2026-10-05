@@ -43,6 +43,7 @@ import { REGIME_LABELS, regimeDoEmitente, transfereCreditoIbsCbs } from '@/infra
 import type { DirecaoNota, FiltrosNfe, NotaXml, ResultadoItemNfe } from '@/infrastructure/nfe/tipos'
 import { useSessao } from '@/store/sessao'
 import { useNfe } from '@/store/nfe'
+import { BannerContribuintesNovos } from './NfePendentes'
 import { ModalItemNfeDetalhe, Olho } from '@/ui/detalhes'
 import { toast, useUi } from '@/store/ui'
 import { CartaoStat } from '@/ui/cartoes'
@@ -115,6 +116,7 @@ export function NfeXml() {
         <PainelImportacao />
       </Entrada>
       <ResumoImportacao />
+      <BannerXml />
       <PainelHistorico />
     </div>
   )
@@ -278,6 +280,10 @@ function CampoTaxaNfe({ tributo }: { tributo: 'IBS' | 'CBS' }) {
   )
 }
 
+function BannerXml() {
+  return <BannerContribuintesNovos />
+}
+
 function ResumoImportacao() {
   const resumo = useNfe((s) => s.ultimoResumo)
   return (
@@ -298,8 +304,16 @@ function ResumoImportacao() {
       <div className="font-bold">
         📥 {resumo.novas} nota(s) importada(s)
         {resumo.duplicadas ? ` · ${resumo.duplicadas} duplicada(s) ignorada(s)` : ''}
-        {resumo.quarentena ? ` · ${resumo.quarentena} em quarentena` : ''}
+        {(resumo.redirecionadas ?? 0) > 0 ? ` · ${resumo.redirecionadas} em outro cadastro` : ''}
+        {(resumo.orfas ?? 0) > 0 ? ` · ${resumo.orfas} de contribuinte novo` : ''}
+        {(resumo.orfas ?? 0) === 0 && resumo.quarentena ? ` · ${resumo.quarentena} em quarentena` : ''}
       </div>
+      {(resumo.pendentesCadastro?.length ?? 0) > 0 ? (
+        <div className="mt-1 text-amber-700 dark:text-amber-300">
+          ⚠ Contribuinte novo: {resumo.pendentesCadastro!.slice(0, 3).map((p) => p.cnpj).join(', ')}
+          {resumo.pendentesCadastro!.length > 3 ? ` +${resumo.pendentesCadastro!.length - 3}` : ''} — cadastre no banner abaixo.
+        </div>
+      ) : null}
       {resumo.erros.length ? (
         <ul className="mt-2 max-h-32 space-y-1 overflow-auto">
           {resumo.erros.map((e, i) => (
@@ -526,7 +540,7 @@ function PainelHistorico() {
       </Secao>
 
       <Secao>
-        <ApuracaoReforma apuracao={apuracao} />
+        <ApuracaoReforma apuracao={apuracao} inicio={filtrosTela.inicio} fim={filtrosTela.fim} />
       </Secao>
 
       <Secao>
@@ -698,9 +712,10 @@ function PainelHistorico() {
  * Apuração IBS/CBS no padrão do portal da Reforma (tributação sobre o
  * consumo): débitos das saídas menos créditos apropriáveis das entradas,
  * por tributo e no total — com o veredito (a pagar / saldo credor).
- * Calculada sobre as notas filtradas em tela.
+ * Calculada sobre as notas filtradas em tela: filtrar uma data específica
+ * apura os créditos/débitos IBS e CBS daquela data (apuração assistida).
  */
-function ApuracaoReforma({ apuracao: a }: { apuracao: ApuracaoIbsCbs }) {
+function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCbs; inicio: string; fim: string }) {
   const temMovimento = a.resultado !== 'sem-movimento'
   const cobertura = a.debitoTotal > 0 ? Math.min(100, (a.creditoTotal / a.debitoTotal) * 100) : 0
   const vereditoTom =
@@ -716,6 +731,8 @@ function ApuracaoReforma({ apuracao: a }: { apuracao: ApuracaoIbsCbs }) {
           <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
             Débitos das saídas − créditos das entradas · {a.qtdSaidas} saída(s) e{' '}
             {a.qtdEntradasApropriaveis + a.qtdEntradasBloqueadas + a.qtdEntradasNaoConfirmadas} entrada(s) no filtro
+            {' · '}
+            <strong className="text-slate-600 dark:text-slate-300">{rotuloPeriodoApuracao(inicio, fim)}</strong>
           </p>
         </div>
         <span className={`pill ${vereditoTom === 'red' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300' : vereditoTom === 'emerald' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
@@ -1648,6 +1665,14 @@ function TabelaNotas({ notas, onVerDanfe }: { notas: NotaXml[]; onVerDanfe: (n: 
 
 const fmtData = (iso: string): string =>
   /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : iso
+
+/** Rótulo do recorte temporal da apuração assistida (reage aos filtros). */
+function rotuloPeriodoApuracao(inicio: string, fim: string): string {
+  if (inicio && fim) return inicio === fim ? `em ${fmtData(inicio)}` : `${fmtData(inicio)} a ${fmtData(fim)}`
+  if (inicio) return `desde ${fmtData(inicio)}`
+  if (fim) return `até ${fmtData(fim)}`
+  return 'todas as notas da empresa'
+}
 
 /* --------------------------------------------------------------- detalhe --- */
 

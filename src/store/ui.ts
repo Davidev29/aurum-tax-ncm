@@ -25,6 +25,7 @@ export type ViewId =
   | 'produtos'
   | 'auxiliares'
   | 'legislacao'
+  | 'aurum'
   | 'debugia'
 
 export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = {
@@ -64,6 +65,10 @@ export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = 
     titulo: 'Legislação',
     subtitulo: 'Leia as normas dentro do sistema — base federal, decretos, RICMS-CE e portais',
   },
+  aurum: {
+    titulo: 'Aurum AI',
+    subtitulo: 'Converse com a IA — NCM/NBS, cálculos e relatórios com RAG nativo',
+  },
   // View oculta de diagnóstico (Phase 6 / IA-05): fora da paridade SPEC das
   // 7 telas e do menu lateral — acessível só por `Ctrl+Shift+D`.
   debugia: {
@@ -88,6 +93,7 @@ export type ModalId =
   | 'calcCustom'
   | 'previewEmitente'
   | 'detalheSped'
+  | 'novidades'
 
 /**
  * Origem do item que o usuário pediu para calcular.
@@ -116,10 +122,39 @@ export function registrarLimpeza(view: ViewId, limpar: LimpezaTela): void {
   limpezas.set(view, limpar)
 }
 
-/** Volta a área rolável da aplicação ao topo (o menu lateral não rola). */
+/**
+ * Volta a área rolável da aplicação ao topo (o menu lateral não rola).
+ *
+ * Propositalmente INSTANTÂNEO (`behavior: 'auto'` + atribuição direta):
+ * o `.scroll-elegante` tem `scroll-behavior: smooth` no CSS, e um retorno
+ * animado competia com a transição de entrada da nova view (fade + deslize),
+ * gerando o "engasgo" na troca de menus. O topo é reposicionado no mesmo
+ * frame da troca; a suavidade fica por conta do framer-motion.
+ */
 export function rolarParaTopo(): void {
-  document.getElementById('conteudo')?.scrollTo({ top: 0 })
-  window.scrollTo({ top: 0 })
+  const area = document.getElementById('conteudo')
+  if (area) {
+    if (typeof area.scrollTo === 'function') {
+      try {
+        area.scrollTo({ top: 0, behavior: 'auto' })
+      } catch {
+        area.scrollTop = 0
+      }
+    } else {
+      area.scrollTop = 0
+    }
+  }
+  if (typeof window.scrollTo === 'function') {
+    try {
+      window.scrollTo({ top: 0, behavior: 'auto' })
+    } catch {
+      try {
+        window.scrollTo(0, 0)
+      } catch {
+        /* ambiente sem rolagem programática (ex.: testes) — ignora */
+      }
+    }
+  }
 }
 
 type Tema = 'dark' | 'light'
@@ -157,6 +192,12 @@ interface UiState {
   sidebarRecolhida: boolean
   /** Item que está sendo levado ao modal da calculadora (`null` = fechado). */
   fonteCalc: FonteCalc | null
+  /**
+   * Contador de trocas de menu — cada `trocarView` real avança 1 e o `Layout`
+   * escolhe o próximo preset do carrossel (`PRESETS_TRANSICAO`), então duas
+   * trocas seguidas nunca repetem a mesma animação.
+   */
+  transicaoSeq: number
   /** Abre/fecha um modal (`null` fecha). */
   abrirModal: (id: ModalId | null) => void
   /** Abre/fecha o modal da calculadora (`null` fecha). */
@@ -182,6 +223,7 @@ export const useUi = create<UiState>((set, get) => ({
   sidebarAberta: false,
   sidebarRecolhida: recolhidaInicial(),
   fonteCalc: null,
+  transicaoSeq: 0,
 
   /**
    * Troca de tela. Ao sair, a tela anterior limpa o que o usuário digitou
@@ -191,7 +233,14 @@ export const useUi = create<UiState>((set, get) => ({
   trocarView: (v) => {
     const atual = get().view
     if (atual !== v) limpezas.get(atual)?.()
-    set({ view: v, sidebarAberta: false, modal: null, fonteCalc: null })
+    set((s) => ({
+      view: v,
+      sidebarAberta: false,
+      modal: null,
+      fonteCalc: null,
+      // Só avança o carrossel de animação quando a tela realmente muda.
+      transicaoSeq: atual !== v ? s.transicaoSeq + 1 : s.transicaoSeq,
+    }))
     rolarParaTopo()
   },
 

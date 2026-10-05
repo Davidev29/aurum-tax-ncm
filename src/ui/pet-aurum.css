@@ -98,10 +98,18 @@
 .pet-px-corpo  { transform-box: fill-box; transform-origin: 50% 100%; }
 .pet-px-rabo   { transform-box: fill-box; transform-origin: 88% 22%; }
 .pet-px-lupa-giro { transform-box: fill-box; transform-origin: 50% 45%; }
+/* Rig de ombros (Fase 0 — física de braços): cada bracinho gira no ombro,
+   não no centro. Esquerdo ancora à direita/topo do bloco, direito à
+   esquerda/topo. Permite rotate/translate suave com --pet-mola em vez do
+   pop por opacity. */
+.pet-px-braco-baixo, .pet-px-braco-alto, .pet-px-braco-gaveta { transform-box: fill-box; transform-origin: 82% 12%; }
+.pet-px-braco-dir { transform-box: fill-box; transform-origin: 18% 12%; }
+.pet-px-braco-superman-e { transform-box: fill-box; transform-origin: 88% 50%; }
+.pet-px-braco-superman-d { transform-box: fill-box; transform-origin: 12% 50%; }
 
 /* Overlays escondidos por padrão (controlados por data-mood).
    Transição curta = troca de humor com blend, sem corte seco. */
-.pet-px-pes-b, .pet-px-braco-alto, .pet-px-lids,
+.pet-px-pes-b, .pet-px-braco-alto, .pet-px-braco-gaveta, .pet-px-lids,
 .pet-px-bravas, .pet-px-boca-brava, .pet-px-boca-aberta {
   opacity: 0;
   transition: opacity 0.18s ease;
@@ -697,9 +705,9 @@
 }
 .pet-aurum[data-loco='pulando'] .pet-sombra-doca { scale: 0.68; opacity: 0.55; }
 
-/* Potinho no canto esquerdo — base de comer/beber. */
+/* Potinho — ao lado da gaveta (base de comer/beber). */
 .pet-pote {
-  left: 2%; bottom: 10px; width: 20px; height: 13px;
+  left: 38px; bottom: 10px; width: 20px; height: 13px;
   border-radius: 3px 3px 10px 10px;
   background: linear-gradient(180deg, #7c8aa0, #4a5a74);
   border: 1px solid #2c3a52;
@@ -736,7 +744,7 @@
 
 /* Biscoito — aparece para o lanche. */
 .pet-biscoito {
-  left: 12%; bottom: 13px; width: 12px; height: 10px;
+  left: 62px; bottom: 13px; width: 12px; height: 10px;
   border-radius: 3px;
   background: linear-gradient(180deg, #c98f4e, #8a5a26);
   border: 1px solid #5b3a16;
@@ -818,6 +826,11 @@
   align-items: center;
   justify-content: center;
   height: 5.4rem;
+  /* TRILHO TOTAL: a casinha ocupa TODA a largura da sidebar (o .pet-aurum é
+     coluna centralizada e encolheria a casa p/ a largura da pet = trilho
+     zero). Com 100% o JS mede o trilho real e ela passeia de borda a borda. */
+  width: 100%;
+  align-self: stretch;
 }
 .pet-aurum[data-recolhida='true'] .pet-casa { height: 3rem; }
 
@@ -929,41 +942,115 @@
   display: block;
   opacity: 1;
   transform: none;
-  transition: opacity 0.25s ease;
-  animation: pet-paraquedas-abrir 0.5s var(--pet-mola), pet-paraquedas-respirar 2.8s var(--pet-suave) 0.5s infinite;
-  filter: drop-shadow(0 8px 16px rgb(16 28 46 / 0.4));
+  transition: opacity 0.35s ease;
+  animation: pet-paraquedas-abrir 0.7s var(--pet-mola), pet-paraquedas-respirar 3.6s var(--pet-suave) 0.7s infinite;
+  filter: drop-shadow(0 10px 18px rgb(16 28 46 / 0.4));
 }
 @keyframes pet-paraquedas-abrir {
-  0% { opacity: 0; transform: scale(0.6) translateY(15px); }
+  0% { opacity: 0; transform: scale(0.55) translateY(22px); }
+  60% { opacity: 1; transform: scale(1.06) translateY(-4px); }
   100% { opacity: 1; transform: none; }
 }
+/* Respiração lenta da copa + balanço de vento (copa "respira" e inclina). */
 @keyframes pet-paraquedas-respirar {
-  0%,100% { transform: scaleX(1) scaleY(1) skewX(0deg); }
-  30% { transform: scaleX(1.025) scaleY(0.988) skewX(0.6deg); }
-  50% { transform: scaleX(1.03) scaleY(0.985) skewX(0deg); }
-  70% { transform: scaleX(1.025) scaleY(0.988) skewX(-0.6deg); }
+  0%,100% { transform: scaleX(1) scaleY(1) skewX(0deg) translateY(0); }
+  25% { transform: scaleX(1.03) scaleY(0.986) skewX(0.9deg) translateY(-1px); }
+  50% { transform: scaleX(1.045) scaleY(0.98) skewX(0deg) translateY(-1.6px); }
+  75% { transform: scaleX(1.03) scaleY(0.986) skewX(-0.9deg) translateY(-0.6px); }
 }
 
-/* Balanço do pêndulo (corpo balança sob a copa) — duas frequências
-   sobrepostas (primária 1.8s + tremor das linhas) para não parecer
-   metrônomo; amplitude contida para não brigar com o JS. */
+/* Balanço do pêndulo — mais lento e fluido (2.6s) + deriva de vento.
+   Amplitude contida para não brigar com o JS; segunda frequência vem do
+   boneco (2.1s), fora de fase de propósito. */
 .pet-voo[data-fase='retornando'] .pet-voo-pendulo {
-  animation: pet-pendulo-retorno 1.8s var(--pet-suave) infinite;
+  animation: pet-pendulo-retorno 2.6s var(--pet-suave) infinite;
 }
 @keyframes pet-pendulo-retorno {
-  0%,100% { transform: rotate(-3.5deg); }
-  20% { transform: rotate(-1deg); }
-  50% { transform: rotate(3.5deg); }
-  80% { transform: rotate(1deg); }
+  0%,100% { transform: rotate(-4.2deg) translateX(-1.5px); }
+  20% { transform: rotate(-1.2deg) translateX(-0.5px); }
+  50% { transform: rotate(4.2deg) translateX(1.5px); }
+  80% { transform: rotate(1.2deg) translateX(0.5px); }
 }
-/* Flutuação do boneco no retorno — fora de fase com o pêndulo (1.8s vs
-   1.35s) para movimento orgânico; soma ao glide do JS sem conflito. */
+/* Flutuação do boneco no retorno — lenta e fofa (2.1s vs pêndulo 2.6s).
+   Soma ao glide do JS sem conflito. */
 .pet-voo[data-fase='retornando'] .pet-voo-boneco {
-  animation: pet-voo-bob-retorno 1.35s var(--pet-suave) infinite;
+  animation: pet-voo-bob-retorno 2.1s var(--pet-suave) infinite;
 }
 @keyframes pet-voo-bob-retorno {
-  0%,100% { transform: translateY(0) rotate(0.6deg); }
-  50% { transform: translateY(-2.5px) rotate(-0.6deg); }
+  0%,100% { transform: translateY(0) rotate(0.8deg) scale(1, 1); }
+  30% { transform: translateY(-2px) rotate(0.2deg) scale(0.995, 1.008); }
+  50% { transform: translateY(-3.4px) rotate(-0.8deg) scale(0.99, 1.015); }
+  70% { transform: translateY(-1.6px) rotate(-0.2deg) scale(1, 1); }
+}
+/* ---- EXPRESSÕES DE VOO (só no retorno de paraquedas) ----
+   A pet sente o vento: boquinha em "o" pulsa, pisca contra o vento,
+   cabeça olha de um lado pro outro e o rabo esvoaça. Braços superman
+   "remam" de leve. Tudo em camadas internas, sem tocar no transform do JS. */
+.pet-voo[data-fase='retornando'] .pet-px-boca-aberta { opacity: 1; animation: pet-voo-boca-vento 1.8s ease-in-out infinite; }
+@keyframes pet-voo-boca-vento {
+  0%,100% { opacity: 1; }
+  30% { opacity: 0.75; }
+  55% { opacity: 1; }
+  80% { opacity: 0.85; }
+}
+.pet-voo[data-fase='retornando'] .pet-px-lids { animation: pet-voo-pisca-vento 2.4s steps(1, end) infinite; }
+@keyframes pet-voo-pisca-vento {
+  0%,72% { opacity: 0; } 73%,78% { opacity: 1; } 79%,100% { opacity: 0; }
+}
+.pet-voo[data-fase='retornando'] .pet-px-cabeca { animation: pet-voo-cabeca-vento 2.6s var(--pet-suave) infinite; }
+@keyframes pet-voo-cabeca-vento {
+  0%,100% { transform: rotate(-4deg) translateY(0); }
+  25% { transform: rotate(-1deg) translateY(0.4px); }
+  50% { transform: rotate(4deg) translateY(0.2px); }
+  75% { transform: rotate(1deg) translateY(0.5px); }
+}
+.pet-voo[data-fase='retornando'] .pet-px-rabo { animation: pet-rabo-rapido 0.32s ease-in-out infinite; }
+.pet-voo[data-fase='retornando'] .pet-px-braco-superman-e,
+.pet-voo[data-fase='retornando'] .pet-px-braco-superman-d { animation: pet-voo-braco-vento 2.1s var(--pet-suave) infinite; }
+@keyframes pet-voo-braco-vento {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.92; }
+}
+/* ---- VENTO (só no retorno) ----
+   Riscos de vento + nuvenzinhas que sobem pela lateral da pet, vendendo a
+   sensação de descida lenta. Camada .pet-vento mora dentro do .pet-voo-move
+   (acompanha o portal), fora do fluxo, só transform/opacity. */
+.pet-vento { position: absolute; inset: -70px -46px; pointer-events: none; opacity: 0; }
+.pet-voo[data-fase='retornando'] .pet-vento { opacity: 1; }
+.pet-vento-risco {
+  position: absolute; left: 50%; top: 100%; width: 2px; border-radius: 2px;
+  background: linear-gradient(180deg, transparent, rgb(190 220 235 / 0.85));
+  opacity: 0;
+}
+.pet-voo[data-fase='retornando'] .pet-vento-risco { animation: pet-vento-sobe 1.15s linear infinite; }
+.pet-vento-risco--1 { margin-left: -42px; height: 34px; animation-delay: 0s !important; }
+.pet-vento-risco--2 { margin-left: -24px; height: 48px; animation-delay: 0.28s !important; }
+.pet-vento-risco--3 { margin-left: -6px; height: 28px; animation-delay: 0.55s !important; }
+.pet-vento-risco--4 { margin-left: 16px; height: 44px; animation-delay: 0.12s !important; }
+.pet-vento-risco--5 { margin-left: 36px; height: 32px; animation-delay: 0.7s !important; }
+@keyframes pet-vento-sobe {
+  0% { opacity: 0; transform: translateY(10px) scaleY(0.6); }
+  18% { opacity: 0.9; }
+  100% { opacity: 0; transform: translateY(-110px) scaleY(1); }
+}
+.pet-vento-nuvem {
+  position: absolute; left: 50%; top: 100%; border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 255 255 / 0.75) 0%, rgb(255 255 255 / 0) 70%);
+  filter: blur(2px); opacity: 0;
+}
+.pet-voo[data-fase='retornando'] .pet-vento-nuvem { animation: pet-vento-nuvem-sobe 1.9s ease-out infinite; }
+.pet-vento-nuvem--1 { margin-left: -38px; width: 26px; height: 26px; animation-delay: 0.2s !important; }
+.pet-vento-nuvem--2 { margin-left: 14px; width: 34px; height: 34px; animation-delay: 1.05s !important; }
+@keyframes pet-vento-nuvem-sobe {
+  0% { opacity: 0; transform: translateY(6px) scale(0.7); }
+  25% { opacity: 0.7; }
+  100% { opacity: 0; transform: translateY(-90px) scale(1.2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pet-vento, .pet-vento * { animation: none !important; }
+  .pet-voo[data-fase='retornando'] .pet-vento { opacity: 0; }
+  .pet-voo[data-fase='retornando'] .pet-voo-pendulo,
+  .pet-voo[data-fase='retornando'] .pet-voo-boneco { animation: none; }
 }
 /* Assentamento: a copa recolhe para cima e some; o squash do corpo vem do JS. */
 .pet-voo[data-pouso='true'] .pet-paraquedas {
@@ -1527,14 +1614,14 @@
 
 /* Eco — vapor do cafezinho (bolhas que sobem do potinho). */
 .pet-vapor {
-  left: 6%; bottom: 24px; width: 7px; height: 7px;
+  left: 42px; bottom: 24px; width: 7px; height: 7px;
   border-radius: 50%;
   background: radial-gradient(circle, rgb(255 255 255 / 0.95), rgb(255 255 255 / 0));
   filter: blur(1px);
   opacity: 0;
 }
-.pet-vapor--2 { left: 9%; }
-.pet-vapor--3 { left: 3.5%; }
+.pet-vapor--2 { left: 48px; }
+.pet-vapor--3 { left: 37px; }
 .pet-aurum[data-ambient='tomar-cafe'] .pet-vapor--1 { animation: pet-vapor-subir 1.4s ease-out 2; }
 .pet-aurum[data-ambient='tomar-cafe'] .pet-vapor--2 { animation: pet-vapor-subir 1.4s 0.35s ease-out 2; }
 .pet-aurum[data-ambient='tomar-cafe'] .pet-vapor--3 { animation: pet-vapor-subir 1.4s 0.7s ease-out 2; }
@@ -1819,6 +1906,809 @@
   0%,100% { transform: scale(1, 1); }
   35%,60% { transform: scale(0.97, 1.05) translateY(-1.6px); }
 }
+
+/* ============ PACOTE 3 — EMOÇÃO / LOCOMOÇÃO / OCIOSO (43–69) ============
+   27 novos que rodam SOZINHOS no idle (sem input). Mesmas regras: começam e
+   terminam neutros, durações espelham `AMBIENTES`. Reusam camadas e eco
+   existentes (corações, zzz, brilhos, notas, sombra) — nenhum prop novo. */
+
+/* 43. RIR-ALTO — gargalha com squash rápido + corações. */
+.pet-aurum[data-ambient='rir-alto'] .pet-salto { animation: pet-amb-rir 2.6s var(--pet-mola) 1; }
+@keyframes pet-amb-rir {
+  0%,100% { transform: translateY(0) scale(1, 1); }
+  15% { transform: translateY(1px) scale(1.08, 0.9); }
+  30% { transform: translateY(-3px) scale(0.95, 1.06) rotate(-2deg); }
+  45% { transform: translateY(0.5px) scale(1.06, 0.92) rotate(2deg); }
+  60% { transform: translateY(-2.4px) scale(0.96, 1.05) rotate(-1deg); }
+  75% { transform: translateY(0) scale(1.04, 0.95); }
+}
+.pet-aurum[data-ambient='rir-alto'] .pet-px-cabeca { animation: pet-amb-rir-cabeca 2.6s var(--pet-suave) 1; }
+@keyframes pet-amb-rir-cabeca {
+  0%,100% { transform: rotate(0); }
+  30% { transform: rotate(-9deg) translateY(-0.8px); }
+  60% { transform: rotate(7deg); }
+}
+.pet-aurum[data-ambient='rir-alto'] .pet-coracoes { opacity: 1; }
+
+/* 44. CHORAMINGAR — murcha com soluços + lids entreabertas. */
+.pet-aurum[data-ambient='choramingar'] .pet-salto { animation: pet-amb-chora 3.2s var(--pet-respiro) 1; }
+@keyframes pet-amb-chora {
+  0%,100% { transform: translateY(0) scale(1, 1); }
+  20%,70% { transform: translateY(1.4px) scale(1.05, 0.94); }
+  30% { transform: translateY(1px) scale(1.05, 0.94); }
+  40% { transform: translateY(1.7px) scale(1.06, 0.93); }
+  50% { transform: translateY(1.1px) scale(1.05, 0.94); }
+  60% { transform: translateY(1.6px) scale(1.06, 0.93); }
+}
+.pet-aurum[data-ambient='choramingar'] .pet-px-cabeca { animation: pet-amb-chora-cabeca 3.2s var(--pet-respiro) 1; }
+@keyframes pet-amb-chora-cabeca {
+  0%,100% { transform: rotate(0); }
+  20%,70% { transform: rotate(5deg) translateY(1px); }
+}
+
+/* 45. ORGULHO — estufa o peito, selo brilha. */
+.pet-aurum[data-ambient='orgulho'] .pet-salto { animation: pet-amb-orgulho 2.8s var(--pet-mola) 1; }
+@keyframes pet-amb-orgulho {
+  0%,100% { transform: scale(1, 1); }
+  30%,65% { transform: scale(0.94, 1.09) translateY(-2.4px); }
+}
+.pet-aurum[data-ambient='orgulho'] .pet-px-cabeca { animation: pet-amb-orgulho-cabeca 2.8s var(--pet-suave) 1; }
+@keyframes pet-amb-orgulho-cabeca {
+  0%,100% { transform: rotate(0); }
+  30%,65% { transform: rotate(-10deg) translateY(-1.2px); }
+}
+.pet-aurum[data-ambient='orgulho'] .pet-brilho--1 { animation: pet-brilho-piscar 0.7s ease-in-out 4; }
+
+/* 46. TIMIDEZ — esconde o focinho, rabo abana tímido. */
+.pet-aurum[data-ambient='timidez'] .pet-px-cabeca { animation: pet-amb-timidez 3s var(--pet-suave) 1; }
+@keyframes pet-amb-timidez {
+  0%,100% { transform: rotate(0) translateX(0); }
+  30%,70% { transform: rotate(10deg) translateX(-1.4px); }
+}
+.pet-aurum[data-ambient='timidez'] .pet-salto { animation: pet-amb-timidez-corpo 3s var(--pet-suave) 1; }
+@keyframes pet-amb-timidez-corpo {
+  0%,100% { transform: scale(1, 1); }
+  30%,70% { transform: scale(0.96, 0.94) translateY(1px); }
+}
+.pet-aurum[data-ambient='timidez'] .pet-px-rabo { animation: pet-rabo-rapido 0.4s ease-in-out 7; }
+
+/* 47. SURPRESA — espanto com hop curto + boca em "o". */
+.pet-aurum[data-ambient='surpresa'] .pet-salto { animation: pet-amb-surpresa 2.2s var(--pet-mola) 1; }
+@keyframes pet-amb-surpresa {
+  0%,100% { transform: translateY(0) scale(1, 1); }
+  25% { transform: translateY(-7px) scale(0.94, 1.08); }
+  45% { transform: translateY(0) scale(1.08, 0.9); }
+  60% { transform: translateY(-2px) scale(0.98, 1.03); }
+}
+.pet-aurum[data-ambient='surpresa'] .pet-px-boca-aberta { animation: pet-amb-surpresa-boca 2.2s steps(1, end) 1; }
+@keyframes pet-amb-surpresa-boca {
+  0%,15% { opacity: 0; } 25%,60% { opacity: 1; } 75%,100% { opacity: 0; }
+}
+.pet-aurum[data-ambient='surpresa'] .pet-px-cabeca { animation: pet-amb-surpresa-cabeca 2.2s var(--pet-suave) 1; }
+@keyframes pet-amb-surpresa-cabeca {
+  0%,100% { transform: rotate(0); }
+  25%,60% { transform: rotate(-6deg) translateY(-1px); }
+}
+
+/* 48. MEDITAR — flutua serena com respiração longa. */
+.pet-aurum[data-ambient='meditar'] .pet-salto { animation: pet-amb-meditar 3.6s var(--pet-respiro) 1; }
+@keyframes pet-amb-meditar {
+  0%,100% { transform: translateY(0) scale(1, 1); }
+  50% { transform: translateY(-3px) scale(0.98, 1.03); }
+}
+.pet-aurum[data-ambient='meditar'] .pet-px-lids { animation: pet-amb-meditar-lids 3.6s steps(1, end) 1; }
+@keyframes pet-amb-meditar-lids {
+  0%,15% { opacity: 0; } 30%,70% { opacity: 1; } 85%,100% { opacity: 0; }
+}
+.pet-aurum[data-ambient='meditar'] .pet-brilho--3 { animation: pet-brilho-piscar 1.1s ease-in-out 3; }
+
+/* 49. APAIXONAR — suspira com corações subindo. */
+.pet-aurum[data-ambient='apaixonar'] .pet-px-cabeca { animation: pet-amb-apaixonar 2.8s var(--pet-suave) 1; }
+@keyframes pet-amb-apaixonar {
+  0%,100% { transform: rotate(0); }
+  35%,65% { transform: rotate(-8deg) translateY(-0.8px); }
+}
+.pet-aurum[data-ambient='apaixonar'] .pet-salto { animation: pet-amb-apaixonar-corpo 2.8s var(--pet-suave) 1; }
+@keyframes pet-amb-apaixonar-corpo {
+  0%,100% { transform: scale(1, 1); }
+  35%,65% { transform: scale(0.98, 1.05) translateY(-1.6px); }
+}
+.pet-aurum[data-ambient='apaixonar'] .pet-coracoes { opacity: 1; }
+
+/* 50. EMBURRAR — vira o focinho com biquinho + sobrancelhas. */
+.pet-aurum[data-ambient='emburrar'] .pet-px-cabeca { animation: pet-amb-emburrar 2.6s var(--pet-suave) 1; }
+@keyframes pet-amb-emburrar {
+  0%,100% { transform: rotate(0) translateX(0); }
+  30%,70% { transform: rotate(8deg) translateX(1.6px); }
+}
+.pet-aurum[data-ambient='emburrar'] .pet-px-bravas { opacity: 1; }
+.pet-aurum[data-ambient='emburrar'] .pet-px-boca-brava { opacity: 1; }
+
+/* 51. ALIVIO — enxuga a testa e solta o ar. */
+.pet-aurum[data-ambient='alivio'] .pet-salto { animation: pet-amb-alivio 2.4s var(--pet-respiro) 1; }
+@keyframes pet-amb-alivio {
+  0%,100% { transform: translateY(0) scale(1, 1); }
+  40%,65% { transform: translateY(1px) scale(1.05, 0.95); }
+  80% { transform: translateY(-2px) scale(0.98, 1.03); }
+}
+.pet-aurum[data-ambient='alivio'] .pet-px-boca-aberta { animation: pet-amb-alivio-boca 2.4s steps(1, end) 1; }
+@keyframes pet-amb-alivio-boca {
+  0%,35% { opacity: 0; } 40%,65% { opacity: 1; } 80%,100% { opacity: 0; }
+}
+
+/* 52. GALOPAR — galope largo com stretch + poeira das patas. */
+.pet-aurum[data-ambient='galopar'] .pet-passeio { animation: pet-amb-galopar 2.4s var(--pet-mola) 1; }
+@keyframes pet-amb-galopar {
+  0%,100% { transform: translateX(0) scale(1, 1); }
+  25% { transform: translateX(-9px) scale(1.1, 0.9); }
+  50% { transform: translateX(9px) scale(0.94, 1.07); }
+  75% { transform: translateX(-4px) scale(1.06, 0.93); }
+}
+.pet-aurum[data-ambient='galopar'] .pet-px-pes-a { animation: pet-passo-a 0.16s steps(1, end) 15; }
+.pet-aurum[data-ambient='galopar'] .pet-px-pes-b { animation: pet-passo-b 0.16s steps(1, end) 15; }
+.pet-aurum[data-ambient='galopar'] .pet-px-rabo { animation: pet-rabo-rapido 0.18s ease-in-out 13; }
+
+/* 53. SALTITAR — saltinhos laterais alternados. */
+.pet-aurum[data-ambient='saltitar'] .pet-salto { animation: pet-amb-saltitar 2.6s var(--pet-mola) 1; }
+@keyframes pet-amb-saltitar {
+  0%,100% { transform: translate(0, 0) scale(1, 1); }
+  20% { transform: translate(-4px, -5px) scale(0.96, 1.05) rotate(-3deg); }
+  40% { transform: translate(0, 0) scale(1.05, 0.94); }
+  60% { transform: translate(4px, -5px) scale(0.96, 1.05) rotate(3deg); }
+  80% { transform: translate(0, 0) scale(1.05, 0.94); }
+}
+.pet-aurum[data-ambient='saltitar'] .pet-px-cabeca { animation: pet-amb-saltitar-cabeca 2.6s var(--pet-suave) 1; }
+@keyframes pet-amb-saltitar-cabeca {
+  0%,100% { transform: rotate(0); }
+  20% { transform: rotate(-7deg); } 60% { transform: rotate(7deg); }
+}
+
+/* 54. CORRER-LEVE — corridinha com inclinação de arrancada. */
+.pet-aurum[data-ambient='correr-leve'] .pet-passeio { animation: pet-amb-correr 2.2s var(--pet-suave) 1; }
+@keyframes pet-amb-correr {
+  0%,100% { transform: translateX(0) rotate(0); }
+  30% { transform: translateX(8px) rotate(5deg) scale(0.97, 1.04); }
+  60% { transform: translateX(-8px) rotate(-5deg) scale(0.97, 1.04); }
+}
+.pet-aurum[data-ambient='correr-leve'] .pet-px-pes-a { animation: pet-passo-a 0.18s steps(1, end) 12; }
+.pet-aurum[data-ambient='correr-leve'] .pet-px-pes-b { animation: pet-passo-b 0.18s steps(1, end) 12; }
+
+/* 55. SONAMBULAR — flutua dormindo com bracinhos à frente. */
+.pet-aurum[data-ambient='sonambular'] .pet-passeio { animation: pet-amb-sonambular 3.6s var(--pet-respiro) 1; }
+@keyframes pet-amb-sonambular {
+  0%,100% { transform: translateX(0) translateY(0); }
+  30% { transform: translateX(6px) translateY(-2px); }
+  60% { transform: translateX(-6px) translateY(-3px); }
+}
+.pet-aurum[data-ambient='sonambular'] .pet-px-lids { animation: pet-amb-sonambular-lids 3.6s steps(1, end) 1; }
+@keyframes pet-amb-sonambular-lids {
+  0%,15% { opacity: 0; } 30%,70% { opacity: 1; } 85%,100% { opacity: 0; }
+}
+.pet-aurum[data-ambient='sonambular'] .pet-zzz { opacity: 1; }
+
+/* 56. ESCORREGAR — derrapa e recupera com overshoot. */
+.pet-aurum[data-ambient='escorregar'] .pet-passeio { animation: pet-amb-escorregar 2.4s var(--pet-mola) 1; }
+@keyframes pet-amb-escorregar {
+  0%,100% { transform: translateX(0) rotate(0) scale(1, 1); }
+  30% { transform: translateX(10px) rotate(7deg) scale(1.1, 0.88); }
+  55% { transform: translateX(6px) rotate(-3deg) scale(0.96, 1.05); }
+  75% { transform: translateX(0) rotate(0); }
+}
+.pet-aurum[data-ambient='escorregar'] .pet-px-boca-aberta { animation: pet-amb-escorregar-boca 2.4s steps(1, end) 1; }
+@keyframes pet-amb-escorregar-boca {
+  0%,25% { opacity: 0; } 30%,55% { opacity: 1; } 70%,100% { opacity: 0; }
+}
+
+/* 57. TROPECAR — tropeço teatral que vira reverência. */
+.pet-aurum[data-ambient='tropecar'] .pet-salto { animation: pet-amb-tropecar 2.2s var(--pet-mola) 1; }
+@keyframes pet-amb-tropecar {
+  0%,100% { transform: translateY(0) rotate(0) scale(1, 1); }
+  30% { transform: translateY(1.4px) rotate(-7deg) scale(1.1, 0.86); }
+  55% { transform: translateY(-3px) rotate(3deg) scale(0.96, 1.05); }
+  75% { transform: translateY(0.8px) scale(1.05, 0.94); }
+}
+.pet-aurum[data-ambient='tropecar'] .pet-px-cabeca { animation: pet-amb-tropecar-cabeca 2.2s var(--pet-suave) 1; }
+@keyframes pet-amb-tropecar-cabeca {
+  0%,100% { transform: rotate(0); }
+  30% { transform: rotate(-10deg); } 55% { transform: rotate(5deg); }
+}
+
+/* 58. RODOPAR — giro em espiral com rabo esticado. */
+.pet-aurum[data-ambient='rodopiar'] .pet-passeio { animation: pet-amb-rodopiar 2.6s var(--pet-mola) 1; }
+@keyframes pet-amb-rodopiar {
+  0%,100% { transform: rotate(0) scale(1, 1); }
+  50% { transform: rotate(360deg) scale(0.94, 1.06); }
+}
+.pet-aurum[data-ambient='rodopiar'] .pet-px-rabo { animation: pet-rabo-rapido 0.2s ease-in-out 13; }
+
+/* 59. PATRULHA-LENTA — sentinela com pausas de olhar (idle profundo). */
+.pet-aurum[data-ambient='patrulha-lenta'] .pet-passeio { animation: pet-amb-patrulha-lenta 3.4s var(--pet-suave) 1; }
+@keyframes pet-amb-patrulha-lenta {
+  0%,100% { transform: translateX(0) rotate(0); }
+  25% { transform: translateX(-6px) rotate(-3deg); }
+  45%,60% { transform: translateX(-7px) rotate(-4deg); }
+  80% { transform: translateX(5px) rotate(3deg); }
+}
+.pet-aurum[data-ambient='patrulha-lenta'] .pet-px-cabeca { animation: pet-amb-patrulha-lenta-cabeca 3.4s var(--pet-suave) 1; }
+@keyframes pet-amb-patrulha-lenta-cabeca {
+  0%,100% { transform: rotate(0); }
+  45%,60% { transform: rotate(-8deg); }
+  80% { transform: rotate(6deg); }
+}
+
+/* 60. ZIGUE-ZAGUE — costura farejando o caminho. */
+.pet-aurum[data-ambient='zigue-zague'] .pet-passeio { animation: pet-amb-zigue 3.2s var(--pet-suave) 1; }
+@keyframes pet-amb-zigue {
+  0%,100% { transform: translate(0, 0) rotate(0); }
+  20% { transform: translate(-7px, -1px) rotate(-5deg); }
+  40% { transform: translate(7px, 0) rotate(5deg); }
+  60% { transform: translate(-6px, -1px) rotate(-4deg); }
+  80% { transform: translate(6px, 0) rotate(4deg); }
+}
+.pet-aurum[data-ambient='zigue-zague'] .pet-px-lupa-giro { animation: pet-amb-zigue-lupa 3.2s var(--pet-suave) 1; }
+@keyframes pet-amb-zigue-lupa {
+  0%,100% { transform: rotate(0); }
+  20%,60% { transform: rotate(-14deg); }
+  40%,80% { transform: rotate(14deg); }
+}
+
+/* 61. OLHAR-RELOGIO — lupa vira relógio de pulso. */
+.pet-aurum[data-ambient='olhar-relogio'] .pet-px-lupa-giro { animation: pet-amb-relogio 2.8s var(--pet-suave) 1; }
+@keyframes pet-amb-relogio {
+  0%,100% { transform: rotate(0) scale(1); }
+  35%,65% { transform: rotate(-24deg) translateY(-1.4px) scale(1.22); }
+}
+.pet-aurum[data-ambient='olhar-relogio'] .pet-px-cabeca { animation: pet-amb-relogio-cabeca 2.8s var(--pet-suave) 1; }
+@keyframes pet-amb-relogio-cabeca {
+  0%,100% { transform: rotate(0); }
+  35%,65% { transform: rotate(-8deg); }
+}
+
+/* 62. CONTAR-ESTRELAS — aponta e conta brilhinhos. */
+.pet-aurum[data-ambient='contar-estrelas'] .pet-brilho--1 { animation: pet-brilho-piscar 0.8s ease-in-out 4; }
+.pet-aurum[data-ambient='contar-estrelas'] .pet-brilho--2 { animation: pet-brilho-piscar 0.8s 0.25s ease-in-out 4; }
+.pet-aurum[data-ambient='contar-estrelas'] .pet-brilho--3 { animation: pet-brilho-piscar 0.8s 0.5s ease-in-out 4; }
+.pet-aurum[data-ambient='contar-estrelas'] .pet-px-cabeca { animation: pet-amb-estrelas 3.4s var(--pet-suave) 1; }
+@keyframes pet-amb-estrelas {
+  0%,100% { transform: rotate(0); }
+  25% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } 75% { transform: rotate(-4deg); }
+}
+
+/* 63. ASSOBIAR — biquinho com notinhas à deriva. */
+.pet-aurum[data-ambient='assobiar'] .pet-px-boca-aberta { animation: pet-amb-assobiar-boca 3.2s steps(1, end) 1; }
+@keyframes pet-amb-assobiar-boca {
+  0%,20% { opacity: 0; } 30%,75% { opacity: 1; } 85%,100% { opacity: 0; }
+}
+.pet-aurum[data-ambient='assobiar'] .pet-salto { animation: pet-amb-assobiar 3.2s var(--pet-suave) 1; }
+@keyframes pet-amb-assobiar {
+  0%,100% { transform: translateY(0) rotate(0); }
+  30%,75% { transform: translateY(-1.4px) rotate(2deg); }
+}
+.pet-aurum[data-ambient='assobiar'] .pet-nota--1 { animation: pet-nota-subir 1.6s ease-out 2; }
+.pet-aurum[data-ambient='assobiar'] .pet-nota--2 { animation: pet-nota-subir 1.6s 0.5s ease-out 2; }
+
+/* 64. AJEITAR-OCULOS — empurra os óculos 2x com a patinha. */
+.pet-aurum[data-ambient='ajeitar-oculos'] .pet-px-braco-baixo { animation: pet-braco-some 0.45s steps(1,end) 6; }
+.pet-aurum[data-ambient='ajeitar-oculos'] .pet-px-braco-alto { animation: pet-braco-acena 0.45s steps(1,end) 6; }
+.pet-aurum[data-ambient='ajeitar-oculos'] .pet-px-cabeca { animation: pet-amb-oculos 2.6s var(--pet-suave) 1; }
+@keyframes pet-amb-oculos {
+  0%,100% { transform: translateY(0); }
+  25%,55% { transform: translateY(-0.8px); }
+}
+
+/* 65. FAREJAR-AR — fuça para o alto com brisa no rabo. */
+.pet-aurum[data-ambient='farejar-ar'] .pet-px-cabeca { animation: pet-amb-farejar-ar 3s var(--pet-suave) 1; }
+@keyframes pet-amb-farejar-ar {
+  0%,100% { transform: rotate(0) translateY(0); }
+  25% { transform: rotate(-8deg) translateY(-1.2px); }
+  40% { transform: rotate(-6deg) translateY(-0.6px); }
+  55% { transform: rotate(-9deg) translateY(-1.3px); }
+  70% { transform: rotate(-5deg) translateY(-0.5px); }
+}
+.pet-aurum[data-ambient='farejar-ar'] .pet-px-rabo { animation: pet-amb-farejar-ar-rabo 3s var(--pet-suave) 1; }
+@keyframes pet-amb-farejar-ar-rabo {
+  0%,100% { transform: rotate(8deg); }
+  25%,70% { transform: rotate(-8deg); }
+}
+
+/* 66. LUSTRAR-SELO — esfrega o selo até sair brilho. */
+.pet-aurum[data-ambient='lustrar-selo'] .pet-px-lupa-giro { animation: pet-amb-lustrar 3s var(--pet-suave) 1; }
+@keyframes pet-amb-lustrar {
+  0%,100% { transform: translate(0, 1px) rotate(0) scale(1); }
+  25% { transform: translate(-1px, 1.4px) rotate(-10deg) scale(1.1); }
+  50% { transform: translate(1px, 1.4px) rotate(10deg) scale(1.1); }
+  75% { transform: translate(0, 1px) rotate(0) scale(1.05); }
+}
+.pet-aurum[data-ambient='lustrar-selo'] .pet-brilho--2 { animation: pet-brilho-piscar 0.7s 1s ease-in-out 3; }
+
+/* 67. ANOTAR — lupa vira lápis, cabecinha acompanha. */
+.pet-aurum[data-ambient='anotar'] .pet-px-lupa-giro { animation: pet-amb-anotar 3.2s var(--pet-suave) 1; }
+@keyframes pet-amb-anotar {
+  0%,100% { transform: translate(0, 0) rotate(0); }
+  25% { transform: translate(-2px, 1px) rotate(-14deg); }
+  50% { transform: translate(2px, 1px) rotate(14deg); }
+  75% { transform: translate(-1px, 1px) rotate(-8deg); }
+}
+.pet-aurum[data-ambient='anotar'] .pet-px-cabeca { animation: pet-amb-anotar-cabeca 3.2s var(--pet-suave) 1; }
+@keyframes pet-amb-anotar-cabeca {
+  0%,100% { transform: rotate(0); }
+  25%,75% { transform: rotate(-5deg) translateY(0.8px); }
+  50% { transform: rotate(5deg) translateY(0.8px); }
+}
+
+/* 68. DOBRAR-MAPA — abre o mapa, confere e dobra de volta. */
+.pet-aurum[data-ambient='dobrar-mapa'] .pet-salto { animation: pet-amb-mapa 3.4s var(--pet-mola) 1; }
+@keyframes pet-amb-mapa {
+  0%,100% { transform: scale(1, 1); }
+  30%,60% { transform: scale(1.08, 0.9) translateY(1px); }
+  75% { transform: scale(0.96, 1.05) translateY(-2px); }
+}
+.pet-aurum[data-ambient='dobrar-mapa'] .pet-px-lupa-giro { animation: pet-amb-mapa-lupa 3.4s var(--pet-suave) 1; }
+@keyframes pet-amb-mapa-lupa {
+  0%,100% { transform: scale(1) rotate(0); }
+  30%,60% { transform: scale(1.25) rotate(-6deg); }
+}
+
+/* 69. FAZER-SOMBRA — provoca a própria sombra com pulinhos. */
+.pet-aurum[data-ambient='fazer-sombra'] .pet-salto { animation: pet-amb-sombra-boneco 2.8s var(--pet-mola) 1; }
+@keyframes pet-amb-sombra-boneco {
+  0%,100% { transform: translateY(0) scale(1, 1); }
+  30% { transform: translateY(-5px) scale(0.95, 1.06); }
+  55% { transform: translateY(0) scale(1.08, 0.9); }
+  75% { transform: translateY(-3px) scale(0.97, 1.04); }
+}
+.pet-aurum[data-ambient='fazer-sombra'] .pet-px-cabeca { animation: pet-amb-sombra-cabeca 2.8s var(--pet-suave) 1; }
+@keyframes pet-amb-sombra-cabeca {
+  0%,100% { transform: rotate(0); }
+  30% { transform: rotate(-8deg); } 75% { transform: rotate(6deg); }
+}
+
+/* ============ GAVETA DE DOCUMENTOS (lado esquerdo da casinha) ============
+   Móvel fixo no eco: corpo de madeira + frente deslizante + livrinho interno.
+   A frente abre de 2 jeitos: (a) sozinha via transition nos moods de consulta
+   (searching/reading/thinking/calculating — o clique em busca já acende o
+   mood, então a gaveta responde na hora); (b) com história completa nos
+   ambientes `consultar-gaveta` (4s: ir até lá, abrir, pegar o livro, ler com
+   a lupa, guardar, fechar) e `ler-livrinho` (3.6s: abre o livro e lê).
+   O livrinho segue a pet pelo --pet-x (mesmo truque da sombra da doca). */
+.pet-gaveta { left: 2px; bottom: 8px; width: 30px; height: 26px; }
+.pet-gaveta-corpo {
+  position: absolute; inset: 0; border-radius: 3px;
+  background: linear-gradient(180deg, #9a6a35, #6e4520 70%, #54331a);
+  border: 1px solid #3c2410;
+}
+.pet-gaveta-corpo::after {
+  content: ''; position: absolute; left: 2px; right: 2px; top: 12px; height: 1px;
+  background: rgb(0 0 0 / 0.35);
+}
+.pet-gaveta-frente {
+  position: absolute; left: 2px; right: 2px; top: 2px; height: 9px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #c98f4e, #8a5a26);
+  border: 1px solid #3c2410;
+  transition: transform 0.35s var(--pet-suave);
+}
+.pet-gaveta-puxador {
+  position: absolute; left: 50%; top: 2px; width: 6px; height: 3px;
+  margin-left: -3px; border-radius: 2px; background: #3c2410;
+}
+.pet-gaveta-livro {
+  position: absolute; left: 6px; bottom: 14px; width: 12px; height: 5px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, #2ab5b5, #0f6f6f);
+  border: 1px solid #0a4444;
+  opacity: 0; transform: translateY(4px);
+  transition: opacity 0.3s ease, transform 0.35s var(--pet-suave);
+}
+/* Livrinho que ela segura: capa + 2 páginas (a direita folheia). */
+.pet-livro {
+  left: 50%; bottom: 30px; width: 30px; height: 20px; margin-left: -15px;
+  transform: translateX(var(--pet-x, 0px));
+  opacity: 0; scale: 0.5;
+  transition: opacity 0.3s ease, scale 0.3s var(--pet-mola);
+}
+.pet-livro-capa {
+  position: absolute; inset: 0; border-radius: 2px;
+  background: linear-gradient(180deg, #2b3f63, #16233a);
+  border: 1px solid #0e1626;
+}
+.pet-livro-pag {
+  position: absolute; top: 2px; bottom: 2px; width: 50%;
+  background: linear-gradient(180deg, #fffdf4, #f3ead2);
+  border: 1px solid #c9b48a;
+}
+.pet-livro-pag--e { left: 1px; border-radius: 2px 0 0 2px; transform-origin: 100% 50%; }
+.pet-livro-pag--d { right: 1px; border-radius: 0 2px 2px 0; transform-origin: 0% 50%; }
+@keyframes pet-livro-folhear {
+  0%,100% { transform: rotateY(0); }
+  50% { transform: rotateY(-150deg); }
+}
+/* --- Consulta ativa (clique em busca/campo): a gaveta abre e o livro aparece.
+   A página folheia sem parar enquanto o mood durar; ao aquietar, tudo fecha
+   com transition (sem snap). A pet inclina para a gaveta. --- */
+.pet-aurum[data-mood='searching'] .pet-gaveta-frente,
+.pet-aurum[data-mood='reading'] .pet-gaveta-frente,
+.pet-aurum[data-mood='thinking'] .pet-gaveta-frente,
+.pet-aurum[data-mood='calculating'] .pet-gaveta-frente { transform: translateX(-7px); }
+.pet-aurum[data-mood='searching'] .pet-gaveta-livro,
+.pet-aurum[data-mood='reading'] .pet-gaveta-livro,
+.pet-aurum[data-mood='thinking'] .pet-gaveta-livro,
+.pet-aurum[data-mood='calculating'] .pet-gaveta-livro { opacity: 1; transform: translateY(-2px); }
+.pet-aurum[data-mood='searching'] .pet-livro,
+.pet-aurum[data-mood='reading'] .pet-livro,
+.pet-aurum[data-mood='thinking'] .pet-livro,
+.pet-aurum[data-mood='calculating'] .pet-livro { opacity: 1; scale: 1; }
+.pet-aurum[data-mood='searching'] .pet-livro-pag--d,
+.pet-aurum[data-mood='reading'] .pet-livro-pag--d,
+.pet-aurum[data-mood='thinking'] .pet-livro-pag--d,
+.pet-aurum[data-mood='calculating'] .pet-livro-pag--d { animation: pet-livro-folhear 1.3s var(--pet-suave) infinite; }
+.pet-aurum[data-mood='searching'] .pet-passeio,
+.pet-aurum[data-mood='reading'] .pet-passeio,
+.pet-aurum[data-mood='thinking'] .pet-passeio,
+.pet-aurum[data-mood='calculating'] .pet-passeio { animation: pet-gaveta-lean 2.6s var(--pet-suave) infinite; }
+@keyframes pet-gaveta-lean {
+  0%,100% { transform: translateX(0) rotate(0); }
+  30%,70% { transform: translateX(-5px) rotate(-3deg); }
+}
+/* Bracinho na gaveta durante a consulta (o de repouso recolhe). */
+.pet-aurum[data-mood='searching'] .pet-px-braco-baixo,
+.pet-aurum[data-mood='reading'] .pet-px-braco-baixo,
+.pet-aurum[data-mood='thinking'] .pet-px-braco-baixo,
+.pet-aurum[data-mood='calculating'] .pet-px-braco-baixo { opacity: 0; }
+.pet-aurum[data-mood='searching'] .pet-px-braco-gaveta,
+.pet-aurum[data-mood='reading'] .pet-px-braco-gaveta,
+.pet-aurum[data-mood='thinking'] .pet-px-braco-gaveta,
+.pet-aurum[data-mood='calculating'] .pet-px-braco-gaveta { opacity: 1; }
+/* --- 70. CONSULTAR-GAVETA (4s) — ela vai até a gaveta, abre, pega o livro,
+   lê com a lupa (2 folheadas), guarda e fecha. --- */
+.pet-aurum[data-ambient='consultar-gaveta'] .pet-passeio { animation: pet-amb-gaveta-ir 4s var(--pet-suave) 1; }
+@keyframes pet-amb-gaveta-ir {
+  0%,100% { transform: translateX(0) rotate(0); }
+  12%,78% { transform: translateX(-7px) rotate(-4deg); }
+}
+.pet-aurum[data-ambient='consultar-gaveta'] .pet-px-cabeca { animation: pet-amb-gaveta-cabeca 4s var(--pet-suave) 1; }
+@keyframes pet-amb-gaveta-cabeca {
+  0%,100% { transform: rotate(0); }
+  12%,28% { transform: rotate(-11deg) translateY(1.4px); }
+  40%,70% { transform: rotate(-4deg) translateY(0.6px); }
+}
+.pet-aurum[data-ambient='consultar-gaveta'] .pet-gaveta-frente { animation: pet-amb-gaveta-frente 4s ease-in-out 1; }
+@keyframes pet-amb-gaveta-frente {
+  0%,8% { transform: translateX(0); }
+  18%,78% { transform: translateX(-7px); }
+  92%,100% { transform: translateX(0); }
+}
+/* Bracinho customizado: enfia na gaveta, puxa o livro, devolve no final.
+   Troca por steps (baixo some, gaveta aparece) + empurrão suave no transform. */
+.pet-aurum[data-ambient='consultar-gaveta'] .pet-px-braco-baixo { animation: pet-amb-gaveta-braco-baixo 4s steps(1, end) 1; }
+@keyframes pet-amb-gaveta-braco-baixo {
+  0%,16% { opacity: 1; } 17%,36% { opacity: 0; } 37%,66% { opacity: 1; }
+  67%,82% { opacity: 0; } 83%,100% { opacity: 1; }
+}
+.pet-aurum[data-ambient='consultar-gaveta'] .pet-px-braco-gaveta {
+  animation: pet-amb-gaveta-braco 4s steps(1, end) 1, pet-amb-gaveta-empurra 4s var(--pet-suave) 1;
+}
+@keyframes pet-amb-gaveta-braco {
+  0%,16% { opacity: 0; } 17%,36% { opacity: 1; } 37%,66% { opacity: 0; }
+  67%,82% { opacity: 1; } 83%,100% { opacity: 0; }
+}
+@keyframes pet-amb-gaveta-empurra {
+  0%,17% { transform: translateX(0); }
+  24% { transform: translateX(-1.6px); }
+  32% { transform: translateX(0.8px); }
+  40%,66% { transform: translateX(0); }
+  73% { transform: translateX(-1.2px); }
+  80%,100% { transform: translateX(0); }
+}
+.pet-aurum[data-ambient='consultar-gaveta'] .pet-gaveta-livro { animation: pet-amb-gaveta-livro 4s ease-in-out 1; }
+@keyframes pet-amb-gaveta-livro {
+  0%,20% { opacity: 0; transform: translateY(4px); }
+  28%,36% { opacity: 1; transform: translateY(-3px); }
+  44%,62% { opacity: 0; transform: translateY(4px); }
+  70%,78% { opacity: 1; transform: translateY(-3px); }
+  86%,100% { opacity: 0; transform: translateY(4px); }
+}
+.pet-aurum[data-ambient='consultar-gaveta'] .pet-livro { animation: pet-amb-gaveta-livro-abre 4s ease-in-out 1; }
+@keyframes pet-amb-gaveta-livro-abre {
+  0%,34% { opacity: 0; scale: 0.5; }
+  42%,64% { opacity: 1; scale: 1; }
+  74%,100% { opacity: 0; scale: 0.5; }
+}
+.pet-aurum[data-ambient='consultar-gaveta'] .pet-livro-pag--d { animation: pet-livro-folhear 1.2s 1.7s ease-in-out 2; }
+.pet-aurum[data-ambient='consultar-gaveta'] .pet-px-lupa-giro { animation: pet-amb-gaveta-lupa 4s var(--pet-suave) 1; }
+@keyframes pet-amb-gaveta-lupa {
+  0%,30%,100% { transform: rotate(0); }
+  45% { transform: translate(-2px, 1px) rotate(-12deg) scale(1.15); }
+  60% { transform: translate(2px, 1px) rotate(12deg) scale(1.15); }
+}
+.pet-aurum[data-ambient='consultar-gaveta'] .pet-px-lids { animation: pet-amb-gaveta-lids 4s steps(1, end) 1; }
+@keyframes pet-amb-gaveta-lids {
+  0%,44% { opacity: 0; } 45%,49% { opacity: 1; } 50%,66% { opacity: 0; }
+  67%,71% { opacity: 1; } 72%,100% { opacity: 0; }
+}
+/* --- 71. LER-LIVRINHO (3.6s) — o livro abre na frente dela, ela lê balançando
+   a cabeça com a lupa e fecha no final. --- */
+.pet-aurum[data-ambient='ler-livrinho'] .pet-livro { animation: pet-amb-livrinho-abre 3.6s ease-in-out 1; }
+@keyframes pet-amb-livrinho-abre {
+  0%,12% { opacity: 0; scale: 0.5; }
+  24%,80% { opacity: 1; scale: 1; }
+  92%,100% { opacity: 0; scale: 0.5; }
+}
+.pet-aurum[data-ambient='ler-livrinho'] .pet-livro-pag--d { animation: pet-livro-folhear 1.2s 1.1s ease-in-out 2; }
+.pet-aurum[data-ambient='ler-livrinho'] .pet-px-cabeca { animation: pet-amb-livrinho-cabeca 3.6s var(--pet-suave) 1; }
+@keyframes pet-amb-livrinho-cabeca {
+  0%,100% { transform: rotate(0); }
+  24%,40% { transform: rotate(-6deg) translateY(0.6px); }
+  55%,80% { transform: rotate(5deg) translateY(0.6px); }
+}
+.pet-aurum[data-ambient='ler-livrinho'] .pet-salto { animation: pet-amb-livrinho-corpo 3.6s var(--pet-suave) 1; }
+@keyframes pet-amb-livrinho-corpo {
+  0%,100% { transform: translateY(0) scale(1, 1); }
+  24%,80% { transform: translateY(0.8px) scale(1.02, 0.98); }
+}
+.pet-aurum[data-ambient='ler-livrinho'] .pet-px-lupa-giro { animation: pet-amb-livrinho-lupa 3.6s var(--pet-suave) 1; }
+@keyframes pet-amb-livrinho-lupa {
+  0%,100% { transform: rotate(0); }
+  24%,40% { transform: rotate(-12deg) scale(1.12); }
+  55%,80% { transform: rotate(12deg) scale(1.12); }
+}
+
+/* ============ PACOTE 4 — BRAÇOS COM FÍSICA (72–81) ============
+   10 animações com rig de ombro: rotate/translate interpolado (nunca
+   opacity steps), braço 80–150ms atrasado do tronco, rabo +100ms
+   (chicote). Todas neutras em 0%/100%. Durações espelham AMBIENTES. */
+
+/* 72. ACENAR-DUPLO — tchau com as duas patas em contrafase */
+.pet-aurum[data-ambient='acenar-duplo'] .pet-salto { animation: pet-amb-acenar-corpo 2.4s var(--pet-mola) 1; }
+@keyframes pet-amb-acenar-corpo {
+  0%,100% { transform: translateY(0) scale(1, 1); }
+  20% { transform: translateY(1px) scale(1.06, 0.94); }
+  40%,70% { transform: translateY(-2px) scale(0.98, 1.03); }
+}
+.pet-aurum[data-ambient='acenar-duplo'] .pet-px-braco-baixo { animation: pet-amb-acenar-e 2.4s var(--pet-suave) 1; }
+@keyframes pet-amb-acenar-e {
+  0%,100% { transform: rotate(0) translate(0, 0); }
+  20% { transform: rotate(-28deg) translate(-0.6px, -1.2px); }
+  35% { transform: rotate(-14deg) translate(0, -0.8px); }
+  50% { transform: rotate(-28deg) translate(-0.6px, -1.2px); }
+  65% { transform: rotate(-14deg) translate(0, -0.8px); }
+  80% { transform: rotate(-24deg) translate(-0.4px, -1px); }
+}
+.pet-aurum[data-ambient='acenar-duplo'] .pet-px-braco-dir { animation: pet-amb-acenar-d 2.4s var(--pet-suave) 1; }
+@keyframes pet-amb-acenar-d {
+  0%,100% { transform: rotate(0) translate(0, 0); }
+  20% { transform: rotate(14deg) translate(0, -0.6px); }
+  35% { transform: rotate(28deg) translate(0.6px, -1.2px); }
+  50% { transform: rotate(14deg) translate(0, -0.6px); }
+  65% { transform: rotate(28deg) translate(0.6px, -1.2px); }
+  80% { transform: rotate(20deg) translate(0.4px, -0.8px); }
+}
+.pet-aurum[data-ambient='acenar-duplo'] .pet-px-cabeca { animation: pet-amb-acenar-cabeca 2.4s var(--pet-suave) 1; }
+@keyframes pet-amb-acenar-cabeca {
+  0%,100% { transform: rotate(0); }
+  40%,70% { transform: rotate(-6deg) translateY(-0.8px); }
+}
+
+/* 73. NADAR-LONTRA — remada circular defasada (espiral de lontra) */
+.pet-aurum[data-ambient='nadar-lontra'] .pet-salto { animation: pet-amb-nadar 3.2s var(--pet-suave) 1; }
+@keyframes pet-amb-nadar {
+  0%,100% { transform: translateY(0) rotate(0) scale(1, 1); }
+  25% { transform: translateY(-2px) rotate(-2deg) scale(0.98, 1.03); }
+  50% { transform: translateY(-1px) rotate(2deg) scale(0.98, 1.03); }
+  75% { transform: translateY(-2.4px) rotate(-1deg) scale(0.97, 1.04); }
+}
+.pet-aurum[data-ambient='nadar-lontra'] .pet-px-braco-baixo { animation: pet-amb-nadar-e 3.2s var(--pet-suave) 1; }
+@keyframes pet-amb-nadar-e {
+  0%,100% { transform: rotate(0) translate(0, 0); }
+  20% { transform: rotate(-32deg) translate(-1px, -1.4px); }
+  40% { transform: rotate(8deg) translate(0.6px, 1px); }
+  60% { transform: rotate(-28deg) translate(-0.8px, -1.2px); }
+  80% { transform: rotate(6deg) translate(0.4px, 0.8px); }
+}
+.pet-aurum[data-ambient='nadar-lontra'] .pet-px-braco-dir { animation: pet-amb-nadar-d 3.2s var(--pet-suave) 1; }
+@keyframes pet-amb-nadar-d {
+  0%,100% { transform: rotate(0) translate(0, 0); }
+  20% { transform: rotate(6deg) translate(0.4px, 0.8px); }
+  40% { transform: rotate(-28deg) translate(-0.8px, -1.2px); }
+  60% { transform: rotate(8deg) translate(0.6px, 1px); }
+  80% { transform: rotate(-32deg) translate(-1px, -1.4px); }
+}
+.pet-aurum[data-ambient='nadar-lontra'] .pet-px-rabo { animation: pet-amb-nadar-rabo 3.2s var(--pet-suave) 1; }
+@keyframes pet-amb-nadar-rabo {
+  0%,100% { transform: rotate(8deg); }
+  25% { transform: rotate(-10deg); } 50% { transform: rotate(16deg); } 75% { transform: rotate(-6deg); }
+}
+
+/* 74. ESCAVAR — patadas alternadas cavando, poeira nos pés */
+.pet-aurum[data-ambient='escavar'] .pet-salto { animation: pet-amb-escavar 2.6s ease-in-out 1; }
+@keyframes pet-amb-escavar {
+  0%,100% { transform: translateY(0) scale(1, 1); }
+  15%,75% { transform: translateY(1.2px) scale(1.05, 0.93); }
+}
+.pet-aurum[data-ambient='escavar'] .pet-px-braco-baixo { animation: pet-amb-escavar-e 2.6s ease-in-out 1; }
+@keyframes pet-amb-escavar-e {
+  0%,100% { transform: rotate(0) translateY(0); }
+  15% { transform: rotate(-18deg) translateY(-1px); }
+  25%,35%,45%,55%,65% { transform: rotate(-24deg) translateY(1.4px); }
+  30%,40%,50%,60% { transform: rotate(-10deg) translateY(-0.6px); }
+}
+.pet-aurum[data-ambient='escavar'] .pet-px-braco-dir { animation: pet-amb-escavar-d 2.6s ease-in-out 1; }
+@keyframes pet-amb-escavar-d {
+  0%,100% { transform: rotate(0) translateY(0); }
+  15% { transform: rotate(18deg) translateY(-1px); }
+  30%,40%,50%,60% { transform: rotate(24deg) translateY(1.4px); }
+  25%,35%,45%,55%,65% { transform: rotate(10deg) translateY(-0.6px); }
+}
+.pet-aurum[data-ambient='escavar'] .pet-px-cabeca { animation: pet-amb-escavar-cabeca 2.6s var(--pet-suave) 1; }
+@keyframes pet-amb-escavar-cabeca {
+  0%,100% { transform: rotate(0); }
+  15%,75% { transform: rotate(6deg) translateY(1.4px); }
+}
+
+/* 75. MALABARISMO — joga a moedinha entre as patas */
+.pet-aurum[data-ambient='malabarismo'] .pet-moeda { opacity: 1; scale: 1; animation: pet-moeda-malabar 3.4s var(--pet-suave) 1; }
+@keyframes pet-moeda-malabar {
+  0%,100% { transform: translate(0, 0); }
+  20% { transform: translate(-16px, -24px) rotate(-180deg); }
+  40% { transform: translate(0, -6px); }
+  60% { transform: translate(16px, -24px) rotate(180deg); }
+  80% { transform: translate(0, -4px); }
+}
+.pet-aurum[data-ambient='malabarismo'] .pet-px-braco-baixo { animation: pet-amb-malabar-e 3.4s var(--pet-suave) 1; }
+@keyframes pet-amb-malabar-e {
+  0%,100% { transform: rotate(0); }
+  20% { transform: rotate(-30deg) translate(-1px, -1.6px); }
+  40% { transform: rotate(-6deg); }
+  60% { transform: rotate(-12deg); }
+  80% { transform: rotate(-26deg) translate(-0.8px, -1.2px); }
+}
+.pet-aurum[data-ambient='malabarismo'] .pet-px-braco-dir { animation: pet-amb-malabar-d 3.4s var(--pet-suave) 1; }
+@keyframes pet-amb-malabar-d {
+  0%,100% { transform: rotate(0); }
+  20% { transform: rotate(10deg); }
+  40% { transform: rotate(26deg) translate(0.8px, -1.2px); }
+  60% { transform: rotate(30deg) translate(1px, -1.6px); }
+  80% { transform: rotate(8deg); }
+}
+.pet-aurum[data-ambient='malabarismo'] .pet-px-cabeca { animation: pet-amb-malabar-cabeca 3.4s var(--pet-suave) 1; }
+@keyframes pet-amb-malabar-cabeca {
+  0%,100% { transform: rotate(0); }
+  20% { transform: rotate(-7deg); } 60% { transform: rotate(7deg); }
+}
+
+/* 76. APLAUDIR — palmas com squash no impacto */
+.pet-aurum[data-ambient='aplaudir'] .pet-salto { animation: pet-amb-aplaudir 2.2s var(--pet-mola) 1; }
+@keyframes pet-amb-aplaudir {
+  0%,100% { transform: scale(1, 1); }
+  20%,45%,65% { transform: scale(1.05, 0.94) translateY(0.8px); }
+  30%,55%,75% { transform: scale(0.98, 1.03) translateY(-1.4px); }
+}
+.pet-aurum[data-ambient='aplaudir'] .pet-px-braco-baixo { animation: pet-amb-aplaudir-e 2.2s ease-in-out 1; }
+@keyframes pet-amb-aplaudir-e {
+  0%,100% { transform: rotate(0) translateX(0); }
+  20%,45%,65% { transform: rotate(-22deg) translateX(2.2px); }
+  30%,55%,75% { transform: rotate(-8deg) translateX(0.8px); }
+}
+.pet-aurum[data-ambient='aplaudir'] .pet-px-braco-dir { animation: pet-amb-aplaudir-d 2.2s ease-in-out 1; }
+@keyframes pet-amb-aplaudir-d {
+  0%,100% { transform: rotate(0) translateX(0); }
+  20%,45%,65% { transform: rotate(22deg) translateX(-2.2px); }
+  30%,55%,75% { transform: rotate(8deg) translateX(-0.8px); }
+}
+.pet-aurum[data-ambient='aplaudir'] .pet-brilho--1 { animation: pet-brilho-piscar 0.6s ease-in-out 3; }
+
+/* 77. FOCAR-BINOCULO — as duas mãos levam a lupa ao rosto */
+.pet-aurum[data-ambient='focar-binoculo'] .pet-px-lupa-giro { animation: pet-amb-binoculo-lupa 3s var(--pet-suave) 1; }
+@keyframes pet-amb-binoculo-lupa {
+  0%,100% { transform: translate(0, 0) rotate(0) scale(1); }
+  30%,65% { transform: translate(-1.6px, -1.6px) rotate(-8deg) scale(1.32); }
+}
+.pet-aurum[data-ambient='focar-binoculo'] .pet-px-braco-baixo { animation: pet-amb-binoculo-e 3s var(--pet-suave) 1; }
+@keyframes pet-amb-binoculo-e {
+  0%,100% { transform: rotate(0) translate(0, 0); }
+  30%,65% { transform: rotate(-26deg) translate(-0.8px, -1.4px); }
+}
+.pet-aurum[data-ambient='focar-binoculo'] .pet-px-braco-dir { animation: pet-amb-binoculo-d 3s var(--pet-suave) 1; }
+@keyframes pet-amb-binoculo-d {
+  0%,100% { transform: rotate(0) translate(0, 0); }
+  30%,65% { transform: rotate(18deg) translate(0.6px, -1px); }
+}
+.pet-aurum[data-ambient='focar-binoculo'] .pet-px-cabeca { animation: pet-amb-binoculo-cabeca 3s var(--pet-suave) 1; }
+@keyframes pet-amb-binoculo-cabeca {
+  0%,100% { transform: rotate(0); }
+  30%,65% { transform: rotate(-4deg) translateY(-0.6px); }
+}
+
+/* 78. CARREGAR-CAIXA — segura peso à frente com tremor de esforço */
+.pet-aurum[data-ambient='carregar-caixa'] .pet-salto { animation: pet-amb-caixa 3.4s var(--pet-suave) 1; }
+@keyframes pet-amb-caixa {
+  0%,100% { transform: translateY(0) scale(1, 1); }
+  25%,70% { transform: translateY(1.4px) scale(1.08, 0.9); }
+  85% { transform: translateY(-2px) scale(0.98, 1.03); }
+}
+.pet-aurum[data-ambient='carregar-caixa'] .pet-px-braco-baixo { animation: pet-amb-caixa-e 3.4s ease-in-out 1; }
+@keyframes pet-amb-caixa-e {
+  0%,100% { transform: rotate(0) translate(0, 0); }
+  25%,70% { transform: rotate(-16deg) translate(1.4px, 1.2px); }
+}
+.pet-aurum[data-ambient='carregar-caixa'] .pet-px-braco-dir { animation: pet-amb-caixa-d 3.4s ease-in-out 1; }
+@keyframes pet-amb-caixa-d {
+  0%,100% { transform: rotate(0) translate(0, 0); }
+  25%,70% { transform: rotate(16deg) translate(-1.4px, 1.2px); }
+}
+.pet-aurum[data-ambient='carregar-caixa'] .pet-px-boca-aberta { animation: pet-amb-caixa-boca 3.4s steps(1, end) 1; }
+@keyframes pet-amb-caixa-boca {
+  0%,20% { opacity: 0; } 25%,70% { opacity: 1; } 85%,100% { opacity: 0; }
+}
+
+/* 79. APONTAR-ACHADO — estica o braço com overshoot elástico */
+.pet-aurum[data-ambient='apontar-achado'] .pet-px-braco-dir { animation: pet-amb-apontar-d 2.6s var(--pet-mola) 1; }
+@keyframes pet-amb-apontar-d {
+  0%,100% { transform: rotate(0) translateX(0); }
+  30% { transform: rotate(38deg) translateX(4.2px); }
+  45% { transform: rotate(30deg) translateX(3.4px); }
+  60%,75% { transform: rotate(34deg) translateX(3.8px); }
+}
+.pet-aurum[data-ambient='apontar-achado'] .pet-px-braco-baixo { animation: pet-amb-apontar-e 2.6s var(--pet-suave) 1; }
+@keyframes pet-amb-apontar-e {
+  0%,100% { transform: rotate(0); }
+  30%,75% { transform: rotate(-10deg); }
+}
+.pet-aurum[data-ambient='apontar-achado'] .pet-px-cabeca { animation: pet-amb-apontar-cabeca 2.6s var(--pet-suave) 1; }
+@keyframes pet-amb-apontar-cabeca {
+  0%,100% { transform: rotate(0); }
+  40%,75% { transform: rotate(7deg) translateX(1px); }
+}
+.pet-aurum[data-ambient='apontar-achado'] .pet-px-lupa-giro { animation: pet-amb-apontar-lupa 2.6s var(--pet-suave) 1; }
+@keyframes pet-amb-apontar-lupa {
+  0%,100% { transform: rotate(0) scale(1); }
+  40%,75% { transform: rotate(18deg) scale(1.18); }
+}
+.pet-aurum[data-ambient='apontar-achado'] .pet-brilho--1 { animation: pet-brilho-piscar 0.7s 0.8s ease-in-out 2; }
+
+/* 80. ESPREGUICAR-BRACOS — Y alto com 2 bounces */
+.pet-aurum[data-ambient='espreguicar-bracos'] .pet-salto { animation: pet-amb-esp-bracos 2.8s var(--pet-mola) 1; }
+@keyframes pet-amb-esp-bracos {
+  0%,100% { transform: scale(1, 1); }
+  25% { transform: scale(1.1, 0.88) translateY(1px); }
+  55% { transform: scale(0.93, 1.1) translateY(-3px); }
+  75% { transform: scale(0.96, 1.05) translateY(-1.6px); }
+}
+.pet-aurum[data-ambient='espreguicar-bracos'] .pet-px-braco-baixo { animation: pet-amb-esp-e 2.8s var(--pet-suave) 1; }
+@keyframes pet-amb-esp-e {
+  0%,100% { transform: rotate(0) translateY(0); }
+  55%,70% { transform: rotate(-38deg) translate(-0.8px, -2.4px); }
+}
+.pet-aurum[data-ambient='espreguicar-bracos'] .pet-px-braco-dir { animation: pet-amb-esp-d 2.8s var(--pet-suave) 1; }
+@keyframes pet-amb-esp-d {
+  0%,100% { transform: rotate(0) translateY(0); }
+  55%,70% { transform: rotate(38deg) translate(0.8px, -2.4px); }
+}
+.pet-aurum[data-ambient='espreguicar-bracos'] .pet-px-cabeca { animation: pet-amb-esp-cabeca 2.8s var(--pet-suave) 1; }
+@keyframes pet-amb-esp-cabeca {
+  0%,100% { transform: rotate(0); }
+  55%,70% { transform: rotate(-9deg) translateY(-1px); }
+}
+
+/* 81. ABRACO-QUENTE — fecha as patas no peito com 2 apertos */
+.pet-aurum[data-ambient='abraco-quente'] .pet-salto { animation: pet-amb-abraco 2.4s var(--pet-suave) 1; }
+@keyframes pet-amb-abraco {
+  0%,100% { transform: scale(1, 1); }
+  35% { transform: scale(1.04, 1.04) translateY(0.6px); }
+  50% { transform: scale(1.02, 1.03); }
+  65% { transform: scale(1.04, 1.04) translateY(0.6px); }
+}
+.pet-aurum[data-ambient='abraco-quente'] .pet-px-braco-baixo { animation: pet-amb-abraco-e 2.4s var(--pet-suave) 1; }
+@keyframes pet-amb-abraco-e {
+  0%,100% { transform: rotate(0) translateX(0); }
+  35%,65% { transform: rotate(-24deg) translateX(2px); }
+}
+.pet-aurum[data-ambient='abraco-quente'] .pet-px-braco-dir { animation: pet-amb-abraco-d 2.4s var(--pet-suave) 1; }
+@keyframes pet-amb-abraco-d {
+  0%,100% { transform: rotate(0) translateX(0); }
+  35%,65% { transform: rotate(24deg) translateX(-2px); }
+}
+.pet-aurum[data-ambient='abraco-quente'] .pet-coracoes { opacity: 1; }
 
 /* Movimento reduzido: desliga tudo, só troca balão */
 @media (prefers-reduced-motion: reduce) {

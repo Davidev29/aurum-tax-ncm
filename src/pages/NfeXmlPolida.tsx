@@ -29,6 +29,7 @@ import { apurarIbsCbs } from '@/infrastructure/nfe/apuracao'
 import type { NotaXml } from '@/infrastructure/nfe/tipos'
 import { useSessao } from '@/store/sessao'
 import { useNfe } from '@/store/nfe'
+import { BannerContribuintesNovos } from './NfePendentes'
 import { toast, useUi } from '@/store/ui'
 import { Btn, IconeBadge, Modal, Painel, Pill } from '@/ui/kit'
 
@@ -145,6 +146,9 @@ export function NfeXmlPolida() {
       <Entrada atraso={0.1}>
         <ImportCompacta />
       </Entrada>
+      <Entrada atraso={0.12}>
+        <BannerContribuintesNovos />
+      </Entrada>
       <Entrada atraso={0.14}>
         <TabsExploracao aba={aba} onTrocar={setAba} />
       </Entrada>
@@ -212,6 +216,7 @@ function SemEmpresaPolida() {
 
 function HeroExecutivo() {
   const notas = useNfe((s) => s.notas)
+  const filtros = useNfe((s) => s.filtros)
   const tot = useMemo(() => totaisNotas(notas), [notas])
   const ap = useMemo(() => apurarIbsCbs(notas), [notas])
 
@@ -262,6 +267,8 @@ function HeroExecutivo() {
               </AnimatePresence>
               <span className="text-[11px] text-white/70">
                 {tot.qtd} nota(s) · {tot.entradas} entradas · {tot.saidas} saídas
+                {' · '}
+                {rotuloPeriodoApuracao(filtros.inicio, filtros.fim)}
               </span>
             </div>
             <div className="calc-hero-rotulo mt-3">
@@ -416,7 +423,7 @@ function ImportCompacta() {
               </span>
             ) : resumo ? (
               <span className="mt-1 block text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-                {resumo.novas} nova(s){resumo.duplicadas ? ` · ${resumo.duplicadas} duplicada(s)` : ''}{resumo.quarentena ? ` · ${resumo.quarentena} quarentena` : ''}
+                {resumo.novas} nova(s){resumo.duplicadas ? ` · ${resumo.duplicadas} duplicada(s)` : ''}{(resumo.redirecionadas ?? 0) > 0 ? ` · ${resumo.redirecionadas} outro cadastro` : ''}{(resumo.orfas ?? 0) > 0 ? ` · ${resumo.orfas} contribuinte novo` : (resumo.quarentena ? ` · ${resumo.quarentena} quarentena` : '')}
               </span>
             ) : null}
           </span>
@@ -463,7 +470,17 @@ function TabsExploracao({ aba, onTrocar }: { aba: Aba; onTrocar: (a: Aba) => voi
   const setFiltros = useNfe((s) => s.setFiltros)
   const limparFiltros = useNfe((s) => s.limparFiltros)
 
-  const ativos = [filtros.texto, filtros.fornecedor, filtros.cfop, filtros.cstIcms, filtros.direcao !== 'todas' ? filtros.direcao : ''].filter(Boolean).length
+  const ativos = [
+    filtros.texto,
+    filtros.fornecedor,
+    filtros.cfop,
+    filtros.cstIcms,
+    filtros.cClassTrib,
+    filtros.cstReforma,
+    filtros.reducao,
+    filtros.direcao !== 'todas' ? filtros.direcao : '',
+    filtros.inicio || filtros.fim ? 'periodo' : '',
+  ].filter(Boolean).length
 
   return (
     <Painel className="overflow-hidden">
@@ -517,7 +534,15 @@ function TabsExploracao({ aba, onTrocar }: { aba: Aba; onTrocar: (a: Aba) => voi
       </div>
 
       <div className="border-b border-[var(--line)] bg-slate-50/60 px-4 py-2.5 dark:bg-slate-950/30">
-        <FiltroBarra texto={filtros.texto} direcao={filtros.direcao} onTexto={(v) => setFiltros({ texto: v })} onDirecao={(v) => setFiltros({ direcao: v })} />
+        <FiltroBarra
+          texto={filtros.texto}
+          direcao={filtros.direcao}
+          inicio={filtros.inicio}
+          fim={filtros.fim}
+          onTexto={(v) => setFiltros({ texto: v })}
+          onDirecao={(v) => setFiltros({ direcao: v })}
+          onPeriodo={(inicio, fim) => setFiltros({ inicio, fim })}
+        />
       </div>
 
       <div className="p-4">
@@ -544,13 +569,19 @@ function TabsExploracao({ aba, onTrocar }: { aba: Aba; onTrocar: (a: Aba) => voi
 function FiltroBarra({
   texto,
   direcao,
+  inicio,
+  fim,
   onTexto,
   onDirecao,
+  onPeriodo,
 }: {
   texto: string
   direcao: 'todas' | 'entrada' | 'saida' | 'quarentena'
+  inicio: string
+  fim: string
   onTexto: (v: string) => void
   onDirecao: (v: 'todas' | 'entrada' | 'saida' | 'quarentena') => void
+  onPeriodo: (inicio: string, fim: string) => void
 }) {
   const opcoes = [
     { id: 'todas', rot: 'Todas' },
@@ -558,36 +589,76 @@ function FiltroBarra({
     { id: 'saida', rot: 'Saídas' },
     { id: 'quarentena', rot: 'Quarentena' },
   ] as const
+  const comPeriodo = Boolean(inicio || fim)
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <label className="relative min-w-0 flex-1">
-        <span className="sr-only">Buscar por emitente, número ou produto</span>
-        <input
-          value={texto}
-          onChange={(e) => onTexto(e.target.value)}
-          placeholder="Buscar emitente, número, chave ou produto…"
-          className="field field-sm !rounded-full !py-2 pl-9"
-        />
-        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
-      </label>
-      <div className="flex shrink-0 items-center gap-1 rounded-full border border-[var(--line)] bg-white p-1 dark:bg-slate-900" role="group" aria-label="Direção">
-        {opcoes.map((o) => {
-          const ativo = direcao === o.id
-          return (
-            <button
-              key={o.id}
-              type="button"
-              onClick={() => onDirecao(o.id)}
-              aria-pressed={ativo}
-              className={`xml-focus-ouro relative rounded-full px-3 py-1 text-[12px] font-bold ${ativo ? 'text-white' : 'text-slate-500'}`}
-            >
-              {ativo ? (
-                <motion.span layoutId="dir-nfe-polida" className="absolute inset-0 rounded-full bg-brand-700" transition={{ type: 'spring', stiffness: 450, damping: 32 }} />
-              ) : null}
-              <span className="relative">{o.rot}</span>
-            </button>
-          )
-        })}
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <label className="relative min-w-0 flex-1">
+          <span className="sr-only">Buscar por emitente, número ou produto</span>
+          <input
+            value={texto}
+            onChange={(e) => onTexto(e.target.value)}
+            placeholder="Buscar emitente, número, chave ou produto…"
+            className="field field-sm !rounded-full !py-2 pl-9"
+          />
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">⌕</span>
+        </label>
+        <div className="flex shrink-0 items-center gap-1 rounded-full border border-[var(--line)] bg-white p-1 dark:bg-slate-900" role="group" aria-label="Direção">
+          {opcoes.map((o) => {
+            const ativo = direcao === o.id
+            return (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => onDirecao(o.id)}
+                aria-pressed={ativo}
+                className={`xml-focus-ouro relative rounded-full px-3 py-1 text-[12px] font-bold ${ativo ? 'text-white' : 'text-slate-500'}`}
+              >
+                {ativo ? (
+                  <motion.span layoutId="dir-nfe-polida" className="absolute inset-0 rounded-full bg-brand-700" transition={{ type: 'spring', stiffness: 450, damping: 32 }} />
+                ) : null}
+                <span className="relative">{o.rot}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1.5 text-[12px] text-slate-500 dark:text-slate-400">
+          <span className="font-bold">Período</span>
+          <input
+            type="date"
+            value={inicio}
+            onChange={(e) => onPeriodo(e.target.value, fim)}
+            aria-label="Apurar desde"
+            className="field field-sm !w-auto !rounded-full !py-1 font-mono"
+          />
+          <span aria-hidden="true">a</span>
+          <input
+            type="date"
+            value={fim}
+            onChange={(e) => onPeriodo(inicio, e.target.value)}
+            aria-label="Apurar até"
+            className="field field-sm !w-auto !rounded-full !py-1 font-mono"
+          />
+        </label>
+        {comPeriodo ? (
+          <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400" aria-live="polite">
+            Apurando {rotuloPeriodoApuracao(inicio, fim)}
+          </span>
+        ) : (
+          <span className="text-[11px] text-slate-400">Apurando todas as notas da empresa</span>
+        )}
+        {comPeriodo ? (
+          <button
+            type="button"
+            onClick={() => onPeriodo('', '')}
+            className="xml-focus-ouro pill bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+            title="Limpar período (apuração volta a todas as notas)"
+          >
+            ✕ limpar período
+          </button>
+        ) : null}
       </div>
     </div>
   )
@@ -953,6 +1024,7 @@ function BlocoBarras({
 
 function AbaInsights() {
   const notas = useNfe((s) => s.notas)
+  const filtros = useNfe((s) => s.filtros)
   const ap = useMemo(() => apurarIbsCbs(notas), [notas])
   const conf = useMemo(() => confrontoRegimes(notas), [notas])
   const evo = useMemo(() => evolucaoMensal(notas, 8), [notas])
@@ -968,6 +1040,9 @@ function AbaInsights() {
           <h3 className="flex items-center gap-2 text-[13px] font-bold">
             <IconeBadge nome="calculadora" tom="brand" tamanho="sm" /> Antigo × Novo
           </h3>
+          <p className="mt-1 font-mono text-[11px] text-slate-400">
+            Apurando {rotuloPeriodoApuracao(filtros.inicio, filtros.fim)} · {notas.length} nota(s)
+          </p>
           <div className="mt-2.5 grid grid-cols-2 gap-2">
             <div className="rounded-lg bg-slate-50 p-2.5 dark:bg-slate-950/50">
               <div className="text-[10px] font-bold uppercase text-slate-500">Regime antigo</div>
@@ -1048,6 +1123,18 @@ function AbaInsights() {
 }
 
 /* -------------------------------------------------------------- vazio --- */
+
+/** ISO `aaaa-mm-dd` → `dd/mm/aaaa` (rótulos de período da apuração). */
+const fmtDataXml = (iso: string): string =>
+  /^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : iso
+
+/** Rótulo do recorte temporal da apuração assistida (reage aos filtros). */
+function rotuloPeriodoApuracao(inicio: string, fim: string): string {
+  if (inicio && fim) return inicio === fim ? `em ${fmtDataXml(inicio)}` : `${fmtDataXml(inicio)} a ${fmtDataXml(fim)}`
+  if (inicio) return `desde ${fmtDataXml(inicio)}`
+  if (fim) return `até ${fmtDataXml(fim)}`
+  return 'todas as notas da empresa'
+}
 
 function VazioPolido({ titulo, texto }: { titulo: string; texto?: string }) {
   return (

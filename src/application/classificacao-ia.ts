@@ -477,20 +477,9 @@ export async function classificarComIa(
   // caminho/hierarquia a Aurum AI lê via ficha absoluta).
   opts?.aoWorker?.(true)
   const contextoRico = combinarContextoIa(entrada)
-  // Tradução fiscal em tempo real (EN→PT): consulta em inglês ancora também
-  // no vocabulário oficial da TEC. Best-effort via worker; sem bridge
-  // (web/testes) ou falha, segue só o original — nunca quebra a consulta.
-  let textoBusca = contextoRico || entrada.descricao
-  if (bridge?.ia && typeof bridge.ia.traduzir === 'function') {
-    try {
-      const t = await bridge.ia.traduzir(textoBusca, 'pt')
-      if (t && t.ok && t.texto && t.texto.trim() && t.texto.trim() !== textoBusca.trim()) {
-        textoBusca = `${textoBusca} ${t.texto.trim()}`
-      }
-    } catch {
-      /* tradução é enriquecimento; o original basta */
-    }
-  }
+  // Modelo multilíngue nativo: o contexto vai puro ao RAG (sem camada de
+  // tradução — anexar o EN quebrava o AND estrito na TEC).
+  const textoBusca = contextoRico || entrada.descricao
   const achados = await buscarNomenclaturaPorTexto(textoBusca, 20)
   const candidatos: CandidatoIa[] = achados.map((a) => ({
     codigo: a.codigo,

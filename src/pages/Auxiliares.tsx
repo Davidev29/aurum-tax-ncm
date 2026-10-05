@@ -34,6 +34,7 @@ import { confirmar } from '@/store/dialogo'
 import { useUi } from '@/store/ui'
 import { itensVisiveis, totalFiltrado, useAuxiliares, type RegistroAux } from '@/store/auxiliares'
 import { Btn, Painel, Texto, Vazio, useDebounce } from '@/ui/kit'
+import { Entrada, Secao } from '@/ui/motion'
 
 const VAZIO: RegistroAux[] = []
 
@@ -200,6 +201,7 @@ export function Auxiliares() {
   return (
     <LimiteErro nome="tabelas-auxiliares">
       <div className="mx-auto max-w-6xl space-y-6">
+        <Entrada>
         <div className="rounded-2xl border border-brand-200 bg-gradient-to-r from-brand-50 to-white p-4 text-xs text-brand-900 dark:border-aurum-900 dark:from-brand-950/40 dark:to-slate-900 dark:text-brand-200">
           <div className="flex items-start gap-2">
             <span className="text-lg">✏️</span>
@@ -212,32 +214,45 @@ export function Auxiliares() {
             </div>
           </div>
         </div>
+        </Entrada>
 
+        <Secao>
         <LimiteErro nome="base-oficial">
           <PainelBaseOficial />
         </LimiteErro>
+        </Secao>
 
         {TABELAS.map((t) => (
-          <LimiteErro key={t.tipo} nome={`tabela-${t.tipo}`}>
+          <Secao key={t.tipo}>
+          <LimiteErro nome={`tabela-${t.tipo}`}>
             <PainelTabela {...t} />
           </LimiteErro>
+          </Secao>
         ))}
 
+        <Secao>
         <LimiteErro nome="referencia-oficial">
           <PainelReferenciaOficial />
         </LimiteErro>
+        </Secao>
 
+        <Secao>
         <LimiteErro nome="nbs">
           <PainelNbs />
         </LimiteErro>
+        </Secao>
 
+        <Secao>
         <LimiteErro nome="tabelas-cff">
           <TabelasOficiaisCff />
         </LimiteErro>
+        </Secao>
 
+        <Secao>
         <LimiteErro nome="auditoria">
           <PainelAuditoria />
         </LimiteErro>
+        </Secao>
       </div>
     </LimiteErro>
   )

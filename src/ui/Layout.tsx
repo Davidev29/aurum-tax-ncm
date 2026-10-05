@@ -15,11 +15,18 @@ import { useUi, VIEW_META, type ViewId } from '@/store/ui'
 import { Btn, Icone, Toasts, type NomeIcone } from './kit'
 import { MarcaSidebar } from './Marca'
 import { PetAurum } from './PetAurum'
+import { FundoGlobal } from './FundoGlobal'
+import { AnimatePresence, motion } from 'framer-motion'
+import { CURVA, Pagina, presetTransicao, useMovimentoReduzido } from './motion'
 import { DialogoGlass } from './dialogos'
 import { ModaisGlobais } from '@/modais/globais'
 
 /** Grupos do menu lateral — a ordem e os ícones espelham o sistema anterior. */
 const NAV: { secao?: string; itens: { id: ViewId; icone: NomeIcone; rotulo: string }[] }[] = [
+  {
+    secao: 'Inteligência',
+    itens: [{ id: 'aurum', icone: 'aurum', rotulo: 'Aurum AI' }],
+  },
   {
     secao: 'Trabalho',
     itens: [
@@ -294,6 +301,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const alternarTema = useUi((s) => s.alternarTema)
   const abrirModal = useUi((s) => s.abrirModal)
   const meta = VIEW_META[view]
+  const reduzir = useMovimentoReduzido()
+  // Carrossel de transições: cada troca usa um preset diferente do anterior.
+  const seqTransicao = useUi((s) => s.transicaoSeq)
+  const preset = presetTransicao(seqTransicao)
 
   // Atalhos de teclado do menu nativo (Electron) — via canal IPC `menu:acao`.
   // No navegador (sem bridge) o menu nativo não existe e os atalhos são
@@ -324,14 +335,33 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [])
 
   return (
-    <div className="flex h-dvh min-h-0 w-full overflow-hidden bg-[var(--surface)] text-[var(--ink)]">
+    <div className="flex h-dvh min-h-0 w-full overflow-hidden text-[var(--ink)]">
+      {/* Fundo animado global (Pexels) — abaixo de tudo; placas de vidro por cima. */}
+      <FundoGlobal />
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="z-30 shrink-0 border-b border-[var(--line)] bg-[var(--surface)]/90 backdrop-blur">
+        <header className="z-30 shrink-0 border-b border-white/40 bg-[var(--surface)]/85 backdrop-blur-xl dark:border-white/10">
           <div className="flex flex-wrap items-center gap-2 px-4 py-3 sm:gap-3 sm:px-6">
             <div className="min-w-0 flex-1 basis-40">
-              <h1 className="truncate text-base font-black tracking-tight sm:text-lg">{meta.titulo}</h1>
-              <p className="hidden truncate text-xs text-slate-500 sm:block">{meta.subtitulo}</p>
+              {reduzir ? (
+                <>
+                  <h1 className="truncate text-base font-black tracking-tight sm:text-lg">{meta.titulo}</h1>
+                  <p className="hidden truncate text-xs text-slate-500 sm:block">{meta.subtitulo}</p>
+                </>
+              ) : (
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.div
+                    key={view}
+                    initial={preset.cabecalhoInicial}
+                    animate={{ opacity: 1, x: 0, y: 0, scale: 1, transition: { duration: 0.22, ease: [...CURVA] } }}
+                    exit={preset.cabecalhoSaida}
+                    className="min-w-0"
+                  >
+                    <h1 className="truncate text-base font-black tracking-tight sm:text-lg">{meta.titulo}</h1>
+                    <p className="hidden truncate text-xs text-slate-500 sm:block">{meta.subtitulo}</p>
+                  </motion.div>
+                </AnimatePresence>
+              )}
             </div>
             <ChipEmpresa />
             <button
@@ -362,16 +392,29 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* Única área com scroll: o menu e o cabeçalho permanecem fixos. */}
+        {/* Única área com scroll: o menu e o cabeçalho permanecem fixos.
+            A troca de menus passa por `AnimatePresence mode="wait"` com um
+            preset DIFERENTE a cada troca (carrossel `PRESETS_TRANSICAO`):
+            subir, esquerda, zoom, direita, descer — sem repetição em
+            sequência e sem sobreposição pesada. */}
         <main
           id="conteudo"
           tabIndex={-1}
           className="scroll-elegante min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6"
         >
-          <div key={view} className="mx-auto w-full max-w-[1400px] animate-fade-up">
-            <BannerSemEmpresa />
-            {children}
-          </div>
+          {reduzir ? (
+            <div className="mx-auto w-full max-w-[1400px]">
+              <BannerSemEmpresa />
+              {children}
+            </div>
+          ) : (
+            <AnimatePresence mode="wait" initial={false}>
+              <Pagina key={view} viewKey={view} seq={seqTransicao} className="mx-auto w-full max-w-[1400px]">
+                <BannerSemEmpresa />
+                {children}
+              </Pagina>
+            </AnimatePresence>
+          )}
         </main>
       </div>
 

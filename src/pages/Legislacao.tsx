@@ -13,6 +13,7 @@
 import { useMemo, useState } from 'react'
 import { GRUPOS_LEGISLACAO, LEGISLACOES, type ItemLegislacao } from '@/domain/legislacao'
 import { Painel, Pill, Vazio } from '@/ui/kit'
+import { Entrada, Lista, Item, Secao } from '@/ui/motion'
 import { ModalLegislacao, type DestinoLegislacao } from '@/ui/ModalLegislacao'
 
 const COR_TIPO: Record<ItemLegislacao['tipo'], 'brand' | 'emerald' | 'amber' | 'slate'> = {
@@ -53,6 +54,7 @@ export function Legislacao() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
+      <Entrada>
       <Painel className="p-5">
         <h2 className="flex items-center gap-2 text-base font-bold">
           <span className="text-lg">⚖️</span> Legislação da Reforma Tributária
@@ -83,28 +85,30 @@ export function Legislacao() {
           </span>
         </div>
       </Painel>
+      </Entrada>
 
       {grupos.length ? (
         grupos.map((grupo) => (
-          <section key={grupo.id} aria-label={grupo.titulo}>
+          <Secao key={grupo.id} rotulo={grupo.titulo}>
             <div className="mb-2 px-1">
               <h3 className="text-sm font-black">{grupo.titulo}</h3>
               <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                 {grupo.descricao}
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Lista className="grid grid-cols-1 gap-4 md:grid-cols-2" intervalo={0.05}>
               {grupo.itens.map((item) => (
+                <Item key={item.id}>
                 <CartaoLegislacao
-                  key={item.id}
                   item={item}
                   onLer={(alvo) =>
                     setDestino({ url: alvo.url, titulo: alvo.titulo, integra: true })
                   }
                 />
+                </Item>
               ))}
-            </div>
-          </section>
+            </Lista>
+          </Secao>
         ))
       ) : (
         <Vazio icone="⚖️" titulo="Nenhuma legislação encontrada para o filtro" />
@@ -123,7 +127,7 @@ function CartaoLegislacao({
   onLer: (item: ItemLegislacao) => void
 }) {
   return (
-    <article className="panel animate-fade-up card-hover flex flex-col p-5">
+    <article className="panel card-hover flex flex-col p-5">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Pill cor={COR_TIPO[item.tipo]}>
           {ICONE_TIPO[item.tipo]} {item.rotuloTipo}

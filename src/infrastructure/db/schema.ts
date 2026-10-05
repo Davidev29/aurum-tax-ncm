@@ -38,6 +38,19 @@ export interface IaFeedback {
   mock?: boolean
 }
 
+/** Conversa da Aurum AI gravada no perfil do emitente (Phase 8 / 08-05).
+ * Chaveada por emitenteId (nunca pela empresa ativa): a mesma conversa
+ * segue visível indiferente do cliente/empresa logado. */
+export interface ConversaEmitente {
+  conversaId: string
+  emitenteId: string
+  empresaAtivaId: number | null
+  titulo: string
+  mensagens: Array<{ papel: 'user' | 'assistant'; texto: string; quando: string }>
+  updatedAt: string
+  createdAt: string
+}
+
 /** Registro genérico da store `meta`. */
 export interface MetaRecord {
   chave: string
@@ -224,6 +237,7 @@ export class AurumDatabase extends Dexie {
 
   /** Cache de consultas por CNPJ (Phase 7, BrasilAPI + TTL). */
   consultasCnpj!: Table<ConsultaCnpj, string>
+  conversasEmitente!: Table<ConversaEmitente, string>
 
   constructor() {
     super(DB_NAME)
@@ -317,7 +331,7 @@ export class AurumDatabase extends Dexie {
         [STORES.PRODUTOSDFE]: 'id, sistema, codClassProd',
       })
     // v11 (Phase 7 Serviços): adiciona `cnae` + `consultasCnpj`; demais intactas.
-    this.version(DB_VERSION)
+    this.version(11)
       .stores({
         [STORES.NCM]: 'id, codigo, cst, cClassTrib',
         [STORES.NBS]: 'id, codigo, cClassTrib',
@@ -342,6 +356,36 @@ export class AurumDatabase extends Dexie {
         [STORES.CNAE]: 'codigo7, descricao',
         [STORES.CONSULTAS_CNPJ]: 'cnpj',
       })
+    // v12 (Phase 8 / 08-05): adiciona `conversasEmitente`; demais intactas.
+    this.version(DB_VERSION)
+      .stores({
+        [STORES.NCM]: 'id, codigo, cst, cClassTrib',
+        [STORES.NBS]: 'id, codigo, cClassTrib',
+        [STORES.CST]: 'codigo',
+        [STORES.CSTCT]: 'id, cst, cClassTrib',
+        [STORES.REFERENCIA]: 'id, cst, cClassTrib',
+        [STORES.NCMNOM]: 'codigo, descricao',
+        [STORES.EMPRESAS]: '++id, razaoSocial, cnpj',
+        [STORES.PRODUTOS]: '++id, empresaId, ncm, codigo, cstReforma',
+        [STORES.META]: 'chave',
+        [STORES.CFOP]: 'codigo',
+        [STORES.CSTICMS]: 'codigo',
+        [STORES.CSTPISCOFINS]: 'codigo',
+        [STORES.NFENOTAS]: '++id, empresaId, dataEmissao, direcao, emitCnpj, chave, &[empresaId+chave]',
+        [STORES.RECLASS]: 'ncm',
+        [STORES.CLASSPROD]: 'id, sistema, cClassTrib',
+        [STORES.AUDIT]: '++id, quando, tabela, chave, autor',
+        [STORES.CEST]: 'codigo, ncm',
+        [STORES.IAFEEDBACK]: '++id, quando, via, decisao',
+        [STORES.ANEXOS]: 'id, codigo, nroAnexo',
+        [STORES.PRODUTOSDFE]: 'id, sistema, codClassProd',
+        [STORES.CNAE]: 'codigo7, descricao',
+        [STORES.CONSULTAS_CNPJ]: 'cnpj',
+        [STORES.CONVERSAS_EMITENTE]: 'conversaId, emitenteId, updatedAt',
+      })
+    // Aliases snake_case -> camelCase (Dexie injeta this[storeName]).
+    this.auditLog ??= this.table(STORES.AUDIT) as unknown as typeof this.auditLog
+    this.iaFeedback ??= this.table(STORES.IAFEEDBACK) as unknown as typeof this.iaFeedback
   }
 }
 
@@ -366,36 +410,50 @@ export async function bulkPut<T, K>(
 }
 
 export async function contarTodos(): Promise<Record<string, number>> {
+  // Leitura defensiva: `db.table(nome)` funciona mesmo quando o alias
+  // camelCase não existe (stores snake_case) ou o banco ainda não abriu.
+  // Nunca rejeita — tabela ausente/fechada conta como 0.
+  const contar = (nome: string): Promise<number> => {
+    try {
+      if (!db.isOpen()) return Promise.resolve(0)
+      const t = db.table(nome)
+      if (!t) return Promise.resolve(0)
+      return t.count().catch(() => 0)
+    } catch {
+      return Promise.resolve(0)
+    }
+  }
   const [
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
     cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
-    anexos, produtosDfe, cnae, consultasCnpj,
+    anexos, produtosDfe, cnae, consultasCnpj, conversasEmitente,
   ] = await Promise.all([
-    db.ncm.count(),
-    db.nbs.count(),
-    db.cst.count(),
-    db.cstClassTrib.count(),
-    db.referencia.count(),
-    db.ncmNomenclatura.count(),
-    db.empresas.count(),
-    db.produtos.count(),
-    db.cfop.count(),
-    db.cstIcms.count(),
-    db.cstPisCofins.count(),
-    db.nfeNotas.count(),
-    db.reclassificacoesManuais.count(),
-    db.classificacaoProduto.count(),
-    db.auditLog.count().catch(() => 0),
-    db.cest.count().catch(() => 0),
-    db.iaFeedback.count().catch(() => 0),
-    db.anexos.count().catch(() => 0),
-    db.produtosDfe.count().catch(() => 0),
-    db.cnae.count().catch(() => 0),
-    db.consultasCnpj.count().catch(() => 0),
+    contar(STORES.NCM),
+    contar(STORES.NBS),
+    contar(STORES.CST),
+    contar(STORES.CSTCT),
+    contar(STORES.REFERENCIA),
+    contar(STORES.NCMNOM),
+    contar(STORES.EMPRESAS),
+    contar(STORES.PRODUTOS),
+    contar(STORES.CFOP),
+    contar(STORES.CSTICMS),
+    contar(STORES.CSTPISCOFINS),
+    contar(STORES.NFENOTAS),
+    contar(STORES.RECLASS),
+    contar(STORES.CLASSPROD),
+    contar(STORES.AUDIT),
+    contar(STORES.CEST),
+    contar(STORES.IAFEEDBACK),
+    contar(STORES.ANEXOS),
+    contar(STORES.PRODUTOSDFE),
+    contar(STORES.CNAE),
+    contar(STORES.CONSULTAS_CNPJ),
+    contar(STORES.CONVERSAS_EMITENTE),
   ])
   return {
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
     cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
-    anexos, produtosDfe, cnae, consultasCnpj,
+    anexos, produtosDfe, cnae, consultasCnpj, conversasEmitente,
   }
 }

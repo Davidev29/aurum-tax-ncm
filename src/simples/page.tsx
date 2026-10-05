@@ -24,6 +24,7 @@ import { BotaoReparticao, DasModal, montarDadosDas } from './DasModal';
 import { fmtCarga, fmtCnpj, fmtMoeda, parseMoeda } from '@/domain/services/format';
 import { rotuloAnexoSimples } from '@/domain/services/cnae';
 import { Btn, IconeBadge, Painel, Selecao, Texto, useAcaoTatil } from '@/ui/kit';
+import { Entrada, Secao } from '@/ui/motion';
 import { toast } from '@/store/ui';
 
 const ANEXOS: AnexoSimplesId[] = ['I', 'II', 'III', 'IV', 'V'];
@@ -264,6 +265,7 @@ export function SimplesNacional() {
     <>
     <div className={`grid grid-cols-1 gap-6 transition-all duration-500 ${relatorioAtivo ? 'lg:grid-cols-[minmax(0,1fr)_400px]' : ''}`}>
       <div className="min-w-0 space-y-6">
+        <Entrada>
         <Painel className="overflow-hidden">
           <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] p-5">
             <IconeBadge nome="calculadora" tom="brand" tamanho="lg" />
@@ -292,6 +294,7 @@ export function SimplesNacional() {
 
           <div className="space-y-6 p-5" key={s.modo}>
             {/* PASSO 1 */}
+            <Entrada atraso={0.05}>
             <section className="space-y-3">
               <Passo n="1" titulo={s.modo === 'manual' ? 'Qual Anexo você quer simular?' : 'Digite o CNPJ da empresa'} desc={s.modo === 'manual' ? 'Toque num Anexo para liberar o restante.' : 'Buscamos as atividades e você escolhe 1 para simular.'} />
               {s.modo === 'manual' ? (
@@ -429,10 +432,12 @@ export function SimplesNacional() {
                 </div>
               )}
             </section>
+            </Entrada>
 
             {/* PASSO 2 — oculto até o passo 1 (sem scroll inicial) */}
             {pronta1 ? (
-              <section ref={passo2Ref} className="animate-fade-up scroll-mt-24 space-y-4 border-t border-[var(--line)] pt-5">
+              <Secao>
+              <section ref={passo2Ref} className="scroll-mt-24 space-y-4 border-t border-[var(--line)] pt-5">
                 <Passo n="2" titulo="Informe os valores" desc="RBT12 e receita do mês. Folha só aparece para o Fator R (Anexo V)." />
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <CampoMoeda rotulo="RBT12 — receita 12 meses" valor={s.rbt12} onValor={(v) => { s.set({ rbt12: v }); s.tocarEntrada(); }} dica="Soma dos últimos 12 meses (teto 4,8M)" />
@@ -573,6 +578,7 @@ export function SimplesNacional() {
                   {gerando ? <div className="loading-bar mt-3 h-1.5 w-1/3 rounded-full bg-aurum-300/80" /> : null}
                 </div>
               </section>
+              </Secao>
             ) : (
               <p className="rounded-2xl border border-dashed border-[var(--line)] bg-slate-50/50 px-4 py-3 text-center text-xs text-slate-400 dark:bg-slate-950/30">
                 {s.modo === 'manual'
@@ -584,6 +590,7 @@ export function SimplesNacional() {
             )}
           </div>
         </Painel>
+        </Entrada>
       </div>
 
       {/* Relatório — OCULTO até Calcular (manual e automático). */}

@@ -2,9 +2,14 @@
  * Tela **Notas Fiscais (XML)** — importação, histórico e simulação.
  *
  * Regras:
- * - exige empresa ativa (o XML é sempre vinculado ao cadastro);
+ * - o XML é roteado pelo CNPJ ao cadastro dono (ativa ou outra cadastrada);
+ * - XML sem dono é estacionado como órfão (invisível à ativa) até o
+ *   contribuinte ser cadastrado via BrasilAPI — aí as notas são adotadas;
  * - direção entrada/saída/quarentena decidida pelo CNPJ (nunca descarta);
- * - chave de acesso duplicada é pulada, sem duplicar o banco.
+ * - chave de acesso duplicada na dona é pulada, sem duplicar o banco;
+ * - o motor (totais/apuração) é recarregado a cada lote — `carregar`
+ *   recalcula filtrado + global, e o período se expande para nunca esconder
+ *   a nota recém-chegada.
  */
 import { create } from 'zustand'
 import { REF_DEFAULT } from '@/domain/constants'
@@ -12,9 +17,13 @@ import { clamp } from '@/domain/services/format'
 import { obterAliquotasRefDinamica } from '@/domain/services/referencia-service'
 import type { Empresa } from '@/domain/entities'
 import {
+  apuracaoDaEmpresa,
+  assinarMudancaNotas,
   contarPorDia,
+  EMPRESA_ORFA_ID,
   excluirNota,
   importarXmls,
+  listarCnpjsPendentes,
   listarCstIcmsNotas,
   listarFornecedores,
   listarNotas,
@@ -26,9 +35,11 @@ import type {
   CreditoFornecedor,
   FiltrosNfe,
   NotaXml,
+  PendenteCadastroXml,
   ResumoImportacaoXml,
 } from '@/infrastructure/nfe/tipos'
 import { filtrosIniciaisNfe } from '@/infrastructure/nfe/tipos'
+import type { ApuracaoIbsCbs } from '@/infrastructure/nfe/apuracao'
 import { useProdutos } from './produtos'
 import { useSessao } from './sessao'
 import { registrarLimpeza, toast } from './ui'
@@ -55,9 +66,20 @@ interface NfeState {
   ultimoResumo: ResumoImportacaoXml | null
   refIBS: number
   refCBS: number
+  /** Contribuintes vistos em órfãs, sem cadastro — 1-clique BrasilAPI. */
+  pendentes: PendenteCadastroXml[]
+  /** CNPJ em cadastramento via banner (evita duplo clique). */
+  cadastrandoCnpj: string | null
+  /** Total de notas da ativa SEM filtro — base do motor global. */
+  totalEmpresa: number
+  /** Apuração global da ativa (todos os documentos recebidos). */
+  apuracaoEmpresa: ApuracaoIbsCbs | null
 
   importar: (files: File[] | FileList) => Promise<void>
   carregar: () => Promise<void>
+  atualizarPendentes: () => Promise<void>
+  /** Cadastra o CNPJ órfão via BrasilAPI (fallback XML) e adota as notas. */
+  cadastrarPendente: (cnpj: string) => Promise<void>
   setFiltros: (parcial: Partial<FiltrosNfe>) => void
   limparFiltros: () => void
   setMes: (ano: number, mes: number) => void
@@ -97,6 +119,10 @@ export const useNfe = create<NfeState>((set, get) => ({
   ultimoResumo: null,
   refIBS: REF_DEFAULT.IBS,
   refCBS: REF_DEFAULT.CBS,
+  pendentes: [],
+  cadastrandoCnpj: null,
+  totalEmpresa: 0,
+  apuracaoEmpresa: null,
 
   importar: async (files) => {
     const lista = [...files].filter((f) => /\.xml$/i.test(f.name))
@@ -115,12 +141,36 @@ export const useNfe = create<NfeState>((set, get) => ({
       const resumo = await importarXmls(lista, ativa, ref, (feito, total) =>
         set({ etapa: `Importando ${Math.min(feito, total)} de ${total} XML(s)…` }),
       )
+      // Reatividade do filtro: o recém-chegado nunca fica escondido pelo
+      // período anterior — expande inicio/fim para cobrir menor/maior data.
+      if (resumo.novas > 0 && (resumo.menorData || resumo.maiorData)) {
+        set((s) => {
+          const f = { ...s.filtros }
+          let mexeu = false
+          if (resumo.menorData && f.inicio && resumo.menorData < f.inicio) {
+            f.inicio = resumo.menorData
+            mexeu = true
+          }
+          if (resumo.maiorData && f.fim && resumo.maiorData > f.fim) {
+            f.fim = resumo.maiorData
+            mexeu = true
+          }
+          return mexeu ? { filtros: f } : {}
+        })
+      }
       set({ processando: false, etapa: null, ultimoResumo: resumo })
       const partes = [`${resumo.novas} nota(s) importada(s)`]
       if (resumo.duplicadas) partes.push(`${resumo.duplicadas} duplicada(s) ignorada(s)`)
-      if (resumo.quarentena) partes.push(`${resumo.quarentena} em quarentena`)
+      if (resumo.redirecionadas) partes.push(`${resumo.redirecionadas} em outro cadastro`)
+      if (resumo.orfas) partes.push(`${resumo.orfas} de contribuinte novo`)
+      else if (resumo.quarentena) partes.push(`${resumo.quarentena} em quarentena`)
       if (resumo.erros.length) partes.push(`${resumo.erros.length} erro(s)`)
       toast(partes.join(' · '), resumo.erros.length || resumo.quarentena ? 'warn' : 'ok')
+      if ((resumo.orfas ?? 0) > 0 || (resumo.pendentesCadastro?.length ?? 0) > 0) {
+        toast('Contribuinte novo detectado — cadastre pelo CNPJ no banner para adotar as notas.', 'warn')
+      }
+      // Motor de comparação: recalcula TUDO (filtrado + global) sobre os
+      // documentos recebidos — saldo ou débito sempre atual.
       await get().carregar()
     } catch (e) {
       set({ processando: false, etapa: null })
@@ -131,14 +181,30 @@ export const useNfe = create<NfeState>((set, get) => ({
   carregar: async () => {
     const ativa = useSessao.getState().ativa
     if (!ativa?.id) {
-      set({
-        notas: [],
-        diasComNota: new Map(),
-        fornecedores: [],
-        ranking: [],
-        cstIcmsOpcoes: [],
-        carregandoHistorico: false,
-      })
+      // Sem ativa não há histórico — mas órfãs pendentes são globais.
+      try {
+        const pendentes = await listarCnpjsPendentes()
+        set({
+          notas: [],
+          diasComNota: new Map(),
+          fornecedores: [],
+          ranking: [],
+          cstIcmsOpcoes: [],
+          pendentes,
+          totalEmpresa: 0,
+          apuracaoEmpresa: null,
+          carregandoHistorico: false,
+        })
+      } catch {
+        set({
+          notas: [],
+          diasComNota: new Map(),
+          fornecedores: [],
+          ranking: [],
+          cstIcmsOpcoes: [],
+          carregandoHistorico: false,
+        })
+      }
       return
     }
     // Sinaliza antes de qualquer `await` para a tela exibir o loading
@@ -160,19 +226,69 @@ export const useNfe = create<NfeState>((set, get) => ({
     const vez = ++seqCarregar
     try {
       const { filtros, mesAno, mesMes } = get()
-      const [notas, dias, fornecedores, cstIcmsOpcoes] = await Promise.all([
+      const [notas, dias, fornecedores, cstIcmsOpcoes, global, pendentes] = await Promise.all([
         listarNotas(ativa.id, filtros),
         contarPorDia(ativa.id, mesAno, mesMes),
         listarFornecedores(ativa.id),
         listarCstIcmsNotas(ativa.id),
+        apuracaoDaEmpresa(ativa.id),
+        listarCnpjsPendentes(),
       ])
-      const inicio = filtros.inicio || `${mesAno}-${String(mesMes).padStart(2, '0')}-01`
-      const fim = filtros.fim || `${mesAno}-${String(mesMes).padStart(2, '0')}-31`
-      const ranking = await rankingFornecedores(ativa.id, inicio, fim)
+      // Reatividade total por filtros: o ranking de fornecedores deriva das
+      // MESMAS notas filtradas da apuração — filtrar uma data específica
+      // apura os créditos IBS/CBS daquela data em ambos os painéis, sem
+      // divergência. Só quando o filtro não tem entradas (ex.: só saídas) o
+      // período entra como contexto, para o ranking não sumir da tela.
+      const { rankingDoFiltro } = await import('@/application/nfe-relatorio-ia')
+      let ranking = rankingDoFiltro(notas)
+      if (!ranking.length && notas.length) {
+        const inicio = filtros.inicio || `${mesAno}-${String(mesMes).padStart(2, '0')}-01`
+        const fim = filtros.fim || `${mesAno}-${String(mesMes).padStart(2, '0')}-31`
+        ranking = await rankingFornecedores(ativa.id, inicio, fim)
+      }
       if (vez !== seqCarregar) return
-      set({ notas, diasComNota: dias, fornecedores, ranking, cstIcmsOpcoes })
+      set({ notas, diasComNota: dias, fornecedores, ranking, cstIcmsOpcoes, pendentes, totalEmpresa: global.qtd, apuracaoEmpresa: global.apuracao })
     } finally {
       if (vez === seqCarregar) set({ carregandoHistorico: false })
+    }
+  },
+
+  atualizarPendentes: async () => {
+    try {
+      const pendentes = await listarCnpjsPendentes()
+      set({ pendentes })
+    } catch {
+      /* banner best-effort */
+    }
+  },
+
+  cadastrarPendente: async (cnpj) => {
+    if (get().cadastrandoCnpj) return
+    const alvo = get().pendentes.find((p) => p.cnpj === cnpj)
+    set({ cadastrandoCnpj: cnpj })
+    try {
+      const { cadastrarEmpresaAPartirDeNota } = await import('@/application/empresas')
+      const r = await cadastrarEmpresaAPartirDeNota(cnpj, { nomeFallback: alvo?.nome })
+      if (!r.ok || !r.empresa) {
+        toast(r.motivo ?? 'Não foi possível cadastrar.', 'err')
+        return
+      }
+      await useSessao.getState().iniciar()
+      // Se o novo cadastro não é a ativa, seleciona-o para o usuário ver as
+      // notas adotadas na hora (reatividade total).
+      if (r.empresa.id != null && useSessao.getState().ativa?.id !== r.empresa.id) {
+        await useSessao.getState().selecionar(r.empresa.id)
+      }
+      await get().carregar()
+      const detalhe = r.adotadas ? ` — ${r.adotadas} nota(s) adotada(s)` : ''
+      toast(
+        `${r.atualizada ? 'Cadastro completado' : r.fonte === 'brasilapi' ? 'Empresa cadastrada via BrasilAPI' : 'Empresa cadastrada'}${detalhe}. Motor recalculado.${r.aviso ? ` ${r.aviso}` : ''}`,
+        'ok',
+      )
+    } catch (e) {
+      toast(`Erro ao cadastrar: ${e instanceof Error ? e.message : String(e)}`, 'err')
+    } finally {
+      set({ cadastrandoCnpj: null })
     }
   },
 
@@ -187,7 +303,17 @@ export const useNfe = create<NfeState>((set, get) => ({
   },
 
   setMes: (ano, mes) => {
-    set({ mesAno: ano, mesMes: mes })
+    // Mês navegado com dia específico de outro mês filtrado = lista vazia
+    // confusa. Limpa o pinpoint de dia quando ele sai do mês visível; faixa
+    // manual proposital (inicio ≠ fim) é preservada.
+    set((s) => {
+      const { inicio, fim } = s.filtros
+      if (inicio && inicio === fim) {
+        const prefixo = `${ano}-${String(mes).padStart(2, '0')}`
+        if (!inicio.startsWith(prefixo)) return { mesAno: ano, mesMes: mes, filtros: { ...s.filtros, inicio: '', fim: '' } }
+      }
+      return { mesAno: ano, mesMes: mes }
+    })
     void get().carregar()
   },
 
@@ -241,9 +367,10 @@ export const useNfe = create<NfeState>((set, get) => ({
     if (!ok) return
     await excluirNota(n)
     set((s) => ({
-      notas: s.notas.filter((x) => x.id !== n.id),
       notaAberta: s.notaAberta?.id === n.id ? null : s.notaAberta,
     }))
+    // Motor reativo: ranking, calendário, totais e apuração recalculados.
+    await get().carregar()
     toast('Nota excluída.', 'ok')
   },
 
@@ -329,4 +456,17 @@ registrarLimpeza('nfe', () =>
 // Carrega alíquotas dinâmicas do banco na inicialização (reativo a mudanças de regras vigentes)
 void obterAliquotasRefDinamica().then((ref) => {
   useNfe.setState({ refIBS: ref.refIBS, refCBS: ref.refCBS })
+})
+
+// Reatividade cruzada: importação em outro cadastro, adoção via BrasilAPI ou
+// exclusão avisam — a ativa recarrega o motor sozinha, a qualquer momento.
+assinarMudancaNotas((ids) => {
+  const ativaId = useSessao.getState().ativa?.id
+  if (ativaId != null && ids.includes(ativaId)) {
+    void useNfe.getState().carregar()
+    return
+  }
+  if (ids.includes(EMPRESA_ORFA_ID)) {
+    void useNfe.getState().atualizarPendentes()
+  }
 })

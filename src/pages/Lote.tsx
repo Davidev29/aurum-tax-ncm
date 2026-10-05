@@ -42,6 +42,7 @@ import {
   SeloAurumAI,
 } from '@/ui/aurum-ai'
 import { BarraProgresso, Btn, Check, Modal, Painel, Texto } from '@/ui/kit'
+import { Entrada, Revelar } from '@/ui/motion'
 import { AurinhaLote } from '@/ui/aurinha-lote'
 import { Campo, Olho, Secao, SecaoInformacoesAdicionais } from '@/ui/detalhes'
 
@@ -144,6 +145,7 @@ export function Lote() {
   return (
     <div className="lote mx-auto max-w-6xl space-y-5">
       {/* ------------------------------------------------ HERO + stepper -- */}
+      <Entrada>
       <Painel className="lote-hero overflow-hidden">
         <div className="lote-hero-faixa" aria-hidden="true" />
         <div className="flex flex-wrap items-start gap-4 p-5 sm:p-6">
@@ -185,9 +187,11 @@ export function Lote() {
           </ol>
         </div>
       </Painel>
+      </Entrada>
 
       {/* ---------------------------------------------------------- envio -- */}
-      <Painel className="animate-fade-up">
+      <Revelar>
+      <Painel>
         <div className="p-5">
           <ZonaArquivo
             onArquivo={(f) => void processar(f)}
@@ -247,10 +251,12 @@ export function Lote() {
           ) : null}
         </div>
       </Painel>
+      </Revelar>
 
       {resumo ? (
-        <section ref={resultadosRef} className="animate-fade-up scroll-mt-20 space-y-4" aria-label="Resultados da análise em lote" tabIndex={-1}>
-          <ResumoHero resumo={resumo} />
+        <section ref={resultadosRef} className="scroll-mt-20 space-y-4" aria-label="Resultados da análise em lote" tabIndex={-1}>
+          <Revelar><ResumoHero resumo={resumo} /></Revelar>
+          <Revelar atraso={0.05}>
           <BarraFerramentas
             resumo={resumo}
             busca={busca}
@@ -262,6 +268,8 @@ export function Lote() {
             onSalvar={() => setRevisaoAberta(true)}
             salvando={salvando}
           />
+          </Revelar>
+          <Revelar atraso={0.1}>
           <TabelaLote
             resumo={resumo}
             busca={busca}
@@ -278,6 +286,7 @@ export function Lote() {
               })
             }
           />
+          </Revelar>
           <ModalRevisaoSalvamento
             aberto={revisaoAberta}
             resumo={resumo}

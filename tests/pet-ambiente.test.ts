@@ -1,5 +1,5 @@
 /**
- * Ambientes autônomos da Aurinha: 42 comportamentos, sorteio ponderado sem
+ * Ambientes autônomos da Aurinha: 81 comportamentos, sorteio ponderado sem
  * repetição imediata e intervalos irregulares (vida natural, nunca mecânica).
  */
 import { describe, expect, it } from 'vitest'
@@ -22,13 +22,28 @@ const ESPERADOS = [
   'lamber-beico', 'farejar-pote', 'tomar-cafe', 'lavar-rosto', 'sonhar',
   'cacar-borboleta', 'perseguir-luz', 'jogar-moeda', 'esconder',
   'carimbar', 'contar-moedas', 'mandar-beijo',
+  // Pacote 3 — emoção
+  'rir-alto', 'choramingar', 'orgulho', 'timidez', 'surpresa', 'meditar',
+  'apaixonar', 'emburrar', 'alivio',
+  // Pacote 3 — locomoção
+  'galopar', 'saltitar', 'correr-leve', 'sonambular', 'escorregar', 'tropecar',
+  'rodopiar', 'patrulha-lenta', 'zigue-zague',
+  // Pacote 3 — ocioso natural
+  'olhar-relogio', 'contar-estrelas', 'assobiar', 'ajeitar-oculos', 'farejar-ar',
+  'lustrar-selo', 'anotar', 'dobrar-mapa', 'fazer-sombra',
+  // Gaveta de documentos
+  'consultar-gaveta', 'ler-livrinho',
+  // Pacote 4 — braços com física
+  'acenar-duplo', 'nadar-lontra', 'escavar', 'malabarismo', 'aplaudir',
+  'focar-binoculo', 'carregar-caixa', 'apontar-achado', 'espreguicar-bracos',
+  'abraco-quente',
 ]
 
 describe('ambientes da Aurinha', () => {
-  it('tem exatamente 42 comportamentos com ids únicos e durações sãs', () => {
-    expect(AMBIENTES).toHaveLength(42)
+  it('tem exatamente 81 comportamentos com ids únicos e durações sãs', () => {
+    expect(AMBIENTES).toHaveLength(81)
     const ids = AMBIENTES.map((a) => a.id)
-    expect(new Set(ids).size).toBe(42)
+    expect(new Set(ids).size).toBe(81)
     for (const a of AMBIENTES) {
       expect(a.id).toMatch(/^[a-z-]+$/)
       expect(a.duracaoMs).toBeGreaterThanOrEqual(2000)
@@ -37,7 +52,7 @@ describe('ambientes da Aurinha', () => {
     }
   })
 
-  it('inclui os 42 catálogos esperados', () => {
+  it('inclui os 81 catálogos esperados', () => {
     const ids = AMBIENTES.map((a) => a.id)
     for (const esperado of ESPERADOS) {
       expect(ids).toContain(esperado)

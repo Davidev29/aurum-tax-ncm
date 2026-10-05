@@ -82,6 +82,5 @@ export function assinarEventosAtualizacao(
   cb: (evento: EventoAtualizacao) => void,
 ): (() => void) | null {
   if (!bridge) return null
-  bridge.onAtualizacao(cb)
-  return () => bridge?.onAtualizacao(() => undefined)
+  return bridge.onAtualizacao(cb)
 }

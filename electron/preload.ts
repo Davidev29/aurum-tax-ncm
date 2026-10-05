@@ -93,14 +93,17 @@ const aurum: AurumBridge = {
   /** Aplica a versão baixada e reinicia (canal `atualizacao:instalar`). */
   instalarAtualizacao: () => ipcRenderer.invoke('atualizacao:instalar'),
 
-  /** Eventos do auto-updater (canal `atualizacao:evento`). */
+  /** Eventos do auto-updater (canal `atualizacao:evento`). Empilha ouvintes
+      e devolve a desinscrição — o job de novidades e a aba Atualização
+      escutam juntos sem se anular. */
   onAtualizacao: (cb) => {
-    ipcRenderer.removeAllListeners('atualizacao:evento')
-    ipcRenderer.on('atualizacao:evento', (_evento, payload: unknown) => {
+    const handler = (_evento: unknown, payload: unknown) => {
       if (payload && typeof payload === 'object' && typeof (payload as { tipo?: unknown }).tipo === 'string') {
         cb(payload as EventoAtualizacao)
       }
-    })
+    }
+    ipcRenderer.on('atualizacao:evento', handler)
+    return () => ipcRenderer.removeListener('atualizacao:evento', handler)
   },
 
   /**
@@ -115,7 +118,8 @@ const aurum: AurumBridge = {
       ipcRenderer.invoke('ia:classificar', descricao, candidatos),
     buscar: (consulta: string, k?: number) => ipcRenderer.invoke('ia:buscar', consulta, k),
     status: (): Promise<StatusIaBridge> => ipcRenderer.invoke('ia:status'),
-    traduzir: (texto: string, para?: 'pt' | 'en') => ipcRenderer.invoke('ia:traduzir', texto, para),
+    conversar: (pergunta: string, opts?: { sistema?: string; historico?: { papel: string; texto: string }[]; think?: boolean; maxTokens?: number; temperature?: number }) =>
+      ipcRenderer.invoke('ia:conversar', pergunta, opts ?? {}),
   },
 }
 

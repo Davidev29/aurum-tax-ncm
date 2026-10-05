@@ -92,3 +92,10 @@
 `logs/consultas-ia.jsonl` (NÃO SEI + feedback "Não é esse") → triagem
 humana semanal → `sinonimos/dicionario/frases-modelo` → rebuild do índice
 (`gerar-indice-ia.mjs`) → regressão (`testar-indice-ia.mjs`).
+
+## 10. Corpus LC 214/2025 (`lc214-artigos.json` + `src/domain/services/lc214.ts`)
+
+- Fonte canonica do bundle: `src/domain/services/lc214.ts` (100% offline, sem rede). O JSON e o TS DEVEM ser atualizados juntos.
+- Cada verbete: numero, titulo, tema, aliases de busca, resumo curado (nunca redacao literal inventada), claro (linguagem simples), tecnico (aliquota/CST/cClassTrib/anexo/condicoes), quando_aplica, exemplo, link com ancora `#artNNN`.
+- Redacao literal vigente: sempre a integra no Planalto (`LINK_LC214`). A IA cita o link em toda resposta e avisa que o texto e resumo curado.
+- Cobertura atual: 33 artigos-guia (conceitos base, creditos, reducoes, diferimento, regimes especificos, administracao, transicao). Artigo fora da cobertura: resposta honesta + link da integra, nunca chute.

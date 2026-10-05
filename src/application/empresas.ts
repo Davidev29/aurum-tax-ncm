@@ -24,6 +24,8 @@ export interface ResultadoEmpresa {
   empresa?: Empresa
   /** `true` quando o CNPJ já existia e foi atualizado (idempotência). */
   atualizada?: boolean
+  /** Notas órfãs/quarentena adotadas automaticamente neste cadastro. */
+  adotadas?: number
 }
 
 export async function listarEmpresas(): Promise<Empresa[]> {
@@ -80,6 +82,9 @@ export function mesclarEmpresa(base: Empresa, patch: Partial<Empresa>): Empresa 
  * - com CNPJ de 14 dígitos já existente: completa os campos vazios e devolve
  *   o registro (`atualizada: true`), sem duplicar;
  * - sem CNPJ: exige razão social (fluxo manual legado).
+ *
+ * Após gravar, adota automaticamente as notas órfãs/quarentena do CNPJ
+ * (best-effort, nunca quebra o cadastro).
  */
 export async function cadastrarEmpresa(dados: DadosCadastroEmpresa): Promise<ResultadoEmpresa> {
   const razaoSocial = limpo(dados.razaoSocial)
@@ -102,7 +107,8 @@ export async function cadastrarEmpresa(dados: DadosCadastroEmpresa): Promise<Res
         email: limpo(dados.email) || undefined,
       })
       await db.empresas.put(mesclada)
-      return { ok: true, empresa: mesclada, atualizada: true }
+      const ad = await adotarNotasBestEffort(mesclada)
+      return { ok: true, empresa: mesclada, atualizada: true, adotadas: ad?.adotadas ?? 0 }
     }
     if (!razaoSocial) return { ok: false, motivo: 'Informe a razão social.' }
     const empresa: Empresa = {
@@ -121,7 +127,8 @@ export async function cadastrarEmpresa(dados: DadosCadastroEmpresa): Promise<Res
     }
     const id = await db.empresas.add(empresa)
     empresa.id = id
-    return { ok: true, empresa }
+    const ad = await adotarNotasBestEffort(empresa)
+    return { ok: true, empresa, adotadas: ad?.adotadas ?? 0 }
   }
 
   if (!razaoSocial) return { ok: false, motivo: 'Informe a razão social.' }
@@ -134,6 +141,21 @@ export async function cadastrarEmpresa(dados: DadosCadastroEmpresa): Promise<Res
   const id = await db.empresas.add(empresa)
   empresa.id = id
   return { ok: true, empresa }
+}
+
+/**
+ * Adoção best-effort após (re)cadastro — nunca lança.
+ * Import dinâmico para não ciclar com `notas-xml` (que importa
+ * `completarEmpresa` daqui).
+ */
+async function adotarNotasBestEffort(empresa: Empresa): Promise<{ adotadas: number } | null> {
+  try {
+    const mod = await import('./notas-xml')
+    const r = await mod.adotarNotasParaEmpresa(empresa)
+    return { adotadas: r.adotadas }
+  } catch {
+    return null
+  }
 }
 
 /** Converte o retorno da BrasilAPI em patch de cadastro. */
@@ -154,6 +176,7 @@ export function dadosDaBrasilApi(d: DadosCnpjBrasilApi): DadosCadastroEmpresa {
 /**
  * Cadastra/atualiza **só pelo CNPJ** — busca na BrasilAPI e grava idempotente.
  * O chamador (modal) mostra o preview antes de confirmar; aqui só executa.
+ * A adoção das notas do CNPJ acontece dentro de `cadastrarEmpresa`.
  */
 export async function cadastrarEmpresaPorCnpj(
   cnpjBruto: string,
@@ -161,6 +184,58 @@ export async function cadastrarEmpresaPorCnpj(
 ): Promise<ResultadoEmpresa> {
   const dados = await buscarCnpj(cnpjBruto, fetchFn)
   return cadastrarEmpresa(dadosDaBrasilApi(dados))
+}
+
+export interface ResultadoCadastroNota {
+  ok: boolean
+  motivo?: string
+  empresa?: Empresa
+  atualizada?: boolean
+  /** De onde veio o nome/endereço do cadastro. */
+  fonte?: 'brasilapi' | 'xml'
+  /** Quantas notas órfãs/quarentena foram adotadas. */
+  adotadas?: number
+  aviso?: string
+}
+
+/**
+ * Cadastro do novo cliente a partir do CNPJ encontrado nas notas.
+ *
+ * 1. tenta a BrasilAPI (razão social, endereço, contatos oficiais);
+ * 2. se a rede/limite/404 falhar, usa o nome que veio no XML (fallback) —
+ *    o contribuinte nunca fica sem cadastro por falta de internet;
+ * 3. em ambos os casos, adota automaticamente as notas órfãs/quarentena
+ *    do CNPJ para o cadastro criado.
+ */
+export async function cadastrarEmpresaAPartirDeNota(
+  cnpjBruto: string,
+  opts?: { nomeFallback?: string; fetchFn?: typeof fetch },
+): Promise<ResultadoCadastroNota> {
+  const cnpj = norm(cnpjBruto)
+  if (cnpj.length !== 14) return { ok: false, motivo: 'CNPJ deve ter exatamente 14 dígitos.' }
+  try {
+    const dados = await buscarCnpj(cnpj, opts?.fetchFn ?? fetch)
+    const r = await cadastrarEmpresa(dadosDaBrasilApi(dados))
+    if (!r.ok) return { ok: false, motivo: r.motivo }
+    return { ok: true, empresa: r.empresa, atualizada: r.atualizada, fonte: 'brasilapi', adotadas: r.adotadas ?? 0 }
+  } catch (e) {
+    const motivo = e instanceof Error ? e.message : String(e)
+    const nome = (opts?.nomeFallback ?? '').trim() || `Contribuinte ${fmtCnpj(cnpj)}`
+    try {
+      const r = await cadastrarEmpresa({ razaoSocial: nome, cnpj })
+      if (!r.ok) return { ok: false, motivo: r.motivo }
+      return {
+        ok: true,
+        empresa: r.empresa,
+        atualizada: r.atualizada,
+        fonte: 'xml',
+        adotadas: r.adotadas ?? 0,
+        aviso: `BrasilAPI indisponível (${motivo}) — cadastro com o nome do XML.`,
+      }
+    } catch (e2) {
+      return { ok: false, motivo: e2 instanceof Error ? e2.message : String(e2) }
+    }
+  }
 }
 
 export interface ResumoLoteCnpj {

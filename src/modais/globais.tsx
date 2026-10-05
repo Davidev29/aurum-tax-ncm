@@ -26,6 +26,8 @@ import { useAuxiliares } from '@/store/auxiliares'
 import { useSessao } from '@/store/sessao'
 import { useUi, toast } from '@/store/ui'
 import { Area, BarraProgresso, Btn, Campo, Check, Modal, Painel, Texto, useAcaoTatil } from '@/ui/kit'
+import { ModalNovidades } from '@/ui/ModalNovidades'
+import { useNovidades } from '@/store/novidades'
 import { ModalCalculadora } from './pagina'
 
 /* ------------------------------------------------------------- empresas --- */
@@ -519,7 +521,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
 
   useEffect(() => {
     if (!aberto) return
-    void contarTodos().then(setContagens)
+    void contarTodos().then(setContagens).catch(() => {})
     void recarregarStatus()
     void statusSincronizacao().then(setCffStatus)
     void versaoInstalada().then(setVersao)
@@ -528,7 +530,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
   // Eventos do auto-updater (verificação automática em background no instalado).
   useEffect(() => {
     if (!aberto || !bridge) return
-    bridge.onAtualizacao((ev: EventoAtualizacao) => {
+    return bridge.onAtualizacao((ev: EventoAtualizacao) => {
       if (ev.tipo === 'disponivel') {
         setVersaoNova(ev.versao ?? 'nova versão')
         setNotasVersao(ev.notas ?? null)
@@ -548,7 +550,6 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
         setVerificando(true)
       }
     })
-    return () => bridge?.onAtualizacao(() => undefined)
   }, [aberto])
 
   useEffect(() => {
@@ -619,7 +620,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
       await restaurarBackup(dado as Backup)
       await useAuxiliares.getState().recarregarTudo()
       await useSessao.getState().iniciar()
-      void contarTodos().then(setContagens)
+      void contarTodos().then(setContagens).catch(() => {})
       toast('Backup restaurado.', 'ok')
     } catch (e) {
       toast(`Erro ao restaurar: ${e instanceof Error ? e.message : String(e)}`, 'err')
@@ -1002,6 +1003,9 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
             ) : null}
 
             <div className="flex flex-wrap gap-1.5">
+              <Btn tam="sm" onClick={() => useNovidades.getState().reabrir()}>
+                Ver novidades da versão
+              </Btn>
               {!bridge ? (
                 <p className="text-[11px] text-slate-400">
                   Atualização automática disponível apenas no app instalado (Electron).
@@ -1336,12 +1340,18 @@ function ModalAuxEdicao({ aberto }: { aberto: boolean }) {
 export function ModaisGlobais() {
   const modal = useUi((s) => s.modal)
   const fechar = () => useUi.getState().abrirModal(null)
+  const fecharNovidades = () => {
+    const st = useNovidades.getState()
+    if (st.modo === 'novidades') st.marcarVistaEFechar()
+    else st.adiarAtualizacao()
+  }
 
   return (
     <>
       <ModalEmpresas aberto={modal === 'empresas'} onFechar={fechar} />
       <ModalConfig aberto={modal === 'config'} onFechar={fechar} />
       <ModalAuxEdicao aberto={modal === 'auxEdit'} />
+      <ModalNovidades aberto={modal === 'novidades'} onFechar={fecharNovidades} />
       <ModalCalculadora />
     </>
   )

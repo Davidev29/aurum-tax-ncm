@@ -238,6 +238,7 @@ export type NomeIcone =
   | 'livros'
   | 'empresa'
   | 'alerta'
+  | 'aurum'
 
 const TRACOS_ICONE: Record<NomeIcone, ReactNode> = {
   nota: (
@@ -284,6 +285,9 @@ const TRACOS_ICONE: Record<NomeIcone, ReactNode> = {
   ),
   empresa: (
     <path d="M4 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16M14 9h5a1 1 0 0 1 1 1v11M2 21h20M7 8h4m-4 4h4m-4 4h4" />
+  ),
+  aurum: (
+    <path d="M12 2.5c.7 4.5 1.9 6.7 9.5 9.5-7.6 2.8-8.8 5-9.5 9.5-.7-4.5-1.9-6.7-9.5-9.5 7.6-2.8 8.8-5 9.5-9.5Z" />
   ),
 }
 

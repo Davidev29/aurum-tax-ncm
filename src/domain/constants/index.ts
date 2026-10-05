@@ -6,7 +6,7 @@
 /** Nome/versão do IndexedDB legado (paridade com a v1). */
 export const DB_NAME = 'aurum_tax_ncm_v1'
 /** Versão do IndexedDB. A v10 adiciona `anexos` + `produtos_dfe` (formatos reais CFF). */
-export const DB_VERSION = 11
+export const DB_VERSION = 12
 
 /** Itens por página nas listagens. */
 export const PAGE_SIZE = 10
@@ -102,6 +102,8 @@ export const STORES = {
   CNAE: 'cnae',
   /** Cache de consultas por CNPJ (Phase 7, BrasilAPI + TTL 30 dias). */
   CONSULTAS_CNPJ: 'consultasCnpj',
+  /** Conversas da Aurum AI por emitente (Phase 8, memória longo prazo). */
+  CONVERSAS_EMITENTE: 'conversasEmitente',
 } as const
 
 export type StoreName = (typeof STORES)[keyof typeof STORES]
