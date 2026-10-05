@@ -18,6 +18,8 @@ import type { ProdutoLinha } from '@/store/produtos'
 import type { ResultadoItemNfe } from '@/infrastructure/nfe/tipos'
 import { creditoIbsCbsDoItem } from '@/infrastructure/nfe/credito'
 import { FaixaConfrontoXml } from '@/ui/divergencia'
+import { BlocoST } from '@/ui/cest'
+import { formatarCest } from '@/domain/services/cest'
 import { salvarProdutosEmLote } from '@/application/produtos'
 import { useSessao } from '@/store/sessao'
 import { toast } from '@/store/ui'
@@ -353,10 +355,12 @@ export function ModalItemNfeDetalhe({
         <div className="space-y-3">
           <AvisoNcmExtinto nomenclatura={item.nomenclatura} />
           <FaixaDivergencia item={item} />
+          <BlocoST cest={item.cest} />
           <Secao titulo="Produto" icone="📦">
             <Grade cols="grid-cols-2 md:grid-cols-4">
               <Campo rotulo="Código" valor={item.codProd} mono forte />
               <Campo rotulo="NCM" valor={fmtNcm(item.ncm)} mono />
+              <Campo rotulo="CEST" valor={item.cest ? formatarCest(item.cest) : '—'} mono />
               <Campo rotulo="CFOP" valor={item.cfop || '—'} mono />
               <Campo rotulo="Unid." valor={`${fmtNum(item.qtd)} ${item.unid || ''}`.trim()} mono />
               <Campo rotulo="V. unit" valor={fmtMoeda(item.vlUnit)} mono />
@@ -466,13 +470,13 @@ function FaixaDivergencia({ item }: { item: ResultadoItemNfe }) {
 import { useRef } from 'react'
 import { norm } from '@/domain/services/format'
 import type { AnexoNcm, CreditoPresumido } from '@/domain/entities'
-import { anexosDoNcm, regrasCreditoPresumido } from '@/infrastructure/base/info-adicional'
+import { anexosDoCodigo, regrasCreditoPresumido } from '@/infrastructure/base/info-adicional'
 
 /**
  * Informações adicionais da classificação (opt-in, colapsadas).
  *
  * Só aparece quando há match com regra existente:
- * - **Anexos do NCM**: linhas da tabela oficial que citam o NCM
+ * - **Anexos do NCM/NBS**: linhas da tabela oficial que citam o código
  *   (Permitido × Não Permitido + condição);
  * - **Crédito presumido**: regras vigentes, quando a classificação indica
  *   crédito presumido (`temCredito`).
@@ -488,6 +492,8 @@ export function SecaoInformacoesAdicionais({
 }) {
   const [dados, setDados] = useState<{ anexos: AnexoNcm[]; credito: CreditoPresumido[] } | null>(null)
   const chave = norm(ncm)
+  const ehNbs = chave.length === 9
+  const rotuloCodigo = ehNbs ? 'NBS' : 'NCM'
   const flagCredito = Boolean(temCredito)
   const chaveRef = useRef('')
 
@@ -498,7 +504,7 @@ export function SecaoInformacoesAdicionais({
     let vivo = true
     void (async () => {
       const [anexos, credito] = await Promise.all([
-        anexosDoNcm(chave),
+        anexosDoCodigo(chave),
         flagCredito ? regrasCreditoPresumido() : Promise.resolve([] as CreditoPresumido[]),
       ])
       if (vivo) setDados({ anexos, credito })
@@ -515,7 +521,7 @@ export function SecaoInformacoesAdicionais({
       {dados.anexos.length ? (
         <details className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950/40">
           <summary className="cursor-pointer text-xs font-bold">
-            📎 Anexos do NCM ({dados.anexos.length})
+            📎 Anexos do {rotuloCodigo} ({dados.anexos.length})
           </summary>
           <ul className="mt-2 space-y-1.5">
             {dados.anexos.slice(0, 20).map((a) => (

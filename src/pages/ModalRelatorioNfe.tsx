@@ -108,6 +108,7 @@ export function ModalRelatorioNfe({
   const [itensFluxo, setItensFluxo] = useState(true)
   const [lojas, setLojas] = useState(true)
   const [simples, setSimples] = useState(true)
+  const [natureza, setNatureza] = useState(true)
   const [direcao, setDirecao] = useState<DirecaoRelatorioNfe>('todas')
   const [resumo, setResumo] = useState<ResumoRelatorioNfe>('completo')
   const [inicio, setInicio] = useState(inicioPadrao)
@@ -120,6 +121,7 @@ export function ModalRelatorioNfe({
     setItensFluxo(OPCOES_RELATORIO_CHEIO.itensFluxo)
     setLojas(OPCOES_RELATORIO_CHEIO.lojas)
     setSimples(OPCOES_RELATORIO_CHEIO.simples)
+    setNatureza(OPCOES_RELATORIO_CHEIO.natureza ?? true)
     setDirecao(OPCOES_RELATORIO_CHEIO.direcao)
     setResumo(OPCOES_RELATORIO_CHEIO.resumo)
     setInicio(inicioPadrao)
@@ -136,11 +138,11 @@ export function ModalRelatorioNfe({
     return qtd
   }, [notas, inicio, fim, direcao])
 
-  const nadaMarcado = !produtos && !lojas && !simples
+  const nadaMarcado = !produtos && !lojas && !simples && !natureza
 
   const gerar = () => {
     if (gerando || nadaMarcado || qtdRecorte === 0) return
-    onGerar({ opcoes: { produtos, itensFluxo, lojas, simples, direcao, resumo }, inicio, fim })
+    onGerar({ opcoes: { produtos, itensFluxo, lojas, simples, natureza, direcao, resumo }, inicio, fim })
   }
 
   return (
@@ -186,6 +188,12 @@ export function ModalRelatorioNfe({
               aoMudar={setSimples}
               titulo="Lojas do Simples"
               descricao="O sistema verifica loja por loja se há crédito disponível."
+            />
+            <Caixa
+              marcado={natureza}
+              aoMudar={setNatureza}
+              titulo="Naturezas diferentes de venda"
+              descricao="Notas com natureza ou CFOP diferente de venda e compras p/ imobilizado, comparadas às imunidades da LC."
             />
           </div>
           {nadaMarcado ? (

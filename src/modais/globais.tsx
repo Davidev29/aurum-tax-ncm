@@ -17,7 +17,7 @@ import { normalizarCor, processarLogo } from '@/application/emitente'
 import { statusSincronizacao, coberturaTabelasProduto } from '@/application/cff-sync'
 import { baixarAtualizacao, instalarAtualizacao, versaoInstalada, verificarAtualizacaoManual } from '@/application/atualizacao'
 import { bridge, type EventoAtualizacao } from '@/infrastructure/bridge'
-import type { Emitente } from '@/domain/entities'
+import type { Emitente, Empresa } from '@/domain/entities'
 import { EMITENTE_PADRAO } from '@/domain/entities'
 import type { DadosCnpjBrasilApi } from '@/infrastructure/receita/brasilapi'
 import { useBase } from '@/store/base'
@@ -53,6 +53,11 @@ function ModalEmpresas({ aberto, onFechar }: { aberto: boolean; onFechar: () => 
   const [loteProg, setLoteProg] = useState<{ feito: number; total: number } | null>(null)
   const [loteResumo, setLoteResumo] = useState<string | null>(null)
   const [filtro, setFiltro] = useState('')
+  const [detalheId, setDetalheId] = useState<number | null>(null)
+  const empresaDetalhe = useMemo(
+    () => empresas.find((e) => e.id === detalheId) ?? null,
+    [empresas, detalheId],
+  )
   const inputArquivo = useRef<HTMLInputElement>(null)
 
   const lista = useMemo(() => {
@@ -138,6 +143,7 @@ function ModalEmpresas({ aberto, onFechar }: { aberto: boolean; onFechar: () => 
   const acaoArquivo = useAcaoTatil(escolherArquivo)
 
   return (
+    <>
     <Modal
       aberto={aberto}
       onFechar={onFechar}
@@ -310,6 +316,10 @@ function ModalEmpresas({ aberto, onFechar }: { aberto: boolean; onFechar: () => 
               onChange={(e) => setFiltro(e.target.value)}
             />
           </div>
+          <p className="mb-2 text-[11px] text-slate-400">
+            Toque em <strong>Detalhes</strong> para ver endereço, contatos, regime tributário,
+            documentos e produtos — e para excluir o cadastro com tudo vinculado.
+          </p>
           <div className="modal-scroll scroll-elegante max-h-56 space-y-2 pr-1">
             {lista.length === 0 ? (
               <div className="rounded-xl bg-slate-50 p-6 text-center text-xs text-slate-500 dark:bg-slate-950/40">
@@ -327,9 +337,14 @@ function ModalEmpresas({ aberto, onFechar }: { aberto: boolean; onFechar: () => 
                       : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'
                   }`}
                 >
-                  <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => setDetalheId(e.id ?? null)}
+                    className="min-w-0 flex-1 text-left"
+                    title="Ver detalhes da empresa"
+                  >
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-semibold">{e.razaoSocial}</span>
+                      <span className="truncate text-sm font-semibold underline-offset-2 hover:underline">{e.razaoSocial}</span>
                       {ehAtiva ? (
                         <span className="pill bg-brand-600 text-white">ATIVA</span>
                       ) : null}
@@ -338,11 +353,18 @@ function ModalEmpresas({ aberto, onFechar }: { aberto: boolean; onFechar: () => 
                           className="pill bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
                           title={
                             e.regimeTributario === 'mei'
-                              ? 'MEI — notas não transferem crédito de IBS/CBS'
-                              : 'Simples Nacional — notas não transferem crédito de IBS/CBS'
+                              ? 'MEI — optante pelo Simples; notas não transferem crédito de IBS/CBS'
+                              : 'Simples Nacional — optante; notas não transferem crédito de IBS/CBS'
                           }
                         >
                           {e.regimeTributario === 'mei' ? 'MEI' : 'Simples'}
+                        </span>
+                      ) : e.regimeTributario === 'normal' ? (
+                        <span
+                          className="pill bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                          title="Regime normal — não optante pelo Simples Nacional"
+                        >
+                          Regime normal
                         </span>
                       ) : null}
                     </div>
@@ -350,7 +372,10 @@ function ModalEmpresas({ aberto, onFechar }: { aberto: boolean; onFechar: () => 
                       {e.cnpj ? fmtCnpj(e.cnpj) : 'sem CNPJ'}
                       {e.fantasia ? ` · ${e.fantasia}` : ''}
                     </div>
-                  </div>
+                  </button>
+                  <Btn tam="sm" onClick={() => setDetalheId(e.id ?? null)}>
+                    👁 Detalhes
+                  </Btn>
                   {ehAtiva ? (
                     <span className="rounded-lg bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
                       ✓ Em uso
@@ -371,15 +396,23 @@ function ModalEmpresas({ aberto, onFechar }: { aberto: boolean; onFechar: () => 
                   <Btn
                     tam="sm"
                     variante="danger"
+                    title="Excluir empresa com produtos e notas vinculados"
                     onClick={() => {
                       void (async () => {
+                        const { contarVinculosEmpresa } = await import('@/application/empresas')
+                        const v = await contarVinculosEmpresa(e.id ?? -1)
+                        const extras: string[] = []
+                        if (v.produtos) extras.push(`${v.produtos} produto(s)`)
+                        if (v.notas) extras.push(`${v.notas} nota(s) XML`)
                         const ok = await confirmar(
                           'Excluir empresa?',
-                          `A empresa "${e.razaoSocial}" será removida. Os produtos vinculados ficarão sem empresa.`,
-                          { icone: '🗑', confirmar: 'Excluir', perigo: true },
+                          extras.length
+                            ? `A empresa "${e.razaoSocial}" será removida JUNTO com ${extras.join(' + ')} vinculado(s). Esta ação não pode ser desfeita.`
+                            : `A empresa "${e.razaoSocial}" será removida. Esta ação não pode ser desfeita.`,
+                          { icone: '🗑', confirmar: 'Excluir tudo', perigo: true },
                         )
                         if (!ok) return
-                        void excluir(e.id ?? -1)
+                        await excluir(e.id ?? -1)
                       })()
                     }}
                   >
@@ -392,6 +425,332 @@ function ModalEmpresas({ aberto, onFechar }: { aberto: boolean; onFechar: () => 
           </div>
         </div>
       </div>
+    </Modal>
+      <ModalDetalheEmpresa
+        empresa={empresaDetalhe}
+        ehAtiva={empresaDetalhe != null && ativa?.id === empresaDetalhe.id}
+        onFechar={() => setDetalheId(null)}
+        onSelecionar={async (id) => {
+          await selecionar(id)
+          toast('Empresa ativa definida.', 'ok')
+          setDetalheId(null)
+          onFechar()
+        }}
+        onExcluida={() => setDetalheId(null)}
+      />
+    </>
+  )
+}
+
+/* ------------------------------------------------------ detalhe empresa --- */
+
+/** Aparência da tag de regime tributário (optante Simples/MEI × normal × desconhecido). */
+function tagRegime(regime: Empresa['regimeTributario']): { rotulo: string; classe: string; dica: string } {
+  if (regime === 'simples')
+    return {
+      rotulo: 'Simples Nacional',
+      classe: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
+      dica: 'Optante pelo Simples Nacional — notas não transferem crédito de IBS/CBS',
+    }
+  if (regime === 'mei')
+    return {
+      rotulo: 'MEI',
+      classe: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
+      dica: 'MEI — optante pelo Simples; notas não transferem crédito de IBS/CBS',
+    }
+  if (regime === 'normal')
+    return {
+      rotulo: 'Regime normal',
+      classe: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
+      dica: 'Não optante pelo Simples Nacional — apura IBS/CBS no regime regular',
+    }
+  return {
+    rotulo: 'Regime não identificado',
+    classe: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+    dica: 'Regime ainda desconhecido — é detectado via CRT/CSOSN ao importar XML',
+  }
+}
+
+function LinhaDetalhe({ rotulo, valor, mono }: { rotulo: string; valor: string; mono?: boolean }) {
+  const vazio = !valor.trim()
+  return (
+    <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950/40">
+      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{rotulo}</div>
+      <div className={`mt-0.5 truncate text-xs font-semibold ${vazio ? 'text-slate-400' : ''} ${mono ? 'font-mono' : ''}`} title={vazio ? undefined : valor}>
+        {vazio ? '— não informado —' : valor}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Modal de detalhes da empresa: endereço, contatos, regime tributário
+ * (optante ou não do Simples), documentos fiscais importados (quantidade,
+ * para conferência) e produtos cadastrados — com exclusão em cascata
+ * (empresa + produtos + notas).
+ *
+ * Abre empilhado sobre o modal de empresas (`z-index` escala por abertura).
+ */
+function ModalDetalheEmpresa({
+  empresa,
+  ehAtiva,
+  onFechar,
+  onSelecionar,
+  onExcluida,
+}: {
+  empresa: Empresa | null
+  ehAtiva: boolean
+  onFechar: () => void
+  onSelecionar: (id: number) => Promise<void>
+  onExcluida: () => void
+}) {
+  const excluirStore = useSessao((s) => s.excluir)
+  const [vinculos, setVinculos] = useState<{ produtos: number; notas: number } | null>(null)
+  const [produtos, setProdutos] = useState<Array<{ id?: number; codigo: string; nome: string; ncm: string }>>([])
+  const [carregando, setCarregando] = useState(false)
+  const [excluindo, setExcluindo] = useState(false)
+
+  const id = empresa?.id ?? null
+
+  useEffect(() => {
+    if (id == null) {
+      setVinculos(null)
+      setProdutos([])
+      return
+    }
+    let vivo = true
+    setCarregando(true)
+    void (async () => {
+      try {
+        const mod = await import('@/application/empresas')
+        const [v, lista] = await Promise.all([
+          mod.contarVinculosEmpresa(id),
+          mod.listarProdutosResumoEmpresa(id, 8),
+        ])
+        if (vivo) {
+          setVinculos(v)
+          setProdutos(lista)
+        }
+      } finally {
+        if (vivo) setCarregando(false)
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [id])
+
+  const pedirExclusao = () => {
+    if (!empresa || id == null || excluindo) return
+    void (async () => {
+      const qtdProdutos = vinculos?.produtos ?? 0
+      const qtdNotas = vinculos?.notas ?? 0
+      const extras: string[] = []
+      if (qtdProdutos) extras.push(`${qtdProdutos} produto(s) cadastrado(s)`)
+      if (qtdNotas) extras.push(`${qtdNotas} documento(s) fiscal(is) importado(s)`)
+      const ok = await confirmar(
+        'Excluir empresa e tudo vinculado?',
+        extras.length
+          ? `"${empresa.razaoSocial}" será removida JUNTO com ${extras.join(' + ')}. Esta ação não pode ser desfeita.`
+          : `"${empresa.razaoSocial}" será removida. Esta ação não pode ser desfeita.`,
+        { icone: '🗑', confirmar: 'Excluir tudo', perigo: true },
+      )
+      if (!ok) return
+      setExcluindo(true)
+      try {
+        await excluirStore(id)
+        onExcluida()
+      } finally {
+        setExcluindo(false)
+      }
+    })()
+  }
+
+  const irPara = (destino: 'nfe' | 'produtos') => {
+    if (id == null) return
+    void (async () => {
+      // Garante o escopo antes de navegar: a tela abre já filtrada pela empresa.
+      await useSessao.getState().selecionar(id)
+      useUi.getState().trocarView(destino)
+      useUi.getState().abrirModal(null)
+      onExcluida()
+    })()
+  }
+
+  const regime = tagRegime(empresa?.regimeTributario)
+  const enderecoCompleto = empresa
+    ? [empresa.endereco, empresa.cidade && empresa.uf ? `${empresa.cidade}/${empresa.uf}` : empresa.cidade ?? empresa.uf, empresa.cep ? `CEP ${empresa.cep}` : '']
+        .filter(Boolean)
+        .join(' · ')
+    : ''
+
+  return (
+    <Modal
+      aberto={empresa != null}
+      onFechar={onFechar}
+      titulo={empresa?.razaoSocial ?? 'Detalhes da empresa'}
+      subtitulo={empresa ? `Cadastro · ${empresa.cnpj ? fmtCnpj(empresa.cnpj) : 'sem CNPJ'}` : undefined}
+      largura="max-w-2xl"
+      rodape={
+        empresa ? (
+          <>
+            {!ehAtiva ? (
+              <Btn variante="primary" onClick={() => void onSelecionar(empresa.id ?? -1)}>
+                ✓ Selecionar empresa
+              </Btn>
+            ) : (
+              <span className="rounded-lg bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                ✓ Empresa em uso
+              </span>
+            )}
+            <Btn variante="danger" carregando={excluindo} onClick={pedirExclusao}>
+              {excluindo ? 'Excluindo…' : '🗑 Excluir cadastro'}
+            </Btn>
+          </>
+        ) : undefined
+      }
+    >
+      {!empresa ? null : (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {ehAtiva ? <span className="pill bg-brand-600 text-white">ATIVA</span> : null}
+            <span className={`pill ${regime.classe}`} title={regime.dica}>
+              {empresa.regimeTributario === 'simples' ? '🧾 ' : empresa.regimeTributario === 'mei' ? '🧾 ' : empresa.regimeTributario === 'normal' ? '🏢 ' : '❓ '}
+              {regime.rotulo}
+            </span>
+            {(vinculos?.notas ?? 0) > 0 ? (
+              <span className="pill bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300" title="Documentos fiscais importados para conferência">
+                🧾 {vinculos!.notas} doc(s) fiscal(is)
+              </span>
+            ) : (
+              <span className="pill bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400" title="Nenhum XML importado para esta empresa">
+                🧾 sem documentos
+              </span>
+            )}
+            {(vinculos?.produtos ?? 0) > 0 ? (
+              <span className="pill bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300" title="Produtos vinculados a esta empresa">
+                📦 {vinculos!.produtos} produto(s)
+              </span>
+            ) : (
+              <span className="pill bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400" title="Nenhum produto cadastrado para esta empresa">
+                📦 sem produtos
+              </span>
+            )}
+          </div>
+
+          <section>
+            <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Identificação</h3>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <LinhaDetalhe rotulo="Razão social" valor={empresa.razaoSocial} />
+              <LinhaDetalhe rotulo="Nome fantasia" valor={empresa.fantasia ?? ''} />
+              <LinhaDetalhe rotulo="CNPJ" valor={empresa.cnpj ? fmtCnpj(empresa.cnpj) : ''} mono />
+              <div className="grid grid-cols-2 gap-2">
+                <LinhaDetalhe rotulo="IE" valor={empresa.ie ?? ''} mono />
+                <LinhaDetalhe rotulo="IM" valor={empresa.im ?? ''} mono />
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Endereço</h3>
+            {enderecoCompleto ? (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <LinhaDetalhe rotulo="Logradouro" valor={empresa.endereco ?? ''} />
+                </div>
+                <LinhaDetalhe rotulo="Cidade/UF" valor={empresa.cidade && empresa.uf ? `${empresa.cidade}/${empresa.uf}` : (empresa.cidade ?? empresa.uf ?? '')} />
+                <LinhaDetalhe rotulo="CEP" valor={empresa.cep ?? ''} mono />
+              </div>
+            ) : (
+              <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-400 dark:bg-slate-950/40">
+                — endereço não informado — cadastre pelo CNPJ ou complete ao importar um XML.
+              </p>
+            )}
+          </section>
+
+          <section>
+            <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Contatos</h3>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <LinhaDetalhe rotulo="E-mail" valor={empresa.email ?? ''} />
+              <LinhaDetalhe rotulo="Telefone" valor={empresa.telefone ?? ''} mono />
+            </div>
+          </section>
+
+          <section>
+            <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Regime tributário</h3>
+            <div className={`rounded-xl border p-3 text-xs leading-relaxed ${empresa.regimeTributario === 'normal' ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30' : empresa.regimeTributario ? 'border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30' : 'border-slate-200 bg-slate-50/60 dark:border-slate-700 dark:bg-slate-950/30'}`}>
+              {empresa.regimeTributario === 'simples' ? (
+                <><strong>Optante pelo Simples Nacional.</strong> As notas desta empresa <strong>não transferem crédito</strong> de IBS/CBS (tributação pelos Anexos I–V).</>
+              ) : empresa.regimeTributario === 'mei' ? (
+                <><strong>MEI — optante pelo Simples.</strong> As notas desta empresa <strong>não transferem crédito</strong> de IBS/CBS.</>
+              ) : empresa.regimeTributario === 'normal' ? (
+                <><strong>Não optante pelo Simples Nacional</strong> (regime normal — Lucro Real/Presumido). Apura IBS/CBS no regime regular, com transferência de crédito quando destacada.</>
+              ) : (
+                <>Regime <strong>ainda não identificado</strong>. Ele é detectado automaticamente pelo CRT/CSOSN ao importar um XML desta empresa.</>
+              )}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">Documentos fiscais · para conferência</h3>
+              {(vinculos?.notas ?? 0) > 0 ? (
+                <Btn tam="sm" onClick={() => irPara('nfe')}>
+                  Conferir notas →
+                </Btn>
+              ) : null}
+            </div>
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
+              {carregando ? (
+                <p className="text-xs text-slate-400">Contando documentos…</p>
+              ) : (vinculos?.notas ?? 0) > 0 ? (
+                <p className="text-xs leading-relaxed">
+                  <strong className="font-mono text-sm">{vinculos!.notas}</strong> documento(s) fiscal(is) importado(s) desta empresa — abra a tela de notas com a empresa selecionada para conferir.
+                </p>
+              ) : (
+                <p className="text-xs text-slate-400">Nenhum documento fiscal importado desta empresa ainda.</p>
+              )}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">Produtos cadastrados</h3>
+              {(vinculos?.produtos ?? 0) > 0 ? (
+                <Btn tam="sm" onClick={() => irPara('produtos')}>
+                  Ver produtos →
+                </Btn>
+              ) : null}
+            </div>
+            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
+              {carregando ? (
+                <p className="text-xs text-slate-400">Contando produtos…</p>
+              ) : (vinculos?.produtos ?? 0) === 0 ? (
+                <p className="text-xs text-slate-400">Nenhum produto cadastrado desta empresa ainda.</p>
+              ) : (
+                <>
+                  <p className="mb-2 text-xs leading-relaxed">
+                    <strong className="font-mono text-sm">{vinculos!.produtos}</strong> produto(s) vinculado(s) a esta empresa{vinculos!.produtos > produtos.length ? ` — mostrando ${produtos.length}:` : ':'}
+                  </p>
+                  <ul className="space-y-1.5">
+                    {produtos.map((p) => (
+                      <li key={p.id ?? p.codigo} className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs dark:bg-slate-950/40">
+                        <span className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 font-mono text-[10px] font-bold dark:bg-slate-800">{p.codigo}</span>
+                        <span className="min-w-0 flex-1 truncate font-semibold">{p.nome}</span>
+                        <span className="shrink-0 font-mono text-[10px] text-slate-400">NCM {p.ncm}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+          </section>
+
+          <p className="rounded-xl border border-red-200 bg-red-50/60 p-3 text-[11px] leading-relaxed text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+            🗑 <strong>Excluir cadastro</strong> apaga a empresa <strong>junto com todos os produtos e notas XML vinculados</strong> — use para remover por completo um cliente.
+          </p>
+        </div>
+      )}
     </Modal>
   )
 }
@@ -636,7 +995,13 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
   // da sessão concluir o carregamento do emitente salvo.
   // Compacto: `max-w-2xl` + abas + scroll elegante (antes era `max-w-4xl`
   // com todas as seções empilhadas numa página longa).
+  //
+  // O preview do timbrado é IRMÃO do modal principal (nunca aninhado): um
+  // `fixed` dentro do outro herda o bloco de contenção do pai
+  // (`backdrop-filter`/`filter` da animação `glass-pop-in`) e abre deslocado.
+  // Com o `Modal` portalizado ambos caem no `document.body` como irmãos.
   return (
+    <>
     <Modal
       aberto={aberto}
       onFechar={onFechar}
@@ -1110,6 +1475,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
         </section>
         ) : null}
       </div>
+    </Modal>
 
       <Modal
         aberto={mostrarPreview}
@@ -1145,7 +1511,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
           </div>
         </div>
       </Modal>
-    </Modal>
+    </>
   )
 }
 

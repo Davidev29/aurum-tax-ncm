@@ -27,7 +27,7 @@ interface SessaoState {
   selecionar: (id: number | null) => Promise<void>
   limparSessao: () => Promise<void>
   criar: (dados: { razaoSocial: string; cnpj?: string; fantasia?: string }) => Promise<boolean>
-  excluir: (id: number) => Promise<void>
+  excluir: (id: number) => Promise<{ produtos: number; notas: number }>
   importar: (file: File) => Promise<number>
   /** Cadastra pelo CNPJ via BrasilAPI (idempotente). Devolve `false` se falhar. */
   criarPorCnpj: (cnpj: string) => Promise<boolean>
@@ -92,11 +92,19 @@ export const useSessao = create<SessaoState>((set, get) => ({
   },
 
   excluir: async (id) => {
-    await excluirEmpresa(id)
+    const vinculos = await excluirEmpresa(id)
     const eraAtiva = get().ativa?.id === id
     if (eraAtiva) definirEmpresaAtivaSessao(null)
     const empresas = await listarEmpresas()
     set({ empresas, ativa: eraAtiva ? null : get().ativa })
+    const partes: string[] = []
+    if (vinculos.produtos) partes.push(`${vinculos.produtos} produto(s)`)
+    if (vinculos.notas) partes.push(`${vinculos.notas} nota(s)`)
+    toast(
+      partes.length ? `Empresa excluída (${partes.join(' + ')} apagados).` : 'Empresa excluída.',
+      'ok',
+    )
+    return vinculos
   },
 
   importar: async (file) => {

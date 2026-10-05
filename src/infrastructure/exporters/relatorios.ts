@@ -27,6 +27,7 @@ import { ehResumo } from '../sped/tipos'
 import type { ResultadoItem, ResultadoResumo, ResultadoSped } from '../sped/tipos'
 import { creditoDaNota, creditoIbsCbsDaNota } from '../nfe/credito'
 import { apurarIbsCbs } from '../nfe/apuracao'
+import { resumirNaturezas } from '../nfe/cfop'
 import { REGIME_LABELS, regimeDoEmitente } from '../nfe/regime'
 import type { CreditoFornecedor, CreditoLoja, DisponibilidadeCredito, InsightNfe, NotaXml, OpcoesRelatorioNfe, VerificacaoRagNfe } from '../nfe/tipos'
 import { OPCOES_RELATORIO_CHEIO } from '../nfe/tipos'
@@ -1453,9 +1454,9 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
 
   const vereditoTexto =
     op.resumo === 'credito'
-      ? ap.creditoTotal > 0
-        ? `Você tem ${fmtMoeda(ap.creditoTotal)} de crédito para usar`
-        : 'Nenhum crédito no período'
+      ? ap.creditoEfetivoTotal > 0
+        ? `Você tem ${fmtMoeda(ap.creditoEfetivoTotal)} de crédito nas notas para usar`
+        : 'Nenhum crédito destacado nas notas do período'
       : op.resumo === 'debito'
         ? ap.debitoTotal > 0
           ? `Suas vendas deram ${fmtMoeda(ap.debitoTotal)} de imposto`
@@ -1501,6 +1502,10 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
   /** Lojas e Simples só existem em compras — somem no recorte só-vendas. */
   const mostraLojas = op.lojas && mostraCompras
   const mostraSimples = op.simples && mostraCompras
+
+  /** Naturezas da operação diferentes de venda (bloco acima dos gráficos). */
+  const resumoNaturezas = resumirNaturezas(notas)
+  const mostraNatureza = op.natureza !== false
 
   /** Etiqueta discreta: o que você ajustou só se diferencia, sem aviso. */
   const etiqueta = (ajustado: boolean): string => (ajustado ? 'você ajustou' : 'bate com a lei')
@@ -1627,24 +1632,36 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
     { titulo: 'Valor', larg: 45, alin: 'right', forte: true },
   ]
   /** A conta final obedece ao modal: completa, só crédito ou só débito. */
+  const divergenciaTxt = `${ap.divergenciaCreditoTotal >= 0 ? '+' : ''}${fmtMoeda(ap.divergenciaCreditoTotal)}`
   const rowsResumo: Cell[][] =
     op.resumo === 'credito'
-      ? [[`Crédito das compras · ${ap.qtdEntradasApropriaveis} compra(s)`, fmtMoeda(ap.creditoTotal)]]
+      ? [
+        [`Crédito efetivo — veio nas notas · ${ap.qtdEntradasEfetivas} compra(s)`, fmtMoeda(ap.creditoEfetivoTotal)],
+        ['Análise pelo NCM — Pela reforma (informativo, você decide)', fmtMoeda(ap.creditoInformativoTotal)],
+        [`Diferença nota − NCM`, divergenciaTxt],
+      ]
       : op.resumo === 'debito'
-        ? [[`Imposto das vendas · ${ap.qtdSaidas} venda(s)`, fmtMoeda(ap.debitoTotal)]]
+        ? [[`Imposto das vendas que você emitiu · ${ap.qtdSaidas} venda(s)`, fmtMoeda(ap.debitoTotal)]]
         : [
-            [`Imposto das vendas · ${ap.qtdSaidas} venda(s)`, fmtMoeda(ap.debitoTotal)],
-            [`Menos: crédito das compras · ${ap.qtdEntradasApropriaveis} compra(s)`, `− ${fmtMoeda(ap.creditoTotal)}`],
-            ['Resultado para você', resultadoValor],
+            [`Imposto das vendas que você emitiu · ${ap.qtdSaidas} venda(s)`, fmtMoeda(ap.debitoTotal)],
+            [`Menos: crédito efetivo das notas que você recebeu · ${ap.qtdEntradasEfetivas} compra(s) com destaque`, `− ${fmtMoeda(ap.creditoEfetivoTotal)}`],
+            ['Resultado assistido para você', resultadoValor],
+                ...(ap.debitoSemEfeitoTotal > 0.005
+                  ? [[`Saídas fora de venda (fora do saldo) · ${ap.qtdSaidasSemEfeito} nota(s)`, fmtMoeda(ap.debitoSemEfeitoTotal)] as Cell[]]
+                  : []),
+            ['Análise pelo NCM — Pela reforma (informativo, não abate)', fmtMoeda(ap.creditoInformativoTotal)],
+            [`Diferença nota − NCM (você decide)`, divergenciaTxt],
           ]
   const tituloResumo = op.resumo === 'credito'
-    ? 'Crédito apurado'
+    ? 'Crédito apurado (efetivo das notas)'
     : op.resumo === 'debito'
       ? 'Débito apurado'
-      : 'Resumo do imposto'
+      : 'Resumo do imposto (apuração assistida)'
   const subResumo = op.resumo === 'completo'
-    ? 'A conta é simples: imposto das vendas menos o crédito das compras.'
-    : undefined
+    ? 'A conta é simples: imposto das vendas menos o crédito que veio destacado nas notas. A análise pelo NCM é informativa.'
+    : op.resumo === 'credito'
+      ? 'Vale o que o fornecedor destacou na nota. A análise pelo NCM é informativa — você decide.'
+      : undefined
 
   const infoTimbre = linhasEmitente(emitente).map((l) => l[0]).filter(Boolean)
   const doc: TDocumentDefinitions = {
@@ -1743,9 +1760,9 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
             op.resumo === 'debito'
               ? [cartaoKpi('Imposto das suas vendas', fmtMoeda(ap.debitoTotal), `${ap.qtdSaidas} venda(s) no período`)]
               : op.resumo === 'credito'
-                ? [cartaoKpi('Crédito que você pode usar', fmtMoeda(ap.creditoTotal), `${ap.qtdEntradasApropriaveis} compra(s) de loja comum`)]
+                ? [cartaoKpi('Crédito efetivo nas notas', fmtMoeda(ap.creditoEfetivoTotal), `${ap.qtdEntradasEfetivas} compra(s) com destaque IBS/CBS`)]
                 : [
-                    cartaoKpi('Crédito que você pode usar', fmtMoeda(ap.creditoTotal), `${ap.qtdEntradasApropriaveis} compra(s) de loja comum`),
+                    cartaoKpi('Crédito efetivo nas notas', fmtMoeda(ap.creditoEfetivoTotal), `${ap.qtdEntradasEfetivas} compra(s) com destaque · NCM diria ${fmtMoeda(ap.creditoInformativoTotal)}`),
                     cartaoKpi('Imposto das suas vendas', fmtMoeda(ap.debitoTotal), `${ap.qtdSaidas} venda(s) no período`),
                   ],
           ],
@@ -1798,6 +1815,59 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
         layout: 'noBorders' as const,
         margin: [0, 2, 0, 6] as [number, number, number, number],
       },
+      // -- crédito: o que veio na nota × análise pelo NCM (efetivo × informativo) --
+      ...(mostraCompras
+        ? [
+            ...titulo(
+              'Crédito: o que veio na nota × análise pelo NCM',
+              'A apuração assistida usa o que o fornecedor destacou. A análise pela lei (NCM) é informativa — você decide.',
+            ),
+            tabelaEditorial({
+              cols: [
+                { titulo: 'Origem do crédito', larg: 55 },
+                { titulo: 'Valor', larg: 45, alin: 'right', forte: true },
+              ],
+              rows: [
+                [`Efetivo — destacado nas notas · ${ap.qtdEntradasEfetivas} compra(s)`, fmtMoeda(ap.creditoEfetivoTotal)],
+                ['Análise pelo NCM — Pela reforma (informativo)', fmtMoeda(ap.creditoInformativoTotal)],
+                [`Diferença nota − NCM`, divergenciaTxt],
+                ...(ap.semEfeitoTotal > 0.005
+                  ? [[`Operações diferentes de venda (sem crédito) · ${ap.qtdSemEfeito} nota(s)`, fmtMoeda(ap.semEfeitoTotal)] as Cell[]]
+                  : []),
+                ...(ap.imobilizadoTotal > 0.005
+                  ? [[`Ativo imobilizado / uso e consumo (sem crédito) · ${ap.qtdImobilizado} nota(s)`, fmtMoeda(ap.imobilizadoTotal)] as Cell[]]
+                  : []),
+              ],
+            }),
+          ]
+        : []),
+      // -- naturezas da operação diferentes de venda (comparadas à LC) -----------
+      ...(mostraNatureza && resumoNaturezas.qtdNaoVenda > 0
+        ? [
+            ...titulo(
+              'Naturezas da operação diferentes de venda',
+              'Fornecedor a fornecedor: quem emitiu nota com natureza diferente de venda (sem direito a crédito), comparado às imunidades da LC 214/2025.',
+            ),
+            {
+              text: `${resumoNaturezas.qtdNaoVenda} de ${resumoNaturezas.totalNotas} nota(s) — ${fmtMoeda(resumoNaturezas.valorNaoVenda)} — vieram com natureza ou CFOP diferente de venda. Compra para ativo imobilizado também não gera crédito.`,
+              fontSize: 8, color: SUAVE, margin: [0, 0, 0, 4] as [number, number, number, number],
+            },
+            tabelaEditorial({
+              cols: [
+                { titulo: 'Natureza da operação', larg: 44 },
+                { titulo: 'Notas', larg: 12, alin: 'right' },
+                { titulo: 'Valor', larg: 20, alin: 'right', forte: true },
+                { titulo: 'Efeito', larg: 24, alin: 'center' },
+              ],
+              rows: resumoNaturezas.grupos.map((g) => [
+                g.natOp.slice(0, 44),
+                g.qtdNotas,
+                fmtMoeda(g.valorTotal),
+                g.temImobilizado ? 'Imobilizado · sem crédito' : g.temImunidade ? 'Possível imunidade LC 214' : 'Diferente de venda · sem crédito',
+              ]),
+            }),
+          ]
+        : []),
       // -- produtos (só se marcado no modal; separado ou junto) ------------------------
       ...(op.produtos && op.itensFluxo && mostraCompras && maisComprados.length
         ? [
@@ -1917,7 +1987,7 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
           ]
         : []),
       {
-        text: 'Valores estimados pela lei de hoje. O que vale de verdade é a sua nota fiscal.',
+        text: 'Apuração assistida: vale o crédito destacado na nota do fornecedor. A análise pelo NCM (Pela reforma) é informativa — compare e decida. Operações diferentes de venda e compras para imobilizado não geram crédito.',
         fontSize: 7, italics: true, color: '#94a3b8', margin: [0, 10, 0, 0] as [number, number, number, number],
       },
     ],

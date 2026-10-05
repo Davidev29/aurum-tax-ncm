@@ -17,6 +17,7 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { ANEXO_LABELS, rotuloAnexoOficial } from '@/domain/constants/tributarios'
 import { MASK, type MaskKey } from '@/domain/services/format'
 import { useUi } from '@/store/ui'
@@ -475,8 +476,14 @@ export function Modal({
   }, [aberto])
 
   if (!visivel) return null
+  // Portal no `document.body`: o `fixed` do `.modal-backdrop` passa a ter a
+  // viewport como referência. Sem isso, qualquer ancestral com
+  // `transform/filter/perspective` (ex.: `Pagina`/`Entrada` do framer-motion,
+  // `animate-fade-up` da tela de XML) vira o bloco de contenção do `fixed` e
+  // o modal abre deslocado/fora da tela.
+  if (typeof document === 'undefined') return null
 
-  return (
+  return createPortal(
     <div
       className={`modal-backdrop${saindo ? ' is-saindo' : ''}`}
       style={{ zIndex: z }}
@@ -511,7 +518,8 @@ export function Modal({
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

@@ -30,7 +30,9 @@ import type { NotaXml } from '@/infrastructure/nfe/tipos'
 import { useSessao } from '@/store/sessao'
 import { useNfe } from '@/store/nfe'
 import { BannerContribuintesNovos } from './NfePendentes'
+import { BlocoNaturezas } from './NfeNatureza'
 import { toast, useUi } from '@/store/ui'
+import { SeloST, SeloSTNota } from '@/ui/cest'
 import { Btn, IconeBadge, Modal, Painel, Pill } from '@/ui/kit'
 
 type Aba = 'notas' | 'fornecedores' | 'produtos' | 'ncm' | 'insights'
@@ -143,6 +145,9 @@ export function NfeXmlPolida() {
       <Entrada atraso={0.05}>
         <HeroExecutivo />
       </Entrada>
+      <Entrada atraso={0.08}>
+        <BlocoNaturezasPolida />
+      </Entrada>
       <Entrada atraso={0.1}>
         <ImportCompacta />
       </Entrada>
@@ -220,8 +225,8 @@ function HeroExecutivo() {
   const tot = useMemo(() => totaisNotas(notas), [notas])
   const ap = useMemo(() => apurarIbsCbs(notas), [notas])
 
-  const cobertura = ap.debitoTotal > 0 ? Math.min(100, (ap.creditoTotal / ap.debitoTotal) * 100) : 0
-  const falta = Math.max(0, ap.debitoTotal - ap.creditoTotal)
+  const cobertura = ap.debitoTotal > 0 ? Math.min(100, (ap.creditoEfetivoTotal / ap.debitoTotal) * 100) : 0
+  const falta = Math.max(0, ap.debitoTotal - ap.creditoEfetivoTotal)
   const saldoAnim = useCountUp(ap.resultado === 'a-pagar' ? ap.valorAPagar : ap.resultado === 'saldo-credor' ? ap.saldoCredor : ap.saldoTotal)
   const baseAnim = useCountUp(tot.base)
   const tribAnim = useCountUp(tot.trib)
@@ -294,11 +299,14 @@ function HeroExecutivo() {
                         : 'Sem débitos no filtro'}
                 </span>
                 <span>
-                  {fmtMoeda(ap.creditoTotal)} / {fmtMoeda(ap.debitoTotal)}
+                  {fmtMoeda(ap.creditoEfetivoTotal)} / {fmtMoeda(ap.debitoTotal)}
                 </span>
               </div>
               <div className="calc-bar mt-1.5 bg-white/15" aria-hidden="true">
                 <BarraViva pct={cobertura} className={`h-full rounded-full ${barraCor}`} />
+              </div>
+              <div className="mt-1.5 font-mono text-[10px] text-white/60">
+                Crédito efetivo (nota) · Análise pelo NCM: {fmtMoeda(ap.creditoInformativoTotal)} (informativo — você decide)
               </div>
             </div>
           </div>
@@ -332,6 +340,13 @@ function HeroExecutivo() {
       </div>
     </div>
   )
+}
+
+/* ------------------------------------------- naturezas (acima dos gráficos) --- */
+
+function BlocoNaturezasPolida() {
+  const notas = useNfe((s) => s.notas)
+  return <BlocoNaturezas notas={notas} />
 }
 
 /* ------------------------------------------------------------- import --- */
@@ -723,6 +738,7 @@ function AbaNotas() {
                     <td>
                       <div className="text-[13px] font-bold">Nº {n.numero || '—'} <span className="font-normal text-slate-400">s.{n.serie || '—'}</span></div>
                       <div className="font-mono text-[11px] text-slate-400">{String(n.dataEmissao || '').slice(0, 10)} · {n.direcao === 'entrada' ? 'Entrada' : n.direcao === 'saida' ? 'Saída' : 'Quarentena'}</div>
+                      <SeloSTNota itens={n.itensAnalisados} />
                     </td>
                     <td className="max-w-[220px]">
                       <div className="truncate text-[13px] font-semibold" title={n.emitNome}>{n.emitNome}</div>
@@ -764,6 +780,7 @@ function ModalNotaPolida({ nota, onFechar }: { nota: NotaXml; onFechar: () => vo
         <Pill cor={nota.direcao === 'entrada' ? 'brand' : nota.direcao === 'saida' ? 'emerald' : 'amber'}>
           {nota.direcao === 'entrada' ? 'Entrada · crédito' : nota.direcao === 'saida' ? 'Saída · débito' : 'Quarentena · fora da apuração'}
         </Pill>
+        <SeloSTNota itens={nota.itensAnalisados} />
         <Copiar texto={nota.chave} titulo="Clique para copiar a chave de acesso">
           <span className="text-[11px] text-slate-500">Chave {nota.chave.slice(0, 12)}…{nota.chave.slice(-4)}</span>
         </Copiar>
@@ -788,6 +805,7 @@ function ModalNotaPolida({ nota, onFechar }: { nota: NotaXml; onFechar: () => vo
                     </Copiar>
                     <Pill cor="slate">CST {it.classificacao?.cst || '—'}</Pill>
                     <Pill cor="brand">{it.classificacao?.cClassTrib || '—'}</Pill>
+                    <SeloST cest={it.cest} />
                   </div>
                 </td>
                 <td className="text-right font-mono tabular-nums">{fmtNum(it.qtd)} · {fmtMoeda(it.vlTotal)}</td>
@@ -1065,9 +1083,12 @@ function AbaInsights() {
           <Expansivel aberto={detalhe}>
             <table className="tbl tbl-compacta mt-2">
               <tbody>
-                <tr><td>Débitos — Saídas ({ap.qtdSaidas})</td><td className="text-right font-mono">{fmtMoeda(ap.debitoTotal)}</td></tr>
-                <tr><td>(−) Créditos apropriáveis ({ap.qtdEntradasApropriaveis})</td><td className="text-right font-mono text-emerald-700">{fmtMoeda(ap.creditoTotal)}</td></tr>
-                <tr><td className="font-bold">(=) Saldo apurado</td><td className="text-right font-mono font-black">{fmtMoeda(ap.saldoTotal)}</td></tr>
+                <tr><td>Débitos — vendas que você emitiu ({ap.qtdSaidas})</td><td className="text-right font-mono">{fmtMoeda(ap.debitoTotal)}</td></tr>
+                {ap.debitoSemEfeitoTotal > 0 ? <tr><td>Saídas fora de venda ({ap.qtdSaidasSemEfeito}) — fora do saldo</td><td className="text-right font-mono text-slate-500">{fmtMoeda(ap.debitoSemEfeitoTotal)}</td></tr> : null}
+                <tr><td>(−) Créditos efetivos — notas que você recebeu ({ap.qtdEntradasEfetivas})</td><td className="text-right font-mono text-emerald-700">{fmtMoeda(ap.creditoEfetivoTotal)}</td></tr>
+                <tr><td className="font-bold">(=) Saldo assistido</td><td className="text-right font-mono font-black">{fmtMoeda(ap.saldoTotal)}</td></tr>
+                <tr><td>Análise pelo NCM — Pela reforma (informativo)</td><td className="text-right font-mono text-slate-500">{fmtMoeda(ap.creditoInformativoTotal)}</td></tr>
+                <tr><td>Diferença nota − NCM (você decide)</td><td className={`text-right font-mono font-bold ${ap.divergenciaCreditoTotal < 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{ap.divergenciaCreditoTotal >= 0 ? '+' : ''}{fmtMoeda(ap.divergenciaCreditoTotal)}</td></tr>
                 {ap.bloqueadoTotal > 0 ? <tr><td>Bloqueados Simples/MEI ({ap.qtdEntradasBloqueadas})</td><td className="text-right font-mono text-amber-700">{fmtMoeda(ap.bloqueadoTotal)}</td></tr> : null}
                 {ap.naoConfirmadoTotal > 0 ? <tr><td>Não confirmados ({ap.qtdEntradasNaoConfirmadas})</td><td className="text-right font-mono text-slate-500">{fmtMoeda(ap.naoConfirmadoTotal)}</td></tr> : null}
               </tbody>

@@ -203,9 +203,22 @@ export interface CreditoFornecedor {
   nome: string
   qtdNotas: number
   totalEntradas: number
+  /**
+   * Crédito **informativo** — análise pelo NCM ("Pela reforma", estimado).
+   * Mantido com o nome histórico por compatibilidade.
+   */
   creditoIBS: number
   creditoCBS: number
   creditoTotal: number
+  /**
+   * Crédito **efetivo** — o que veio destacado nas notas do fornecedor
+   * (opcional: preenchido pelos agregadores que têm os totais do XML).
+   */
+  creditoEfetivoIBS?: number
+  creditoEfetivoCBS?: number
+  creditoEfetivoTotal?: number
+  /** Notas do fornecedor com natureza/CFOP diferente de venda. */
+  qtdNaoVenda?: number
   /**
    * Fornecedor Simples/MEI (CRT ou CSOSN das notas): os valores são mera
    * estimativa — **não há transferência de crédito de IBS/CBS**.
@@ -315,6 +328,11 @@ export interface OpcoesRelatorioNfe {
   lojas: boolean
   /** Lojas do Simples + verificação de crédito disponível. */
   simples: boolean
+  /**
+   * Bloco "Naturezas da operação diferentes de venda" (opcional — ausente
+   * = mostra, para não mudar o relatório cheio existente).
+   */
+  natureza?: boolean
   /** Recorte de notas. */
   direcao: DirecaoRelatorioNfe
   /** Conta final. */

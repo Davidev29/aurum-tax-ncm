@@ -208,9 +208,13 @@ describe('motor reativo a cada lote', () => {
     expect(todas).toHaveLength(2)
     const ap2 = await apuracaoDaEmpresa(ativa.id!)
     expect(ap2.qtd).toBe(2)
+    // Informativo NCM cresceu com a entrada; o efetivo segue zero porque o
+    // XML não destaca IBS/CBS — a apuração assistida usa o efetivo (nota).
     expect(ap2.apuracao.creditoTotal).toBeGreaterThan(0)
-    // O crédito da entrada abateu o débito da saída.
-    expect(ap2.apuracao.saldoTotal).toBeLessThan(saldo1)
+    expect(ap2.apuracao.creditoEfetivoTotal).toBe(0)
+    expect(ap2.apuracao.creditoInformativoTotal).toBeGreaterThan(0)
+    // Sem crédito comprovado na nota, o saldo assistido não se move.
+    expect(ap2.apuracao.saldoTotal).toBe(saldo1)
     // Datas para expansão reativa do filtro.
     expect(r2.menorData).toBe('2026-09-11')
   })

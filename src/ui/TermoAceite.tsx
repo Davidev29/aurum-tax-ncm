@@ -13,6 +13,7 @@
  * no banco local (IndexedDB) e o tema no `localStorage`.
  */
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Btn, Campo, Check, Selecao, Texto } from './kit'
 import {
@@ -385,7 +386,12 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
     else irPara(passo + 1)
   }
 
-  return (
+  // Portal no `document.body`: o assistente monta como filho do `Layout`
+  // (dentro de `Pagina`, que usa transform) — sem portal o `fixed` teria o
+  // container animado como referência e abriria fora da tela. Mesmo motivo
+  // do `Modal` em `kit.tsx`.
+  if (typeof document === 'undefined') return null
+  return createPortal(
     <div
       className="fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-slate-900/70 p-4 backdrop-blur-sm"
       role="dialog"
@@ -793,7 +799,8 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

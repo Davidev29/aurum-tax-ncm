@@ -18,6 +18,7 @@
 import { norm } from '@/domain/services/format'
 import { apurarIbsCbs, type ApuracaoIbsCbs } from '@/infrastructure/nfe/apuracao'
 import { regimeDoEmitente } from '@/infrastructure/nfe/regime'
+import { classificarNatOp, efeitoDoItem } from '@/infrastructure/nfe/cfop'
 import type {
   AlertaRagNfe,
   ConfrontoRegimesNfe,
@@ -346,9 +347,21 @@ export function gerarInsightsNfe(
     }
   }
 
+  // 2b. Operações diferentes de venda / imobilizado (não geram crédito).
+  if (out.length < 3 && (ap.semEfeitoTotal > 0.005 || ap.imobilizadoTotal > 0.005)) {
+    const partes: string[] = []
+    if (ap.semEfeitoTotal > 0.005) partes.push(`${fmtBRL(ap.semEfeitoTotal)} em ${ap.qtdSemEfeito} nota(s) com natureza diferente de venda`)
+    if (ap.imobilizadoTotal > 0.005) partes.push(`${fmtBRL(ap.imobilizadoTotal)} em ${ap.qtdImobilizado} nota(s) de imobilizado/uso`)
+    pushUnico(
+      out, 'natureza-sem-credito',
+      'Tem compra que não gera crédito por natureza',
+      `A Aurum AI encontrou ${partes.join(' e ')}. Operação diferente de venda não gera direito a crédito — confira no bloco de naturezas antes de aproveitar.`,
+      'alerta',
+    )
+  }
+
   // 3. Uma compra domina o período.
-  if (out.length < 3) {
-    let maior: NotaXml | null = null
+  if (out.length < 3) {    let maior: NotaXml | null = null
     for (const n of notas) {
       if (!maior || Number(n?.valorTotal) > Number(maior?.valorTotal)) maior = n
     }
@@ -391,7 +404,9 @@ export function rankingDoFiltro(notas: NotaXml[], limite = 10): CreditoFornecedo
     if (!atual) {
       atual = {
         cnpj, nome: n.emitNome || cnpj, qtdNotas: 0,
-        totalEntradas: 0, creditoIBS: 0, creditoCBS: 0, creditoTotal: 0, simples: false,
+        totalEntradas: 0, creditoIBS: 0, creditoCBS: 0, creditoTotal: 0,
+        creditoEfetivoIBS: 0, creditoEfetivoCBS: 0, creditoEfetivoTotal: 0,
+        qtdNaoVenda: 0, simples: false,
       }
       mapa.set(cnpj, atual)
     }
@@ -402,6 +417,21 @@ export function rankingDoFiltro(notas: NotaXml[], limite = 10): CreditoFornecedo
     atual.creditoIBS = round2(atual.creditoIBS + (Number(n.totalIBS) || 0))
     atual.creditoCBS = round2(atual.creditoCBS + (Number(n.totalCBS) || 0))
     atual.creditoTotal = round2(atual.creditoTotal + (Number(n.totalTributos) || 0))
+    // Efetivo = o que veio destacado na nota (a apuração assistida usa este).
+    const temCampoXml = n.totalIbsXml !== undefined || n.totalCbsXml !== undefined
+    const efIbs = temCampoXml ? Number(n.totalIbsXml) || 0 : Number(n.totalIBS) || 0
+    const efCbs = temCampoXml ? Number(n.totalCbsXml) || 0 : Number(n.totalCBS) || 0
+    atual.creditoEfetivoIBS = round2((atual.creditoEfetivoIBS ?? 0) + efIbs)
+    atual.creditoEfetivoCBS = round2((atual.creditoEfetivoCBS ?? 0) + efCbs)
+    atual.creditoEfetivoTotal = round2((atual.creditoEfetivoTotal ?? 0) + efIbs + efCbs)
+    if (classificarNatOp(n.natOp) === 'nao-venda' || classificarNatOp(n.natOp) === 'imobilizado') {
+      atual.qtdNaoVenda = (atual.qtdNaoVenda ?? 0) + 1
+    } else if ((n.itensAnalisados ?? []).some((it) => {
+      const e = efeitoDoItem(it.cfop, n.natOp, 'entrada')
+      return e === 'sem-efeito' || e === 'imobilizado'
+    })) {
+      atual.qtdNaoVenda = (atual.qtdNaoVenda ?? 0) + 1
+    }
   }
   return [...mapa.values()].sort((a, b) => b.creditoTotal - a.creditoTotal).slice(0, limite)
 }

@@ -44,7 +44,9 @@ import type { DirecaoNota, FiltrosNfe, NotaXml, ResultadoItemNfe } from '@/infra
 import { useSessao } from '@/store/sessao'
 import { useNfe } from '@/store/nfe'
 import { BannerContribuintesNovos } from './NfePendentes'
+import { BlocoNaturezas } from './NfeNatureza'
 import { ModalItemNfeDetalhe, Olho } from '@/ui/detalhes'
+import { SeloST, SeloSTNota } from '@/ui/cest'
 import { toast, useUi } from '@/store/ui'
 import { CartaoStat } from '@/ui/cartoes'
 import { Btn, IconeBadge, Modal, Painel, Pill, Texto, useAcaoTatil } from '@/ui/kit'
@@ -544,6 +546,10 @@ function PainelHistorico() {
       </Secao>
 
       <Secao>
+        <BlocoNaturezas notas={notas} />
+      </Secao>
+
+      <Secao>
         <GraficosNfe notas={notas} />
       </Secao>
 
@@ -709,15 +715,21 @@ function PainelHistorico() {
 /* -------------------------------------------------------------- apuração --- */
 
 /**
- * Apuração IBS/CBS no padrão do portal da Reforma (tributação sobre o
- * consumo): débitos das saídas menos créditos apropriáveis das entradas,
- * por tributo e no total — com o veredito (a pagar / saldo credor).
+ * Apuração **assistida** IBS/CBS no padrão do portal da Reforma: débitos das
+ * saídas menos **créditos efetivos — os que vieram destacados na nota do
+ * fornecedor** — por tributo e no total, com o veredito.
+ *
+ * A estimativa **via NCM** ("Análise pelo NCM — Pela reforma") é
+ * **informativa**: não abate o saldo. O bloco mostra a diferença (nota − NCM)
+ * e o cliente decide o que fazer.
+ *
  * Calculada sobre as notas filtradas em tela: filtrar uma data específica
  * apura os créditos/débitos IBS e CBS daquela data (apuração assistida).
  */
 function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCbs; inicio: string; fim: string }) {
   const temMovimento = a.resultado !== 'sem-movimento'
-  const cobertura = a.debitoTotal > 0 ? Math.min(100, (a.creditoTotal / a.debitoTotal) * 100) : 0
+  const cobertura = a.debitoTotal > 0 ? Math.min(100, (a.creditoEfetivoTotal / a.debitoTotal) * 100) : 0
+  const divergencia = a.divergenciaCreditoTotal
   const vereditoTom =
     a.resultado === 'a-pagar' ? 'red' : a.resultado === 'saldo-credor' ? 'emerald' : 'slate'
   return (
@@ -726,10 +738,10 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
         <IconeBadge nome="calculadora" tom="brand" tamanho="lg" />
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-black tracking-tight">
-            Apuração IBS / CBS
+            Apuração assistida IBS / CBS
           </h3>
           <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-            Débitos das saídas − créditos das entradas · {a.qtdSaidas} saída(s) e{' '}
+            Débitos das vendas que você emitiu − créditos das notas que você recebeu · {a.qtdSaidas} saída(s) e{' '}
             {a.qtdEntradasApropriaveis + a.qtdEntradasBloqueadas + a.qtdEntradasNaoConfirmadas} entrada(s) no filtro
             {' · '}
             <strong className="text-slate-600 dark:text-slate-300">{rotuloPeriodoApuracao(inicio, fim)}</strong>
@@ -742,19 +754,19 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
       <div className="space-y-4 p-5">
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
           <div className="calc-kpi border-l-4 !border-l-red-400">
-            <div className="text-[10px] font-bold uppercase text-slate-500">Débitos · saídas</div>
+            <div className="text-[10px] font-bold uppercase text-slate-500">Débitos · saídas de venda</div>
             <div className="font-mono text-lg font-black">{fmtMoeda(a.debitoTotal)}</div>
             <div className="font-mono text-[10px] text-slate-400">IBS {fmtMoeda(a.debitoIBS)} + CBS {fmtMoeda(a.debitoCBS)}</div>
-            <div className="mt-0.5 text-[10px] text-slate-400">{a.qtdSaidas} nota(s) · base {fmtMoeda(a.baseSaidas)}</div>
+            <div className="mt-0.5 text-[10px] text-slate-400">{a.qtdSaidas} venda(s) que você emitiu · base {fmtMoeda(a.baseSaidas)}</div>
           </div>
           <div className="calc-kpi border-l-4 !border-l-emerald-500">
-            <div className="text-[10px] font-bold uppercase text-slate-500">Créditos · entradas</div>
-            <div className="font-mono text-lg font-black text-emerald-700 dark:text-emerald-400">{fmtMoeda(a.creditoTotal)}</div>
-            <div className="font-mono text-[10px] text-slate-400">IBS {fmtMoeda(a.creditoIBS)} + CBS {fmtMoeda(a.creditoCBS)}</div>
-            <div className="mt-0.5 text-[10px] text-slate-400">{a.qtdEntradasApropriaveis} nota(s) · base {fmtMoeda(a.baseEntradas)}</div>
+            <div className="text-[10px] font-bold uppercase text-slate-500">Créditos efetivos · vieram na nota</div>
+            <div className="font-mono text-lg font-black text-emerald-700 dark:text-emerald-400">{fmtMoeda(a.creditoEfetivoTotal)}</div>
+            <div className="font-mono text-[10px] text-slate-400">IBS {fmtMoeda(a.creditoEfetivoIBS)} + CBS {fmtMoeda(a.creditoEfetivoCBS)}</div>
+            <div className="mt-0.5 text-[10px] text-slate-400">{a.qtdEntradasEfetivas} nota(s) com destaque · base {fmtMoeda(a.baseEntradasEfetiva)}</div>
           </div>
           <div className="calc-hero rounded-xl p-3">
-            <div className="calc-hero-rotulo">Saldo apurado</div>
+            <div className="calc-hero-rotulo">Saldo assistido</div>
             <div className="calc-hero-valor text-2xl text-white">{fmtMoeda(a.saldoTotal)}</div>
             <div className="font-mono text-[10px] text-white/70">IBS {fmtMoeda(a.saldoIBS)} · CBS {fmtMoeda(a.saldoCBS)}</div>
           </div>
@@ -763,8 +775,8 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
         {temMovimento ? (
           <div>
             <div className="flex justify-between font-mono text-[10px] text-slate-400">
-              <span>Créditos cobrem {cobertura.toFixed(0)}% dos débitos</span>
-              <span>{fmtMoeda(a.creditoTotal)} / {fmtMoeda(a.debitoTotal)}</span>
+              <span>Créditos da nota cobrem {cobertura.toFixed(0)}% dos débitos</span>
+              <span>{fmtMoeda(a.creditoEfetivoTotal)} / {fmtMoeda(a.debitoTotal)}</span>
             </div>
             <div className="calc-bar mt-1" aria-hidden="true">
               <span className="bg-gradient-to-r from-emerald-600 to-teal-400" style={{ width: `${cobertura}%` }} />
@@ -775,7 +787,7 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
         <table className="tbl w-full">
           <thead>
             <tr>
-              <th>Detalhamento LC 214/2025</th>
+              <th>Detalhamento LC 214/2025 — apuração assistida</th>
               <th className="th-r">IBS</th>
               <th className="th-r">CBS</th>
               <th className="th-r">Total</th>
@@ -784,9 +796,10 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
           <tbody>
             <tr>
               <td>
-                Débitos — Saídas
+                Débitos — Saídas de venda
                 <span className="block text-[10px] font-normal text-slate-400">
-                  {a.qtdSaidas} nota(s) · base {fmtMoeda(a.baseSaidas)}
+                  {a.qtdSaidas} venda(s) que você emitiu · base {fmtMoeda(a.baseSaidas)}
+                  {a.debitoSemEfeitoTotal > 0 ? ` · +${fmtMoeda(a.debitoSemEfeitoTotal)} em ${a.qtdSaidasSemEfeito} saída(s) fora de venda (fora do saldo)` : ''}
                 </span>
               </td>
               <td className="text-right font-mono">{fmtMoeda(a.debitoIBS)}</td>
@@ -795,23 +808,59 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
             </tr>
             <tr>
               <td>
-                (−) Créditos apropriáveis — Entradas
+                (−) Créditos efetivos — vieram na nota
                 <span className="block text-[10px] font-normal text-slate-400">
-                  {a.qtdEntradasApropriaveis} nota(s) de regime normal · base {fmtMoeda(a.baseEntradas)}
+                  {a.qtdEntradasEfetivas} nota(s) com destaque IBS/CBS · vale para a apuração assistida
                 </span>
               </td>
-              <td className="text-right font-mono text-emerald-700 dark:text-emerald-400">{fmtMoeda(a.creditoIBS)}</td>
-              <td className="text-right font-mono text-emerald-700 dark:text-emerald-400">{fmtMoeda(a.creditoCBS)}</td>
-              <td className="text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmtMoeda(a.creditoTotal)}</td>
+              <td className="text-right font-mono text-emerald-700 dark:text-emerald-400">{fmtMoeda(a.creditoEfetivoIBS)}</td>
+              <td className="text-right font-mono text-emerald-700 dark:text-emerald-400">{fmtMoeda(a.creditoEfetivoCBS)}</td>
+              <td className="text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmtMoeda(a.creditoEfetivoTotal)}</td>
             </tr>
             <tr>
-              <td className="font-bold">(=) Saldo apurado</td>
+              <td className="font-bold">(=) Saldo assistido</td>
               <td className="text-right font-mono font-bold">{fmtMoeda(a.saldoIBS)}</td>
               <td className="text-right font-mono font-bold">{fmtMoeda(a.saldoCBS)}</td>
               <td className="text-right font-mono font-black">{fmtMoeda(a.saldoTotal)}</td>
             </tr>
           </tbody>
         </table>
+
+        {temMovimento ? (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-950/30">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                🧮 Análise pelo NCM — Pela reforma
+              </span>
+              <Pill cor="slate">Informativo · não abate o saldo · você decide</Pill>
+            </div>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              Pela lei (NCM), o crédito <strong>poderia ser {fmtMoeda(a.creditoInformativoTotal)}</strong>{' '}
+              (IBS {fmtMoeda(a.creditoInformativoIBS)} + CBS {fmtMoeda(a.creditoInformativoCBS)}).
+              A nota trouxe <strong>{fmtMoeda(a.creditoEfetivoTotal)}</strong> — diferença de{' '}
+              <strong className={divergencia < 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}>
+                {divergencia >= 0 ? '+' : ''}{fmtMoeda(divergencia)}
+              </strong>{' '}
+              (nota − NCM). Vale o que o fornecedor destacou: compare e decida se aceita, contesta ou complementa.
+            </p>
+            {(a.semEfeitoTotal > 0 || a.imobilizadoTotal > 0 || a.creditoProvisorio) ? (
+              <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">
+                {a.semEfeitoTotal > 0 ? (
+                  <>⚠️ Operações diferentes de venda: <strong>{fmtMoeda(a.semEfeitoTotal)}</strong> ({a.qtdSemEfeito} nota(s)) fora do crédito — veja o bloco de naturezas acima dos gráficos. </>
+                ) : null}
+                {a.imobilizadoTotal > 0 ? (
+                  <>🏭 Ativo imobilizado / uso e consumo: <strong>{fmtMoeda(a.imobilizadoTotal)}</strong> ({a.qtdImobilizado} nota(s)) sem crédito. </>
+                ) : null}
+                {a.creditoProvisorio ? (
+                  <>📎 Há nota legada sem os campos do XML: o efetivo usou a estimativa NCM como proxy — confira o XML. </>
+                ) : null}
+                {a.debitoSemEfeitoTotal > 0 ? (
+                  <>⤴ Saídas fora de venda: <strong>{fmtMoeda(a.debitoSemEfeitoTotal)}</strong> ({a.qtdSaidasSemEfeito} nota(s) que você emitiu sem vender) fora do débito — veja o bloco de naturezas. </>
+                ) : null}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-1">
           {a.resultado === 'a-pagar' ? (
@@ -971,7 +1020,7 @@ function RankingFornecedores({
           Fornecedores com maior crédito
         </h3>
         <p className="mt-0.5 pl-8 text-[10px] text-slate-500 dark:text-slate-400">
-          IBS + CBS das entradas · clique para ver as notas
+          Notas que você recebeu (eles emitiram = seu crédito) · clique para ver as notas
         </p>
       </div>
       <div className="scroll-elegante max-h-[300px] min-h-0 space-y-2 overflow-y-auto p-3 lg:max-h-none lg:flex-1">
@@ -1587,6 +1636,7 @@ function TabelaNotas({ notas, onVerDanfe }: { notas: NotaXml[]; onVerDanfe: (n: 
                       <span className="inline-block"><Pill cor="amber">{REGIME_LABELS[regime]}</Pill></span>
                     ) : null}
                     <span className="shrink-0 text-[10px] text-slate-400">{n.itensAnalisados.length} item(ns)</span>
+                    <SeloSTNota itens={n.itensAnalisados} />
                   </span>
                 </td>
                 <td><Pill cor={COR_DIRECAO[n.direcao]}>{ROTULO_DIRECAO[n.direcao]}</Pill></td>
@@ -1750,8 +1800,9 @@ function ModalDetalheNfe({ onVerDanfe }: { onVerDanfe: (n: NotaXml) => void }) {
           ) : null}
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-500">
+              <h4 className="flex flex-wrap items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-500">
                 Itens ({nota.itensAnalisados.length})
+                <SeloSTNota itens={nota.itensAnalisados} />
               </h4>
               <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-bold text-brand-700">👁 abre todos os tributos do item</span>
             </div>
@@ -1826,6 +1877,7 @@ function LinhaItemNfe({ item: it, onDetalhe }: { item: ResultadoItemNfe; onDetal
         <span className="block truncate font-mono text-[10px] text-slate-400">
           {fmtNcm(it.ncm)} · CFOP {it.cfop || '—'}
         </span>
+        <SeloST cest={it.cest} />
       </td>
       <td className="whitespace-normal break-words text-right text-xs">{fmtNum(it.qtd)}</td>
       <td className="whitespace-normal break-words text-right font-mono text-xs">{fmtMoeda(it.vlTotal)}</td>
@@ -1919,6 +1971,9 @@ function BlocoCreditoIbsCbs({ nota }: { nota: NotaXml }) {
   const cred = creditoIbsCbsDaNota(nota.itensAnalisados, nota)
   const regime = regimeDoEmitente(nota.emitCrt, nota.itensAnalisados)
   const apropriavel = nota.direcao === 'entrada' && transfereCreditoIbsCbs(regime)
+  // Direção correta: você EMITIU (saída) = DÉBITO seu; você RECEBEU a nota
+  // (entrada) = CRÉDITO seu — desde que a operação seja de venda.
+  const ehSaida = nota.direcao === 'saida'
   if (!cred.temDestaque) {
     return (
       <div className="flex items-start gap-2.5 rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-3.5 text-xs leading-relaxed dark:border-slate-700 dark:bg-slate-950/30">
@@ -1936,31 +1991,40 @@ function BlocoCreditoIbsCbs({ nota }: { nota: NotaXml }) {
     )
   }
   return (
-    <div className="overflow-hidden rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-50 via-white to-teal-50/60 dark:border-emerald-800 dark:from-emerald-950/40 dark:via-slate-900 dark:to-slate-900">
+    <div className={`overflow-hidden rounded-2xl border bg-gradient-to-br dark:to-slate-900 ${ehSaida ? 'border-red-300 from-red-50 via-white to-orange-50/60 dark:border-red-800 dark:from-red-950/40 dark:via-slate-900' : 'border-emerald-300 from-emerald-50 via-white to-teal-50/60 dark:border-emerald-800 dark:from-emerald-950/40 dark:via-slate-900'}`}>
       <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
-        <span className="grid h-8 w-8 place-items-center rounded-xl bg-emerald-500 text-base text-white shadow-pop">💠</span>
+        <span className={`grid h-8 w-8 place-items-center rounded-xl text-base text-white shadow-pop ${ehSaida ? 'bg-red-500' : 'bg-emerald-500'}`}>💠</span>
         <div>
-          <div className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-            Crédito IBS / CBS destacado no XML
+          <div className={`text-[10px] font-black uppercase tracking-widest ${ehSaida ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+            {ehSaida ? 'Débito IBS / CBS destacado no XML' : 'Crédito IBS / CBS destacado no XML'}
           </div>
           <div className="text-[11px] text-slate-500 dark:text-slate-400">
             {cred.itensComCredito} de {cred.totalItens} item(ns) ·{' '}
-            {apropriavel ? 'apropriável nesta entrada' : nota.direcao === 'saida' ? 'destacado nesta saída (débito do emitente)' : 'verifique o regime do emitente'}
+            {ehSaida
+              ? 'destacado nesta saída — é o DÉBITO da sua emissão (você emitiu, você deve)'
+              : apropriavel
+                ? 'apropriável nesta entrada — você recebeu a nota, o crédito é seu'
+                : 'verifique o regime do emitente'}
           </div>
         </div>
-        <span className="ml-auto font-mono text-xl font-black text-emerald-700 dark:text-emerald-300">
+        <span className={`ml-auto font-mono text-xl font-black ${ehSaida ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
           {fmtMoeda(cred.totalDestacado)}
         </span>
       </div>
       <div className="grid grid-cols-2 gap-3 p-4">
         <div className="rounded-xl bg-white/80 p-3 shadow-card dark:bg-slate-900/70">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">IBS destacado</div>
-          <div className="font-mono text-base font-black text-emerald-700 dark:text-emerald-300">{fmtMoeda(cred.ibsDestacado)}</div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">IBS {ehSaida ? 'do débito' : 'destacado'}</div>
+          <div className={`font-mono text-base font-black ${ehSaida ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{fmtMoeda(cred.ibsDestacado)}</div>
         </div>
         <div className="rounded-xl bg-white/80 p-3 shadow-card dark:bg-slate-900/70">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">CBS destacada</div>
-          <div className="font-mono text-base font-black text-emerald-700 dark:text-emerald-300">{fmtMoeda(cred.cbsDestacado)}</div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">CBS {ehSaida ? 'do débito' : 'destacada'}</div>
+          <div className={`font-mono text-base font-black ${ehSaida ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{fmtMoeda(cred.cbsDestacado)}</div>
         </div>
+      </div>
+      <div className="px-4 pb-3 text-[10px] text-slate-400">
+        {ehSaida
+          ? '⤴ Você emitiu esta nota (saída de venda) — o destaque é o seu débito, não crédito.'
+          : '⤵ Esta nota foi emitida pelo fornecedor (entrada) — o destaque é o seu crédito, se a operação for de venda.'}
       </div>
     </div>
   )
@@ -2037,6 +2101,9 @@ function PillCreditoAnexo({ anexo }: { anexo: string }) {
 function ConfrontoCredito({ nota }: { nota: NotaXml }) {
   const cred = creditoDaNota(nota.itensAnalisados)
   const credReforma = creditoIbsCbsDaNota(nota.itensAnalisados, nota)
+  // Direção correta: saída que você emitiu = DÉBITO seu; entrada que você
+  // recebeu = CRÉDITO seu (quando a operação é de venda).
+  const ehSaidaNota = nota.direcao === 'saida'
   const regime = regimeDoEmitente(nota.emitCrt, nota.itensAnalisados)
   const semTransferencia = !transfereCreditoIbsCbs(regime)
   // BLINDAGEM: o selo/cor da nota usa o anexo do 1º item SOMENTE quando todos
@@ -2064,12 +2131,12 @@ function ConfrontoCredito({ nota }: { nota: NotaXml }) {
       </div>
     ) : null}
     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-      <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50/80 to-white p-4 dark:border-emerald-900 dark:from-emerald-950/30 dark:to-slate-900">
-        <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
-          💠 IBS/CBS no XML
+      <div className={`rounded-2xl border bg-gradient-to-br p-4 dark:to-slate-900 ${ehSaidaNota ? 'border-red-200 from-red-50/80 to-white dark:border-red-900 dark:from-red-950/30' : 'border-emerald-200 from-emerald-50/80 to-white dark:border-emerald-900 dark:from-emerald-950/30'}`}>
+        <div className={`text-[10px] font-black uppercase tracking-wide ${ehSaidaNota ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+          {ehSaidaNota ? '💠 IBS/CBS no XML — seu débito' : '💠 IBS/CBS no XML — seu crédito'}
         </div>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="font-mono text-lg font-black text-emerald-700 dark:text-emerald-300">
+          <span className={`font-mono text-lg font-black ${ehSaidaNota ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
             {fmtMoeda(credReforma.totalDestacado)}
           </span>
           <span className="text-[11px] text-slate-500">destacado</span>
@@ -2115,7 +2182,10 @@ function ConfrontoCredito({ nota }: { nota: NotaXml }) {
         style={{ '--cor-borda': confEst.cor, '--cor-brilho': confEst.brilho } as CSSProperties}
       >
         <div className="text-[10px] font-black uppercase tracking-wide text-brand-600 dark:text-aurum-200">
-          🧮 Pela legislação
+          🧮 Análise pelo NCM — Pela reforma
+        </div>
+        <div className="mt-0.5 text-[10px] text-slate-400">
+          Informativo — o sistema estimou pela lei; vale o que veio na nota. Você decide.
         </div>
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="font-mono text-lg font-black text-brand-700 dark:text-brand-300">
@@ -2940,7 +3010,7 @@ function DanfeModal({ nota, onFechar }: { nota: NotaXml; onFechar: () => void })
 
         <div className="border-t border-slate-100 px-5 py-4">
           <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Produtos / serviços ({nota.itensAnalisados.length})</span>
+            <span className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Produtos / serviços ({nota.itensAnalisados.length}) <SeloSTNota itens={nota.itensAnalisados} /></span>
             <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-bold text-brand-700">Botão Tributos abre ICMS · PIS · COFINS</span>
           </div>
           <div className="overflow-x-auto rounded-2xl border border-slate-200/80 shadow-sm">
@@ -2975,6 +3045,7 @@ function DanfeModal({ nota, onFechar }: { nota: NotaXml; onFechar: () => void })
                           {it.cstIbsCbs ? ` · CST ${it.cstIbsCbs}` : ''}
                           {it.cClassTribIbsCbs ? ` · ${it.cClassTribIbsCbs}` : ''}
                         </span>
+                        <SeloST cest={it.cest} />
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-right text-slate-600">{fmtNum(it.qtd)} {it.unid}</td>
                       <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-bold">{fmtMoeda(it.vlTotal)}</td>

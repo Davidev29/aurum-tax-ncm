@@ -10,6 +10,7 @@
  * em texto — nunca só cor.
  */
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { resolverDialogo, useDialogo, type Dialogo } from '@/store/dialogo'
 import { Btn, Texto, ehTopoEscapeModal, empilharEscapeModal } from './kit'
 
@@ -36,7 +37,10 @@ export function DialogoGlass() {
   }, [atual, visivel])
 
   if (!visivel) return null
-  return (
+  // Portal no `document.body` pelo mesmo motivo do `Modal` (`kit.tsx`):
+  // garante centralização na viewport em qualquer tela.
+  if (typeof document === 'undefined') return null
+  return createPortal(
     <div
       className={`modal-backdrop glass-dialogo${saindo ? ' is-saindo' : ''}`}
       onMouseDown={(e) => {
@@ -51,7 +55,8 @@ export function DialogoGlass() {
       >
         {atual ? <Corpo dialogo={atual} /> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

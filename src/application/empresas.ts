@@ -272,8 +272,58 @@ export async function importarEmpresasPorCnpjs(
   return resumo
 }
 
-export async function excluirEmpresa(id: number): Promise<void> {
-  await db.empresas.delete(id)
+export interface VinculosEmpresa {
+  produtos: number
+  notas: number
+}
+
+/**
+ * Conta os vínculos da empresa — produtos do catálogo + notas XML importadas.
+ * Usado pelo modal de detalhes (conferência) e pela confirmação de exclusão.
+ * Nunca lança: banco fechado/ausente conta como 0.
+ */
+export async function contarVinculosEmpresa(id: number): Promise<VinculosEmpresa> {
+  const contar = async (tabela: 'produtos' | 'nfeNotas'): Promise<number> => {
+    try {
+      return await db.table(tabela).where('empresaId').equals(id).count()
+    } catch {
+      return 0
+    }
+  }
+  const [produtos, notas] = await Promise.all([contar('produtos'), contar('nfeNotas')])
+  return { produtos, notas }
+}
+
+/** Prévia dos produtos da empresa para o modal de detalhes (ordenados por SKU). */
+export async function listarProdutosResumoEmpresa(
+  id: number,
+  limite = 8,
+): Promise<Array<{ id?: number; codigo: string; nome: string; ncm: string }>> {
+  try {
+    const lista = await db.produtos.where('empresaId').equals(id).limit(limite).toArray()
+    return lista
+      .sort((a, b) => String(a.codigo).localeCompare(String(b.codigo), 'pt-BR'))
+      .map((p) => ({ id: p.id, codigo: p.codigo, nome: p.nome, ncm: p.ncm }))
+  } catch {
+    return []
+  }
+}
+
+export async function excluirEmpresa(id: number): Promise<VinculosEmpresa> {
+  const vinculos = await contarVinculosEmpresa(id)
+  try {
+    await db.transaction('rw', [db.empresas, db.produtos, db.nfeNotas], async () => {
+      await db.produtos.where('empresaId').equals(id).delete()
+      await db.nfeNotas.where('empresaId').equals(id).delete()
+      await db.empresas.delete(id)
+    })
+  } catch {
+    // Fallback sem transação (banco antigo/perfil restrito): apaga em sequência.
+    await db.produtos.where('empresaId').equals(id).delete().catch(() => {})
+    await db.nfeNotas.where('empresaId').equals(id).delete().catch(() => {})
+    await db.empresas.delete(id)
+  }
+  return vinculos
 }
 
 /**

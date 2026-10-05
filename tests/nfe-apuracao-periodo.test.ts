@@ -82,8 +82,13 @@ describe('apuração reativa à data filtrada', () => {
     const ap11 = apurarIbsCbs(dia11)
     expect(ap11.qtdSaidas).toBe(0)
     expect(ap11.qtdEntradasApropriaveis).toBe(1)
-    // Entrada maior no dia 11 → crédito maior que o do dia 10.
+    // Entrada maior no dia 11 → informativo NCM maior que o do dia 10.
     expect(ap11.creditoTotal).toBeGreaterThan(ap10.creditoTotal)
+    // Sem destaque de IBS/CBS no XML: efetivo zerado, informativo preservado.
+    // A apuração assistida usa o efetivo (nota); o NCM vira informativo.
+    expect(ap11.creditoEfetivoTotal).toBe(0)
+    expect(ap11.creditoInformativoTotal).toBeGreaterThan(0)
+    expect(ap11.divergenciaCreditoTotal).toBeLessThan(0)
 
     const tudo = await listarNotas(ativa.id!, { ...FILTROS_NFE_VAZIOS })
     const apTudo = apurarIbsCbs(tudo)
@@ -113,10 +118,13 @@ describe('apuração reativa à data filtrada', () => {
     const ativa = await massa()
     const ap10 = apurarIbsCbs(await listarNotas(ativa.id!, noDia('2026-09-10')))
     const ap11 = apurarIbsCbs(await listarNotas(ativa.id!, noDia('2026-09-11')))
-    // Dia 10 tem saída (débito) abatida pela entrada; dia 11 só tem entrada.
+    // Dia 10 tem saída (débito) abatida pelo crédito efetivo; dia 11 só tem
+    // entrada sem destaque no XML (efetivo zero, só informativo NCM).
     expect(ap10.saldoTotal).not.toBe(ap11.saldoTotal)
     expect(ap11.debitoTotal).toBe(0)
-    expect(ap11.resultado).toBe('saldo-credor')
+    expect(ap11.creditoEfetivoTotal).toBe(0)
+    expect(ap11.creditoInformativoTotal).toBeGreaterThan(0)
+    expect(ap11.resultado).toBe('zerado')
   })
 
   it('faixa de período soma os dois dias sem vazar notas fora', async () => {

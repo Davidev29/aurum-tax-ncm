@@ -16,6 +16,7 @@ import { completarEmpresa } from './empresas'
 import { norm } from '@/domain/services/format'
 import { round2 } from '@/domain/services/calculo'
 import { regimeDoEmitente } from '@/infrastructure/nfe/regime'
+import { classificarNatOp, efeitoDoItem } from '@/infrastructure/nfe/cfop'
 import type { NotaXmlBruta } from '@/infrastructure/nfe/tipos'
 
 /**
@@ -526,6 +527,10 @@ export async function rankingFornecedores(
         creditoIBS: 0,
         creditoCBS: 0,
         creditoTotal: 0,
+        creditoEfetivoIBS: 0,
+        creditoEfetivoCBS: 0,
+        creditoEfetivoTotal: 0,
+        qtdNaoVenda: 0,
         simples: false,
       }
       mapa.set(n.emitCnpj, atual)
@@ -539,6 +544,21 @@ export async function rankingFornecedores(
     atual.creditoIBS = round2(atual.creditoIBS + (Number(n.totalIBS) || 0))
     atual.creditoCBS = round2(atual.creditoCBS + (Number(n.totalCBS) || 0))
     atual.creditoTotal = round2(atual.creditoTotal + (Number(n.totalTributos) || 0))
+    // Efetivo = o que veio destacado na nota (apuração assistida usa este).
+    const temCampoXml = n.totalIbsXml !== undefined || n.totalCbsXml !== undefined
+    const efIbs = temCampoXml ? Number(n.totalIbsXml) || 0 : Number(n.totalIBS) || 0
+    const efCbs = temCampoXml ? Number(n.totalCbsXml) || 0 : Number(n.totalCBS) || 0
+    atual.creditoEfetivoIBS = round2((atual.creditoEfetivoIBS ?? 0) + efIbs)
+    atual.creditoEfetivoCBS = round2((atual.creditoEfetivoCBS ?? 0) + efCbs)
+    atual.creditoEfetivoTotal = round2((atual.creditoEfetivoTotal ?? 0) + efIbs + efCbs)
+    // Natureza diferente de venda (bloco acima dos gráficos).
+    const restritivo = (n.itensAnalisados ?? []).some((it) => {
+      const e = efeitoDoItem(it.cfop, n.natOp, 'entrada')
+      return e === 'sem-efeito' || e === 'imobilizado'
+    })
+    if (classificarNatOp(n.natOp) === 'nao-venda' || classificarNatOp(n.natOp) === 'imobilizado' || restritivo) {
+      atual.qtdNaoVenda = (atual.qtdNaoVenda ?? 0) + 1
+    }
   }
   return [...mapa.values()].sort((a, b) => b.creditoTotal - a.creditoTotal).slice(0, limite)
 }
