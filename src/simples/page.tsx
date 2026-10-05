@@ -21,11 +21,13 @@ import { EMITENTE_PADRAO } from '@/domain/entities';
 import { useSessao } from '@/store/sessao';
 import { exportarSimplesCSV, exportarSimplesJSON } from './export';
 import { BotaoReparticao, DasModal, montarDadosDas } from './DasModal';
-import { fmtCarga, fmtCnpj, fmtMoeda, parseMoeda } from '@/domain/services/format';
+import { useProjecaoDividida } from '@/simples-projection/store';
+import { ModalDivisao as ModalDivisaoView } from '@/simples-projection/ModalDivisao';
+import { fmtCarga, fmtCnpj, fmtMoeda, fmtNbs, parseMoeda } from '@/domain/services/format';
 import { rotuloAnexoSimples } from '@/domain/services/cnae';
 import { Btn, IconeBadge, Painel, Selecao, Texto, useAcaoTatil } from '@/ui/kit';
 import { Entrada, Secao } from '@/ui/motion';
-import { toast } from '@/store/ui';
+import { toast, useUi } from '@/store/ui';
 
 const ANEXOS: AnexoSimplesId[] = ['I', 'II', 'III', 'IV', 'V'];
 
@@ -422,9 +424,93 @@ export function SimplesNacional() {
                           ) : null}
                         </div>
                       </div>
+                      {/* NBS informativos da Reforma (09-04) — antes do cálculo, sem tocar o DAS. */}
+                      {cnaeAtivo!.estadoNbs === 'bens→NCM' ? (
+                        <div
+                          className="rounded-xl border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200"
+                          role="note"
+                        >
+                          <p className="font-bold">🏭 sem NBS aplicável — atividade de bens (ver NCM)</p>
+                          <div className="mt-1.5">
+                            <Btn tam="sm" onClick={() => useUi.getState().trocarView('consulta')}>
+                              🔍 Ir à Consulta NCM
+                            </Btn>
+                          </div>
+                        </div>
+                      ) : cnaeAtivo!.estadoNbs === 'mapeado' && cnaeAtivo!.nbsLista.length ? (
+                        <details
+                          className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300"
+                          open={cnaeAtivo!.nbsLista.length <= 3}
+                        >
+                          <summary className="cursor-pointer font-bold">
+                            🧾 NBS disponíveis: {cnaeAtivo!.nbsLista.length} ({cnaeAtivo!.nbsComBeneficio} com benefício, ref. {cnaeAtivo!.anoReferencia}) — informativo
+                          </summary>
+                          {cnaeAtivo!.maisProvavel ? (
+                            <p className="mt-1.5">
+                              ★ Mais provável:{' '}
+                              <span className="font-mono font-black text-brand-700 dark:text-aurum-200">
+                                {fmtNbs(cnaeAtivo!.maisProvavel)}
+                              </span>
+                            </p>
+                          ) : null}
+                          {cnaeAtivo!.nbsLista.length > 5 ? (
+                            <ul className="mt-1.5 max-h-48 space-y-1 overflow-y-auto pr-1">
+                              {cnaeAtivo!.nbsLista.map((v) => (
+                                <li key={v.nbs} className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                  <span className="font-mono font-bold text-brand-700 dark:text-aurum-200">{v.nbsFormatado}</span>
+                                  <span className="min-w-0 flex-1 truncate" title={v.descricao ?? ''}>{v.descricao ?? '—'}</span>
+                                  {v.temBeneficio ? (
+                                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">benefício</span>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <ul className="mt-1.5 space-y-1">
+                              {cnaeAtivo!.nbsLista.map((v) => (
+                                <li key={v.nbs} className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                  <span className="font-mono font-bold text-brand-700 dark:text-aurum-200">{v.nbsFormatado}</span>
+                                  <span className="min-w-0 flex-1 truncate" title={v.descricao ?? ''}>{v.descricao ?? '—'}</span>
+                                  {v.temBeneficio ? (
+                                    <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">benefício</span>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <p className="mt-1.5 text-[10px] text-slate-400">
+                            Flags da Reforma por NBS (ref. {cnaeAtivo!.anoReferencia}) — informativo antes do cálculo; confirme com o contador.
+                          </p>
+                        </details>
+                      ) : cnaeAtivo!.estadoNbs === 'sem-mapeamento-NBS' ? (
+                        <p
+                          className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400"
+                          role="note"
+                        >
+                          <span className="mr-1.5 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">s/ mapeamento NBS</span>
+                          Regra do Simples acima · ref. {cnaeAtivo!.anoReferencia} (informativo).
+                        </p>
+                      ) : null}
                       <div className="flex flex-wrap gap-2">
                         <Btn tam="sm" className="btn-press transition-all duration-200 hover:-translate-y-px active:translate-y-0" onClick={aoTrocarAtividade}>
                           🔄 Trocar atividade · simular com outra
+                        </Btn>
+                        <Btn
+                          tam="sm"
+                          variante="primary"
+                          title="Simular divisão do faturamento em duas empresas (cenário real do cliente)"
+                          onClick={() => useProjecaoDividida.getState().abrir({
+                            cnpj: s.cnpj,
+                            empresaNome: s.empresaNome,
+                            opcaoSimples: s.opcaoSimples,
+                            cnaeEscolhido: s.cnaeEscolhido,
+                            anexoSugerido: s.anexoId,
+                            rbt12: s.rbt12,
+                            receitaMes: s.receitaMes,
+                            folha12: s.folha12,
+                          })}
+                        >
+                          ✂️ Simular dividir faturamento
                         </Btn>
                       </div>
                     </div>
@@ -713,6 +799,25 @@ export function SimplesNacional() {
                 <Btn tam="sm" className="flex-1" onClick={() => { const p = payload(); if (p) exportarSimplesJSON(p); }}>🧾 JSON</Btn>
                 <Btn tam="sm" variante="primary" className="flex-1" carregando={pdfAnalitico.carregando} onClick={() => pdfAnalitico.executar()}>📕 PDF analítico</Btn>
               </div>
+              {s.modo === 'cnpj' && s.empresaNome && s.cnaeEscolhido ? (
+                <Btn
+                  tam="sm"
+                  variante="primary"
+                  className="w-full"
+                  onClick={() => useProjecaoDividida.getState().abrir({
+                    cnpj: s.cnpj,
+                    empresaNome: s.empresaNome,
+                    opcaoSimples: s.opcaoSimples,
+                    cnaeEscolhido: s.cnaeEscolhido,
+                    anexoSugerido: s.anexoId,
+                    rbt12: s.rbt12,
+                    receitaMes: s.receitaMes,
+                    folha12: s.folha12,
+                  })}
+                >
+                  ✂️ Simular dividir faturamento em 2 empresas
+                </Btn>
+              ) : null}
               <p className="px-1 text-[10px] leading-relaxed text-slate-400">
                 Planilhas 2027–2028 · confirme com o contador. A partir de 2029 as porcentagens mudam.
               </p>
@@ -749,6 +854,7 @@ export function SimplesNacional() {
         </Painel>
       ) : null}
       <DasModal aberto={dasAberto} onFechar={() => setDasAberto(false)} dados={dadosDas} />
+      <ModalDivisaoView />
     </>
   );
 }
