@@ -14,7 +14,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
 
 *Aplicativo desktop (Windows / macOS / Linux) + modo web, 100% local e offline-first.*
-*Versão atual: **1.0.0** · **77 suítes / 651 casos Vitest** · 10 views (9 no menu + Diagnóstico IA oculto).*
+*Versão atual: **1.0.0** · **131 suítes / 1346 casos Vitest** · 11 views (10 no menu + Diagnóstico IA oculto).*
 
 [✨ Proposta](#-proposta-do-sistema) • [🆕 Novidades](#-novidades) • [🚀 Começo rápido](#-começo-rápido) • [📖 Guia de uso](#-guia-de-uso-módulo-a-módulo) • [🧮 Regras tributárias](#-como-o-cálculo-funciona) • [🛠️ Desenvolvimento](#️-desenvolvimento)
 
@@ -45,21 +45,22 @@ Tudo roda **localmente** (IndexedDB via Dexie, sem servidor, sem enviar dados fi
 
 ## 🆕 Novidades
 
-Estado real do código em `main` (03/10/2026):
+Estado real do código em `main` (05/10/2026):
 
 | Área | Situação |
 |---|---|
-| 🧮 **Simples Nacional (`src/simples/`, 10 arquivos)** | **NOVO, ainda não comitado.** Módulo isolado (não importa o motor IBS/CBS): modos **Manual (Anexo I–V)** e **Automático por CNPJ** (BrasilAPI → CNAE → anexo). RBT12, receita do mês, folha 12m (Fator R ≥ 28% → III, senão V), RBA/sublimite R$ 3,6M em 4 cenários, trava ISS 5% com redistribuição, CBS de referência (padrão 8,80%) + despesas com crédito por item. Duelo **Convencional (CBS dentro) × Híbrido (CBS por fora)**, modal de repartição do DAS, **Relatório Analítico e Inteligente** (10 cenários I/II/III/IV/V × Conv/Híb, matriz III×V só em CNPJ dual, memória do híbrido, Fator R detalhado com gap de folha, hash + `reportId`, IA em modo leitura). Exports CSV / JSON canônico / PDF premium timbrado. Vigência 2027–2028 (a partir de 2029 as porcentagens mudam). |
-| 🧰 **Serviços NBS/CNAE/CNPJ (Phase 7, implementada)** | Consulta NBS manual (9 dígitos) + automática por CNPJ, base viva (`CNAE X ANEXO.json` 1.090 CNAEs + `NBS SERVIÇOS.json` 137→112 após dedupe), resolvedor NBS próprio (`resolverClassificacoesNbs`, regra geral `000/000001` fora da base), busca textual + IA de serviços com vocabulário/sinais próprios, ponte CNAE→NBS, `CartaoCnae`/`FaixaCnae`, trilha de auditoria. |
-| 🧾 **NF-e XML com 2 layouts** | `NfeXml` (clássica, com Chart.js) + `NfeXmlPolida` (padrão, veredito→ação→5 abas, zero canvas, count-up, copy-on-click, `localStorage['xml-layout']`). Hero executivo (a pagar / saldo credor / zerado), entradas × saídas, quarentena, ranking de fornecedores, top produtos/NCM/CFOP/CST, confronto Antigo × Novo, evolução mensal, apuração IBS/CBS, relatório IA + modal de relatório. |
-| 🤖 **Aurum AI integrada (offline)** | Bypass determinístico → RAG lexical (`indice-lexical.json` + sinônimos) → modelo local **AILO-152M** (`recursos-ia/modelo/*.gguf`) em `utilityProcess` isolado. Geração restrita validada pelo resolvedor oficial (anti-alucinação: `99999999` e NCM sem nomenclatura viram “NÃO SEI”). Trilha em `audit_log` + `ia_feedback` + `logs/consultas-ia.jsonl`. Diagnóstico em `Ctrl+Shift+D` (view oculta `debugia`). Índice reconstruído por hash do `MANIFEST.json`. Inclui tradução PT↔EN, dicionário comercial e cobertura de tradução. |
+| 🧮 **Simples Nacional (`src/simples/`, 10 arquivos)** | Módulo isolado (não importa o motor IBS/CBS): modos **Manual (Anexo I–V)** e **Automático por CNPJ** (BrasilAPI → CNAE → anexo). RBT12, receita do mês, folha 12m (Fator R ≥ 28% → III, senão V), RBA/sublimite R$ 3,6M em 4 cenários, trava ISS 5% com redistribuição, CBS de referência (padrão 8,80%) + despesas com crédito por item. Duelo **Convencional (CBS dentro) × Híbrido (CBS por fora)**, modal de repartição do DAS, **Relatório Analítico e Inteligente** (10 cenários I/II/III/IV/V × Conv/Híb, matriz III×V só em CNPJ dual, memória do híbrido, Fator R detalhado com gap de folha, hash + `reportId`, IA em modo leitura). Exports CSV / JSON canônico / PDF premium timbrado. Vigência 2027–2028 (a partir de 2029 as porcentagens mudam). |
+| 🧰 **Serviços NBS/CNAE/CNPJ (Phase 7, implementada)** | Consulta NBS manual (9 dígitos) + automática por CNPJ, base viva (`CNAE X ANEXO.json` 1.090 CNAEs + `NBS SERVIÇOS.json` 137→112 após dedupe + 10 NBS do Anexo IX resgatados do overflow NCM = 122 vínculos), resolvedor NBS próprio (`resolverClassificacoesNbs`, regra geral `000/000001` fora da base), busca textual + IA de serviços com vocabulário/sinais próprios, ponte CNAE→NBS, `CartaoCnae`/`FaixaCnae`, trilha de auditoria. |
+| 🧾 **NF-e XML com 2 layouts** | `NfeXml` (clássica, com Chart.js) + `NfeXmlPolida` (padrão, veredito→ação→5 abas, zero canvas, count-up, copy-on-click, `localStorage['xml-layout']`). Hero executivo (a pagar / saldo credor / zerado), entradas × saídas, quarentena, ranking de fornecedores, top produtos/NCM/CFOP/CST, confronto Antigo × Novo, evolução mensal, apuração IBS/CBS **assistida** (crédito **efetivo** destacado no XML abate o saldo; estimativa via NCM é informativa, com divergência nota − NCM), bloco **Naturezas da operação** (CFOP diferente de venda / imobilizado / imunidades LC 214 — informativo, sem crédito), selo **CEST/ST** por item (lista de 1.010 registros, “sujeito a ST”, nunca afirmação), relatório IA + modal de relatório. |
+| 🧬 **Herança hierárquica NCM + diferimento** | A lei opera por **família** (capítulo 2d → posição SH4 → subposição SH6): sem vínculo exato de 8 dígitos, o resolvedor herda de irmãos da mesma família com limiares (SH6 ≥60%, SH4 ≥75%, capítulo curado ≥95%) e carimbo de confiança; condicionais, exceções e divergências viram hipótese “a confirmar”, nunca benefício inventado. Anexo IX condicional (CST 200) ganha **2ª opção de tributação** (normal com redução × hipótese de diferimento CST 515, alíquota 0% — a operação decide). Revalidação por `scripts/mapear-familias-ncm.mjs` + `docs/MAPEAMENTO-HIERARQUICO-NCM.md`. |
+| 🤖 **Aurum AI integrada (offline)** | Bypass determinístico → RAG lexical (`indice-lexical.json` + sinônimos) → modelo local **Qwen3-0.6B** (`recursos-ia/modelo/*.gguf`) em `utilityProcess` isolado, com hot-swap sem reiniciar. Geração restrita validada pelo resolvedor oficial (anti-alucinação: `99999999` e NCM sem nomenclatura viram “NÃO SEI”). Chat com Fator R explicativo (folha mínima, gap mensal, botão de recálculo), intenção contínua em pilha, híbrido sob demanda (guias DAS sem CBS + DARF CBS por fora) e motor de percentuais/reduções no diálogo. Trilha em `audit_log` + `ia_feedback` + `logs/consultas-ia.jsonl`. Diagnóstico em `Ctrl+Shift+D` (view oculta `debugia`). Índice reconstruído por hash do `MANIFEST.json`. Inclui tradução PT↔EN, dicionário comercial e cobertura de tradução. |
 | 🐾 **Pet Aurum (Aurinha)** | Mascote reativo na sidebar (estados por tela, celebra exportações, falas por horário, farejo, locomoção). Stores dedicadas `pet*` + sprite/CSS próprios. |
 | ⚖️ **Legislação ampliada** | LC 214/2025 + Decreto 12.955/2026 (CBS) + Resolução CGIBS nº 6/2026 (IBS) + RICMS-CE + portais, leitura in-app via `ModalLegislacao`, deep-link `#art128` etc. |
 | 🔄 **Bases e sincronizações** | Bases **embutidas e versionadas** (`public/base/` + `bases-fonte/`). Sync Siscomex (NCM vigente com diff novos/alterados/extintos), sync CFF (classTrib, anexos, crédito presumido, NFCom/NFAg/NF3e/NFGas — alguns exigem certificado ICP-Brasil, com importação manual de fallback), consulta CNPJ via BrasilAPI (DV local + cache 30d). Verificação de atualização via GitHub Releases em **Configurações → Atualização**. |
-| 🧪 **Qualidade** | **77 arquivos `.test.ts`** (68 em `tests/` + 9 em `tests/ia/`), **651 casos `it/test`** contados estaticamente. Cobrem cálculo, lote, NFe (parse/apuração/crédito/regime/insights/relatório), SPED (parser), serviços/NBS, IA/classificação, CFF/Siscomex, vigência, reclassificação, PDF timbrado, Simples, relatório analítico, pet. |
+| 🧪 **Qualidade** | **131 arquivos `.test.ts`** (122 em `tests/` + 9 em `tests/ia/`), **1346 casos** (`vitest run`, todos passando). Cobrem cálculo, lote, NFe (parse/apuração/crédito efetivo/CFOP/regime/insights/relatório), SPED (parser), serviços/NBS (+ Anexo IX), IA/classificação, CFF/Siscomex, vigência, reclassificação, PDF timbrado, Simples (incl. Fator R, intenção, híbrido gating/redução), CEST, herança hierárquica, relatório analítico, pet. |
 | 📦 **Build blindado** | Pipeline `base:completa` + `tsc` + Vite + Electron + **ofuscação** (`ofuscar-build.cjs`) + **verificação** (`verificar-build.mjs`). Instaladores NSIS/Portable (Win), DMG/ZIP (Mac), AppImage (Linux). `recursos-ia/modelo` e `embedding` fora do `build.files`, reanexados via `extraResources` + `after-pack-ia.cjs`. |
 
-> ⚠️ **SPED Fiscal — nota de honestidade:** o **motor SPED existe** (`src/infrastructure/sped/`: parse EFD ICMS/IPI C100/C170/C190 + EFD Contribuições, detecção de tipo com rejeição explicada de Reinf/e-Social/ECD/ECF, modo resumo C190, análise só de saídas, testes), mas **não há tela “SPED Fiscal” no menu atual**. As 10 views são: Calculadora, Simples Nacional, Consulta NCM, Serviços (NBS), Classificação em lote, Notas Fiscais (XML), Produtos, Tabelas auxiliares, Legislação + Diagnóstico IA oculto. A doc legada `docs/SPEC-LOGICA-NEGOCIO.md` ainda descreve o fluxo SPED da v1 single-file como referência do motor.
+> ⚠️ **SPED Fiscal — nota de honestidade:** o **motor SPED existe** (`src/infrastructure/sped/`: parse EFD ICMS/IPI C100/C170/C190 + EFD Contribuições, detecção de tipo com rejeição explicada de Reinf/e-Social/ECD/ECF, modo resumo C190, análise só de saídas, testes), mas **não há tela “SPED Fiscal” no menu atual**. As 11 views são: Calculadora, Aurum AI, Simples Nacional, Consulta NCM, Serviços (NBS), Classificação em lote, Notas Fiscais (XML), Produtos, Tabelas auxiliares, Legislação + Diagnóstico IA oculto. A doc legada `docs/SPEC-LOGICA-NEGOCIO.md` ainda descreve o fluxo SPED da v1 single-file como referência do motor.
 
 ---
 
@@ -69,11 +70,11 @@ Estado real do código em `main` (03/10/2026):
 |---|---|
 | 🧮 **Calculadora** | Cestas com produtos salvos ou NCM manual, qtd/valor editáveis, base + IBS + CBS + total + carga efetiva em tempo real. Alíquotas de referência editáveis (padrão IBS 19% + CBS 9%). Reduções congeladas no momento da adição. |
 | 🧾 **Simples Nacional** *(novo)* | Passo 1: Anexo manual **ou** CNPJ → escolha 1 CNAE (“Qual usar?”). Passo 2: RBT12 + receita (+ folha se Anexo V/Fator R + RBA opcional + comparador híbrido opcional). Passo 3: **Visualizar cálculo** (skeleton Aurum AI → slide-in). Saída: DAS + repartição IRPJ/CSLL/CBS/IBS/CPP/ICMS/IPI/ISS, CBS dentro, Fator R automático, sublimite 4 cenários, duelo Conv × Híb, relatório analítico executivo (10 cenários + matriz III×V + memória híbrida + insights só-leitura), modal DAS, exports CSV/JSON/PDF. |
-| 🔍 **Consulta NCM** | 8 dígitos (com ou sem ponto), fan-out número/nome/Aurum AI, N cards de classificação (CST · cClassTrib, % redução, anexo oficial, base legal, documentos NFe…NFSe), observações legais automáticas (Art. 128/135/137/158/261/275–289/127/308), simulador editável, “Visualizar legislação” no artigo exato, correção/detecção de escopo da consulta. |
+| 🔍 **Consulta NCM** | 8 dígitos (com ou sem ponto), fan-out número/nome/Aurum AI, N cards de classificação (CST · cClassTrib, % redução, anexo oficial, base legal, documentos NFe…NFSe), observações legais automáticas (Art. 128/135/137/158/261/275–289/127/308 + herança de família + revogação/extinção), **herança por família** quando não há vínculo exato (com confiança e trilha) e **2ª opção de diferimento** no Anexo IX condicional (CST 515, alíquota 0% — por operação), simulador editável, “Visualizar legislação” no artigo exato, correção/detecção de escopo da consulta. |
 | 🧰 **Serviços (NBS/CNAE/CNPJ)** | NBS manual + descrição livre (“aula de inglês online”) + CNPJ→CNAEs→NBS. Cartão por CNAE, Fator R como refino, tradutor fiscal PT↔EN, motor de hipóteses + verificação + preditivo, trilha de auditoria. Bases vivas versionadas. |
 | 📋 **Classificação individual** *(dentro de Produtos/Lote/Consulta)* | SKU + nome + NCM obrigatórios, qtd/valor/CFOP/CST ICMS/PIS/COFINS (com cadastro rápido via **＋**), escolha da classificação da Reforma na lateral, snapshot tributário no produto, reclassificação manual com propagação + modal de divergência. |
 | 📁 **Classificação em lote** | CSV/XLSX (`COD/SKU; NOME; NCM; CFOP; CST; PIS; COFINS`), centenas de linhas, pills (classificadas · regra geral · múltiplas opções · inválidos), `<select>` por linha, revisão IA (`analise-lote-ia`), salvamento como produtos, modelo CSV para download. |
-| 🧾 **NF-e XML (2 layouts)** | Import NF-e mod. 55 / NFC-e mod. 65 (chaves repetidas ignoradas, quarentena), histórico por empresa/período, fornecedores (Simples sem crédito sinalizado), confronto NCM × base, apuração IBS/CBS (entradas=crédito, saídas=débito), insights (antigo×novo, evolução mensal, divergências, Top NCM/CFOP/CST), relatório IA + modal de relatório, vincular produtos, XMLs arquivados em `%APPDATA%/Aurum Tax NCM/xml/<cnpj>/<chave>.xml`. |
+| 🧾 **NF-e XML (2 layouts)** | Import NF-e mod. 55 / NFC-e mod. 65 (chaves repetidas ignoradas, quarentena), histórico por empresa/período, fornecedores (Simples sem crédito sinalizado), confronto NCM × base, apuração IBS/CBS **assistida** (saídas de venda=débito; crédito **efetivo** destacado no XML abate o saldo, estimativa NCM é informativa com divergência; CFOP diferente de venda/imobilizado fora do saldo; Simples/MEI bloqueado; legado sem campos IBS/CBS vira crédito provisório), bloco **naturezas da operação** (CFOP 619 + `natOp` da capa × imunidades LC 214), selo **CEST/ST** por item, insights (antigo×novo, evolução mensal, divergências, Top NCM/CFOP/CST), relatório IA + modal de relatório, vincular produtos, XMLs arquivados em `%APPDATA%/Aurum Tax NCM/xml/<cnpj>/<chave>.xml`. |
 | 📦 **Produtos & 🏢 Empresas** | Multi-empresa (CNPJ, razão social, fantasia, lote), produtos vinculados à empresa ativa (modo visualização sem empresa), filtro 180 ms, paginação, exports CSV/JSON/PDF, idempotência em importações repetidas (lote/SPED). |
 | 📚 **Tabelas auxiliares** | 8 listas editáveis via `AUX_META`: CST IBS/CBS, cClassTrib, NCM vigente, vínculo NCM×Classificação, CFOP, CST ICMS, CST PIS/COFINS (+ CNAE). Criar/editar/excluir com validação. |
 | ⚖️ **Legislação** | Base federal + decretos + RICMS-CE + portais (CFF/Siscomex), texto integral em `src/infrastructure/legislacao-texto.ts` + catálogo, abertura no artigo exato. |
@@ -112,7 +113,7 @@ npm run dev:web
 # Só checagem de tipos
 npm run typecheck
 
-# Testes (Vitest, 77 suítes / 651 casos)
+# Testes (Vitest, 131 suítes / 1346 casos)
 npm test
 ```
 
@@ -138,7 +139,7 @@ Os artefatos saem em `./release/`:
 | `AurumTaxNCM-Setup-<versão>-win-x64.exe` | Instalador NSIS (PT-BR, por usuário, com atalho + desinstalador) |
 | `AurumTaxNCM-Portatil-<versão>-win-x64.exe` | Versão portátil (sem instalar) |
 
-O instalador leva **só o app**: interface + base tributária embutida + índice da IA + modelo AILO-152M via `extraResources`.
+O instalador leva **só o app**: interface + base tributária embutida + índice da IA + modelo Qwen3-0.6B via `extraResources`.
 `.planning/`, `docs/`, `tests/`, `scripts/` e pastas de modelo/embedding ficam de fora por regra explícita no `build.files` do `package.json`.
 Os dados do usuário (XMLs importados, IndexedDB) vivem em `%APPDATA%` — fora da pasta do programa — e sobrevivem a atualizações/desinstalações.
 
@@ -180,7 +181,7 @@ Os dados do usuário (XMLs importados, IndexedDB) vivem em `%APPDATA%` — fora 
    - Botão **Visualizar legislação** (abre o artigo exato da LC 214)
 4. **➕ Adicionar à calculadora** joga a classificação direto na cesta.
 
-> **NCM sem vínculo específico?** O sistema aplica a **regra geral** (`CST 000 · 000001`, tributação integral) e avisa em âmbar. É o comportamento oficial da LC 214.
+> **NCM sem vínculo específico?** Primeiro o sistema tenta a **herança por família** (mesmo capítulo/posição/subposição, com confiança e trilha). Só sem lastro familiar ele aplica a **regra geral** (`CST 000 · 000001`, tributação integral) e avisa em âmbar. É o comportamento oficial da LC 214.
 
 ### 🧰 4. Serviços (NBS)
 
@@ -203,8 +204,8 @@ Os dados do usuário (XMLs importados, IndexedDB) vivem em `%APPDATA%` — fora 
 1. Vá em **Notas Fiscais (XML)** (requer empresa ativa).
 2. Arraste 1 ou N `.xml` (NF-e 55 / NFC-e 65; duplicadas ignoradas, quarentena separada).
 3. Hero executivo: **veredito** (A pagar / Saldo credor / Zerado) + Base + IBS+CBS + Carga + barra de cobertura crédito/débito.
-4. Explore as 5 abas: **Notas** (tabela + detalhe por item) · **Fornecedores** (ranking de crédito, Simples sinalizado) · **Produtos** (mais comprados/vendidos) · **NCM** (por benefício/CST/CFOP/Top NCM) · **Insights** (Antigo × Novo, evolução mensal, prontidão do XML).
-5. Ações: **Vincular produtos**, filtros (texto/direção/fornecedor/CFOP/CST), **relatório IA + modal de relatório**, alíquotas IBS/CBS de referência editáveis, botão **↩ Clássica** para alternar o layout (`xml-layout`).
+4. Explore as 5 abas: **Notas** (tabela + detalhe por item, com selo CEST/ST) · **Fornecedores** (ranking de crédito, Simples sinalizado) · **Produtos** (mais comprados/vendidos) · **NCM** (por benefício/CST/CFOP/Top NCM) · **Insights** (Antigo × Novo, evolução mensal, prontidão do XML). Confira o bloco **Naturezas da operação** acima dos gráficos (CFOP diferente de venda / imobilizado / imunidades LC 214 — informativo, você decide).
+5. Ações: **Vincular produtos**, filtros (texto/direção/fornecedor/CFOP/CST), **relatório IA + modal de relatório**, alíquotas IBS/CBS de referência editáveis, botão **↩ Clássica** para alternar o layout (`xml-layout`). Na apuração, vale o **crédito efetivo** (destacado no XML); a estimativa via NCM fica como informativa com a divergência.
 
 ### 📦 7. Produtos, 🏢 Empresas, 📚 Auxiliares e ⚙️ Configurações
 
@@ -290,33 +291,33 @@ híbrido: DASreduzido = DAS − CBSdentro; CBSfora = MAX(0, débitos − crédit
 aurum-tax-ncm/
 ├── electron/            # main.ts, preload.ts, esbuild.mjs
 │   ├── dist/            # compilados (main.js, preload.cjs, workers IA)
-│   └── ia/              # worker IA offline (utilityProcess isolado, RAG lexical + GGUF AILO-152M)
+│   └── ia/              # worker IA offline (utilityProcess isolado, RAG lexical + GGUF Qwen3-0.6B)
 ├── src/
 │   ├── App.tsx          # shell: Calculadora, Simples, Consulta, Serviços, Lote,
 │   │                    #  NfeXml/NfeXmlPolida, Produtos, Auxiliares, Legislacao (+ DebugIA oculta)
 │   ├── main.tsx         # bootstrap React
-│   ├── pages/           # 12 arquivos: Calculadora, Consulta, ConsultaServicos, Lote,
-│   │                    #  NfeXml, NfeXmlPolida, ModalRelatorioNfe, Produtos,
-│   │                    #  Auxiliares, Legislacao, DebugIA
+│   ├── pages/           # 14 arquivos: Calculadora, AurumChat, Consulta, ConsultaServicos, Lote,
+│   │                    #  NfeXml, NfeXmlPolida, NfeNatureza, ModalRelatorioNfe, Produtos,
+│   │                    #  Auxiliares, Legislacao, DebugIA (+ NfePendentes)
 │   ├── simples/         # 10 arquivos: módulo Simples isolado (tabelas, calculo, store,
 │   │                    #  page, DasModal, relatorio-analitico, RelatorioAnalitico,
 │   │                    #  export, export-relatorio-analitico, ia-insights)
 │   ├── domain/          # entidades, constants (10), capitulos, legislacao, seeds, contrato
-│   │   └── services/    # 21 serviços: cálculo, classificação NCM/NBS, busca-texto,
-│   │                    #  CNAE/CNPJ, vocabulários, preditivo, verificação, correção…
-│   ├── application/     # 22 casos de uso (produtos, empresas, lote, backup, CFF/Siscomex,
-│   │                    #  NFe insights/relatório, IA NCM/serviços, reclassificação, atualização…)
-│   ├── infrastructure/  # 30 arquivos: Dexie/IndexedDB, base, parsers (lote/SPED/NFe),
-│   │                    #  PDF/CSV, CFF/Siscomex/BrasilAPI, bridge IPC, legislação-texto
-│   ├── store/           # 18 arquivos Zustand (ui, sessão, calculadora, simples fora daqui,
-│   │                    #  consulta, lote, nfe, produtos, base, ia, pet*…)
-│   ├── ui/              # 21 arquivos: Layout, kit, Marca, PetAurum, ModalLegislacao,
-│   │                    #  motion, consulta-enxuta/premium, servicos, cartoes…
+│   │   └── services/    # 31 serviços: cálculo, classificação NCM/NBS, busca-texto,
+│   │                    #  CNAE/CNPJ, CEST, hierarquia fiscal, vocabulários, preditivo, verificação, correção…
+│   ├── application/     # 39 casos de uso (produtos, empresas, lote, backup, CFF/Siscomex,
+│   │                    #  NFe insights/relatório/apuração, IA NCM/serviços/chat, Simples exploratório, reclassificação, atualização…)
+│   ├── infrastructure/  # 32 arquivos: Dexie/IndexedDB, base, parsers (lote/SPED/NFe),
+│   │                    #  CFOP/curadoria, PDF/CSV, CFF/Siscomex/BrasilAPI, bridge IPC, legislação-texto
+│   ├── store/           # 22 arquivos Zustand (ui, sessão, calculadora, simples fora daqui,
+│   │                    #  consulta, lote, nfe, produtos, base, ia, chat, pet*…)
+│   ├── ui/              # 26 arquivos: Layout, kit, Marca, PetAurum, ModalLegislacao,
+│   │                    #  motion, consulta-enxuta/premium, servicos, cartoes, cest, diferimento-opcoes…
 │   └── modais/          # 3 arquivos: globais (empresas/config/emitente/backup…), pagina, reclassificacao
-├── recursos-ia/         # IA offline: GGUF AILO-152M + índice lexical + conhecimento (via extraResources)
+├── recursos-ia/         # IA offline: GGUF Qwen3-0.6B + índice lexical + conhecimento (via extraResources)
 ├── bases-fonte/         # 8 JSONs-fonte oficiais + vivos (ver tabela abaixo)
 ├── scripts/             # build-base, gerar-indice-ia, cobertura-traducao, ofuscar, verificar, after-pack…
-├── tests/               # 77 suítes (68 raiz + 9 em tests/ia) — 651 casos
+├── tests/               # 131 suítes (122 raiz + 9 em tests/ia) — 1346 casos
 ├── docs/                # SPEC-LOGICA-NEGOCIO.md, arquitetura/segurança/troubleshooting IA,
 │                        #  diagnósticos fase 0–6/8 + final, manuais + 2 contratos .docx (fora do instalador)
 ├── public/              # assets + base JSON embutida versionada (5 JSONs + MANIFEST)
@@ -331,7 +332,7 @@ Arquitetura: **React + Clean Architecture** — `domain` (regras puras) → `app
 - **Desktop:** Electron 44 + electron-builder (NSIS PT-BR, DMG, AppImage)
 - **Front:** React 19, Vite 8 (`base: './'` p/ file://), TailwindCSS 4, Zustand 5, Framer Motion, Chart.js
 - **Dados:** Dexie 4 (IndexedDB `aurum_tax_ncm_v1`), XLSX (SheetJS), pdfmake, fast-xml-parser
-- **IA local:** node-llama-cpp (AILO-152M Q4_K_M) em `utilityProcess`
+- **IA local:** node-llama-cpp (Qwen3-0.6B Q8_0) em `utilityProcess`
 - **Qualidade:** TypeScript strict, Vitest + jsdom + fake-indexeddb, esbuild, ofuscação + verificação de build
 
 ### Dados / base tributária
@@ -350,7 +351,7 @@ Coloque os arquivos em `bases-fonte/` com os nomes exatos e rode `npm run base` 
 | `reforma_tributaria_por_ncm.json` | Vínculos NCM/NBS × CST × cClassTrib (+ tabelas `cst`/`cstClassTrib`) | Mesmo portal CFF acima (exportação NCM da Reforma — LC 214/2025) | Sim |
 | `Tabela_NCM_Vigente_AAAA-MM-DD.json` | Nomenclatura NCM vigente (~15 mil itens) | Portal Único Siscomex: https://portalunico.siscomex.gov.br/classif/api/publico/nomenclatura/download/json (espelho na página “Download NCM” da Receita). Vale qualquer data no nome, desde que comece com `Tabela_NCM_Vigente_` e termine com `.json`. O app também sincroniza sozinho (com diff novos/alterados/extintos) quando há internet | Sim |
 | `CNAE X ANEXO.json` | CNAE × Anexo Simples + Fator R (~1.090 CNAEs) | Arquivo vivo mantido no projeto (sem URL oficial única — preserve o atual; se a fonte publicar nova versão, substitua com o mesmo nome) | Não (sem ele a store `cnae` nasce vazia, sem quebrar a build) |
-| `NBS SERVIÇOS.json` | Vínculos NBS de serviços (~112 únicos após dedupe) | Arquivo vivo mantido no projeto (idem acima; NBS cai no legado `reforma.json` quando ausente) | Não |
+| `NBS SERVIÇOS.json` | Vínculos NBS de serviços (112 únicos após dedupe + 10 do Anexo IX resgatados do overflow NCM = 122) | Arquivo vivo mantido no projeto (idem acima; NBS cai no legado `reforma.json` quando ausente) | Não |
 | `cnae.json` / `mei_cnaes.json` | Apoio CNAE/MEI para consulta por CNPJ e Simples | Derivados/curados no projeto (espelham BrasilAPI + tabela viva) | Não |
 
 Outras tabelas CFF (`anexos`, `credPresumido`, `indOper`, `ConsultaClassificacaoProduto?sistema=NFCom|NFAg|NF3e|NFGas`) não entram no `npm run base`: são sincronizadas/importadas em tempo de execução (algumas exigem certificado digital ICP-Brasil — nesse caso baixe o JSON no portal CFF e importe em **Configurações → Importação da base**).
@@ -366,13 +367,13 @@ Não para o uso diário. Só legislação externa, sync Siscomex/CFF/BrasilAPI e
 Não. Todo o processamento é local (IndexedDB no Electron/navegador). Não há backend. O motor SPED (EFD ICMS/IPI + Contribuições) roda localmente; hoje sem tela dedicada — a importação com UI é a de **XML de NF-e**.
 
 **E se meu NCM tiver 2 classificações?**
-Na Consulta você vê os N cards; na Classificação e no Lote você escolhe no radio/select. No XML o sistema usa a primeira da base (ordem de importação) — troque manualmente no Lote se precisar. Em Serviços (NBS) vale a mesma lógica, com regra geral `000/000001` fora da base.
+Na Consulta você vê os N cards; na Classificação e no Lote você escolhe no radio/select. No XML o sistema usa a primeira da base (ordem de importação) — troque manualmente no Lote se precisar. Em Serviços (NBS) vale a mesma lógica, com regra geral `000/000001` fora da base. Itens do Anexo IX condicional mostram ainda a **2ª opção de diferimento** (CST 515, alíquota 0%) para você marcar por operação.
 
 **Posso usar no navegador sem instalar?**
 Sim: `npm run dev:web` ou sirva a pasta `dist/` após `npm run build`. O Electron só adiciona janela nativa, menu, workers IA isolados e instalador.
 
 **A IA funciona sem internet / sem baixar modelo?**
-Sim. O app embarca o índice lexical + o modelo AILO-152M e opera 100% offline. Nada é baixado sozinho. O índice é reconstruído por hash do `MANIFEST.json` quando a base muda.
+Sim. O app embarca o índice lexical + o modelo Qwen3-0.6B e opera 100% offline. Nada é baixado sozinho. O índice é reconstruído por hash do `MANIFEST.json` quando a base muda.
 
 **Onde ficam meus XMLs e meu banco?**
 XMLs importados vão para `%APPDATA%/Aurum Tax NCM/xml/<cnpj>/<chave>.xml`; o banco (empresas, produtos, auxiliares) fica no IndexedDB local. Nada sai da máquina e nada se perde ao atualizar.
