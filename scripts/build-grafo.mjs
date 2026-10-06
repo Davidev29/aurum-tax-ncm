@@ -116,7 +116,13 @@ export function sha256Hex(dados) {
  * Entradas (shapes dos artefatos de `public/base/` + conhecimento):
  *   nomenclatura {itens[]}, reforma {ncm[], nbs[]}, referencia {itens[]},
  *   cnae {itens[]}, cnaeNbs {links[]}, conhecimento {sinonimos{}, pins[],
- *   pesoSinonimo, artigos[{numero,titulo,anexo?}] }
+ *   pesoSinonimo, artigos[{numero,titulo,anexo?}], pinsFtNcm[{termos[],ncm}],
+ *   pinsNbs[{termos[],nbs}] }
+ *
+ * `pinsFtNcm`/`pinsNbs` vêm do fine-tuning curado (NCM 6000 + NBS 3000 +
+ * frases-modelo): cada produto/serviço vira Termo + aresta de curadoria para
+ * o código validado — o grafo absorve o conhecimento e o retrieval (FTS +
+ * vetor + alias) passa a ranquear o código certo antes do lexical.
  *
  * Saída: { nodos: [{id,tipo,props}], arestas: [{de,para,tipo,...prov}],
  *   relatorio: {duplicados, ignorados} } — arrays ORDENADOS por id
@@ -143,10 +149,13 @@ export function construirGrafo(entradas = {}) {
   const pins = Array.isArray(con.pins) ? con.pins : [];
   const pesoSinonimo = Number.isFinite(Number(con.pesoSinonimo)) ? Number(con.pesoSinonimo) : 0.85;
   const artigos = Array.isArray(con.artigos) ? con.artigos : [];
+  // Fine-tuning curado (NCM + NBS): pins já validados na ingestão.
+  const pinsFtNcm = Array.isArray(con.pinsFtNcm) ? con.pinsFtNcm : [];
+  const pinsNbs = Array.isArray(con.pinsNbs) ? con.pinsNbs : [];
 
   const nodos = new Map();
   const arestas = new Map();
-  const relatorio = { duplicadosNodos: 0, duplicadosArestas: 0, revogadosFiltrados: 0, arestasSemProveniencia: 0, linksIgnorados: 0 };
+  const relatorio = { duplicadosNodos: 0, duplicadosArestas: 0, revogadosFiltrados: 0, arestasSemProveniencia: 0, linksIgnorados: 0, pinsFtNcm: 0, pinsFtNbs: 0, pinsFtIgnorados: 0 };
 
   const porNo = (tipo, codigo, props = {}) => {
     const id = `${tipo}:${codigo}`;
@@ -372,7 +381,7 @@ export function construirGrafo(entradas = {}) {
     });
   }
 
-  // --- Termo (FTS seeds: sinônimos + pins do dicionário) ---
+  // --- Termo (FTS seeds: sinônimos + pins do dicionário + fine-tuning) ---
   const termosVistos = new Set();
   for (const t of Object.keys(sinonimos)) {
     const nt = normalizarTermo(t);
@@ -382,6 +391,18 @@ export function construirGrafo(entradas = {}) {
     }
   }
   for (const p of pins) {
+    for (const t of p?.termos ?? []) {
+      const nt = normalizarTermo(t);
+      if (nt && !termosVistos.has(nt)) {
+        termosVistos.add(nt);
+        porNo('Termo', nt, { termo: nt });
+      }
+    }
+  }
+  // Termos do fine-tuning curado (NCM + NBS): viram nós Termo para as
+  // arestas de curadoria abaixo. Sem isso, o produto validado não excitaria
+  // o retrieval do grafo (FTS/vetor/alias).
+  for (const p of [...pinsFtNcm, ...pinsNbs]) {
     for (const t of p?.termos ?? []) {
       const nt = normalizarTermo(t);
       if (nt && !termosVistos.has(nt)) {
@@ -407,6 +428,53 @@ export function construirGrafo(entradas = {}) {
       if (!nt || !nodos.has(`Termo:${nt}`)) continue;
       porSinonimo(`Termo:${nt}`, alvo, { origem: 'curadoria', confianca: pesoSinonimo }, pesoSinonimo);
     }
+  }
+  // Arestas do fine-tuning curado (o grafo absorve o conhecimento):
+  // - Termo → NCM (SINONIMO_DE, curadoria/0.9): ex. "frango vivo para abate"
+  //   excita 01059400 antes do lexical — sem isso, "vivo" puxava a vacina.
+  // - Termo → NBS (SINONIMO_NBS, curadoria/0.9): tipo já previsto no schema,
+  //   antes nunca emitido. Alvo inexistente/extinto = ignorado + contado.
+  const porSinonimoNbs = (termoNt, alvo, prov, peso) => {
+    const chavePar = `${termoNt}|SINONIMO_NBS|${alvo}`;
+    if (paresSinonimo.has(chavePar)) return;
+    paresSinonimo.add(chavePar);
+    porAresta(termoNt, alvo, 'SINONIMO_NBS', prov, { peso });
+  };
+  for (const p of pinsFtNcm) {
+    const cod = digits(p?.ncm ?? '');
+    const alvo = idNcmPorCodigo.get(cod);
+    if (!alvo) {
+      relatorio.pinsFtIgnorados++;
+      continue;
+    }
+    let ligou = false;
+    for (const t of p?.termos ?? []) {
+      const nt = normalizarTermo(t);
+      if (!nt || !nodos.has(`Termo:${nt}`)) continue;
+      const antes = paresSinonimo.size;
+      porSinonimo(`Termo:${nt}`, alvo, { origem: 'curadoria', confianca: 0.9 }, 0.9);
+      if (paresSinonimo.size > antes) ligou = true;
+    }
+    if (ligou) relatorio.pinsFtNcm++;
+    else relatorio.pinsFtIgnorados++;
+  }
+  for (const p of pinsNbs) {
+    const cod = digits(p?.nbs ?? '');
+    const alvo = idNbsPorCodigo.get(cod);
+    if (!alvo) {
+      relatorio.pinsFtIgnorados++;
+      continue;
+    }
+    let ligou = false;
+    for (const t of p?.termos ?? []) {
+      const nt = normalizarTermo(t);
+      if (!nt || !nodos.has(`Termo:${nt}`)) continue;
+      const antes = paresSinonimo.size;
+      porSinonimoNbs(`Termo:${nt}`, alvo, { origem: 'curadoria', confianca: 0.9 }, 0.9);
+      if (paresSinonimo.size > antes) ligou = true;
+    }
+    if (ligou) relatorio.pinsFtNbs++;
+    else relatorio.pinsFtIgnorados++;
   }
   // Arestas por radical: sinônimo dia-a-dia cujo canônico aparece na
   // descrição oficial (cap determinístico por termo, ordenado por código).
@@ -505,6 +573,12 @@ function lerEntradas() {
   const pesos = lerJsonSeguro(path.join(CONHECIMENTO_DIR, 'pesos.json'));
   const lc214 = lerJsonSeguro(path.join(CONHECIMENTO_DIR, 'lc214-artigos.json'));
   const temBase = Boolean(nomenclatura || reforma || referencia);
+  // Fine-tuning curado → pins do grafo (o grafo absorve o conhecimento):
+  // NCM (finetuning-6000 + frases-modelo) e NBS (finetuning-nbs +
+  // frases-modelo-servicos com nbs válido). `regra_geral`/`sem-lastro` nunca
+  // viram nó — só mapeamento validado com código.
+  const pinsFtNcm = coletarPinsNcm();
+  const pinsNbs = coletarPinsNbs();
   return {
     temBase,
     grafo: {
@@ -518,9 +592,129 @@ function lerEntradas() {
         pins: dicionario?.pins ?? [],
         pesoSinonimo: pesos?.pesos?.sinonimo ?? 0.85,
         artigos: lc214?.artigos ?? [],
+        pinsFtNcm,
+        pinsNbs,
       },
     },
   };
+}
+
+/**
+ * Andaime de pergunta dos templates de fine-tuning (NCM + NBS + CNAE):
+ * palavras que NUNCA fazem parte do produto/serviço. Matching por PALAVRA
+ * inteira (nunca por letra — `arroz` não pode virar `rroz`).
+ */
+const ANDAIME_WORDS = new Set(
+  [
+    'por', 'gentileza', 'favor', 'qual', 'e', 'o', 'como', 'classifica',
+    'classificação', 'classificacao', 'classificar', 'classifico', 'fica', 'a',
+    'do', 'da', 'de', 'dos', 'das', 'serviço', 'servico', 'seria', 'codigo',
+    'código', 'codgo', 'cod', 'nmc', 'ncn', 'ncmm', 'nbn', 'nbss', 'nbs', 'ncm',
+    'produto', 'poderia', 'informar', 'gostaria', 'saber', 'me', 'diga', 'pode',
+    'dizer', 'você', 'voce', 'alguém', 'alguem', 'passa', 'preciso', 'quero',
+    'onde', 'acho', 'vcs', 'têm', 'tem', 'ajuda', 'dúvida', 'duvida', 'pra',
+    'para', 'pfv', 'pf', 'p', 'em', 'se', 'enquadra', 'sabe', 'um', 'uma', 'os', 'as',
+    'é', 'quall', 'qula', 'qul', 'cnnae', 'cnaee', 'fiscal', 'informe', 'com', 'no',
+    'tributação', 'tributacao', 'das', 'meu', 'minha', 'sou',
+  ].map((w) => w.normalize('NFD').replace(/[̀-ͯ]/g, '')),
+);
+const ANDAIME_TRAILING = new Set(
+  ['por', 'favor', 'pfv', 'pf', 'na', 'reforma', 'tributaria', 'tributária',
+    'simples', 'nacional', 'ncm', 'nbs', 'cnae', 'o', 'a', 'os', 'as', 'um',
+    'uma', 'e', 'qual', 'se', 'enquadra', 'em', 'de', 'do', 'da', 'para',
+    'saber', 'dizer'].map((w) =>
+    w.normalize('NFD').replace(/[̀-ͯ]/g, ''),
+  ),
+);
+
+const normPalavra = (w) =>
+  String(w ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/^[^a-z0-9%]+|[^a-z0-9%]+$/g, '');
+
+/** Remove o andaime de pergunta e devolve o núcleo (produto/serviço). */
+function extrairNucleoTermo(consulta) {
+  let s = String(consulta ?? '').trim();
+  if (!s) return '';
+  let parts = s.split(/\s+/);
+  // Cabeça: descarta palavras de andaime (mantém ao menos 1 palavra).
+  while (parts.length > 1 && ANDAIME_WORDS.has(normPalavra(parts[0]))) parts.shift();
+  // Cauda: descarta andaime final ("... por favor?", "... na reforma?").
+  while (parts.length > 1 && ANDAIME_TRAILING.has(normPalavra(parts[parts.length - 1]))) parts.pop();
+  s = parts
+    .join(' ')
+    .replace(/[?.!,;:—-]+$/g, '')
+    .trim();
+  if (s.replace(/\W+/g, '').length < 3) return '';
+  return s;
+}
+/**
+ * Agrupa o fine-tuning NCM por código: cada produto validado vira termo de
+ * curadoria do seu NCM. Fontes: finetuning-6000.json (60 âncoras; as consultas
+ * são templates — só o núcleo vira termo) + frases-modelo.json (semente, já
+ * em forma de produto). NCM fora do padrão 8 dígitos é descartado (o
+ * construirGrafo ainda filtra extinto/ausente na nomenclatura).
+ */
+function coletarPinsNcm() {
+  const porNcm = new Map();
+  const por = (produto, ncm) => {
+    const cod = String(ncm ?? '').replace(/\D+/g, '');
+    const termo = String(produto ?? '').trim();
+    if (!/^\d{8}$/.test(cod) || termo.length < 2) return;
+    if (!porNcm.has(cod)) porNcm.set(cod, new Set());
+    porNcm.get(cod).add(termo);
+  };
+  const ft6000 = lerJsonSeguro(path.join(CONHECIMENTO_DIR, 'finetuning-6000.json'));
+  const lista6000 = Array.isArray(ft6000) ? ft6000 : (ft6000?.linhas ?? []);
+  for (const l of lista6000) {
+    const nucleo = extrairNucleoTermo(String(l?.consulta ?? l?.produto ?? ''));
+    por(nucleo || String(l?.consulta ?? '').slice(0, 80), l?.ncm);
+  }
+  const frases = lerJsonSeguro(path.join(CONHECIMENTO_DIR, 'frases-modelo.json'));
+  for (const f of frases?.frases ?? []) por(String(f?.consulta ?? ''), f?.ncm);
+  const out = [];
+  for (const [cod, termos] of porNcm) {
+    const limpos = [...termos].filter((t) => t.length >= 2 && t.length <= 80).slice(0, 12);
+    if (limpos.length) out.push({ termos: limpos, ncm: cod });
+  }
+  return out;
+}
+
+/**
+ * Agrupa o fine-tuning NBS por código: cada serviço validado vira termo de
+ * curadoria do seu NBS. Fontes: finetuning-nbs.json (30 âncoras) +
+ * frases-modelo-servicos.json (só `nbs` com 9 dígitos; `regra_geral` e
+ * `sem-lastro` nunca viram nó).
+ */
+function coletarPinsNbs() {
+  const porNbs = new Map();
+  const por = (produto, nbs) => {
+    const cod = String(nbs ?? '').replace(/\D+/g, '');
+    const termo = String(produto ?? '').trim();
+    if (!/^\d{9}$/.test(cod) || termo.length < 2) return;
+    if (!porNbs.has(cod)) porNbs.set(cod, new Set());
+    porNbs.get(cod).add(termo);
+  };
+  const ftNbs = lerJsonSeguro(path.join(CONHECIMENTO_DIR, 'finetuning-nbs.json'));
+  const listaNbs = Array.isArray(ftNbs) ? ftNbs : (ftNbs?.linhas ?? []);
+  for (const l of listaNbs) {
+    const consulta = String(l?.consulta ?? l?.produto ?? '');
+    const nucleo = extrairNucleoTermo(consulta);
+    por(nucleo || consulta.slice(0, 80), l?.nbs);
+  }
+  const frasesSvc = lerJsonSeguro(path.join(CONHECIMENTO_DIR, 'frases-modelo-servicos.json'));
+  for (const f of frasesSvc?.frases ?? []) {
+    if (!/^\d{9}$/.test(String(f?.nbs ?? '').replace(/\D+/g, ''))) continue;
+    por(String(f?.consulta ?? ''), f?.nbs);
+  }
+  const out = [];
+  for (const [cod, termos] of porNbs) {
+    const limpos = [...termos].filter((t) => t.length >= 2 && t.length <= 80).slice(0, 12);
+    if (limpos.length) out.push({ termos: limpos, nbs: cod });
+  }
+  return out;
 }
 
 const csvCelula = (v) => {
@@ -679,7 +873,7 @@ export async function buildGrafo(opcoes = {}) {
       referencia: 'public/base/classificacao-tributaria.json',
       cnae: 'public/base/cnae.json',
       ponteCnaeNbs: 'public/base/cnae-nbs.json (fonte NÃO-oficial — candidatos)',
-      conhecimento: 'recursos-ia/conhecimento/{sinonimos,dicionario,pesos,lc214-artigos}.json',
+      conhecimento: 'recursos-ia/conhecimento/{sinonimos,dicionario,pesos,lc214-artigos,finetuning-6000,finetuning-nbs,frases-modelo,frases-modelo-servicos}.json',
       formato: nativoOk ? 'lbug-nativo' : 'json-portatil',
       vazio: !temBase,
     },

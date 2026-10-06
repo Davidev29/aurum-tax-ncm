@@ -17,6 +17,7 @@ import {
   ANEXOS_SIMPLES,
   ISS_TETO,
   SUBLIMITE,
+  RBT12_MAX,
   FATOR_R_LIMIAR,
   type AnexoSimples,
   type AnexoSimplesId,
@@ -177,8 +178,7 @@ export interface ResultadoConvencional {
  * Simplificação rigorosa: receita única tributada integralmente (C84-ramo base).
  * Sublimite implementado nos 4 cenários com ICMS/IBS/ISS pela 5ª faixa.
  */
-export function calcularConvencional(e: EntradaConvencional): ResultadoConvencional {
-  const anexo = ANEXOS_SIMPLES[e.anexoId];
+export function calcularConvencional(e: EntradaConvencional): ResultadoConvencional {  const anexo = ANEXOS_SIMPLES[e.anexoId];
   const rbt12 = Number(e.rbt12) || 0;
   const receita = Number(e.receitaMes) || 0;
   const rba = e.rba == null ? rbt12 : Number(e.rba) || 0;
@@ -378,6 +378,27 @@ export function calcularConvencional(e: EntradaConvencional): ResultadoConvencio
     reparticao: rep, acrescimosISS: trava.acrescimos,
     detalhes: { receitaNaoExcedente: receitaNaoExc, receitaExcedente: receitaExc, icmsEfetivo: aICMSnao, ibsEfetivo: aIBSnao },
   };
+}
+
+/**
+ * C-006: variante estrita fail-closed para o dispatcher de IA.
+ * Lança erro tipado em vez de devolver DAS zero exibível quando os inputs
+ * são inválidos (anexo desconhecido, rbt12/receita <= 0, fora do Simples).
+ * O `calcularConvencional` original é preservado para os chamadores internos
+ * (relatórios/projeções que tratam o zero como "sem base").
+ */
+export function calcularConvencionalEstrito(e: EntradaConvencional): ResultadoConvencional {
+  if (!e || !(e.anexoId in ANEXOS_SIMPLES)) {
+    throw new Error(`anexo-invalido: "${String((e as { anexoId?: unknown } | null)?.anexoId ?? '')}" (esperado I, II, III, IV ou V)`);
+  }
+  const rbt12 = Number(e.rbt12);
+  const receita = Number(e.receitaMes);
+  if (!Number.isFinite(rbt12) || rbt12 <= 0) throw new Error('rbt12-ausente-ou-invalido: informe RBT12 > 0');
+  if (!Number.isFinite(receita) || receita <= 0) throw new Error('receita-ausente-ou-invalida: informe receitaMes > 0');
+  if (rbt12 > RBT12_MAX) throw new Error('desenquadramento-simples: RBT12 acima de R$ 4.800.000 — não projetar');
+  const r = calcularConvencional(e);
+  if (r.faixa === 0 || r.das <= 0) throw new Error('calculo-sem-base: faixa/DAS zerados para os inputs');
+  return r;
 }
 
 // ------- Híbrido (CBS por fora) -------

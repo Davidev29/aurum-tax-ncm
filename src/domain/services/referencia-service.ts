@@ -33,7 +33,7 @@ export interface AliquotasRefDinamica {
  *    já multiplica refIBS * (1 - redIBS/100), então refIBS deve ser
  *    a alíquota cheia (ex.: 28) e redIBS a redução percentual (ex.: 0).
  *    Portanto, buscamos a alíquota cheia baseando-nos no padrão da
- *    base oficial: IBS = 19% (estadual) + 9% (municipal) = 28% total.
+ *    base oficial: IBS = 19% e CBS = 9% (soma 28% — C-011: NUNCA IBS 28% + CBS 9%).
  *    Mas como a base oficial pode ter reduções diferentes por NCM,
  *    usamos a redução padrão (regra geral = 0%) como referência.
  */
@@ -44,13 +44,11 @@ export async function obterAliquotasRefDinamica(): Promise<AliquotasRefDinamica>
 
     if (regraGeral && regraGeral.pRedIBS != null && regraGeral.pRedCBS != null) {
       // A base oficial define o CST 000 como "tributação integral" (redução 0%).
-      // As alíquotas cheias padrão da LC 214/2025 são: IBS = 28%, CBS = 9%
-      // (ou IBS = 19% + CBS = 9% dependendo da interpretação).
-      // Como o cálculo no sistema usa: aliq = ref * (1 - red/100),
-      // e a regra geral tem red=0, ref deve ser a alíquota cheia.
-      // Mantemos REF_DEFAULT como base para a alíquota cheia, pois a
-      // tabela cStClassTrib armazena percentuais de REDUÇÃO, não a alíquota
-      // cheia. A alíquota cheia é um parâmetro legal definido pela LC 214.
+      // C-011: referência cheia IBS 19% + CBS 9% (soma 28). A tabela
+      // cStClassTrib armazena percentuais de REDUÇÃO, não a alíquota cheia —
+      // a cheia é parâmetro legal (REF_DEFAULT). `fonte:'dinamica'` significa
+      // apenas "regra geral confirmada na base"; o número continua vindo do
+      // parâmetro (confirmar contra o ato vigente antes de cada entrega).
       return {
         refIBS: REF_DEFAULT.IBS,
         refCBS: REF_DEFAULT.CBS,

@@ -729,6 +729,18 @@ function limparTextoLivre(bruto) {
   s = s.replace(/<\/?think>/gi, ' ')
   s = s.replace(/<\|im_(start|end)\|>/g, ' ')
   s = s.replace(/\|im_end\|/g, ' ')
+  s = s.replace(/<\|\s*im_?\s*(start|end)\s*\|?>/gi, ' ')
+  s = s.replace(/\|\s*im_?\s*(start|end)\s*\|?/gi, ' ')
+  s = s.replace(/<\|(begin_of_text|start_header_id|end_header_id|eot_id)\|>/g, ' ')
+  s = s.replace(/\[\/?INST\]/g, ' ')
+  s = s
+    .split('\n')
+    .map((l) => {
+      if (/^[<|>│|\[\]]*\s*(system|user|assistant)\s*:?\s*[<|>]*$/.test(l.trim())) return ''
+      return l.replace(/^[<|>│\s]*\b(system|user|assistant)\b\s*:?\s*/gi, '')
+    })
+    .join('\n')
+  s = s.replace(/[\s│|<>]+\b(system|user|assistant)\b\s*:?\s*$/gim, '')
   s = s.replace(/\b(system|user|assistant)\s*:/gi, ' ')
   // Corta marcadores de fim alucinados pelo 0.6B e thinking em inglês vazado.
   const cortes = ['(End of', '[End of', '</code>', '<code>', 'Okay, the user', 'translates to', 'I need to', 'I should respond']

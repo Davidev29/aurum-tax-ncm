@@ -287,9 +287,11 @@ export async function grafoConsultarGrafo(
     fallback: 'lexical',
   }
   try {
+    const { removerPII } = await import('@/ai/guards')
+    const textoLimpo = removerPII(texto)
     const fn = bridge?.ia?.grafoConsultar
     if (typeof fn !== 'function') return vazio
-    const r = (await fn.call(bridge!.ia, texto, k, anoReferencia, opts)) as unknown as ResultadoGrafoBridge
+    const r = (await fn.call(bridge!.ia, textoLimpo, k, anoReferencia, opts)) as unknown as ResultadoGrafoBridge
     if (!r || typeof r !== 'object') return vazio
     const brutos = Array.isArray((r as { candidatos?: unknown }).candidatos)
       ? ((r as { candidatos: unknown[] }).candidatos as Array<Record<string, unknown>>)
@@ -379,9 +381,18 @@ export async function registrarUsoGrafoBridge(evento: {
   peso?: number
 }): Promise<{ ok: boolean; erro?: string }> {
   try {
+    // C-008: PII-first — emitente vira hash, termo passa por removerPII. Nunca CNPJ cru no IPC.
+    const { removerPII, hashEmitente } = await import('@/ai/guards')
+    const eventoLimpo = {
+      tipo: evento.tipo,
+      ...(evento.termo ? { termo: removerPII(evento.termo) } : {}),
+      ...(evento.codigo ? { codigo: evento.codigo } : {}),
+      ...(evento.emitente ? { emitente: hashEmitente(evento.emitente) } : {}),
+      ...(evento.peso !== undefined ? { peso: evento.peso } : {}),
+    }
     const fn = bridge?.ia?.registrarUsoGrafo
     if (typeof fn !== 'function') return { ok: false, erro: 'sem-canal' }
-    const r = await fn.call(bridge!.ia, evento)
+    const r = await fn.call(bridge!.ia, eventoLimpo)
     if (!r || typeof r !== 'object') return { ok: false, erro: 'resposta-invalida' }
     return (r as { ok: boolean; erro?: string }).ok === true
       ? { ok: true }

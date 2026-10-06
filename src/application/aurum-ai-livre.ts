@@ -47,23 +47,34 @@ export function montarSistemaLivre(args?: { nome?: string | null; modo?: string 
   void args?.modo
   const nome = args?.nome ? ` O usuário é ${args.nome}.` : ''
   return (
-    `Você é a Aurinha, assistente do Aurum Tax NCM. Responda em português, curto (1-3 linhas), simpático.${nome}\n` +
-    `Nunca invente códigos, valores ou artigos de lei. Se pedirem fiscal, peça 1 detalhe.`
+    `Você é a Aurinha, assistente fiscal do Aurum Tax NCM (NCM/NBS/CNAE/CNPJ, IBS/CBS, Simples/DAS/Fator R, XMLs, relatórios). Responda em português, curto (1-3 linhas), simpático.${nome}\n` +
+    `Nunca invente códigos, valores ou artigos de lei. Se pedirem fiscal, peça 1 detalhe. Nunca ofereça "pesquisas, resumos, tradução" como principal — seu forte é o fiscal deste sistema. Nunca emita tokens de template (<|im_start|>, <|im_end|>, papéis user/assistant/system) nem repita a pergunta do usuário.`
   )
 }
 
-/** Remove vazamento de papéis do ChatML (`user`, `assistant`) ecoados pelo 0.6B. */
+/** Remove vazamento de papéis e restos de template de qualquer família (ChatML/Llama3/Mistral/Phi/Gemma). */
 function semPapeis(s: string): string {
-  return s
+  let out = s
+    // Tokens inteiros ou parciais de qualquer template.
+    .replace(/<\|\s*im_?\s*(start|end)\s*\|?>/gi, ' ')
+    .replace(/\|\s*im_?\s*(start|end)\s*\|?/gi, ' ')
+    .replace(/<\|\s*(begin_of_text|start_header_id|end_header_id|eot_id)\s*\|?>/gi, ' ')
+    .replace(/\[\/?INST\]/gi, ' ')
+    .replace(/<\/?s>/gi, ' ')
+  out = out
     .split('\n')
     .map((l) => {
       const t = l.trim()
-      if (/^(user|assistant|system|usuário|usuario)\s*:?\s*$/i.test(t)) return ''
-      return l.replace(/^(user|assistant|system|usuário|usuario)\s*:\s*/i, '')
+      // Linha que é só papel ("assistant", "< assistant", "| assistant:") some.
+      if (/^[<|>│|[\]|]*\s*(user|assistant|system|usuário|usuario)\s*:?\s*[<|>]*$/.test(t)) return ''
+      return l.replace(/^[<|>│\s]*\b(user|assistant|system|usuário|usuario)\b\s*:?\s*/i, '')
     })
     .join('\n')
+    // Sufixo de papel ecoado no fim ("... Tudo bem? user", "... hoje? assistant").
+    .replace(/[\s│|<>]+\b(user|assistant|system)\b\s*:?\s*$/gim, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+  return out
 }
 
 /** Remove invenção fiscal: código/valor que não estava nos fatos. */
@@ -72,11 +83,19 @@ export function sanitizarLivre(texto: string, fatos?: { codigos?: string[]; valo
     String(texto ?? '')
       .replace(/<think>[\s\S]*?<\/think>/gi, ' ')
       .replace(/<\/?think>/gi, ' ')
+      .replace(/^thinking process:.*$/gim, ' ')
+      .replace(/thinking process:/gi, ' ')
+      .replace(/why i (chose|choose|picked).*$/gim, ' ')
       .replace(/<\|im_(start|end)\|>/g, ' ')
       .replace(/\|im_end\|/g, ' ')
+      .replace(/<\|(begin_of_text|start_header_id|end_header_id|eot_id)\|>/g, ' ')
+      .replace(/\[\/?INST\]/g, ' ')
       .trim(),
   )
   if (!s || s.length < 2) return null
+  // Restos de template de qualquer modelo novo (fail-closed: volta ao template).
+  if (/im_start|im_end|eot_id|start_header_id|end_header_id|\[INST\]/.test(s)) return null
+  if (/^[<|>│\s]*(user|assistant|system)\b/i.test(s)) return null
   // Vazamento do prompt interno (IA-07): o 0.6B ecoa o separador — nunca vai à UI.
   if (/fatos do motor para verbalizar/i.test(s)) return null
   if (/^---\s*$/m.test(s) && /fatos/i.test(s)) return null
@@ -124,11 +143,16 @@ export function sanitizarAbertura(texto: string): string | null {
     String(texto ?? '')
       .replace(/<think>[\s\S]*?<\/think>/gi, ' ')
       .replace(/<\/?think>/gi, ' ')
+      .replace(/^thinking process:.*$/gim, ' ')
+      .replace(/thinking process:/gi, ' ')
       .replace(/<\|im_(start|end)\|>/g, ' ')
       .replace(/\|im_end\|/g, ' ')
+      .replace(/<\|(begin_of_text|start_header_id|end_header_id|eot_id)\|>/g, ' ')
+      .replace(/\[\/?INST\]/g, ' ')
       .trim(),
   )
   if (!s || s.length < 2) return null
+  if (/im_start|im_end|eot_id|start_header_id|end_header_id|\[INST\]/.test(s)) return null
   if (/fatos do motor para verbalizar/i.test(s)) return null
   if (/okay,\s*the user|translates to|i need to|i should respond/i.test(s)) return null
   if (/\b\d{8,9}\b/.test(s)) return null
@@ -157,19 +181,23 @@ export async function conversarLivre(args: {
   const conversar = bridge?.ia?.conversar
   if (typeof conversar !== 'function') return null
   try {
-    const r = await conversar(args.pergunta, {
+    // C-008: histórico e pergunta sem PII antes do IPC/modelo
+    const { removerPII } = await import('@/ai/guards')
+    const r = await conversar(removerPII(args.pergunta), {
       sistema: args.sistema ?? montarSistemaLivre(),
-      historico: (args.historico ?? []).slice(-6).map((m) => ({ papel: m.papel, texto: String(m.texto).slice(0, 500) })),
+      historico: (args.historico ?? []).slice(-6).map((m) => ({ papel: m.papel, texto: removerPII(String(m.texto)).slice(0, 500) })),
       think: args.think === true,
       maxTokens: args.think ? 448 : 280,
       temperature: args.temperature ?? 0.35,
     })
     if (!r || !r.ok || !r.texto) return null
-    // Modo teste: mostra o cru do seu modelo (DebugIA), sem barreira.
+    // Modo teste: mostra o cru do seu modelo (DebugIA) — C-009: carimbado e sem PII,
+    // nunca alimenta relatório/backup nem vale como fato fiscal.
     if (modoTesteLivre()) {
-      const cru = String(r.texto).slice(0, 1200).trim()
+      const { removerPII: strip } = await import('@/ai/guards')
+      const cru = strip(String(r.texto)).slice(0, 1200).trim()
       if (!cru) return null
-      return { texto: `[TESTE] ${cru}`, motivo: `${r.motivo ?? 'llm-livre'}+bruto` }
+      return { texto: `[TESTE — NÃO-VALIDADO, sem valor fiscal] ${cru}`, motivo: `${r.motivo ?? 'llm-livre'}+bruto` }
     }
     const limpo = sanitizarLivre(r.texto, args.fatos)
     if (!limpo) return null

@@ -239,6 +239,31 @@ async function selecionarAurumAILocal(
     let scoreAbsoluto = ficha
       ? pontuarFichaAbsoluta(ficha, pontosTexto, { bonusPin: temPinDict ? 10 : 0 })
       : pontosTexto
+    // Blindagem contextual "vivo × vírus vivo" (correção Frango Vivo):
+    // "vivo" como ESTADO do animal (cap. 01) nunca pode puxar vacina/medicamento
+    // (cap. 30, "a vírus vivo"). Se a query fala de animal + vivo sem citar
+    // vacina/vírus/doença/medicamento, o candidato 3002/3004 perde força total.
+    // Mesma lógica: fruta sem citar suco/processado não puxa cap. 20; ferro
+    // bruto sem citar obra não puxa cap. 73/84.
+    try {
+      const qNorm = normalizarBusca(descricao)
+      const falaAnimal = /(frango|franga|galinha|galo|pintinho|ave|aves|chester|peru|pato|ganso|codorna|boi|bovin|vaca|suin|porco|cavalo|ovelha|cabrito|coelho|peixe|camarao)/.test(qNorm)
+      const falaVivo = /(^| )vivo( |$)|viva|vivos|vivas/.test(qNorm) || /(^| )vivo( |$)/.test(normalizarBusca(descricao))
+      const falaVacina = /(vacina|virus|doenca|medicamento|farmaco|soro|antinfeccioso)/.test(qNorm)
+      const codLimpo = String(c.codigo).replace(/\D+/g, '')
+      const cap2 = codLimpo.slice(0, 2)
+      if (falaAnimal && falaVivo && !falaVacina && (cap2 === '30' || codLimpo.startsWith('3002'))) {
+        scoreAbsoluto -= 500
+      }
+      // "vivo" isolado sem contexto de doença nunca decide por 3002: exige a
+      // palavra vacina/vírus na query, senão o 3002 nem entra no topo.
+      if (!falaVacina && codLimpo.startsWith('30024270')) {
+        const soVivo = !/(vacina|virus|newcastle|gumboro|bronquite|difteroviruela|salmonelose|colera)/.test(qNorm)
+        if (soVivo) scoreAbsoluto -= 300
+      }
+    } catch {
+      /* blindagem best-effort */
+    }
     // Feedback negativo exato: já rejeitado para esta descrição → perde força
     // (mas continua como pista auditável no Top, nunca some da lista).
     if (rejeitados.has(String(c.codigo).replace(/\D+/g, ''))) scoreAbsoluto -= 500
@@ -526,11 +551,52 @@ export async function classificarComIa(
     respostaGrafo = null
   }
   const achados = await buscarNomenclaturaPorTexto(textoBusca, 20)
-  const lexicais: CandidatoIa[] = achados.map((a) => ({
+  let lexicais: CandidatoIa[] = achados.map((a) => ({
     codigo: a.codigo,
     descricao: a.descricao,
     score: a.score,
   }))
+  // Destinação/uso/composição são CONTEXTO para desempate, não termo de busca:
+  // "frango vivo para abate" com AND estrito em "abate" zerava o lexical (TEC
+  // do 0105 não contém "abate"). Se o contexto rico zerou, tenta a descrição
+  // pura do produto antes de desistir.
+  if (!lexicais.length && textoBusca !== entrada.descricao) {
+    try {
+      const achadosPuros = await buscarNomenclaturaPorTexto(entrada.descricao, 20)
+      lexicais = achadosPuros.map((a) => ({
+        codigo: a.codigo,
+        descricao: a.descricao,
+        score: a.score,
+      }))
+    } catch {
+      /* mantém vazio — vira sem-lastro honesto abaixo */
+    }
+  }
+  // Última bala: produto puro sem destinação ("frango vivo para abate" →
+  // "frango vivo"). A destinação decide o desempate (01 vivo × 02 carne), mas
+  // nunca pode zerar a busca — a TEC do vivo não cita "abate".
+  if (!lexicais.length) {
+    try {
+      let puro = String(entrada.descricao ?? '')
+      for (const ctx of [entrada.destinacao, entrada.composicao, entrada.uso]) {
+        if (ctx) {
+          puro = puro.split(ctx)[0]
+          puro = puro.replace(new RegExp(`\\b${String(ctx).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), ' ')
+        }
+      }
+      puro = puro.replace(/\s+para\s+.*$/i, '').replace(/\s+/g, ' ').trim()
+      if (puro && puro !== textoBusca && puro !== entrada.descricao) {
+        const achadosNucleo = await buscarNomenclaturaPorTexto(puro, 20)
+        lexicais = achadosNucleo.map((a) => ({
+          codigo: a.codigo,
+          descricao: a.descricao,
+          score: a.score,
+        }))
+      }
+    } catch {
+      /* mantém vazio */
+    }
+  }
   // Dicionário comercial: pins curados entram no Top mesmo quando o RAG
   // lexical não os encontra ("parmesão" ∉ TEC). O resolvedor valida abaixo.
   for (const acerto of buscarNoDicionarioComercial(textoBusca).slice(0, 6)) {

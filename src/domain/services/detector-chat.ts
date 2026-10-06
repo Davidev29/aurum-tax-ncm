@@ -324,6 +324,9 @@ const SINAIS_CAPACIDADES = [
   'para que voce serve', 'para que serve voce', 'como voce funciona',
   'como voce pode me ajudar', 'quem e voce', 'o que voce e', 'se apresente',
   'sua apresentacao', 'o que e voce', 'quem e vc', 'quem eh voce',
+  'o que vc pode fazer', 'o que vc faz', 'o que vc sabe fazer',
+  'quais ferramentas', 'ferramentas disponiveis', 'quais funcionalidades',
+  'o que sabe fazer no sistema', 'no que voce pode ajudar', 'me ajuda com o que',
 ]
 
 /** Explicação simples de conceito do sistema (sem cálculo, sem RAG). */
@@ -520,7 +523,7 @@ const SINAIS_FISCAL_GERAL = [
   'cfop', 'anexo', 'nomenclatura', 'reforma', 'lc 214', 'cest', 'cnpj',
 ]
 
-const SAUDACOES = ['oi', 'ola', 'olá', 'bom dia', 'boa tarde', 'boa noite', 'obrigad', 'valeu', 'tchau']
+const SAUDACOES = ['oi', 'oie', 'oiee', 'ola', 'olá', 'opa', 'eai', 'eae', 'bom dia', 'boa tarde', 'boa noite', 'obrigad', 'valeu', 'tchau']
 
 function normBaixo(s: string): string {
   return String(s ?? '')
@@ -1134,7 +1137,13 @@ export function detectarIntencaoChat(mensagem: unknown): AnaliseChat {
     return { intencao: 'clientes', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
   }
   if (contem(SINAIS_DADOS, n) || ehSinalDadosAvancado(n)) {
-    return { intencao: 'dados', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
+    // Verbo de cálculo explícito + código fiscal presente ("calcula o produto
+    // 08031000 vendido por 2.500"): a intenção é calcular o IBS/CBS, não
+    // consultar o movimento. Sem código ("calcula o produto mais vendido"),
+    // o dado vence (ranking do movimento).
+    if (!(contem(SINAIS_CALCULO, n) && codigoDigitos != null)) {
+      return { intencao: 'dados', codigoDigitos, cnpj, valorBase, termoBusca: cru, empresaMencionada, produtoMencionado }
+    }
   }
   // CNAE direto (7 dígitos `XXXX-X/XX` ou 7 dígitos com lastro "cnae/anexo"):
   // "qual anexo do CNAE 6201-5/01?" → cnae (tabela viva CNAE × Anexo Simples).

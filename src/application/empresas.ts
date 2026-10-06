@@ -35,8 +35,10 @@ export async function listarEmpresas(): Promise<Empresa[]> {
 
 /** Busca por CNPJ normalizado (índice `cnpj` da v5; fallback linear na v4). */
 export async function buscarEmpresaPorCnpj(cnpjBruto: string): Promise<Empresa | null> {
+  // C-008 lateral: DV antes do lookup — CNPJ impossível nem chega ao banco
+  const { ehCnpjValido } = await import('@/domain/services/cnpj')
+  if (!ehCnpjValido(cnpjBruto)) return null
   const cnpj = norm(cnpjBruto)
-  if (cnpj.length !== 14) return null
   try {
     const achada = await db.empresas.where('cnpj').equals(cnpj).first()
     if (achada) return achada

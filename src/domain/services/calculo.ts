@@ -26,6 +26,34 @@ import { observacaoRevogacao } from './revogacao'
 export const round2 = (v: unknown): number => Math.round((Number(v) || 0) * 100) / 100
 
 /**
+ * C-011: CSTs onde a fórmula `ref × (1 − red)` NÃO vale — aplicar `calcularTributos`
+ * aqui cobra imposto cheio onde o débito é zero (exportação imune, monofásica com
+ * imposto retido antes, ajustes/transferências que nem são débito).
+ * Gate pré-cálculo: `motivoRegimeEspecial()` != null → NÃO calcular; emitir a
+ * observação de regime em vez de número.
+ */
+export const CST_SEM_DEBITO_NESTA_ETAPA = new Set([
+  '410', // imunidade/isenção/não-incidência
+  '550', // suspensão/regimes aduaneiros
+  '620', // monofásica (retido anteriormente)
+  '800', '810', '811', // ajustes/fusão/transferência de crédito
+  '820', '830', // ajustes documentais
+])
+
+export function motivoRegimeEspecial(cst: unknown, tipoAliquota?: unknown): string | null {
+  const c = String(cst ?? '').replace(/\D+/g, '').slice(0, 3)
+  if (!c) return null
+  if (c === '550') return 'regime-aduaneiro-suspensao: sem débito nesta etapa (arts. 82/84/85/87) — não aplicar alíquota cheia'
+  if (c === '620') return 'monofasica: imposto retido anteriormente — não aplicar alíquota cheia sobre a operação'
+  if (c === '410') return 'imunidade/isencao/nao-incidencia: sem débito — não aplicar alíquota cheia'
+  if (['800', '810', '811', '820', '830'].includes(c)) {
+    return 'ajuste-documental/transferencia: não é débito da operação — não aplicar alíquota cheia'
+  }
+  if (Number(tipoAliquota) === 3) return 'tipo-sem-aliquota: operação sem alíquota — não aplicar fórmula'
+  return null
+}
+
+/**
  * Cálculo tributário (LC 214/2025 — redução de ALÍQUOTA).
  *
  * Mecânica legal: a base de cálculo é o valor cheio da operação
@@ -49,10 +77,33 @@ export function calcularTributos(
   redCBS: number,
   refIBS: number,
   refCBS: number,
+  opts?: { cst?: unknown; tipoAliquota?: unknown },
 ): ResultadoCalculo {
+  // C-011: gate de regime — nunca tributo cheio onde não há débito.
+  // Preserva as reduções informadas (não rotula como "alíquota zero"); zera só
+  // os valores. O chamador deve exibir `motivoRegimeEspecial(cst, tipo)` junto.
+  const motivo = motivoRegimeEspecial(opts?.cst, opts?.tipoAliquota)
   const base = round2(valorBase)
   const rIBS = Math.min(100, Math.max(0, Number(redIBS) || 0))
   const rCBS = Math.min(100, Math.max(0, Number(redCBS) || 0))
+  if (motivo) {
+    return {
+      base,
+      valorOperacao: base,
+      bcIBS: base,
+      bcCBS: base,
+      redIBS: rIBS,
+      redCBS: rCBS,
+      refIBS: Number(refIBS) || 0,
+      refCBS: Number(refCBS) || 0,
+      aliqIBS: 0,
+      aliqCBS: 0,
+      vIBS: 0,
+      vCBS: 0,
+      total: 0,
+      carga: 0,
+    }
+  }
   const refI = Number(refIBS) || 0
   const refC = Number(refCBS) || 0
   const aliqIBS = refI * (1 - rIBS / 100)

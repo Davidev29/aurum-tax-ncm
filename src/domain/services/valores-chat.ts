@@ -93,8 +93,8 @@ function mascararNaoDinheiro(texto: string): string {
     // "12" do rótulo RBT12 e "12 m/meses" (período) nunca são dinheiro:
     // sem isso, "RBT12 500 mil" gerava receita fantasma de R$ 12.
     // Inclui o typo comum "RTB 12" (inversão) — normalizado para RBT.
-    .replace(/rbt\s*12/gi, 'RBT')
-    .replace(/rtb\s*12/gi, 'RBT')
+    .replace(/rbt\s*12\b/gi, 'RBT')
+    .replace(/rtb\s*12\b/gi, 'RBT')
     .replace(/\b12\s*m(eses?)?\b/gi, ' ')
 }
 
@@ -131,10 +131,10 @@ export function extrairValorRobusto(texto: string): number | null {
   return todos.length ? todos[todos.length - 1].valor : null
 }
 
-const LBL_RBT12 = String.raw`(?:rbt\s*12|rtb\s*12|\brbt\b|\brtb\b|rba\s*12|receita\s*bruta|faturamento(?:\s*(?:bruto|anual|12\s*m(?:eses?)?|acumulad[oa]|dos\s+ultimos\s+12))?)`
+const LBL_RBT12 = String.raw`(?:rbt\s*12\b|rtb\s*12\b|\brbt\b|\brtb\b|rba\s*12\b|receita\s*bruta|faturamento(?:\s*(?:bruto|anual|12\s*m(?:eses?)?|acumulad[oa]|dos\s+ultimos\s+12))?)`
 const LBL_RECEITA = String.raw`(?:receita(?:\s*(?:do\s*m[eê]s|mensal|atual|compet[eê]ncia))?|faturamento\s*(?:do\s*m[eê]s|mensal|atual|desse\s+mes|este\s+mes|por\s*m[eê]s)?|fatura(?:mento)?\s*(?:do\s*mes|mensal|por\s*m[eê]s)?|rec\b)`
-const LBL_FOLHA = String.raw`(?:folha(?:\s*de\s*(?:pagamento|sal[aá]rios))?(?:\s*(?:12\s*m(?:eses?)?|12|anual|12m))?|massa\s*salarial|sal[aá]rios?(?:\s*12)?|folha\s*12m?|flh\b|pagamento\s*(?:de\s*)?salarios?|colaboradores?|funcion[aá]rios?|pro[\s-]?labore|prolabore|encargos?(?:\s*sociais)?|mao\s*de\s*obra)`
-const LBL_RBA = String.raw`(?:\brba\b|rba\s*12|receita\s*bruta\s*anual)`
+const LBL_FOLHA = String.raw`(?:folha(?:\s*de\s*(?:pagamento|sal[aá]rios))?(?:\s*(?:12\s*m(?:eses?)?|12\b|anual|12m))?|massa\s*salarial|sal[aá]rios?(?:\s*12\b(?:\s*m(?:eses?)?)?)?|folha\s*12m?\b|flh\b|pagamento\s*(?:de\s*)?salarios?|colaboradores?|funcion[aá]rios?|pro[\s-]?labore|prolabore|encargos?(?:\s*sociais)?|mao\s*de\s*obra)`
+const LBL_RBA = String.raw`(?:\brba\b|rba\s*12\b|receita\s*bruta\s*anual)`
 const LBL_BASE = String.raw`(?:base|valor(?:\s*base)?|total)`
 
 /** Preposições entre rótulo e valor ("receita pra 50 mil", "folha de 200k"). */
@@ -296,8 +296,11 @@ function normalizarTyposValores(texto: string): string {
 function pegaAncorado(texto: string, lbl: string): number | null {
   const t = normalizarTyposValores(String(texto ?? ' '))
   // `(?!\s*%)`: número seguido de % é percentual ("30% do RBT"), nunca dinheiro.
-  const rx1 = new RegExp(`${lbl}\\s*(?:${RX_PREP}\\s*)?(?:R\\$\\s*)?${RX_NUM}\\s*${RX_SUF}?(?!\\s*%)`, 'i')
-  const rx2 = new RegExp(`(?:R\\$\\s*)?${RX_NUM}\\s*${RX_SUF}?\\s*(?:${RX_PREP}\\s+)?(?:de\\s+)?${lbl}(?!\\s*%)`, 'i')
+  // `(?!\d)` fecha o número: sem isso o backtracking casa o "3" de "30" (o "%"
+  // após o "0" passa no lookahead) e "folha 30%" virava R$ 3 em vez de cair
+  // na resolução percentual contra o RBT.
+  const rx1 = new RegExp(`${lbl}\\s*(?:${RX_PREP}\\s*)?(?:R\\$\\s*)?${RX_NUM}(?!\\d)\\s*${RX_SUF}?(?!\\s*%)`, 'i')
+  const rx2 = new RegExp(`(?:R\\$\\s*)?${RX_NUM}(?!\\d)\\s*${RX_SUF}?\\s*(?:${RX_PREP}\\s+)?(?:de\\s+)?${lbl}(?!\\s*%)`, 'i')
   for (const rx of [rx1, rx2]) {
     const m = t.match(rx)
     if (m) {

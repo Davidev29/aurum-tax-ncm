@@ -63,8 +63,30 @@ export function soDigitos(valor: string): string {
 export function validarContratante(c: Contratante): string | null {
   if (c.nome.trim().length < 3) return 'Informe seu nome ou a razão social (mín. 3 letras).'
   const dig = soDigitos(c.documento)
-  if (dig.length !== 11 && dig.length !== 14)
+  // C-008 lateral: DV real, não só tamanho (aceite LGPD-local não registra doc impossível)
+  if (dig.length === 11) {
+    let soma = 0
+    for (let i = 0; i < 9; i++) soma += Number(dig[i]) * (10 - i)
+    let d1 = (soma % 11) < 2 ? 0 : 11 - (soma % 11)
+    soma = 0
+    for (let i = 0; i < 10; i++) soma += Number(dig[i]) * (11 - i)
+    let d2 = (soma % 11) < 2 ? 0 : 11 - (soma % 11)
+    if (Number(dig[9]) !== d1 || Number(dig[10]) !== d2)
+      return 'CPF inválido: dígito verificador não confere.'
+  } else if (dig.length === 14) {
+    const calc = (base: string, pesos: number[]): number => {
+      let soma = 0
+      for (let i = 0; i < base.length; i++) soma += Number(base[i]) * pesos[i]
+      const resto = soma % 11
+      return resto < 2 ? 0 : 11 - resto
+    }
+    const d1 = calc(dig.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+    const d2 = calc(`${dig.slice(0, 12)}${d1}`, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+    if (Number(dig[12]) !== d1 || Number(dig[13]) !== d2)
+      return 'CNPJ inválido: dígito verificador não confere.'
+  } else {
     return 'Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.'
+  }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c.email.trim()))
     return 'Informe um e-mail válido para contato e suporte.'
   return null

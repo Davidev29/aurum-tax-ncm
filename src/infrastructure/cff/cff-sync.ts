@@ -478,17 +478,38 @@ export async function sincronizarTudo(
 /**
  * Revogações detectadas no JSON bruto do endpoint CFF `anexos` (quando
  * sincronizado). Best-effort: sem marcador explícito, lista vazia.
+ *
+ * C-034: `[]` aqui é AMBÍGUO (vazio-verificado vs nunca-sincronizado). Quem
+ * precisa distinguir deve usar `estadoRevogacoesCff()` — CFF desativado
+ * (só via updater) NUNCA pode significar "nada revogado" sem aviso.
  */
 export async function obterRevogacoesCff(): Promise<import('@/domain/services/revogacao').Revogacao[]> {
+  return (await estadoRevogacoesCff()).revogacoes
+}
+
+export type EstadoRevogacoesCff =
+  | { estado: 'lista'; revogacoes: import('@/domain/services/revogacao').Revogacao[] }
+  | { estado: 'vazio-verificado'; revogacoes: [] }
+  | { estado: 'desconhecido'; revogacoes: [] }
+
+/**
+ * C-034: tri-estado das revogações CFF — lista | vazio-verificado | desconhecido.
+ * Sem `cff_sync_anexos` sincronizado, o estado é `desconhecido` (CFF só renova
+ * via electron-updater): o chamador NÃO deve afirmar "nada revogado".
+ */
+export async function estadoRevogacoesCff(): Promise<EstadoRevogacoesCff> {
   try {
     const { extrairRevogacoesAnexos } = await import('@/domain/services/revogacao')
     const meta = await db.meta.get('cff_sync_anexos')
     const valor = meta?.valor as Record<string, unknown> | undefined
+    if (!valor) return { estado: 'desconhecido', revogacoes: [] }
     const brutos = valor?.dadosBrutos
-    if (!brutos) return []
-    return extrairRevogacoesAnexos(brutos)
+    if (!brutos) return { estado: 'desconhecido', revogacoes: [] }
+    const revs = extrairRevogacoesAnexos(brutos)
+    if (!revs.length) return { estado: 'vazio-verificado', revogacoes: [] }
+    return { estado: 'lista', revogacoes: revs }
   } catch {
-    return []
+    return { estado: 'desconhecido', revogacoes: [] }
   }
 }
 /**

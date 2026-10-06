@@ -13,6 +13,7 @@
  * o chamador segue bit-idêntico ao pré-grafo.
  */
 import { grafoConsultarGrafo, type CandidatoIa, type ResultadoGrafoBridge } from '@/infrastructure/bridge'
+import type { SinalGrafoDecisao } from './aurum-ai-decisao'
 
 export interface TrilhaGrafo {
   usouGrafo: boolean
@@ -173,4 +174,51 @@ export function textoPorQueSugeriu(codigo: unknown, trilha: TrilhaGrafo): string
     return `${base} + seu uso (boost: uso_local +${boost.valor})`
   }
   return base
+}
+
+/**
+ * Sinal para o subagente de decisão (`aurum-ai-decisao.ts`): conta candidatos
+ * do grafo por domínio (8 dígitos = NCM, 9 = NBS, 7 = CNAE) exigindo
+ * proveniência — sem proveniência não há voto. Empate ou zero em tudo =
+ * `dominio: null` (o detector puro decide). Puro e testável.
+ */
+export function sinalDecisaoPara(
+  respostaGrafo: ResultadoGrafoBridge | null,
+  trilha: TrilhaGrafo,
+): SinalGrafoDecisao {
+  if (!respostaGrafo || respostaGrafo.ok !== true || !trilha.usouGrafo) {
+    return { dominio: null, candidatosNcm: 0, candidatosNbs: 0, candidatosCnae: 0, temProveniencia: false, cypher: null }
+  }
+  let ncm = 0
+  let nbs = 0
+  let cnae = 0
+  for (const c of respostaGrafo.candidatos ?? []) {
+    const cod = digitos((c as { codigo?: unknown }).codigo)
+    if (!cod) continue
+    const prov = trilha.provenienciaPorCodigo.get(cod) ?? []
+    if (!prov.length) continue
+    if (cod.length === 8) ncm++
+    else if (cod.length === 9) nbs++
+    else if (cod.length === 7) cnae++
+  }
+  const temProveniencia = ncm + nbs + cnae > 0
+  let dominio: SinalGrafoDecisao['dominio'] = null
+  if (temProveniencia) {
+    const max = Math.max(ncm, nbs, cnae)
+    const vencedores = [
+      ...(ncm === max ? ['ncm' as const] : []),
+      ...(nbs === max ? ['nbs' as const] : []),
+      ...(cnae === max ? ['cnae' as const] : []),
+    ]
+    // Empate entre domínios: sem voto (o detector desempatia).
+    dominio = vencedores.length === 1 ? vencedores[0] : null
+  }
+  return {
+    dominio,
+    candidatosNcm: ncm,
+    candidatosNbs: nbs,
+    candidatosCnae: cnae,
+    temProveniencia,
+    cypher: typeof respostaGrafo.cypher === 'string' ? respostaGrafo.cypher : null,
+  }
 }

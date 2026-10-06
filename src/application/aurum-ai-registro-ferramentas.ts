@@ -45,6 +45,8 @@ export interface SpecFerramenta {
   parametros: Record<string, ParametroFerramenta>
   exemplos: string[]
   guardrail: string
+  /** Quando usar (discriminador p/ o modelo escolher entre candidatas — S4-19). */
+  quandoUsar?: string
 }
 
 export interface ResultadoFerramenta {
@@ -372,10 +374,13 @@ export function listarFerramentasParaModelo(dominios?: DominioFerramenta[]): Arr
     const properties: Record<string, { type: string; description: string }> = {}
     const required: string[] = []
     for (const [k, p] of Object.entries(f.parametros)) {
-      properties[k] = { type: p.tipo === 'integer' ? 'integer' : p.tipo, description: p.descricao }
+      // C-033/S4-19: exemplo vai na descrição do parâmetro — o modelo decide COM os guardrails
+      properties[k] = { type: p.tipo === 'integer' ? 'integer' : p.tipo, description: p.exemplo ? `${p.descricao} Ex.: ${p.exemplo}` : p.descricao }
       if (p.obrigatorio) required.push(k)
     }
-    return { name: f.nome, description: f.descricao, parameters: { type: 'object', properties, required } }
+    // C-033/S4-19: guardrail + 1 exemplo no corpo da description (antes descartados)
+    const description = `${f.descricao}\nQuando usar: ${f.quandoUsar ?? f.dominio}. Guardrail: ${f.guardrail ?? 'seguir o resolvedor/motor; sem dado, perguntar.'}${f.exemplos?.[0] ? `\nExemplo: ${f.exemplos[0]}` : ''}`
+    return { name: f.nome, description, parameters: { type: 'object', properties, required } }
   })
 }
 
@@ -450,25 +455,61 @@ export async function executarFerramenta(
         return { ok: true, ferramenta: nome, dados }
       }
       case 'consultarNCM':
-      case 'consultarNBS':
       case 'detalharCodigo':
       case 'calcularIBSCBS': {
         const termo = str(args.termo ?? args.codigo ?? ctx.memoria?.assunto ?? ctx.contexto?.ultimoAssunto ?? '')
         const codigo = str(args.codigo ?? '')
         const alvo = codigo || termo
         if (!alvo) return { ok: false, ferramenta: nome, erro: 'termo-ou-codigo-ausente' }
-        if (/^\d{8}$/.test(alvo.replace(/\D+/g, '')) || /^\d{9}$/.test(alvo.replace(/\D+/g, ''))) {
+        const digitos = alvo.replace(/\D+/g, '')
+        // C-006: fail-closed — parcial nunca vai ao resolvedor como se fosse exato
+        if (digitos.length > 0 && digitos.length < 8) {
+          return { ok: false, ferramenta: nome, erro: 'ncm-incompleto', dados: { digitos, dica: 'informe os 8 dígitos (use sugerirNomenclatura/prefixo ou complete os dígitos restantes)' } }
+        }
+        if (digitos.length > 8) {
+          return { ok: false, ferramenta: nome, erro: 'ncm-invalido', dados: { digitos, dica: 'NCM tem 8 dígitos; 9 dígitos no domínio NCM é NBS — vá à tela Serviços' } }
+        }
+        if (/^\d{8}$/.test(digitos)) {
           const { montarFichaAbsoluta } = await import('./aurum-ai-contexto')
-          const ficha = montarFichaAbsoluta(alvo.replace(/\D+/g, ''))
+          const ficha = await montarFichaAbsoluta(digitos) // C-004: await (era Promise como dado)
+          if (!ficha || typeof ficha !== 'object' || !('codigo' in (ficha as object))) {
+            return { ok: false, ferramenta: nome, erro: 'ficha-invalida' }
+          }
           return { ok: true, ferramenta: nome, dados: ficha }
         }
         const { classificarComIa } = await import('./classificacao-ia')
         const r = await classificarComIa({ descricao: alvo } as never)
         return { ok: true, ferramenta: nome, dados: r }
       }
+      case 'consultarNBS': {
+        // C-005: NBS tem pipeline próprio — NUNCA classificarComIa (só-NCM)
+        const termo = str(args.termo ?? args.codigo ?? ctx.memoria?.assunto ?? ctx.contexto?.ultimoAssunto ?? '')
+        const codigo = str(args.codigo ?? '')
+        const alvo = codigo || termo
+        if (!alvo) return { ok: false, ferramenta: nome, erro: 'termo-ou-codigo-ausente' }
+        const digitos = alvo.replace(/\D+/g, '')
+        if (digitos.length > 0 && digitos.length < 9) {
+          return { ok: false, ferramenta: nome, erro: 'nbs-incompleto', dados: { digitos, dica: 'NBS tem 9 dígitos — complete os restantes' } }
+        }
+        if (digitos.length > 9) {
+          return { ok: false, ferramenta: nome, erro: 'nbs-invalido', dados: { digitos } }
+        }
+        if (/^\d{9}$/.test(digitos)) {
+          const { resolverClassificacoesNbs } = await import('@/infrastructure/base/classificacao-repo')
+          const r = await resolverClassificacoesNbs(digitos)
+          return { ok: true, ferramenta: nome, dados: r }
+        }
+        const { classificarComIaServicos } = await import('./classificacao-ia-servicos')
+        const r = await classificarComIaServicos({ descricao: alvo } as never)
+        return { ok: true, ferramenta: nome, dados: r }
+      }
       case 'consultarCNAE': {
         const cnae = str(args.cnae)
         if (!cnae) return { ok: false, ferramenta: nome, erro: 'cnae-ausente' }
+        // C-006: fail-closed — CNAE tem 7 dígitos; nada de lookup fantasma 6/8d
+        if (!/^\d{7}$/.test(cnae.replace(/\D+/g, ''))) {
+          return { ok: false, ferramenta: nome, erro: 'cnae-invalido', dados: { recebido: cnae, dica: 'CNAE tem 7 dígitos' } }
+        }
         const { codigo7De } = await import('@/domain/services/cnae')
         const normalizado = codigo7De(cnae) ?? cnae.replace(/\D+/g, '')
         return { ok: true, ferramenta: nome, dados: { cnae: normalizado } }
@@ -520,17 +561,55 @@ export async function executarFerramenta(
         const achados = pesquisarLC214(q)
         return { ok: true, ferramenta: nome, dados: achados.slice(0, 3) }
       }
-      case 'calcularSimples':
-      case 'simularComparativo': {
-        const { calcularConvencional } = await import('@/simples/calculo')
+      case 'calcularSimples': {
+        const { calcularConvencionalEstrito } = await import('@/simples/calculo')
         const anexo = str(args.anexo ?? (args as { anexos?: string }).anexos?.split(',')[0] ?? ctx.contexto?.ultimoAnexo ?? '')
         const rbt12 = Number(args.rbt12 ?? ctx.contexto?.ultimoRbt12)
         const receitaMes = Number(args.receitaMes ?? ctx.contexto?.ultimaReceita)
+        const rbaBruta = Number(args.rba ?? rbt12)
         if (!anexo || !Number.isFinite(rbt12) || !Number.isFinite(receitaMes)) {
           return { ok: false, ferramenta: nome, erro: 'anexo-rbt-receita-ausentes' }
         }
-        const r = calcularConvencional({ anexoId: anexo as never, rbt12, receitaMes } as never)
-        return { ok: true, ferramenta: nome, dados: r }
+        try {
+          const r = calcularConvencionalEstrito({ anexoId: anexo as never, rbt12, receitaMes, rba: Number.isFinite(rbaBruta) ? rbaBruta : undefined } as never)
+          return { ok: true, ferramenta: nome, dados: r }
+        } catch (e) {
+          return { ok: false, ferramenta: nome, erro: String((e as Error)?.message ?? e) }
+        }
+      }
+      case 'simularComparativo': {
+        // C-005: branch próprio — Fator-R e 2-guias não cabem no calcularSimples de 1 anexo
+        const { calcularConvencionalEstrito, fatorR, calcularHibrido } = await import('@/simples/calculo')
+        const anexosRaw = str(args.anexos ?? args.anexo ?? ctx.contexto?.ultimoAnexo ?? '')
+        const anexos = anexosRaw.split(/[,;\/x×]/).map((s) => s.trim()).filter(Boolean)
+        const rbt12 = Number(args.rbt12 ?? ctx.contexto?.ultimoRbt12)
+        const receitaMes = Number(args.receitaMes ?? ctx.contexto?.ultimaReceita)
+        const folha12 = args.folha12 == null ? null : Number(args.folha12)
+        if (anexos.length === 0 || !Number.isFinite(rbt12) || !Number.isFinite(receitaMes)) {
+          return { ok: false, ferramenta: nome, erro: 'anexo-rbt-receita-ausentes' }
+        }
+        try {
+          const resultados = anexos.slice(0, 2).map((a) =>
+            calcularConvencionalEstrito({ anexoId: a as never, rbt12, receitaMes } as never))
+          const comparativo: Record<string, unknown> = { resultados }
+          if (resultados.length === 2) {
+            const [a, b] = resultados as unknown as [{ das: number }, { das: number }]
+            comparativo.economia = Math.round((b.das - a.das) * 100) / 100
+          }
+          if (folha12 != null && Number.isFinite(folha12)) {
+            comparativo.fatorR = fatorR(folha12, rbt12)
+          } else if (anexos.includes('III') || anexos.includes('V')) {
+            comparativo.aviso = 'folha12-ausente: informe folha12 para Fator-R III×V'
+          }
+          const debitosCBS = Number(args.debitosCBS ?? args.debitos ?? NaN)
+          const creditosCBS = Number(args.creditosCBS ?? args.creditos ?? args.despesas ?? 0)
+          if (Number.isFinite(debitosCBS)) {
+            comparativo.hibrido = calcularHibrido({ convencional: resultados[0] as never, debitosCBS, creditosCBS: Number.isFinite(creditosCBS) ? creditosCBS : 0 } as never)
+          }
+          return { ok: true, ferramenta: nome, dados: comparativo }
+        } catch (e) {
+          return { ok: false, ferramenta: nome, erro: String((e as Error)?.message ?? e) }
+        }
       }
       case 'simularCenarioDividido': {
         const { executarFerramentaProjecao } = await import('@/simples-projection/ferramentas')

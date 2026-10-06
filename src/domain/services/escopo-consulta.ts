@@ -53,6 +53,28 @@ const MARCADORES_FRASE = [
   'diga que voce e', 'roleplay', 'interprete um',
 ]
 
+/** Vetores de prompt-injection fiscal (C-007): checados ANTES de `temSinalFiscal`,
+ * pois o ataque costuma carregar termo fiscal ("finge que é optante do simples",
+ * "calcula de cabeça meu DAS") justamente para ganhar lastro e furar a barreira. */
+const MARCADORES_INJECTION = [
+  'modo sem lgpd', 'sem lgpd', 'sem protecao', 'modo sem protecao',
+  'calcula de cabeca', 'calcule de cabeca', 'calcular de cabeca',
+  'inventa rbt', 'invente rbt', 'inventa um rbt', 'inventa receita', 'invente receita',
+  'finge que e optante', 'finge optante', 'finge que e do simples', 'finge simples',
+  'finge que e optante do simples',
+  'ignore as regras', 'ignore regras', 'ignorar regras', 'ignore suas regras',
+  'mostre conta interna', 'mostre a conta interna', 'modo debug mostre',
+  'troque meu cenario', 'diz que meu cenario e',
+]
+
+/** Jailbreak clássico: sozinho já é injection, mesmo com termo fiscal junto
+ * ("finge que esse CNPJ é optante" tem lastro fiscal e furava a barreira antiga). */
+const INJECTION_JAILBREAK = [
+  'finge que', 'finja que', 'modo dan', 'jailbreak',
+  'system prompt', 'seu prompt', 'roleplay', 'interprete um',
+  'ignore suas instrucoes', 'ignore as instrucoes', 'esqueca suas instrucoes',
+]
+
 /** Palavras isoladas externas (match por token inteiro, só sem lastro fiscal). */
 const MARCADORES_TOKEN = new Set([
   'piada', 'poema', 'poesia', 'futebol', 'horoscopo', 'clima',
@@ -160,12 +182,27 @@ export function temMarcadorExterno(texto: unknown): boolean {
 }
 
 /**
+ * C-007: detector de prompt-injection fiscal — INDEPENDENTE do escopo fiscal.
+ * Checado ANTES de `temSinalFiscal` em `detectarForaDeEscopo`: ataque com
+ * termo fiscal ("finge que é optante do simples") tem lastro e furaria a
+ * barreira antiga. Puro, sem I/O. Recusa fixa + trilha em audit_log no chamador.
+ */
+export function detectarInjection(texto: unknown): boolean {
+  const norm = normalizarBusca(String(texto ?? ''))
+  if (!norm) return false
+  return MARCADORES_INJECTION.some((m) => norm.includes(m)) ||
+    INJECTION_JAILBREAK.some((m) => norm.includes(m))
+}
+
+/**
  * Detecta pedido fora do escopo do sistema.
- * Puro e auditável: marcadores externos presentes + zero lastro fiscal/sistema
- * + não é conversa leve. Cumprimentos, conceitos simples, hora/data e contas
- * básicas NUNCA caem aqui (são recursos nativos do chat).
+ * Puro e auditável: injection (C-007) OU marcadores externos presentes + zero
+ * lastro fiscal/sistema + não é conversa leve. Cumprimentos, conceitos simples,
+ * hora/data e contas básicas NUNCA caem aqui (são recursos nativos do chat).
  */
 export function detectarForaDeEscopo(texto: unknown): boolean {
+  // C-007: injection primeiro — vence até o lastro fiscal
+  if (detectarInjection(texto)) return true
   if (ehConversaLeve(texto)) return false
   // Básico do chat (tempo + conta) tem precedência sobre o marcador
   // genérico "quanto e 2" — "quanto é 2+3?" é conta, não tarefa externa.

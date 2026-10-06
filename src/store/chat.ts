@@ -411,26 +411,21 @@ export const useChat = create<ChatState>((set, get) => ({
         set({ hidratado: true })
         return
       }
-      // A mais recente vira a conversa ativa; as demais, o arquivo.
-      const [ativa, ...resto] = ordenadas
-      const mensagensAtivas = reidratar(ativa.mensagens)
-      const arquivadas: ConversaArquivada[] = resto.map((t) => ({
-        id: t.conversaId,
-        titulo: t.titulo || tituloDe(reidratar(t.mensagens)),
-        quando: t.updatedAt,
-        mensagens: reidratar(t.mensagens),
-      }))
-      // Garante o espelho da ativa no arquivo (nada se perde ao trocar).
-      const espelho: ConversaArquivada = {
-        id: ativa.conversaId,
-        titulo: ativa.titulo || tituloDe(mensagensAtivas),
-        quando: ativa.updatedAt,
-        mensagens: mensagensAtivas,
-      }
+      // A tela abre SEMPRE em conversa nova (boas-vindas); o histórico vai
+      // todo para o arquivo lateral — nada se perde, nada é restaurado ativo.
+      const arquivadas: ConversaArquivada[] = ordenadas.map((t) => {
+        const msgs = reidratar(t.mensagens)
+        return {
+          id: t.conversaId,
+          titulo: t.titulo || tituloDe(msgs),
+          quando: t.updatedAt,
+          mensagens: msgs,
+        }
+      })
       set({
-        mensagens: mensagensAtivas,
-        conversaId: ativa.conversaId,
-        arquivadas: [espelho, ...arquivadas].slice(0, 30),
+        mensagens: [BOAS_VINDAS],
+        conversaId: novaId(),
+        arquivadas: arquivadas.slice(0, 30),
         enviando: false,
         fila: [],
         hidratado: true,

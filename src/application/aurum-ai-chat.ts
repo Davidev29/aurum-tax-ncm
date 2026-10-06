@@ -339,7 +339,7 @@ function responderAjuda(pergunta: string): RespostaChat {
   else if (/abrir|criar|montar|constituir/.test(n) && /empresa|cnpj/.test(n)) dica = 'Para abrir empresa: o registro é na Junta Comercial + CNPJ na Receita (contador resolve em dias). Aqui eu respondo a parte fiscal: diga "vale a pena abrir uma nova empresa?" ou "consegue dividir o faturamento em duas empresas?" com RBT12 + receita + % da nova que eu projeto mãe × nova (economia, payback e alertas) — ou pergunte "qual o anexo do CNAE 6201-5/01?" para o enquadramento.'
   else if (/nbs|serviço|servico|atividade|cnpj|cnae/.test(n)) dica = 'Para NBS/CNPJ/CNAE: descreva o serviço ("nbs para programação de computadores?"), diga o CNAE direto ("CNAE 6201-5/01 qual anexo?") ou diga "Quais atividades o CNPJ 53.795.990/0001-68 tem?" (com ou sem formatação). Listo CNAEs + Anexo do Simples + NBS e já ofereço simular o DAS e salvar como cliente.'
   else if (/calcul|ibs|cbs|simula/.test(n)) dica = 'Para calcular: diga valor + código (ex.: "quanto fica R$ 2.500 no NCM 0803.10.00?"). Sem valor, uso R$ 1.000 como exemplo e aviso.'
-  else if (/simples|das|anexo|rbt/.test(n)) dica = 'Para o Simples: diga anexo + RBT12 + receita (ex.: "DAS Anexo III, RBT12 500 mil, receita 40 mil"). Sem os dados, projeto com exemplo e aviso.'
+  else if (/simples|das|anexo|rbt/.test(n)) dica = 'Para o Simples: diga anexo + RBT12 + receita (ex.: "DAS Anexo III, RBT12 500 mil, receita 40 mil"). Sem os dados, pergunto o que falta — não projeto com exemplo.'
   else if (/xml|nota fiscal|fornecedor|cliente|diferid|reducao|redução|filtro|credito|crédito|debito|débito/.test(n)) dica = 'Para seus dados: pergunte direto ("tem XML de algum cliente?", "qual fornecedor me dá mais crédito?", "produtos da Padaria Pão Dourado?", "quanto fica esse queijo da Padaria Y?"). Eu digo de qual empresa estou falando, localizo o produto dela e diferencio cálculo de consulta. Entendo cliente, fornecedor, produto, NCM, CFOP, CST, período — e gero PDF customizado.'
   else if (/cadastr|registr|salvar|produto novo|novo produto/.test(n)) dica = 'Para cadastros: pergunte "o CNPJ X está cadastrado?" (verifico e ofereço cadastrar) ou diga "quero cadastrar um produto" (conduzo empresa → SKU → nome → NCM → trib. antiga CFOP/CST/PIS/COFINS → conferência, e só gravo após o SIM).'
   else if (/lc\s*214|lei complementar|artigo|art\.|legisla/.test(n)) dica = 'Para a LC 214/2025: pergunte pelo número ("explica o art. 128") ou pelo tema ("onde a lei fala de diferimento?"). Pesquiso no corpus offline e explico no molde claro + técnico, com link da íntegra no Planalto. A tela Legislação abre a lei completa.'
@@ -1112,59 +1112,32 @@ function parecePedidoExterno(texto: string): boolean {
 
 function saudacao(historico: MensagemHistorico[] = [], perfil?: PerfilMemoria | null, memoria?: MemoriaSistema | null, pergunta = ''): RespostaChat {
   const temConversa = historico.some((m) => m.papel === 'user')
-  const boasVindas = temConversa ? 'bom te ver de novo' : prefixoTemporal().toLowerCase()
   const nome = primeiroNome(perfil)
-  const voc = nome ? ` ${nome}` : ''
+  const voc = nome ? `, ${nome}` : ''
   const chamouApelido = contemApelido(pergunta)
-  // Chat novo com sessão anterior: o artefato-resumo retoma de onde paramos.
+  // Chat novo com sessão anterior: o artefato-resumo retoma de onde paramos (1 linha).
   const retomada = !temConversa && memoria?.assunto
-    ? `\n\n📌 Na última vez você viu **${memoria.assunto}**${memoria.codigoNcm ? ` (NCM ${fmtNcm(memoria.codigoNcm)})` : memoria.codigoNbs ? ` (NBS ${memoria.codigoNbs})` : ''} — posso continuar de onde paramos (opções, cálculo, relatório).`
+    ? ` Vi que na última vez você olhou **${memoria.assunto}**${memoria.codigoNcm ? ` (NCM ${fmtNcm(memoria.codigoNcm)})` : memoria.codigoNbs ? ` (NBS ${memoria.codigoNbs})` : ''} — posso retomar de onde paramos.`
     : ''
-  // Melhor amigo: com padrão estabelecido, a saudação reconhece o hábito.
-  const habito = (() => {
-    try {
-      const dom = sugestoesParaPadrao(perfil)
-      void dom
-      return null
-    } catch {
-      return null
-    }
-  })()
-  void habito
-  const aberturas = [
-    `Olá${voc}! Sou a Aurum AI${chamouApelido ? ` (pode me chamar de ${NOME_MASCOTE}! ✨)` : ''}, sua assistente fiscal. Posso ajudar com:\n`,
-    `Opa${voc}! ${temConversa ? 'Que bom te ver de novo — ' : ''}sou a Aurum AI${chamouApelido ? `, a ${NOME_MASCOTE}` : ''}, sua assistente fiscal. Olha o que faço:\n`,
-    `${prefixoTemporal()}${voc}! Sou a Aurum AI${chamouApelido ? ` (${NOME_MASCOTE} às ordens!)` : ''} (${boasVindas}!) — seu apoio fiscal aqui no sistema:\n`,
-    `Oi${voc}! Sou a Aurum AI${chamouApelido ? ` — isso, a ${NOME_MASCOTE}!` : ''}. Que bom falar com você — posso ajudar com:\n`,
-  ] as const
-  const abertura = variar('saudacao', aberturas)
-  const fechos = [
-    `\nO que você quer consultar?`,
-    `\nPor onde começamos?`,
-    `\nMe diga o que precisa — ou toque num botão.`,
-  ] as const
+  const apelidoTxt = chamouApelido ? ` (pode me chamar de ${NOME_MASCOTE}! ✨)` : ''
+  const abertura = variar('saudacao', [
+    `${prefixoTemporal()}${voc}! Sou a Aurum AI — tudo bem por aqui.${apelidoTxt}`,
+    `Olá${voc}! Sou a Aurum AI — tudo bem por aqui.${apelidoTxt}`,
+    `Oi${voc}! Sou a Aurum AI — que bom te ver por aqui.${apelidoTxt}`,
+    `Opa${voc}! Sou a Aurum AI — tudo bem por aqui.${apelidoTxt}`,
+  ])
   return {
-    texto:
-      `${abertura}` +
-      `• NCM de produtos (ex.: "tem algum ncm de banana?")\n` +
-      `• NBS de serviços (ex.: "qual o nbs para aula de yoga?")\n` +
-      `• Cálculos de IBS/CBS (ex.: "quanto fica R$ 1.000 no NCM 0803.10.00?")\n` +
-      `• Simples Nacional (ex.: "meu DAS no Anexo III com RBT12 500 mil?")\n` +
-      `• Conta rápida e hora/data (ex.: "quanto é 10% de 500?", "que horas são?")\n` +
-      `• Seus dados: clientes, XMLs, fornecedores, produtos, diferidos, reduções (ex.: "tem XML de algum cliente?")\n` +
-      `• Relatórios (ex.: "gera um relatório dessa conversa" ou "gera um PDF disso")` +
-      `${retomada}` +
-      `${variar('saudacao-fecho', fechos)}`,
+    texto: `${abertura}${retomada} Em que vamos trabalhar hoje?`,
     confianca: 1,
     nivel: 'alta',
     fontes: retomada ? ['Memória local da Aurum AI (artefato-resumo da sessão anterior)'] : [],
     sugestoes: variar('saudacao-sug', [
-      ['Tem algum NCM de banana?', 'Qual o NBS para aula de inglês?', 'Quanto fica R$ 1.000 no NCM 0803.10.00?'],
-      ['Qual o NBS para aula de inglês?', 'O que é Fator R?', 'Tem algum NCM de banana?'],
+      ['Tem algum NCM de banana?', 'Qual o NBS para aula de inglês?', 'O que você pode fazer?'],
       ['O que é Fator R?', 'Tem algum NCM de banana?', 'Meu DAS no Anexo III com RBT12 500 mil?'],
+      ['Qual o NBS para aula de inglês?', 'Quanto fica R$ 1.000 no NCM 0803.10.00?', 'O que você pode fazer?'],
     ]),
     botoes: botoesCapacidades().slice(0, 4),
-    pensamento: pensar([PENSAR.entender], 'Saudação: apresentar recursos'),
+    pensamento: pensar([PENSAR.entender], 'Saudação: cumprimento simples + ponte proativa'),
   }
 }
 
@@ -1174,6 +1147,152 @@ function descricaoLimpa(s: string): string {
     .replace(/<[^>]*>/g, '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+/**
+ * Sanitização final de TODO texto fiscal (anti-alucinação do modelo):
+ * - nunca vaza thinking ("Thinking Process:", "<think>", "Why I ...");
+ * - nunca mistura cabeçalho de um NCM com justificativa de outro.
+ * Fail-closed: se o modelo colou thinking no texto, corta antes de exibir.
+ */
+function textoFiscalLimpo(s: string): string {
+  let out = String(s ?? '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, ' ')
+    .replace(/<\/?think>/gi, ' ')
+    .replace(/^thinking process:.*$/gim, ' ')
+    .replace(/thinking process:/gi, ' ')
+    .replace(/why i (chose|choose|picked).*$/gim, ' ')
+  out = out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  return out
+}
+
+/** Sinais de animal vivo (funil 01 × 02): exige destinação antes de afirmar. */
+const SINAIS_ANIMAL_VIVO = ['frango', 'franga', 'galinha', 'galo', 'pintinho', 'pinto', 'ave', 'aves', 'galinaceo', 'chester', 'peru', 'perua', 'pato', 'ganso', 'codorna', 'boi', 'vaca', 'bezerro', 'porco', 'suino', 'cavalo', 'ovelha', 'cabrito', 'coelho', 'peixe', 'camarao']
+const SINAIS_VIVO = ['vivo', 'viva', 'vivos', 'vivas']
+const SINAIS_CARNE_CORTE = ['carne', 'corte', 'carcaca', 'pedaco', 'pedacos', 'coxa', 'peito', 'asa', 'file', 'costela', 'lombo', 'miudeza', 'desossad', 'cortad']
+const SINAIS_CONSERVACAO = ['fresco', 'fresca', 'resfriad', 'refrigerad', 'congelad', 'salgad', 'defumad', 'cozid']
+const SINAIS_FRUTA = ['fruta', 'banana', 'maca', 'laranja', 'uva', 'manga', 'melao', 'melancia', 'morango', 'abacaxi', 'limao', 'mamao', 'abacate', 'maracuja', 'caqui', 'pera', 'pessego', 'cereja', 'ameixa', 'figo', 'goiaba', 'tangerina', 'mexerica', 'ponkan']
+const SINAIS_FERRO_ACO = ['ferro', 'aco', 'inox', 'inoxidavel', 'fundido', 'chapa', 'barra', 'perfil', 'tubo', 'vergalhao', 'arame', 'laminad']
+
+function temAnimalVivo(texto: string): boolean {
+  const n = String(texto ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return SINAIS_ANIMAL_VIVO.some((s) => n.includes(s)) && SINAIS_VIVO.some((s) => n.includes(s))
+}
+
+/**
+ * Funil desambiguador obrigatório (pedido do usuário):
+ * "O modelo deve perguntar o que é o produto? É animal, é fruta, onde se
+ * classifica, é o que? Que tipo de coisa se trata? Com base nessa premissa
+ * pergunta ao grafo. Produto veio com descrição simples ou composta? Se
+ * animal? É vivo? Em pedaços? Apenas partes?"
+ *
+ * Retorna `null` quando há detalhe suficiente para classificar; senão retorna
+ * a resposta-funil (perguntas + botões) e o orquestrador NÃO classifica.
+ */
+function responderFunilDesambiguacao(termo: string, slots: { composicao: string | null; destinacao: string | null; uso: string | null }, t0: number): RespostaChat | null {
+  const n = String(termo ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  const tokens = n.split(/\s+/).filter(Boolean)
+  const curto = tokens.length <= 2
+  const semDetalhe = !slots.composicao && !slots.destinacao && !slots.uso
+  if (!semDetalhe && !curto) return null
+
+  // Animal + vivo sem destinação: o caso "Frango Vivo" — nunca chutar 3002.
+  if (temAnimalVivo(termo) && semDetalhe) {
+    return {
+      texto:
+        `Para classificar preciso entender **o que é esse produto**:\n` +
+        `• É um **animal vivo** (inteiro, em pé) ou já é **carne/corte** (abatido, em pedaços, só partes)?\n` +
+        `• Se for vivo: qual a **destinação** — reprodução, abate/engorda, postura?\n` +
+        `• Estado: fresco, resfriado, refrigerado ou congelado?\n\n` +
+        `Ex.: "frango vivo para abate", "frango inteiro abatido resfriado" ou "coxa de frango congelada". ` +
+        `Com isso consulto o grafo (cap. 01 vivo × cap. 02 carne) e a base oficial na hora.`,
+      confianca: 0.9,
+      nivel: 'alta',
+      fontes: ['Nomenclatura vigente (TEC) — cap. 01 (animais vivos) × cap. 02 (carnes)'],
+      sugestoes: ['Frango vivo para abate', 'Frango inteiro abatido resfriado', 'Coxa de frango congelada'],
+      botoes: [
+        { rotulo: '🐔 Vivo p/ abate', acao: 'perguntar', alvo: `${termo} para abate` },
+        { rotulo: '🐔 Vivo p/ reprodução', acao: 'perguntar', alvo: `${termo} para reprodução` },
+        { rotulo: '🍗 Abatido / em pedaços', acao: 'perguntar', alvo: `${termo} abatido em pedaços` },
+      ],
+      pensamento: pensar([PENSAR.entender, PENSAR.validar], `Funil: "${termo}" animal vivo sem destinação → perguntar`, Date.now() - t0),
+    }
+  }
+  // Carne/corte sem conservação.
+  if (SINAIS_CARNE_CORTE.some((s) => n.includes(s)) && !SINAIS_CONSERVACAO.some((s) => n.includes(s)) && semDetalhe) {
+    return {
+      texto:
+        `Entendi que é **carne/corte** — mas preciso de 1 detalhe para não errar o capítulo:\n` +
+        `• Estado: **fresco, resfriado/refrigerado ou congelado**?\n` +
+        `• É **inteiro, em pedaços ou só partes/miudezas** (coxa, peito, asa)?\n\n` +
+        `Ex.: "coxa de frango congelada", "carne bovina fresca resfriada".`,
+      confianca: 0.9,
+      nivel: 'alta',
+      fontes: ['Nomenclatura vigente (TEC) — cap. 02 (carnes)'],
+      sugestoes: ['Coxa de frango congelada', 'Carne bovina resfriada'],
+      botoes: [
+        { rotulo: 'Fresco / resfriado', acao: 'perguntar', alvo: `${termo} fresco resfriado` },
+        { rotulo: 'Congelado', acao: 'perguntar', alvo: `${termo} congelado` },
+      ],
+      pensamento: pensar([PENSAR.entender, PENSAR.validar], `Funil: "${termo}" corte sem conservação → perguntar`, Date.now() - t0),
+    }
+  }
+  // Fruta curta sem estado.
+  if ((SINAIS_FRUTA.some((s) => n.includes(s)) || /\bfruta\b/.test(n)) && curto && semDetalhe) {
+    return {
+      texto:
+        `Para classificar a **fruta** preciso saber **o estado**:\n` +
+        `• É **fresca, seca/desidratada, congelada ou processada** (suco, polpa, geleia)?\n` +
+        `• É para **consumo in natura** ou **uso industrial**?\n\n` +
+        `Ex.: "banana fresca para consumo", "uva passa seca".`,
+      confianca: 0.9,
+      nivel: 'alta',
+      fontes: ['Nomenclatura vigente (TEC) — cap. 08 (frutas)'],
+      sugestoes: ['Banana fresca para consumo', 'Uva seca'],
+      botoes: [
+        { rotulo: 'Fresca', acao: 'perguntar', alvo: `${termo} fresca` },
+        { rotulo: 'Seca / processada', acao: 'perguntar', alvo: `${termo} seca` },
+      ],
+      pensamento: pensar([PENSAR.entender, PENSAR.validar], `Funil: "${termo}" fruta sem estado → perguntar`, Date.now() - t0),
+    }
+  }
+  // Ferro/aço curto sem processo.
+  if (SINAIS_FERRO_ACO.some((s) => n.includes(s)) && curto && semDetalhe) {
+    return {
+      texto:
+        `**Ferro/aço** muda de NCM pelo **processo/forma** — me diga:\n` +
+        `• É **bruto** (minério, gusa, granulado), **laminado** (chapa, barra, perfil, tubo) ou **obra pronta** (parafuso, ferramenta, estrutura)?\n` +
+        `• Se laminado: qual forma (chapa, barra, tubo, arame, vergalhão)?\n\n` +
+        `Ex.: "vergalhão de aço", "tubo de ferro fundido", "parafuso sextavado".`,
+      confianca: 0.9,
+      nivel: 'alta',
+      fontes: ['Nomenclatura vigente (TEC) — Seção XV (metais)'],
+      sugestoes: ['Vergalhão de aço', 'Tubo de ferro fundido'],
+      botoes: [
+        { rotulo: 'Bruto', acao: 'perguntar', alvo: `${termo} bruto` },
+        { rotulo: 'Laminado (chapa/barra/tubo)', acao: 'perguntar', alvo: `${termo} laminado` },
+      ],
+      pensamento: pensar([PENSAR.entender, PENSAR.validar], `Funil: "${termo}" metal sem processo → perguntar`, Date.now() - t0),
+    }
+  }
+  // Genérico curto: "o que é o produto?" antes de acionar o grafo.
+  if (curto && semDetalhe) {
+    return {
+      texto:
+        `O que é exatamente **"${termo}"**? Para acertar de primeira, me diga 1–2 detalhes:\n` +
+        `• **O que é / de que é feito** (material/composição — ex.: "100% algodão", "aço inox")\n` +
+        `• **Estado** (vivo, fresco, congelado, bruto, laminado?)\n` +
+        `• **Uso/destino** (para revenda, consumo, plantio, abate, reprodução?)\n\n` +
+        `Ex.: "camiseta 100% algodão para revenda". Com isso pergunto ao grafo e cruzo na base oficial.`,
+      confianca: 0.9,
+      nivel: 'alta',
+      fontes: ['Nomenclatura vigente (TEC)'],
+      sugestoes: [`${termo} para revenda`, 'O que você pode fazer?'],
+      botoes: [{ rotulo: 'Abrir Consulta NCM', acao: 'navegar', alvo: 'consulta' }],
+      pensamento: pensar([PENSAR.entender, PENSAR.validar], `Funil genérico: "${termo}" curto sem detalhe → perguntar`, Date.now() - t0),
+    }
+  }
+  return null
 }
 
 /** A conversa já trouxe uma classificação? (follow-up → resposta compacta). */
@@ -1553,18 +1672,27 @@ async function montarRespostaNcm(
     ? `\n**Trilha do grafo (via:grafo):** ${gate.caminhoGrafo.join(' → ')} (proveniência: ${gate.provenienciaGrafo.map((p) => p.origem).join(', ')})` +
       `${gate.boostGrafo === 'uso_local' ? ` · seu uso (boost: uso_local +${gate.boostValorGrafo ?? 0})` : ''}`
     : ''
-  return {
-    texto:
+  // Anti-contradição (correção Frango Vivo): a justificativa SEMPRE descreve o
+  // NCM do cabeçalho (`gate.ncmValidado` + `resolvido`), nunca a sugestão
+  // determinística anterior (`gate.sugestao`), que pode ser de outro código.
+  // O caminho hierárquico + RGI + vínculo vêm do código validado.
+  const caminhoTxt = gate.ficha?.caminhoTexto ? ` Caminho: ${descricaoLimpa(gate.ficha.caminhoTexto).slice(0, 160)}.` : ''
+  const justificativaCoerente =
+    `Posição ${fmtNcm(gate.ncmValidado)} — "${descricao}"${caminhoTxt} ` +
+    `Enquadramento pela RGI 1 (texto das posições) + RGI 6 (texto das subposições).`
+  const textoBruto =
       `${extra.notaDominio ? `${extra.notaDominio}\n` : ''}` +
       `**Classificação sugerida: NCM ${fmtNcm(gate.ncmValidado)} — ${descricao}**\n` +
       `${composicaoLinha}` +
-      `**Justificativa técnica:** ${gate.sugestao?.justificativa ?? `cruzamento da descrição${extra.composicao ? ' + composição' : ''} com a nomenclatura TEC e as regras gerais de interpretação (RGI 1 + RGI 6)`} ` +
+      `**Justificativa técnica:** ${justificativaCoerente} ` +
       `Enquadramento CST ${decisao.cst} · cClassTrib ${decisao.cClassTrib}.\n` +
       `**Base legal:** ${baseLegalLinha}\n` +
       `**Nível de confiança: ${rotuloNivel(nivel, conf)}**\n` +
       `**Simulação de referência (R$ 1.000,00):** IBS ${fmtMoeda(calc.vIBS)} + CBS ${fmtMoeda(calc.vCBS)} = ${fmtMoeda(calc.total)}` +
       `${atencao ? `${atencao}` : ''}${vaga}${multiAviso}${blocoAlternativas}${blocoGrafo}\n` +
-      `${fecho}`,
+      `${fecho}`
+  return {
+    texto: textoFiscalLimpo(textoBruto),
     codigo: gate.ncmValidado,
     tipoCodigo: 'ncm',
     confianca: conf,
@@ -1638,7 +1766,13 @@ function montarRespostaNbs(gate: ResultadoGateIaServicos, t0: number, notaDomini
   const conf = gate.confiancaIa > 0 ? gate.confiancaIa : 0.4
   const nivel = nivelDeConfianca(conf)
   const ficha = gate.ficha
-  const titulo = descricaoLimpa(ficha?.titulo ?? gate.sugestao?.justificativa ?? 'serviço classificado')
+  // Anti-contradição (espelho do fix NCM Frango Vivo): título e justificativa
+  // SEMPRE descrevem o NBS do cabeçalho (`gate.nbsValidado` + ficha), nunca a
+  // sugestão determinística anterior, que pode ser de outro código.
+  const tituloCoerente = descricaoLimpa(ficha?.titulo ?? 'serviço classificado')
+  const justificativaCoerenteNbs =
+    `Posição NBS ${fmtNbs(gate.nbsValidado)} — "${tituloCoerente}"` +
+    ` Enquadramento pela base NBS × CST × cClassTrib (LC 214/2025).`
   const fecho = compacto
     ? `**Quer detalhar?** Me diga o valor, o CNPJ ou "tem mais algum?" para ver as opções.`
     : `**Próximo passo sugerido:** quer a tributação deste NBS ou simular no Simples? Me diga o valor/CNPJ — e se for empresa, posso listar as atividades pelo CNPJ.`
@@ -1647,16 +1781,17 @@ function montarRespostaNbs(gate: ResultadoGateIaServicos, t0: number, notaDomini
       `${gate.boostGrafo === 'uso_local' ? ` · seu uso (boost: uso_local +${gate.boostValorGrafo ?? 0})` : ''}`
     : ''
   return {
-    texto:
+    texto: textoFiscalLimpo(
       `${notaDominio ? `${notaDominio}\n` : ''}` +
-      `**Classificação sugerida: NBS ${fmtNbs(gate.nbsValidado)} — ${titulo}**\n` +
-      `**Justificativa técnica:** ${gate.sugestao?.justificativa ?? 'cruzamento da descrição do serviço com a base NBS × CST × cClassTrib'} ` +
+      `**Classificação sugerida: NBS ${fmtNbs(gate.nbsValidado)} — ${tituloCoerente}**\n` +
+      `**Justificativa técnica:** ${justificativaCoerenteNbs} ` +
       `${ficha ? `Enquadramento CST ${ficha.cst} · cClassTrib ${ficha.cClassTrib}${ficha.anexo ? ` · Anexo LC 214 ${ficha.anexo}` : ''}.` : ''}\n` +
       `**Base legal:** LC 214/2025${ficha ? ` (CST ${ficha.cst} · cClassTrib ${ficha.cClassTrib})` : ''} + LC 116/2003 (ISS municipal, conforme o serviço)\n` +
       `**Nível de confiança: ${rotuloNivel(nivel, conf)}**\n` +
       `${compacto ? '' : `**Pontos de atenção:** confirme tomador, local da prestação e vigência (transição 2026–2033); ISS varia por município.\n`}` +
       `${blocoGrafoNbs}` +
       `${fecho}`,
+    ),
     codigo: gate.nbsValidado,
     tipoCodigo: 'nbs',
     confianca: conf,
@@ -1861,6 +1996,9 @@ async function responderNcm(pergunta: string, analise: AnaliseChat, historico: M
       }
     }
   }
+  // (Funil desambiguador movido para DEPOIS do gate: ver bloco pós-gate.
+  // Certeza alta do determinístico nunca é bloqueada; gibberish sem pista
+  // nunca vira funil — só ambiguidade real com lastro pergunta.)
   // Aprendizado contínuo: termo já confirmado antes (peso ≥ 2) vira atalho
   // validado pelo resolvedor — mais rápido (sem RAG) e mais assertivo.
   try {
@@ -1930,6 +2068,49 @@ async function responderNcm(pergunta: string, analise: AnaliseChat, historico: M
     destinacao: slotsEfetivos.destinacao ?? undefined,
     uso: slotsEfetivos.uso ?? undefined,
   })
+  // Funil desambiguador (pedido do usuário) — DEPOIS do gate, nunca antes:
+  // - certeza alta do determinístico (ex.: "tangerina" com match literal)
+  //   NUNCA é bloqueada: entrega direto;
+  // - gibberish sem pista oficial (zero candidatos + sem sugestão) NUNCA vira
+  //   funil: cai no sem-lastro honesto;
+  // - ambiguidade real (media/baixa ou hipótese com lastro: "frango vivo" →
+  //   0105 × 3002) PERGUNTA o que é o produto (vivo? pedaços? só partes?
+  //   fruta fresca? ferro bruto ou laminado?) em vez de chutar.
+  // Só pergunta uma vez por assunto (follow-up com detalhe novo segue adiante).
+  if (!perguntaOpcoes && !compacto) {
+    const ehDeterministicoAlto =
+      gate.via === 'deterministico' &&
+      gate.motivo === 'deterministico-alta-confianca' &&
+      gate.ncmValidado != null
+    const semDetalhe =
+      slotsEfetivos.composicao == null && slotsEfetivos.destinacao == null && slotsEfetivos.uso == null
+    if (!ehDeterministicoAlto && semDetalhe) {
+      // Gate fraco = hipótese provisória (confiança < 0.5 ou motivo ancorado/
+      // fraco/empate). Match sólido (ex.: "tangerina" 0.6 ficha absoluta)
+      // nunca vira funil; gibberish sem pista (zero candidatos + sem sugestão)
+      // nunca vira funil — cai no sem-lastro honesto.
+      const gateFraco =
+        gate.confiancaIa < 0.5 || /ancorad|similaridade-fraca|empate/i.test(gate.motivo ?? '')
+      if (gateFraco) {
+        const nLow = String(termoEfetivo ?? '')
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[̀-ͯ]/g, '')
+        const domainHit =
+          temAnimalVivo(termoEfetivo) ||
+          SINAIS_CARNE_CORTE.some((s) => nLow.includes(s)) ||
+          SINAIS_FRUTA.some((s) => nLow.includes(s)) ||
+          SINAIS_FERRO_ACO.some((s) => nLow.includes(s)) ||
+          /\bfruta\b/.test(nLow)
+        const temPista =
+          (gate.candidatos?.length ?? 0) > 0 || gate.sugestao?.ncm_provavel != null
+        if (domainHit || temPista) {
+          const funil = responderFunilDesambiguacao(termoEfetivo, slotsEfetivos, t0)
+          if (funil) return funil
+        }
+      }
+    }
+  }
   // Follow-up sobre opções ("só tem um?") → lista enquadramentos + próximos,
   // sem refazer a classificação nem repetir o agregado.
   if (perguntaOpcoes && compacto && gate.ncmValidado) {
@@ -2287,6 +2468,19 @@ async function responderCnpj(pergunta: string, analise: AnaliseChat, historico: 
   try {
     const { consultarPorCnpj } = await import('./consultar-por-cnpj')
     const v = await consultarPorCnpj(cnpj)
+    // C-010: empresa BAIXADA — sem operação; não simula DAS nem projeta NBS
+    if (/baixad/i.test(v.situacao ?? '')) {
+      return {
+        texto:
+          `CNPJ ${fmtCnpj(cnpj)} — ${v.razaoSocial || 'sem razão social retornada'} — situação **baixada** na Receita.\n\n` +
+          `Empresa baixada não tem operação: não simulo DAS nem projeto NBS para ela. Se reativou ou o dado está desatualizado (cache de até 30 dias), confira na Receita e me chame de novo.`,
+        confianca: 0.95,
+        nivel: 'alta',
+        fontes: ['BrasilAPI (CNPJ)'],
+        botoes: [{ rotulo: 'Abrir Serviços (NBS)', acao: 'navegar', alvo: 'servicos' }],
+        pensamento: pensar([PENSAR.entender, PENSAR.validar], `CNPJ ${fmtCnpj(cnpj)} baixado — trava C-010`, Date.now() - t0),
+      }
+    }
     if (!v.atividades.length) {
       return {
         texto:
@@ -4083,6 +4277,24 @@ async function responderViaModelo(
   perfil?: PerfilMemoria | null,
   intencao = 'generico',
 ): Promise<RespostaChat> {
+  // Regra do usuário: sem saudação em toda mensagem — entregar o que foi pedido,
+  // sem pensamento do modelo no texto. Fiscal (NCM/NBS/cálculo/Simples/dados/
+  // CNPJ/CNAE/legislação/conceito/comparativo/projeção/relatório/conta/tempo) é
+  // 100% determinístico: retorna o template do motor, sem abertura do LLM.
+  // O LLM verbaliza SÓ papo leve/generico (sem números) — e nunca thinking.
+  const FISCAL_DIRETO = new Set([
+    'ncm', 'nbs', 'cnae', 'cnpj', 'calculo', 'simples', 'comparativo', 'projecao',
+    'dados', 'clientes', 'legislacao', 'conceito', 'relatorio', 'conta', 'tempo',
+  ])
+  if (FISCAL_DIRETO.has(intencao)) {
+    return { ...base, viaModelo: false }
+  }
+  // Saudação/capacidades/ajuda são determinísticas (fonte do fine-tuning em
+  // `aurum-ai-recursos.ts`): o LLM nunca substitui o catálogo de ferramentas
+  // — modelo novo sem esse contexto alucina "pesquisas, resumos, tradução".
+  if (intencao === 'saudacao' || intencao === 'capacidades' || intencao === 'ajuda') {
+    return { ...base, viaModelo: false }
+  }
   try {
     const nome = perfil ? primeiroNome(perfil) : null
     // --- Papo leve: resposta integral do modelo, sem números ---
@@ -4091,8 +4303,8 @@ async function responderViaModelo(
         pergunta: String(pergunta).slice(0, 300),
         historico: historicoSeguroLeve(historico),
         sistema:
-          `Você é a Aurinha, a Aurum AI. Responda em português, curto (1-3 linhas), simpático.${nome ? ` Usuário: ${nome}.` : ''}\n` +
-          `Não cite códigos, valores ou artigos. Se pedirem fiscal, peça 1 detalhe.`,
+          `Você é a Aurinha, a Aurum AI do Aurum Tax NCM (fiscal: NCM/NBS/CNAE/CNPJ, IBS/CBS, Simples/DAS/Fator R, XMLs, relatórios). Responda em português, curto (1-3 linhas), simpático.${nome ? ` Usuário: ${nome}.` : ''}\n` +
+          `Não cite códigos, valores ou artigos. Se pedirem fiscal, peça 1 detalhe. Nunca ofereça "pesquisas, resumos, tradução" como principal — seu forte é o fiscal deste sistema. Nunca emita tokens de template (<|im_start|>, papéis user/assistant/system) nem repita a pergunta.`,
         think: false,
         fatos: { codigos: [], valores: [] },
       })
@@ -4107,29 +4319,9 @@ async function responderViaModelo(
         ),
       }
     }
-    // --- Fiscal: abertura do modelo + corpo 100% motor (RAG manda) ---
-    const abertura = await conversarLivre({
-      pergunta: `Escreva UMA linha simpática abrindo a resposta sobre "${intencao}" para: "${String(pergunta).slice(0, 200)}". Sem números, códigos ou valores.`,
-      historico: [],
-      sistema:
-        `Você é a Aurinha, a Aurum AI. Escreva só 1 frase de abertura em português.${nome ? ` Usuário: ${nome}.` : ''}\n` +
-        `Proibido: números, códigos NCM/NBS, valores R$, artigos de lei.`,
-      think: false,
-      fatos: { codigos: [], valores: [] },
-    })
-    if (!abertura) return { ...base, viaModelo: false }
-    const { sanitizarAbertura } = await import('./aurum-ai-livre')
-    const intro = sanitizarAbertura(abertura.texto)
-    if (!intro) return { ...base, viaModelo: false }
-    return {
-      ...base,
-      texto: `${intro}\n\n${base.texto}`,
-      viaModelo: true,
-      pensamento: pensar(
-        [...(base.pensamento?.etapas ?? [PENSAR.entender]), `Aurum AI responde (${abertura.motivo})`],
-        base.pensamento?.detalhe,
-      ),
-    }
+    // Fiscal restante (se chegar aqui): entrega direta do motor, sem saudação
+    // e sem thinking — fazer o que o usuário pediu.
+    return { ...base, viaModelo: false }
   } catch {
     return { ...base, viaModelo: false }
   }
@@ -4144,8 +4336,10 @@ async function polirComLivre(
   modo = 'leve',
   think = false,
 ): Promise<RespostaChat> {
-  void modo
   void think
+  // Orientação (saudação/capacidades/ajuda/fora-escopo) é determinística:
+  // nunca troca o template curado pelo texto livre do modelo.
+  if (modo === 'leve' || modo === 'fora-escopo') return { ...base, viaModelo: false }
   return responderViaModelo(base, pergunta, historico, perfil, 'conversa_leve')
 }
 
@@ -4188,8 +4382,8 @@ async function responderFluxoSimples(
   }
   let resp: RespostaChat
   switch (detectada.intencao) {
-    case 'capacidades': resp = await responderViaModelo(responderCapacidades(texto), texto, historico, perfil, 'capacidades'); break
-    case 'ajuda': resp = await responderViaModelo(responderAjuda(texto), texto, historico, perfil, 'ajuda'); break
+    case 'capacidades': resp = responderCapacidades(texto); break
+    case 'ajuda': resp = responderAjuda(texto); break
     case 'navegar': resp = responderNavegar(detectada); break
     case 'status': resp = responderStatus(); break
     case 'tempo': resp = await responderViaModelo(responderTempo(texto, perfil), texto, historico, perfil, 'tempo'); break
@@ -4200,7 +4394,7 @@ async function responderFluxoSimples(
     default:
       if (ehConversaLeve(texto)) resp = await responderLivreOuBase(responderConversaLeve(texto, perfil), texto, historico, perfil, 'leve')
       else if (detectarForaDeEscopo(texto)) {
-        const baseFora: RespostaChat = { texto: MENSAGEM_FORA_DE_ESCOPO_CHAT, confianca: 1, nivel: 'alta', fontes: [], pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Barreira de escopo: fora do sistema') }
+        const baseFora: RespostaChat = { texto: MENSAGEM_FORA_DE_ESCOPO_CHAT, confianca: 1, nivel: 'alta', fontes: [], sugestoes: ['O que você pode fazer?', 'Tem algum NCM de banana?'], botoes: botoesCapacidades().slice(0, 4), pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Barreira de escopo: fora do sistema') }
         resp = await polirComLivre(baseFora, texto, historico, perfil, 'fora-escopo')
       } else resp = await responderLivreOuBase(responderGenerico(texto, perfil), texto, historico, perfil, 'generico')
   }
@@ -4336,8 +4530,8 @@ async function responderChatFull(texto: string, historico: MensagemHistorico[] =
     void registrarTurnoMemoria(analise.intencao).catch(() => null)
     if (INTENCOES_ORIENTACAO.has(analise.intencao)) {
       switch (analise.intencao) {
-        case 'capacidades': return responderViaModelo(responderCapacidades(texto), texto, historico, perfil, 'capacidades')
-        case 'ajuda': return responderViaModelo(responderAjuda(texto), texto, historico, perfil, 'ajuda')
+        case 'capacidades': return responderCapacidades(texto)
+        case 'ajuda': return responderAjuda(texto)
         case 'navegar': return responderNavegar(analise)
         case 'status': return responderStatus()
         case 'tempo': return responderViaModelo(responderTempo(texto, perfil), texto, historico, perfil, 'tempo')
@@ -4352,7 +4546,7 @@ async function responderChatFull(texto: string, historico: MensagemHistorico[] =
     // Conversa leve curta também bypassa a barreira (ex.: "bom dia!" com "bom").
     if (ehConversaLeve(texto)) return responderLivreOuBase(responderConversaLeve(texto, perfil), texto, historico, perfil, 'leve')
     if (detectarForaDeEscopo(texto)) {
-      const baseFora: RespostaChat = { texto: MENSAGEM_FORA_DE_ESCOPO_CHAT, confianca: 1, nivel: 'alta', fontes: [], pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Barreira de escopo: fora do sistema') }
+      const baseFora: RespostaChat = { texto: MENSAGEM_FORA_DE_ESCOPO_CHAT, confianca: 1, nivel: 'alta', fontes: [], sugestoes: ['O que você pode fazer?', 'Tem algum NCM de banana?'], botoes: botoesCapacidades().slice(0, 4), pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Barreira de escopo: fora do sistema') }
       return polirComLivre(baseFora, texto, historico, perfil, 'fora-escopo')
     }
     switch (analise.intencao) {

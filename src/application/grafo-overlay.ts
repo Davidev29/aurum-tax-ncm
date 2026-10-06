@@ -15,6 +15,7 @@
  */
 
 import { bridge } from '@/infrastructure/bridge'
+import { hashEmitente, removerPII } from '@/ai/guards'
 
 export interface EventoUsoGrafo {
   tipo: string
@@ -100,9 +101,10 @@ export function registrarUsoLocal(evento: EventoUsoGrafo): void {
   try {
     const e: EventoUsoGrafo = {
       tipo: String(evento?.tipo || 'NCM-ESCOLHIDO').slice(0, 40),
-      ...(evento?.termo ? { termo: String(evento.termo).slice(0, 120) } : {}),
+      // C-008: termo sem PII, emitente como hash — nunca CNPJ cru no overlay/IPC
+      ...(evento?.termo ? { termo: removerPII(String(evento.termo)).slice(0, 120) } : {}),
       ...(evento?.codigo ? { codigo: String(evento.codigo).slice(0, 20) } : {}),
-      ...(evento?.emitente ? { emitente: String(evento.emitente).replace(/\D+/g, '').slice(0, 14) } : {}),
+      ...(evento?.emitente ? { emitente: hashEmitente(evento.emitente) } : {}),
       ...(evento?.peso !== undefined ? { peso: Number(evento.peso) || 0 } : {}),
     }
     if (!e.codigo) return
@@ -122,7 +124,7 @@ export function registrarUsoLocal(evento: EventoUsoGrafo): void {
       const de = e.termo
         ? `Termo:${String(e.termo).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim().slice(0, 80)}`
         : e.emitente
-          ? `Emitente:${String(e.emitente).replace(/\D+/g, '').slice(0, 14)}`
+          ? `Emitente:${e.emitente}`
           : `Uso:${e.tipo}`
       const ehDemote = /negativo|rejeit/i.test(e.tipo) || Number(e.peso) < 0
       const aresta: ArestaLocal = {
@@ -133,7 +135,7 @@ export function registrarUsoLocal(evento: EventoUsoGrafo): void {
         peso: ehDemote ? 0 : Math.abs(Number(e.peso) || 0.1),
         criadoEm: agoraIso(),
         ...(ehDemote ? { feedback: 'negativo' } : {}),
-        ...(e.emitente ? { emitente: String(e.emitente).replace(/\D+/g, '').slice(0, 14) } : {}),
+        ...(e.emitente ? { emitente: e.emitente } : {}),
         ...(e.termo ? { termo: String(e.termo).slice(0, 120) } : {}),
       }
       const atual = lerLocal()

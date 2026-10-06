@@ -325,13 +325,22 @@ function montarPromptConversa(perfil, sistema, historico, pergunta, think) {
   return s
 }
 
-/** Stops de geração por template (o worker usa como `stopGenerationTriggers`). */
+/** Stops de geração por template (o worker usa como `stopGenerationTriggers`).
+ * Universais (todas as famílias): o modelo novo pode chegar sem `modelo.json`
+ * atualizado — parar em QUALQUER token de template evita eco de papéis. */
 function stopsParaTemplate(perfil) {
   const tpl = String((perfil && perfil.templateChat) || 'generico')
-  if (tpl === 'llama3') return ['<|eot_id|>', '<|start_header_id|>', '\n\n\n']
-  if (tpl === 'mistral') return ['</s>', '[INST]', '\n\n\n']
-  if (tpl === 'phi' || tpl === 'gemma' || tpl === 'generico') return ['\nUser:', '\nSystem:', '\n\n\n']
-  return ['<|im_end|>', '<|im_start|>', '\n\n\n']
+  const universais = [
+    '<|im_end|>', '<|im_start|>',
+    '<|eot_id|>', '<|start_header_id|>', '<|end_header_id|>', '<|begin_of_text|>',
+    '</s>', '[INST]', '[/INST]',
+    '\nUser:', '\nSystem:', '\nAssistant:',
+    '\n\n\n',
+  ]
+  if (tpl === 'llama3') return ['<|eot_id|>', '<|start_header_id|>', '<|end_header_id|>', '<|im_end|>', '<|im_start|>', '\n\n\n']
+  if (tpl === 'mistral') return ['</s>', '[INST]', '<|im_end|>', '<|im_start|>', '\n\n\n']
+  if (tpl === 'phi' || tpl === 'gemma' || tpl === 'generico') return ['\nUser:', '\nSystem:', '\nAssistant:', '<|im_end|>', '<|im_start|>', '</s>', '\n\n\n']
+  return universais
 }
 
 /**
@@ -345,9 +354,19 @@ function limparTextoLivreGenerico(bruto) {
   s = s.replace(/<\/?think>/gi, ' ')
   s = s.replace(/<\|im_(start|end)\|>/g, ' ')
   s = s.replace(/\|im_end\|/g, ' ')
+  s = s.replace(/<\|\s*im_?\s*(start|end)\s*\|?>/gi, ' ')
+  s = s.replace(/\|\s*im_?\s*(start|end)\s*\|?/gi, ' ')
   s = s.replace(/<\|(begin_of_text|start_header_id|end_header_id|eot_id)\|>/g, ' ')
   s = s.replace(/\[\/?INST\]/g, ' ')
   s = s.replace(/<\/?s>/g, ' ')
+  s = s
+    .split('\n')
+    .map((l) => {
+      if (/^[<|>│|\[\]]*\s*(system|user|assistant)\s*:?\s*[<|>]*$/.test(l.trim())) return ''
+      return l.replace(/^[<|>│\s]*\b(system|user|assistant)\b\s*:?\s*/gi, '')
+    })
+    .join('\n')
+  s = s.replace(/[\s│|<>]+\b(system|user|assistant)\b\s*:?\s*$/gim, '')
   s = s.replace(/\b(system|user|assistant)\s*:/gi, ' ')
   const cortes = ['(End of', '[End of', '</code>', '<code>', 'Okay, the user', 'translates to', 'I need to', 'I should respond']
   for (const c of cortes) {

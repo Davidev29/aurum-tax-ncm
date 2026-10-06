@@ -74,29 +74,32 @@ export async function aliquotasPorNcm(ncm: string): Promise<{ ibs: number; cbs: 
 /**
  * Alíquotas de referência DINÂMICAS (mapeamento completo NCM → IBS/CBS).
  * Derivadas de `calcularTributos` — nunca fixas.
+ *
+ * C-011 (fail-closed): os métodos ABAIXO LANÇAM em vez de devolver a fração
+ * sub-1% da planilha (`vinculo.aliquotaIBS/CBS`, ex. 0.0004). Alimentar essa
+ * fração como `refIBS/refCBS` zeraria o imposto com cara de conta certa.
+ * Referência cheia é parâmetro global (REF_DEFAULT 19/9 + edição na
+ * Calculadora). Nenhum caminho fiscal consome este objeto (0 usos em src/).
  */
 export const ALIQUOTAS_REF = {
   /**
-   * Alíquota IBS de referência para um NCM específico (8 dígitos).
-   * Retorna 0 se o NCM não está na base oficial (regra geral).
+   * BLOQUEADO (C-011): nunca usar fração de vínculo como referência.
+   * Use REF_DEFAULT (19/9) ou a taxa da sessão/nota.
    */
-  async ibs(ncm: string): Promise<number> {
-    return (await aliquotasPorNcm(ncm)).ibs
+  async ibs(_ncm: string): Promise<number> {
+    throw new Error('ALIQUOTAS_REF.ibs bloqueado (C-011): fração de vínculo sub-1% não é referência — use REF_DEFAULT 19/9 ou a taxa da sessão')
   },
   /**
-   * Alíquota CBS de referência para um NCM específico (8 dígitos).
-   * Retorna 0 se o NCM não está na base oficial (regra geral).
+   * BLOQUEADO (C-011): ver `ibs`.
    */
-  async cbs(ncm: string): Promise<number> {
-    return (await aliquotasPorNcm(ncm)).cbs
+  async cbs(_ncm: string): Promise<number> {
+    throw new Error('ALIQUOTAS_REF.cbs bloqueado (C-011): fração de vínculo sub-1% não é referência — use REF_DEFAULT 19/9 ou a taxa da sessão')
   },
   /**
-   * Soma IBS+CBS de referência para um NCM específico (8 dígitos).
-   * Retorna 0 se o NCM não está na base oficial (regra geral).
+   * BLOQUEADO (C-011): ver `ibs`.
    */
-  async soma(ncm: string): Promise<number> {
-    const { ibs, cbs } = await aliquotasPorNcm(ncm)
-    return ibs + cbs
+  async soma(_ncm: string): Promise<number> {
+    throw new Error('ALIQUOTAS_REF.soma bloqueado (C-011): fração de vínculo sub-1% não é referência — use REF_DEFAULT 19/9 ou a taxa da sessão')
   },
 }
 

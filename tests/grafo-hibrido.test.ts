@@ -112,21 +112,37 @@ describe('grafo-hibrido — (a) vetor onde o lexical falha', () => {
     expect(hyb.cypher).toContain('vetor=hnsw')
   })
 
-  it('real: FTS-puro sem NBS-educação × híbrido com NBS + caminho CNAE→NBS', async () => {
+  it('real: FTS-puro com NBS-educação via curadoria × híbrido com NBS + caminho CNAE→NBS', async () => {
+    // Premissa atualizada (fine-tuning no grafo): os pins de curadoria
+    // (Termo→NBS, `SINONIMO_NBS`) fazem o FTS-puro resolver NBS-educação com
+    // caminho auditável NBS→CCT→Anexo — antes ele não achava nada e só o
+    // híbrido (vetor) achava. O contraste agora é FTS(curadoria) × vetor+CNAE.
     const fts = await grafo.grafoConsultar(
       { texto: 'aula de ingles online', k: 12, modoVetorForcado: 'fts-puro' },
       {},
     )
     expect(fts.ok).toBe(true)
     expect(fts.modoVetor).toBe('fts-puro')
-    expect(fts.candidatos.filter((c: { tipo: string; codigo: string }) => c.tipo === 'NBS' && /^1220/.test(c.codigo))).toEqual([])
+    const ftsNbs = fts.candidatos.filter((c: { tipo: string; codigo: string }) => c.tipo === 'NBS' && /^1220/.test(c.codigo))
+    expect(ftsNbs.length).toBeGreaterThan(0)
+    const ftsAlvo = ftsNbs.find((c: { codigo: string }) => c.codigo === '122051300')
+    expect(ftsAlvo).toBeDefined()
+    expect(ftsAlvo.scores.fts).toBeGreaterThan(0)
+    expect(ftsAlvo.scores.vetor).toBe(0)
+    expect(ftsAlvo.caminho).toEqual(['NBS:122051300', 'CCT:200028', 'Anexo:II'])
 
     const hyb = await grafo.grafoConsultar({ texto: 'aula de ingles online', k: 12 }, {})
     expect(hyb.ok).toBe(true)
     expect(hyb.modoVetor).toBe('hnsw')
     expect(hyb.embedding?.modo).toBe('hash-fallback')
     const cods = hyb.candidatos.map((c: { codigo: string }) => c.codigo)
-    expect(cods).toContain('122051900')
+    // 122051300 (idiomas, curadoria) lidera com FTS+vetor; 122051900 saiu do
+    // top-12, deslocado por matches mais relevantes — o vetor segue achando
+    // NBS-educação com caminho completo + CNAEs com ponte CNAE→NBS.
+    expect(cods).toContain('122051300')
+    const nbsHyb = hyb.candidatos.find((c: { codigo: string }) => c.codigo === '122051300')
+    expect(nbsHyb.scores.vetor).toBeGreaterThan(0)
+    expect(nbsHyb.caminho).toEqual(['NBS:122051300', 'CCT:200028', 'Anexo:II'])
     expect(cods).toContain('8593700')
     const cnae = hyb.candidatos.find((c: { codigo: string }) => c.codigo === '8593700')
     expect(cnae.scores.vetor).toBeGreaterThan(0)

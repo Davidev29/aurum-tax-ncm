@@ -201,6 +201,12 @@ export async function buscarCnpjsEmLote(
   for (const bruto of cnpjs) {
     const c = norm(bruto)
     if (!c || vistos.has(c)) continue
+    if (c.length === 14 && !ehCnpjValidoLocal(c)) {
+      // DV inválido: erro por item sem gastar rede
+      vistos.add(c)
+      unicos.push(c)
+      continue
+    }
     vistos.add(c)
     unicos.push(c)
   }
@@ -234,6 +240,7 @@ export async function buscarCnpjsEmLote(
 export function extrairCnpjsDeTexto(texto: string): string[] {
   // Token a token (nunca atravessa quebras): cada CNPJ mascarado vira 14
   // dígitos após `norm`; sequências longas deslizam janela de 14.
+  // C-008 lateral: filtra DV antes de enfileirar (não gasta fetch/rate-limit com impossível).
   const out: string[] = []
   const vistos = new Set<string>()
   for (const token of String(texto ?? '').split(/[\s;,|]+/)) {
@@ -241,11 +248,25 @@ export function extrairCnpjsDeTexto(texto: string): string[] {
     if (d.length < 14) continue
     for (let i = 0; i + 14 <= d.length; i++) {
       const c = d.slice(i, i + 14)
-      if (!vistos.has(c)) {
+      if (!vistos.has(c) && ehCnpjValidoLocal(c)) {
         vistos.add(c)
         out.push(c)
       }
     }
   }
   return out
+}
+
+/** DV local inline (evita ciclo de import com domain/services/cnpj). */
+function ehCnpjValidoLocal(d: string): boolean {
+  if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false
+  const calc = (base: string, pesos: number[]): number => {
+    let soma = 0
+    for (let i = 0; i < base.length; i++) soma += Number(base[i]) * pesos[i]
+    const resto = soma % 11
+    return resto < 2 ? 0 : 11 - resto
+  }
+  const d1 = calc(d.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+  const d2 = calc(`${d.slice(0, 12)}${d1}`, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+  return d[12] === String(d1) && d[13] === String(d2)
 }

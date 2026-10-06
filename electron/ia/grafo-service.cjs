@@ -536,7 +536,8 @@ function construirIndices(nodos, arestas) {
     if (!a || typeof a.de !== 'string' || typeof a.para !== 'string') continue
     if (!adjSaida.has(a.de)) adjSaida.set(a.de, [])
     adjSaida.get(a.de).push(a)
-    if (a.tipo === 'SINONIMO_DE' && typeof a.de === 'string' && a.de.startsWith('Termo:')) {
+    if ((a.tipo === 'SINONIMO_DE' || a.tipo === 'SINONIMO_NBS') && typeof a.de === 'string' &&
+      a.de.startsWith('Termo:')) {
       const termo = normalizar(a.de.slice('Termo:'.length))
       if (termo) {
         if (!aliasTermo.has(a.para)) aliasTermo.set(a.para, new Set())
