@@ -9,13 +9,13 @@ são ignorados (ver `.gitignore`: `*.gguf`, `recursos-ia/indice-ncm/*`,
 ## Onde colocar o modelo (camada de compatibilidade — qualquer GGUF)
 
 ```text
-recursos-ia/modelo/<qualquer-nome>.gguf   (ex.: Qwen3-0.6B-Q8_0.gguf, ~640MB, Q8_0, fonte: https://huggingface.co/Qwen/Qwen3-0.6B-GGUF)
-recursos-ia/modelo/modelo.json            (opcional — overrides; copie de modelo.json.example)
+recursos-ia/modelo/<qualquer-nome>.gguf   (oficial: Qwen3.5-2B-Q4_K_M.gguf, ~1221MB, Q4_K_M, pin em modelo/modelo.json)
+recursos-ia/modelo/modelo.json            (pin oficial do modelo + overrides; copie de modelo.json.example)
 ```
 
-1. Copie QUALQUER arquivo `.gguf` para `recursos-ia/modelo/` (apague o antigo).
-   A descoberta é automática: `modelo.json:arquivo` → env `AURUM_IA_MODEL` →
-   legado `Qwen3-0.6B-Q8_0.gguf` → qualquer `*.gguf`. Ver
+1. O modelo oficial é o **Qwen3.5-2B-Q4_K_M** (pin em `modelo.json`, família `qwen3`, ctx 4096).
+   A descoberta continua automática: `modelo.json:arquivo` → env `AURUM_IA_MODEL` →
+   legado `Qwen3-0.6B-Q8_0.gguf` (compat) → qualquer `*.gguf`. Ver
    `docs/camada-modelo-rag.md` + `electron/ia/perfil-modelo.cjs`.
 2. Valide a integridade contra `recursos-ia/CHECKSUMS.txt`:
    ```powershell
@@ -30,17 +30,19 @@ recursos-ia/modelo/modelo.json            (opcional — overrides; copie de mode
 
 | Caminho | Conteúdo | Versionado? |
 |---|---|---|
-| `modelo/Qwen3-0.6B-Q8_0.gguf` | LLM local Q8_0 (~640MB) | NÃO (`*.gguf`) |
+| `modelo/Qwen3.5-2B-Q4_K_M.gguf` | LLM local Q4_K_M (~1221MB) | NÃO (`*.gguf`) |
 | `embedding/` | `all-MiniLM-L6-v2` (06-03) | NÃO |
 | `indice-ncm/` | Índice Vectra <200MB (06-03) | NÃO |
 | `dados-brutos/ncm-para-ia.json` | Base 2335 NCMs (06-02) | SIM (pequeno) |
 | `CHECKSUMS.txt` | SHA256 dos artefatos | SIM |
 
-## Orçamento (IA-04, Qwen3-0.6B-Q8_0)
+## Orçamento (IA-04, Qwen3.5-2B-Q4_K_M — medido 2026-10-06)
 
-Inferência <8s CPU moderna (teto 15s x86_64 básico), RAM processo ~1.4GB
-(teto 1.8GB). Medido via `scripts/testar-modelo-ia.mjs` — ver
-`docs/diagnostico-fase-3.md` (orçamento anterior do AILO-152M: <3s/~300MB).
+Inferência 0.9–2.7s/caso CPU moderna (teto 15s), load ~8.6s, RAM processo
+~2.2GB (teto 2.6GB). Medido via `scripts/testar-modelo-ia.mjs` — ver
+`docs/diagnostico-fase-3.md` (orçamento anterior do AILO-152M: <3s/~300MB;
+intermediário Qwen3-0.6B-Q8_0: load 5.6s, ~0.4s/caso, ~1.3GB).
+Requisito de máquina: 8 GB RAM recomendados (worker IA + grafo + SO).
 
 ## Como recriar cada artefato (06-01)
 
@@ -49,10 +51,10 @@ Inferência <8s CPU moderna (teto 15s x86_64 básico), RAM processo ~1.4GB
 | `dados-brutos/ncm-para-ia.json` | `scripts/preparar-dados-ia.mjs` (06-02) | `public/base/*.json` |
 | `embedding/` (pesos) | download 06-03 (`all-MiniLM-L6-v2`, fallback `multilingual-e5-small`) | HuggingFace (uma vez, depois offline) |
 | `indice-ncm/` (Vectra) | `scripts/gerar-indice-ia.mjs` (06-03) | `dados-brutos/` + `embedding/` |
-| `modelo/*.gguf` | aquisição manual 06-04 | HuggingFace Qwen3-0.6B-GGUF (~640MB) |
+| `modelo/*.gguf` | aquisição manual (oficial Qwen3.5-2B-Q4_K_M, ~1221MB) | HuggingFace (Qwen3.5-2B-GGUF) |
 
 ```powershell
-certutil -hashfile recursos-ia/modelo/Qwen3-0.6B-Q8_0.gguf SHA256
+certutil -hashfile recursos-ia/modelo/Qwen3.5-2B-Q4_K_M.gguf SHA256
 # colar o hash em CHECKSUMS.txt no lugar do placeholder
 ```
 

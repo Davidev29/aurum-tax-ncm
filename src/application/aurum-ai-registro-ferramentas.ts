@@ -195,6 +195,19 @@ export const REGISTRO_FERRAMENTAS: SpecFerramenta[] = [
     guardrail: 'DV inválido → pede correção, nunca consulta. Única ferramenta com rede.',
   },
   {
+    nome: 'grafoConsultar',
+    descricao: 'Consulta o grafo fiscal local (FTS + vetor + 2-hops): candidatos NCM/NBS/CNAE + caminho multi-hop auditável + cypher + proveniência + anoReferencia. Grafo primeiro, resolvedor valida.',
+    dominio: 'fiscal',
+    leitura: true,
+    parametros: {
+      texto: { tipo: 'string', descricao: 'Descrição livre ou código (NCM/CNAE/NBS).', obrigatorio: true, exemplo: 'carne bovina' },
+      k: { tipo: 'integer', descricao: 'Top-k (padrão 5, máx 30).', exemplo: '5' },
+      anoReferencia: { tipo: 'integer', descricao: 'Ano de referência: 2026, 2027 ou 2033.', exemplo: '2033' },
+    },
+    exemplos: ['grafoConsultar({"texto":"carne bovina","k":5})', 'grafoConsultar({"texto":"aula de inglês online"})'],
+    guardrail: 'Sem `.lbug` → ok:false + fallback lexical. Caminho só com proveniência; ranking nunca vira confiança fiscal.',
+  },
+  {
     nome: 'verificarCadastroCnpj',
     descricao: 'Verifica se um CNPJ está no banco local; se não está, OFERECE o cadastro (grava só após confirmação explícita).',
     dominio: 'cadastro',
@@ -369,9 +382,9 @@ export function listarFerramentasParaModelo(dominios?: DominioFerramenta[]): Arr
 /** Roteamento intenção do detector → ferramentas candidatas (auditoria). */
 export function ferramentasParaIntencao(intencao: AnaliseChat['intencao']): string[] {
   switch (intencao) {
-    case 'ncm': return ['consultarNCM', 'detalharCodigo', 'calcularIBSCBS']
-    case 'nbs': return ['consultarNBS', 'detalharCodigo']
-    case 'cnae': return ['consultarCnaeNbs', 'consultarCNAE', 'calcularSimples']
+    case 'ncm': return ['grafoConsultar', 'consultarNCM', 'detalharCodigo', 'calcularIBSCBS']
+    case 'nbs': return ['grafoConsultar', 'consultarNBS', 'detalharCodigo']
+    case 'cnae': return ['grafoConsultar', 'consultarCnaeNbs', 'consultarCNAE', 'calcularSimples']
     case 'cnpj': return ['consultarCNPJ', 'verificarCadastroCnpj', 'calcularSimples']
     case 'cadastrar_produto': return ['cadastrarProdutoAssistido', 'consultarNCM']
     case 'clientes': return ['consultarClientes', 'consultarDadosXml']
@@ -409,6 +422,33 @@ export async function executarFerramenta(
   const str = (v: unknown): string => String(v ?? '').trim()
   try {
     switch (nome) {
+      case 'grafoConsultar': {
+        const texto = str(args.texto ?? args.termo ?? args.consulta ?? '')
+        if (!texto) return { ok: false, ferramenta: nome, erro: 'texto-ausente' }
+        const kBruto = Number(args.k)
+        const k = Number.isFinite(kBruto) && kBruto > 0 ? Math.min(30, Math.trunc(kBruto)) : 5
+        const anoBruto = Number(args.anoReferencia)
+        const ano = Number.isFinite(anoBruto) && anoBruto > 0 ? Math.trunc(anoBruto) : undefined
+        const { grafoConsultarGrafo } = await import('@/infrastructure/bridge')
+        const r = await grafoConsultarGrafo(texto, k, ano)
+        if (!r.ok) return { ok: true, ferramenta: nome, dados: { ok: false, fallback: 'lexical', motivo: r.motivo ?? null } }
+        // Cita caminho + ano + proveniência (só com proveniência).
+        const dados = {
+          ok: true,
+          cypher: r.cypher,
+          caminhos: r.caminhos,
+          anoReferencia: ano ?? null,
+          candidatos: r.candidatos.map((c) => ({
+            codigo: c.codigo,
+            tipo: c.tipo,
+            descricao: c.descricao,
+            caminho: c.caminho,
+            proveniencia: (c as { proveniencia?: unknown }).proveniencia ?? [],
+            boost: (c as { boost?: unknown }).boost ?? null,
+          })),
+        }
+        return { ok: true, ferramenta: nome, dados }
+      }
       case 'consultarNCM':
       case 'consultarNBS':
       case 'detalharCodigo':

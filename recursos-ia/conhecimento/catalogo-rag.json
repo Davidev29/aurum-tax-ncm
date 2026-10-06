@@ -8,7 +8,11 @@
       "tipo": "lexical-bm25",
       "cobre": "2335 vínculos NCM (capítulo + nomenclatura + vínculo cClassTrib)",
       "quandoUsar": "consultarNCM: produto descrito ou NCM de 8 dígitos",
-      "ferramentas": ["consultarNCM", "detalharCodigo", "calcularIBSCBS"]
+      "ferramentas": [
+        "consultarNCM",
+        "detalharCodigo",
+        "calcularIBSCBS"
+      ]
     },
     {
       "id": "base-ncm-ia",
@@ -16,7 +20,10 @@
       "tipo": "fichas-oficiais",
       "cobre": "2335 fichas (descricaoExpandida + nomenclatura + capítulo + cClassTrib)",
       "quandoUsar": "enriquecer candidatos do índice com nome/vínculo",
-      "ferramentas": ["consultarNCM", "detalharCodigo"]
+      "ferramentas": [
+        "consultarNCM",
+        "detalharCodigo"
+      ]
     },
     {
       "id": "nbs-servicos",
@@ -24,7 +31,10 @@
       "tipo": "tabela-viva",
       "cobre": "112+ vínculos NBS (9 dígitos × CST × cClassTrib, 23 grupos)",
       "quandoUsar": "consultarNBS: serviço descrito ou NBS de 9 dígitos",
-      "ferramentas": ["consultarNBS", "detalharCodigo"]
+      "ferramentas": [
+        "consultarNBS",
+        "detalharCodigo"
+      ]
     },
     {
       "id": "cnae-anexo",
@@ -32,7 +42,10 @@
       "tipo": "tabela-viva",
       "cobre": "1090 CNAEs × Anexo Simples + Fator R",
       "quandoUsar": "consultarCNAE: CNAE de 7 dígitos → Anexo",
-      "ferramentas": ["consultarCNAE", "calcularSimples"]
+      "ferramentas": [
+        "consultarCNAE",
+        "calcularSimples"
+      ]
     },
     {
       "id": "lc214",
@@ -40,7 +53,10 @@
       "tipo": "corpus-curado",
       "cobre": "Artigos da LC 214/2025 (corpus offline embarcado)",
       "quandoUsar": "explicarArtigoLC214: artigo citado ou tema livre",
-      "ferramentas": ["explicarArtigoLC214", "explicarConceito"]
+      "ferramentas": [
+        "explicarArtigoLC214",
+        "explicarConceito"
+      ]
     },
     {
       "id": "conhecimento-curadoria",
@@ -48,7 +64,10 @@
       "tipo": "curadoria",
       "cobre": "Pins termo→NCM (peso 500), sinônimos, marcas/siglas, erros comuns, frases-modelo (+ dicionario, marcas-siglas, erros-comuns, frases-modelo, pesos)",
       "quandoUsar": "expansão de consulta + pins do RAG + correção ortográfica",
-      "ferramentas": ["consultarNCM", "consultarNBS"]
+      "ferramentas": [
+        "consultarNCM",
+        "consultarNBS"
+      ]
     },
     {
       "id": "glossario-pt-en",
@@ -56,7 +75,9 @@
       "tipo": "dicionario-bilingue",
       "cobre": "Frases 3/2g + termos PT↔EN + en_para_pt curado",
       "quandoUsar": "retrieval: consulta EN ancora no PT oficial (buscar + gate)",
-      "ferramentas": ["consultarNCM"]
+      "ferramentas": [
+        "consultarNCM"
+      ]
     },
     {
       "id": "notas-xml",
@@ -64,7 +85,11 @@
       "tipo": "dados-usuario",
       "cobre": "Movimento importado: fornecedores, produtos, NCM/CFOP/CST, reduções, diferidos, períodos",
       "quandoUsar": "consultarDadosXml / gerarRelatorioDados: pergunta sobre o movimento",
-      "ferramentas": ["consultarDadosXml", "gerarRelatorioDados", "consultarClientes"]
+      "ferramentas": [
+        "consultarDadosXml",
+        "gerarRelatorioDados",
+        "consultarClientes"
+      ]
     },
     {
       "id": "empresas",
@@ -72,7 +97,11 @@
       "tipo": "cadastro+rede",
       "cobre": "Empresas locais + CNAEs/atividades via CNPJ",
       "quandoUsar": "consultarCNPJ / verificarCadastroCnpj / consultarClientes",
-      "ferramentas": ["consultarCNPJ", "verificarCadastroCnpj", "consultarClientes"]
+      "ferramentas": [
+        "consultarCNPJ",
+        "verificarCadastroCnpj",
+        "consultarClientes"
+      ]
     },
     {
       "id": "tabelas-simples",
@@ -80,7 +109,10 @@
       "tipo": "motor-calculo",
       "cobre": "Anexos I–V, faixas RBT12, Fator R 0.28, CBS ref 0.088, DAS convencional/híbrido",
       "quandoUsar": "calcularSimples / simularComparativo",
-      "ferramentas": ["calcularSimples", "simularComparativo"]
+      "ferramentas": [
+        "calcularSimples",
+        "simularComparativo"
+      ]
     },
     {
       "id": "projecao-dividida",
@@ -88,7 +120,9 @@
       "tipo": "motor-calculo",
       "cobre": "Projeção mãe × nova: RBT12 deslizante, DAS do motor, economia, payback, alertas sublimite/Fator R/grupo econômico",
       "quandoUsar": "simularCenarioDividido: dividir o faturamento em duas empresas / abrir nova empresa",
-      "ferramentas": ["simularCenarioDividido"]
+      "ferramentas": [
+        "simularCenarioDividido"
+      ]
     },
     {
       "id": "motor-ibs-cbs",
@@ -96,7 +130,10 @@
       "tipo": "motor-calculo",
       "cobre": "calcularTributos(valorBase, redIBS, redCBS, refIBS, refCBS)",
       "quandoUsar": "calcularIBSCBS: código + base",
-      "ferramentas": ["calcularIBSCBS", "detalharCodigo"]
+      "ferramentas": [
+        "calcularIBSCBS",
+        "detalharCodigo"
+      ]
     },
     {
       "id": "sistema-assistido",
@@ -104,7 +141,29 @@
       "tipo": "runtime",
       "cobre": "Conta básica, cadastro assistido de produto, gráficos, relatórios, navegação, tempo, papo leve e barreira de escopo",
       "quandoUsar": "fluxos com UI/store ou escrita assistida — o orquestrador continua dono da execução",
-      "ferramentas": ["calcularContaBasica", "cadastrarProdutoAssistido", "gerarGrafico", "gerarRelatorio", "navegarPara", "responderTempo", "responderLeve", "recusarForaDeEscopo"]
+      "ferramentas": [
+        "calcularContaBasica",
+        "cadastrarProdutoAssistido",
+        "gerarGrafico",
+        "gerarRelatorio",
+        "navegarPara",
+        "responderTempo",
+        "responderLeve",
+        "recusarForaDeEscopo"
+      ]
+    },
+    {
+      "id": "grafo-fiscal",
+      "arquivo": "recursos-ia/grafo/grafo.kgl.json + recursos-ia/grafo/describe.txt",
+      "tipo": "grafo-local",
+      "cobre": "NCM→SH6→SH4→Cap→CCT→Anexo→Artigo + CNAE→NBS→CCT (nodos/arestas com proveniência por aresta)",
+      "quandoUsar": "candidatos + caminho multi-hop auditável antes do resolvedor (via:grafo)",
+      "ferramentas": [
+        "consultarNCM",
+        "consultarNBS",
+        "consultarCNAE",
+        "detalharCodigo"
+      ]
     }
   ]
 }

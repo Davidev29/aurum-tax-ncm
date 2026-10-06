@@ -39,6 +39,25 @@ export interface CandidatoIa {
   descricao: string
   /** Pontuação do RAG (quando vindo de `ia:buscar`). */
   score?: number
+  /**
+   * Trilha do grafo (Phase 10-05 / GRAFO-05): caminho multi-hop + cypher +
+   * proveniência + boost. Presente SÓ quando o candidato veio do grafo
+   * (`via:grafo`); lexical puro nunca carrega estes campos (fallback
+   * bit-idêntico).
+   */
+  caminhoGrafo?: string[]
+  provenienciaGrafo?: Array<{
+    de: string
+    para: string
+    tipo: string
+    origem: string
+    confianca: number
+    anoReferencia?: number | null
+  }>
+  cypherGrafo?: string
+  boostGrafo?: 'uso_local' | null
+  boostValorGrafo?: number
+  viaGrafo?: boolean
 }
 
 /** Decisão do worker IA (`NÃO SEI` sob baixa similaridade/confiança). */
@@ -106,6 +125,73 @@ export interface IaBridge {
     pergunta: string,
     opts?: { sistema?: string; historico?: { papel: string; texto: string }[]; think?: boolean; maxTokens?: number; temperature?: number },
   ): Promise<{ ok: boolean; texto?: string; motivo?: string; erro?: string; mock?: boolean }>
+  /**
+   * Grafo fiscal local (Phase 10-02 / GRAFO-02): FTS + expansão 2-hops com
+   * caminho auditável (`via:grafo` em 10-05). Sem `.lbug` → `ok:false` +
+   * `fallback:'lexical'`. Opcional (builds antigos não expõem `ia:grafo`).
+   */
+  grafoConsultar?(texto: string, k?: number, anoReferencia?: number, opts?: { modoVetor?: 'hibrido' | 'fts-puro' }): Promise<ResultadoGrafoBridge>
+  /**
+   * Overlay de aprendizado local (Phase 10-05 / GRAFO-08): registra uso
+   * (`escolha em <select>` lote/consulta, `ia_feedback` ±, CNAE via CNPJ).
+   * Best-effort, nunca lança — sem canal vira no-op.
+   */
+  registrarUsoGrafo?(evento: {
+    tipo: string
+    termo?: string | null
+    codigo?: string | null
+    emitente?: string | null
+    peso?: number
+  }): Promise<{ ok: boolean; erro?: string }>
+}
+
+/** Candidato do grafo com caminho multi-hop auditável. */
+export interface CandidatoGrafo {
+  codigo: string
+  tipo: string
+  descricao: string
+  /** Ranking interno (base + boost, teto 0.3) — NUNCA confiança fiscal. */
+  score: number
+  caminho: string[]
+  /**
+   * Proveniência por aresta do caminho (origem + confiança + ano).
+   * OBRIGATÓRIA para exibir o caminho (nunca exibir sem proveniência).
+   */
+  proveniencia?: Array<{
+    de: string
+    para: string
+    tipo: string
+    origem: string
+    confianca: number
+    anoReferencia?: number | null
+  }>
+  /** Decomposição do ranking p/ debug (Phase 10-03 / GRAFO-03). */
+  scores?: { fts: number; vetor: number; pagerank: number }
+  /** Base antes do boost de uso local. */
+  scoreBase?: number
+  /** Comunidade Louvain-lite (scoping por capítulo/grupo). */
+  comunidade?: string
+  /** Origem do boost aplicado (`uso_local` do overlay, ou null). */
+  boost?: 'uso_local' | null
+  /** Valor do boost aplicado (já com teto 0.3). */
+  boostValor?: number
+}
+
+/** Resposta do canal `ia:grafo` (fail-closed: sem `.lbug` → fallback lexical). */
+export interface ResultadoGrafoBridge {
+  ok: boolean
+  candidatos: CandidatoGrafo[]
+  caminhos: string[][]
+  cypher: string
+  tempoMs: number
+  modo?: 'lbug' | 'json-fallback'
+  /** `hnsw` = FTS+vetor+PageRank; `fts-puro` = sem índice vetorial. */
+  modoVetor?: 'hnsw' | 'fts-puro'
+  /** Metadados do índice vetorial lateral (null em FTS-puro). */
+  embedding?: { modo: string; modelo: string; dim: number; totalVetores: number } | null
+  fallback?: string
+  motivo?: string
+  erro?: string
 }
 
 /** Resultado da verificação de atualizações (electron-updater). */
@@ -181,6 +267,95 @@ export const bridge: AurumBridge | null =
 export const isElectron = (): boolean => bridge !== null
 
 /**
+ * Consulta o grafo fiscal local (Phase 10-02 / GRAFO-02), null-safe: fora do
+ * Electron (`window.aurum` ausente) ou sem canal `ia:grafo`, devolve
+ * `{ ok:false, fallback:'lexical' }` — o chamador usa o Top-20 lexical atual
+ * (comportamento pré-grafo, bit-idêntico). NUNCA lança.
+ */
+export async function grafoConsultarGrafo(
+  texto: string,
+  k = 5,
+  anoReferencia?: number,
+  opts?: { modoVetor?: 'hibrido' | 'fts-puro' },
+): Promise<ResultadoGrafoBridge> {
+  const vazio: ResultadoGrafoBridge = {
+    ok: false,
+    candidatos: [],
+    caminhos: [],
+    cypher: '',
+    tempoMs: 0,
+    fallback: 'lexical',
+  }
+  try {
+    const fn = bridge?.ia?.grafoConsultar
+    if (typeof fn !== 'function') return vazio
+    const r = (await fn.call(bridge!.ia, texto, k, anoReferencia, opts)) as unknown as ResultadoGrafoBridge
+    if (!r || typeof r !== 'object') return vazio
+    const brutos = Array.isArray((r as { candidatos?: unknown }).candidatos)
+      ? ((r as { candidatos: unknown[] }).candidatos as Array<Record<string, unknown>>)
+      : []
+    const candidatos: CandidatoGrafo[] = brutos.map((c) => {
+      const provRaw = (c as { proveniencia?: unknown }).proveniencia
+      const prov = Array.isArray(provRaw)
+        ? (provRaw as Array<Record<string, unknown>>)
+            .filter((p) => p && typeof p === 'object' && typeof (p as { origem?: unknown }).origem === 'string')
+            .map((p) => ({
+              de: String((p as { de?: unknown }).de ?? ''),
+              para: String((p as { para?: unknown }).para ?? ''),
+              tipo: String((p as { tipo?: unknown }).tipo ?? ''),
+              origem: String((p as { origem?: unknown }).origem ?? ''),
+              confianca: Number((p as { confianca?: unknown }).confianca) || 0,
+              anoReferencia:
+                (p as { anoReferencia?: unknown }).anoReferencia === null ||
+                (p as { anoReferencia?: unknown }).anoReferencia === undefined
+                  ? null
+                  : Number((p as { anoReferencia?: unknown }).anoReferencia),
+            }))
+        : undefined
+      const scoresRaw = (c as { scores?: unknown }).scores as { fts: number; vetor: number; pagerank: number } | undefined
+      return {
+        codigo: String((c as { codigo?: unknown }).codigo ?? ''),
+        tipo: String((c as { tipo?: unknown }).tipo ?? ''),
+        descricao: String((c as { descricao?: unknown }).descricao ?? ''),
+        score: Number((c as { score?: unknown }).score) || 0,
+        caminho: Array.isArray((c as { caminho?: unknown }).caminho)
+          ? (((c as { caminho: unknown[] }).caminho as unknown[]).map((x) => String(x)))
+          : [],
+        ...(prov ? { proveniencia: prov } : {}),
+        ...(scoresRaw && typeof scoresRaw === 'object' ? { scores: scoresRaw } : {}),
+        ...((c as { scoreBase?: unknown }).scoreBase !== undefined
+          ? { scoreBase: Number((c as { scoreBase?: unknown }).scoreBase) || 0 }
+          : {}),
+        ...((c as { comunidade?: unknown }).comunidade !== undefined
+          ? { comunidade: String((c as { comunidade?: unknown }).comunidade) }
+          : {}),
+        ...((c as { boost?: unknown }).boost === 'uso_local' || (c as { boost?: unknown }).boost === null
+          ? { boost: (c as { boost: 'uso_local' | null }).boost }
+          : {}),
+        ...((c as { boostValor?: unknown }).boostValor !== undefined
+          ? { boostValor: Number((c as { boostValor?: unknown }).boostValor) || 0 }
+          : {}),
+      }
+    })
+    return {
+      ok: r.ok === true,
+      candidatos,
+      caminhos: Array.isArray(r.caminhos) ? r.caminhos : [],
+      cypher: typeof r.cypher === 'string' ? r.cypher : '',
+      tempoMs: typeof r.tempoMs === 'number' ? r.tempoMs : 0,
+      ...(r.modo ? { modo: r.modo } : {}),
+      ...(r.modoVetor === 'hnsw' || r.modoVetor === 'fts-puro' ? { modoVetor: r.modoVetor } : {}),
+      ...(r.embedding && typeof r.embedding === 'object' ? { embedding: r.embedding } : {}),
+      ...(!r.ok && r.fallback ? { fallback: r.fallback } : !r.ok ? { fallback: 'lexical' } : {}),
+      ...(r.motivo ? { motivo: r.motivo } : {}),
+      ...(r.erro ? { erro: r.erro } : {}),
+    }
+  } catch (e) {
+    return { ...vazio, erro: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/**
  * Lê um arquivo de base (`public/base` no dev, `dist/base` no pacote).
  * Usa IPC no Electron e `fetch` no navegador.
  */
@@ -189,4 +364,29 @@ export async function lerArquivoBase(nome: string): Promise<string> {
   const resposta = await fetch(`base/${nome}`, { cache: 'no-cache' })
   if (!resposta.ok) throw new Error(`Arquivo base "${nome}" indisponível (${resposta.status}).`)
   return resposta.text()
+}
+
+/**
+ * Escritor do overlay (Phase 10-05 / GRAFO-08), null-safe: sem Electron ou
+ * sem canal `ia:grafo-uso`, devolve `{ ok:false }` — o chamador
+ * (`grafo-overlay.ts`) cai no `localStorage`. NUNCA lança.
+ */
+export async function registrarUsoGrafoBridge(evento: {
+  tipo: string
+  termo?: string | null
+  codigo?: string | null
+  emitente?: string | null
+  peso?: number
+}): Promise<{ ok: boolean; erro?: string }> {
+  try {
+    const fn = bridge?.ia?.registrarUsoGrafo
+    if (typeof fn !== 'function') return { ok: false, erro: 'sem-canal' }
+    const r = await fn.call(bridge!.ia, evento)
+    if (!r || typeof r !== 'object') return { ok: false, erro: 'resposta-invalida' }
+    return (r as { ok: boolean; erro?: string }).ok === true
+      ? { ok: true }
+      : { ok: false, erro: (r as { erro?: string }).erro ?? 'falha' }
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) }
+  }
 }

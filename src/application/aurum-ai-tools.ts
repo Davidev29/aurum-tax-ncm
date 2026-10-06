@@ -38,6 +38,7 @@ export type ToolName =
   | 'consultarCNAE'
   | 'consultarCnaeNbs'
   | 'consultarCNPJ'
+  | 'grafoConsultar'
   | 'verificarCadastroCnpj'
   | 'cadastrarProdutoAssistido'
   | 'consultarClientes'
@@ -107,6 +108,14 @@ export const PLANO_TOOL_CALLING: ToolSpec[] = [
     inputs: ['cnpj (14 dígitos normalizados, com ou sem máscara)'],
     exemplo: ['"Quais atividades o CNPJ 53795990000168 tem?" → consultarCNPJ("53795990000168") + upsell Simples/Híbrido + oferta de salvar'],
     guardrail: 'BrasilAPI (única rede do chat) + cache 30d; DV inválido → pede correção, nunca consulta. Lista CNAEs + NBS + Anexo Simples + Fator R e sugere próximo passo.',
+    escreveNoSistema: false,
+  },
+  {
+    tool: 'grafoConsultar',
+    quandoUsar: 'pergunta menciona NCM/CNAE/NBS ou texto livre difícil (ambíguo, multi-opção): consulta o grafo fiscal local ANTES do lexical para trazer candidatos + caminho multi-hop auditável (NCM→CCT→Anexo→Artigo, CNAE→NBS→CCT) com cypher + proveniência + anoReferencia.',
+    inputs: ['texto (descrição livre ou código)', 'k? (padrão 5)', 'anoReferencia? (2026 | 2027 | 2033)'],
+    exemplo: ['"carne bovina fria?" → grafoConsultar("carne bovina", 5, 2033) + caminho NCM→CCT→Anexo + ano', '"aula de inglês online" → grafoConsultar("aula de inglês online") + NBS via vetor + caminho CNAE→NBS'],
+    guardrail: 'Read-only; sem `.lbug` → fallback lexical (ok:false). Caminho SÓ com proveniência; ranking do grafo nunca vira confiança fiscal (só ordena); o resolvedor revalida tudo.',
     escreveNoSistema: false,
   },
   {

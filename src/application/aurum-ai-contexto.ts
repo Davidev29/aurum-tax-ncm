@@ -51,6 +51,23 @@ export interface FichaAbsoluta {
   anexoOficial: string | null
   baseLegal: string | null
   totalVinculos: number
+  /**
+   * Trilha do grafo (Phase 10-05): caminho multi-hop + cypher + proveniência.
+   * Só presente quando o candidato veio do grafo (com proveniência);
+   * sem grafo, ausente (fallback bit-idêntico).
+   */
+  grafoCaminho?: string[] | null
+  grafoCypher?: string | null
+  grafoProveniencia?: Array<{
+    de: string
+    para: string
+    tipo: string
+    origem: string
+    confianca: number
+    anoReferencia?: number | null
+  }> | null
+  grafoBoost?: 'uso_local' | null
+  grafoBoostValor?: number
 }
 
 export type SituacaoAurumAI =

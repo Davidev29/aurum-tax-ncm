@@ -306,6 +306,43 @@ async function buscarViaIa(consulta, k = 5) {
 }
 
 /**
+ * Consulta o grafo fiscal (Phase 10-02 / GRAFO-02): FTS + expansão 2-hops com
+ * caminho auditável (`via:grafo` em 10-05).
+ *
+ * Tenta o worker via rpc (`cmd 'grafo'` no `ia-worker.cjs`); sem worker vivo,
+ * delega DIRETO ao `grafo-service.cjs` (caminho usado em testes do main e em
+ * boot degradado). Sem `.lbug` → `{ ok:false, fallback:'lexical' }`.
+ * NUNCA lança.
+ */
+async function grafoConsultarViaGrafo(opcoes = {}) {
+  const o = (opcoes && typeof opcoes === 'object' ? opcoes : {})
+  const args = {
+    texto: String(o.texto ?? o.consulta ?? ''),
+    k: Number(o.k) > 0 ? Number(o.k) : 5,
+    ...(o.anoReferencia !== undefined && o.anoReferencia !== null ? { anoReferencia: Number(o.anoReferencia) } : {}),
+    // Toggle DebugIA (10-03): 'fts-puro' pula o estágio vetorial no runtime.
+    ...(o.modoVetor === 'fts-puro' ? { modoVetorForcado: 'fts-puro' } : {}),
+  }
+  if (!args.texto.trim()) {
+    return { ok: false, fallback: 'lexical', erro: 'texto vazio' }
+  }
+  if (proc && pronto) {
+    try {
+      const r = await rpc('grafo', args)
+      if (r && typeof r === 'object') return r
+    } catch (_) {
+      // worker falhou — cai para o direto abaixo (fail-closed, sem throw)
+    }
+  }
+  try {
+    const gs = require('./grafo-service.cjs')
+    return await gs.grafoConsultar(args, { app: appRef })
+  } catch (e) {
+    return { ok: false, fallback: 'lexical', erro: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/**
  * Conversa livre via worker (IA-06). Exige modelo real (`realPronto`):
  * sem modelo responde `ok:false` para o renderer cair no template
  * determinístico (fail-closed, nunca mock verbalizando).
@@ -560,11 +597,31 @@ function pararObservarModelo() {
   observandoModelo = false
 }
 
+/**
+ * Escritor do overlay (Phase 10-05 / GRAFO-08): registra uso local
+ * (`registrarUso({tipo, termo, codigo, emitente, peso})` com TTL 90d + teto
+ * 5000 + demote). Só reordena (boost com teto) — nunca cria redução.
+ * NUNCA lança.
+ */
+function registrarUsoGrafoViaGrafo(evento = {}) {
+  try {
+    const gs = require('./grafo-service.cjs')
+    if (gs && typeof gs.registrarUso === 'function') {
+      return gs.registrarUso(evento, { app: appRef })
+    }
+    return { ok: false, erro: 'grafo-service sem registrarUso' }
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : String(e) }
+  }
+}
+
 module.exports = {
   iniciarIaService,
   statusIa,
   classificarViaIa,
   buscarViaIa,
+  grafoConsultarViaGrafo,
+  registrarUsoGrafoViaGrafo,
   conversarViaIa,
   encerrarIaService,
   perfilModeloViaIa,

@@ -49,6 +49,8 @@ coverage/
 *.temp
 tmp/
 temp/
+# Phase 10-01: CSVs intermediários do build do grafo (regenerados por `npm run base`)
+scripts/grafo/.tmp/
 
 # Base / dados locais grandes (descomente se não quiser versionar)
 # *.xlsx

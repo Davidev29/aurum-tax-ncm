@@ -28,7 +28,10 @@
  *   - cnae.json                      CNAE × Anexo Simples (Phase 7)
  *   - cnae-nbs.json                  links CNAE → NBS + relações LC × NBS (Phase 9)
  *   - classificacoes-consolidadas.json  templates por CNAE com descrições conferidas (Phase 9)
- *   - MANIFEST.json                  metadados, contagens e checksums (+fontesVivas)
+ *   - MANIFEST.json                  metadados, contagens e checksums (+fontesVivas, +grafo)
+ *   - grafo/grafo.lbug               grafo fiscal local (Phase 10-01; nativo ou JSON portátil)
+ *   - grafo/grafo.lbug.json          espelho portátil do grafo (sempre JSON)
+ *   - grafo/MANIFEST.grafo.json      versão, hash, contadores do grafo (rebuild por hash)
  *
  * Por que normalizar?
  *   O JSON de origem tem 16 MB porque repete a mesma referencia (2,5 KB) em cada
@@ -878,6 +881,36 @@ async function gatilhoIndiceIA(manifest, arquivosSaida) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Gatilho 10-01/GRAFO-01: rebuild do grafo fiscal se a base tributária mudou
+// ---------------------------------------------------------------------------
+// `scripts/build-grafo.mjs` compara o hash semântico da base (o mesmo do
+// gatilho 06-03, que já inclui o conhecimento curado) com
+// `public/base/grafo/MANIFEST.grafo.json` e só reconstrói quando diverge.
+// NUNCA falha o build da base: qualquer problema aqui vira aviso e exit 0.
+
+async function gatilhoGrafo(manifest) {
+  try {
+    const { buildGrafo } = await import('./build-grafo.mjs');
+    const resultado = await buildGrafo();
+    if (manifest && resultado && !resultado.skipped) {
+      manifest.grafo = {
+        versao: resultado.versao,
+        geradoEm: resultado.geradoEm,
+        nodos: resultado.nodos,
+        arestas: resultado.arestas,
+        hash: resultado.hash,
+        hashBase: resultado.hashBase,
+        embedding: resultado.embedding,
+      };
+      escrever('MANIFEST.json', manifest);
+      console.log('   grafo: MANIFEST.json carimbado com o resumo do grafo.');
+    }
+  } catch (err) {
+    console.log(`   grafo: gatilho ignorado (${String(err.message).split('\n')[0]}). Build da base preservado.`);
+  }
+}
+
 async function main() {
   console.log(' Aurum Tax NCM — compilação da base tributária');
   console.log(`   procura em: ${DIRS_FONTES.join('  |  ')}`);
@@ -906,6 +939,7 @@ async function main() {
     if (saidasOk) {
       console.warn(`\n⚠ Fontes ausentes (${ausentes.join(', ')}) — usando public/base/ versionado.`);
       console.warn('  Para atualizar: jogue os JSONs em bases-fonte/ e rode `npm run base`.');
+      await gatilhoGrafo();
       return;
     }
     console.error(`\n✖ Arquivos de origem ausentes: ${ausentes.join(', ')}`);
@@ -1129,6 +1163,7 @@ async function main() {
   escrever('MANIFEST.json', manifest);
 
   await gatilhoIndiceIA(manifest, arquivosSaida);
+  await gatilhoGrafo(manifest);
 
   const totalBytes = arquivosSaida.reduce((s, a) => s + a.bytes, 0);
   console.log('\n Resultado:');

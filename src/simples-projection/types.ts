@@ -69,10 +69,24 @@ export interface LinhaCenarioMensal {
   receitaNova: number;
   rbt12Mae: number;
   rbt12Nova: number;
+  /** RBT12 projetado (deslizante) do cenário unificado — base da coluna "referência". */
+  rbt12Ref?: number;
   faixaMae: number;
   faixaNova: number;
+  /** Faixa do cenário unificado (referência). */
+  faixaRef?: number;
   aliquotaEfetivaMae: number;
   aliquotaEfetivaNova: number;
+  /** Alíquota efetiva do cenário unificado (referência). */
+  aliquotaEfetivaRef?: number;
+  /** Alíquota nominal da faixa (mãe / nova / referência) — para a tabela de progressividade. */
+  aliquotaNominalMae?: number;
+  aliquotaNominalNova?: number;
+  aliquotaNominalRef?: number;
+  /** Parcela a deduzir da faixa (mãe / nova / referência). */
+  parcelaDeduzirMae?: number;
+  parcelaDeduzirNova?: number;
+  parcelaDeduzirRef?: number;
   dasMae: number;
   dasNova: number;
   dasUnificadoReferencia: number;
@@ -106,12 +120,19 @@ export interface RelatorioProjecao {
   alertas: AlertaFiscal[];
   /** Container vazio — preenchido pela LLM depois (motor nunca gera texto). */
   insightsSugeridos: [];
+  /** Diagnóstico do Fator R mês a mês (mãe × nova × unificado). Opcional p/ compat. */
+  analiseFatorR?: import('./fator-r-dividido').AnaliseFatorR;
+  /** Classificação do retorno (imediato / payback / sem-payback / prejuízo). Opcional p/ compat. */
+  analiseRetorno?: import('./analise-retorno').AnaliseRetorno;
   metadados: {
     mesInicio: MesRef;
     horizonteMeses: number;
     percentualNova: number;
     anexoMae: AnexoSimplesId;
     anexoNova: AnexoSimplesId;
+    /** Folha 12m informada (para o diagnóstico do Fator R na UI). */
+    folha12Mae?: number;
+    folha12Nova?: number;
     motorVersao: string;
   };
 }

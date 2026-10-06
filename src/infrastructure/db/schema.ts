@@ -65,6 +65,22 @@ export interface MetaRecord {
   atualizadoEm?: string
 }
 
+/**
+ * Metadados do grafo fiscal local (Phase 10-01 / GRAFO-01, Dexie v14).
+ * Espelha `public/base/grafo/MANIFEST.grafo.json`: o grafo é índice
+ * derivado, então aqui vive só o carimbo (hash/versão/contadores) —
+ * os nós/arestas ficam no `.lbug` lido pelo worker IA (10-02).
+ */
+export interface GrafoMeta {
+  /** Chave única — sempre `'atual'` (um carimbo por banco). */
+  id: string
+  hash: string
+  versao: string
+  nodos: number
+  arestas: number
+  geradoEm: string
+}
+
 /* -------------------------------------------------------------------------- */
 /* Migração v2 → v3                                                            */
 /* -------------------------------------------------------------------------- */
@@ -249,6 +265,9 @@ export class AurumDatabase extends Dexie {
   /** Templates consolidados por CNAE (Phase 9, Dexie v13, keyPath `cnae7`). */
   classificacoesConsolidadas!: Table<ClassificacaoConsolidada, string>
 
+  /** Carimbo do grafo fiscal local (Phase 10-01, Dexie v14, keyPath `id`). */
+  grafometa!: Table<GrafoMeta, string>
+
   constructor() {
     super(DB_NAME)
     // v6: schema anterior (sem `classificacaoProduto`). Mantido para a
@@ -396,7 +415,39 @@ export class AurumDatabase extends Dexie {
       })
     // v13 (Phase 9 / 09-01): adiciona `cnaeNbs` + `lcNbs` +
     // `classificacoesConsolidadas` (ponte CNAE → NBS); demais intactas.
+    // Congelada: bancos em v13 sobem para v14 sem perder dados.
     // Migração aditiva: nenhum `clear()`, nenhum dado existente é tocado.
+    this.version(13)
+      .stores({
+        [STORES.NCM]: 'id, codigo, cst, cClassTrib',
+        [STORES.NBS]: 'id, codigo, cClassTrib',
+        [STORES.CST]: 'codigo',
+        [STORES.CSTCT]: 'id, cst, cClassTrib',
+        [STORES.REFERENCIA]: 'id, cst, cClassTrib',
+        [STORES.NCMNOM]: 'codigo, descricao',
+        [STORES.EMPRESAS]: '++id, razaoSocial, cnpj',
+        [STORES.PRODUTOS]: '++id, empresaId, ncm, codigo, cstReforma',
+        [STORES.META]: 'chave',
+        [STORES.CFOP]: 'codigo',
+        [STORES.CSTICMS]: 'codigo',
+        [STORES.CSTPISCOFINS]: 'codigo',
+        [STORES.NFENOTAS]: '++id, empresaId, dataEmissao, direcao, emitCnpj, chave, &[empresaId+chave]',
+        [STORES.RECLASS]: 'ncm',
+        [STORES.CLASSPROD]: 'id, sistema, cClassTrib',
+        [STORES.AUDIT]: '++id, quando, tabela, chave, autor',
+        [STORES.CEST]: 'codigo, ncm',
+        [STORES.IAFEEDBACK]: '++id, quando, via, decisao',
+        [STORES.ANEXOS]: 'id, codigo, nroAnexo',
+        [STORES.PRODUTOSDFE]: 'id, sistema, codClassProd',
+        [STORES.CNAE]: 'codigo7, descricao',
+        [STORES.CONSULTAS_CNPJ]: 'cnpj',
+        [STORES.CONVERSAS_EMITENTE]: 'conversaId, emitenteId, updatedAt',
+        [STORES.CNAE_NBS]: '++id, cnae7, nbs, [cnae7+nbs]',
+        [STORES.LC_NBS]: '++id, lc, nbs, cct, [lc+nbs]',
+        [STORES.CLASS_CONSOLIDADA]: 'cnae7',
+      })
+    // v14 (Phase 10 / 10-01): adiciona `grafometa` (carimbo do grafo
+    // fiscal); demais intactas. Migração aditiva: nenhum `clear()`.
     this.version(DB_VERSION)
       .stores({
         [STORES.NCM]: 'id, codigo, cst, cClassTrib',
@@ -425,6 +476,7 @@ export class AurumDatabase extends Dexie {
         [STORES.CNAE_NBS]: '++id, cnae7, nbs, [cnae7+nbs]',
         [STORES.LC_NBS]: '++id, lc, nbs, cct, [lc+nbs]',
         [STORES.CLASS_CONSOLIDADA]: 'cnae7',
+        [STORES.GRAFOMETA]: 'id, hash, versao',
       })
     // Aliases snake_case -> camelCase (Dexie injeta this[storeName]).
     this.auditLog ??= this.table(STORES.AUDIT) as unknown as typeof this.auditLog
@@ -470,7 +522,7 @@ export async function contarTodos(): Promise<Record<string, number>> {
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
     cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
     anexos, produtosDfe, cnae, consultasCnpj, conversasEmitente,
-    cnaeNbs, lcNbs, classificacoesConsolidadas,
+    cnaeNbs, lcNbs, classificacoesConsolidadas, grafometa,
   ] = await Promise.all([
     contar(STORES.NCM),
     contar(STORES.NBS),
@@ -497,11 +549,12 @@ export async function contarTodos(): Promise<Record<string, number>> {
     contar(STORES.CNAE_NBS),
     contar(STORES.LC_NBS),
     contar(STORES.CLASS_CONSOLIDADA),
+    contar(STORES.GRAFOMETA),
   ])
   return {
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
     cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
     anexos, produtosDfe, cnae, consultasCnpj, conversasEmitente,
-    cnaeNbs, lcNbs, classificacoesConsolidadas,
+    cnaeNbs, lcNbs, classificacoesConsolidadas, grafometa,
   }
 }

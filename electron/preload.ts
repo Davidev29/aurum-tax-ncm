@@ -15,6 +15,7 @@ import type {
   AurumBridge,
   CandidatoIa,
   EventoAtualizacao,
+  ResultadoGrafoBridge,
   ResultadoIaBridge,
   StatusIaBridge,
 } from '../src/infrastructure/bridge'
@@ -120,6 +121,22 @@ const aurum: AurumBridge = {
     status: (): Promise<StatusIaBridge> => ipcRenderer.invoke('ia:status'),
     conversar: (pergunta: string, opts?: { sistema?: string; historico?: { papel: string; texto: string }[]; think?: boolean; maxTokens?: number; temperature?: number }) =>
       ipcRenderer.invoke('ia:conversar', pergunta, opts ?? {}),
+    /**
+     * Grafo fiscal local (Phase 10-02 / GRAFO-02, híbrido em 10-03): FTS +
+     * vetor + 2-hops no worker (`utilityProcess`) via canal `ia:grafo`.
+     * Sem `.lbug` → `ok:false` + `fallback:'lexical'` (fail-closed, nunca
+     * mock). `opts.modoVetor:'fts-puro'` força o modo lexical (toggle DebugIA).
+     */
+    grafoConsultar: (texto: string, k?: number, anoReferencia?: number, opts?: { modoVetor?: 'hibrido' | 'fts-puro' }): Promise<ResultadoGrafoBridge> =>
+      ipcRenderer.invoke('ia:grafo', { texto, k, anoReferencia, modoVetor: opts?.modoVetor }),
+    /**
+     * Overlay de aprendizado (Phase 10-05 / GRAFO-08): escritor
+     * `registrarUso({tipo, termo, codigo, emitente, peso})` com TTL 90d + teto
+     * 5000 + demote. Best-effort (sem canal → rejeita, o renderer cai no
+     * `localStorage`).
+     */
+    registrarUsoGrafo: (evento: { tipo: string; termo?: string | null; codigo?: string | null; emitente?: string | null; peso?: number }) =>
+      ipcRenderer.invoke('ia:grafo-uso', evento),
   },
 }
 

@@ -468,7 +468,7 @@ export function Consulta() {
                   </StatusAurumAI>
                 ) : null}
               </h3>
-              {classificando && !sugestao && via !== 'ia' ? (
+              {classificando && !sugestao && via !== 'ia' && via !== 'grafo' && via !== 'grafo+ia' ? (
                 <CarregandoAurumAI entrada={entrada} />
               ) : (
                 <SecaoRespostaIA entrada={entrada} bloqueios={bloqueios} onSalvar={setParaSalvar} onAddCalc={abrirCalc} />
@@ -564,7 +564,7 @@ export function Consulta() {
                 </span>
               </summary>
               <div className="mt-2">
-                {classificando && !sugestao && via !== 'ia' ? (
+                {classificando && !sugestao && via !== 'ia' && via !== 'grafo' && via !== 'grafo+ia' ? (
                   <CarregandoAurumAI entrada={entrada} />
                 ) : (
                   <SecaoRespostaIA entrada={entrada} bloqueios={bloqueios} onSalvar={setParaSalvar} onAddCalc={abrirCalc} />
@@ -764,7 +764,8 @@ function SecaoRespostaIA({
   }
 
   // Decisão validada do fallback tem precedência sobre a predição simples.
-  if (via === 'ia') {
+  // Phase 10-05: `ia` + `grafo` + `grafo+ia` exibem a decisão validada.
+  if (via === 'ia' || via === 'grafo' || via === 'grafo+ia') {
     return (
       <div className="space-y-2">
         {classificando ? (
@@ -983,6 +984,12 @@ function RespostaIaValidada({
   const usarSugestaoIa = useConsulta((s) => s.usarSugestaoIa)
   const feedbackNegativo = useConsulta((s) => s.feedbackIaNegativo)
   const escolher = useConsulta((s) => s.escolherUnificada)
+  const via = useConsulta((s) => s.via)
+  const grafoCypher = useConsulta((s) => s.grafoCypherIa)
+  const caminhoGrafo = useConsulta((s) => s.caminhoGrafoIa)
+  const provenienciaGrafo = useConsulta((s) => s.provenienciaGrafoIa)
+  const boostGrafo = useConsulta((s) => s.boostGrafoIa)
+  const boostValorGrafo = useConsulta((s) => s.boostValorGrafoIa)
   const [modal, setModal] = useState<'ncms' | 'simulacao' | 'auditoria' | null>(null)
 
   const top = candidatos.slice(0, 8)
@@ -997,7 +1004,25 @@ function RespostaIaValidada({
     >
       <div className="flex flex-wrap items-center gap-2">
         <BarraConfiancaAurumAI valor={confianca} compact />
+        {via === 'grafo' || via === 'grafo+ia' ? (
+          <span
+            className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
+            title="Resposta com caminho do grafo fiscal local (multi-hop auditável) — o resolvedor validou o código."
+            role="status"
+            aria-label={via === 'grafo+ia' ? 'via:grafo+ia' : 'via:grafo'}
+          >
+            {via === 'grafo+ia' ? 'via:grafo+ia' : 'via:grafo'}
+          </span>
+        ) : null}
       </div>
+      {caminhoGrafo?.length && provenienciaGrafo?.length ? (
+        <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400" title="Base oficial + seu uso local (overlay só reordena)">
+          <strong>Por que sugeriu:</strong> base: {caminhoGrafo.join(' → ')}
+          {boostGrafo === 'uso_local' && Number(boostValorGrafo) > 0 ? (
+            <span className="font-mono font-bold"> + seu uso (boost: uso_local +{Number(boostValorGrafo)})</span>
+          ) : null}
+        </p>
+      ) : null}
 
       {codigoIa && decisao ? (
         <>
@@ -1108,6 +1133,40 @@ function RespostaIaValidada({
             onFechar={() => setModal(null)}
             fontes={fontes}
             nota={`Decisão validada pelo resolvedor oficial; cálculo sobre ${fmtMoeda(VALOR_BASE_IA)} — trilha em \`audit_log\` + \`logs/consultas-ia.jsonl\`.`}
+            extra={
+              grafoCypher || caminhoGrafo?.length ? (
+                <div className="space-y-2">
+                  {caminhoGrafo?.length && provenienciaGrafo?.length ? (
+                    <div className="rounded-xl border border-[var(--line)] bg-slate-50 p-3 dark:bg-slate-950/40">
+                      <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">Trilha do grafo ({via === 'grafo+ia' ? 'via:grafo+ia' : 'via:grafo'})</div>
+                      <p className="mt-1 font-mono text-[11px]">{caminhoGrafo.join(' → ')}</p>
+                      <ul className="mt-1 space-y-1 font-mono text-[11px] text-slate-500">
+                        {provenienciaGrafo!.map((p, i) => (
+                          <li key={i}>
+                            {p.de} —[{p.tipo}/{p.origem} conf {p.confianca}
+                            {p.anoReferencia ? ` ano ${p.anoReferencia}` : ''}]→ {p.para}
+                          </li>
+                        ))}
+                      </ul>
+                      {boostGrafo === 'uso_local' ? (
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          Boost de uso local: <span className="font-mono font-bold">uso_local +{Number(boostValorGrafo) || 0}</span> (teto 0.3, TTL 90d — só reordena).
+                        </p>
+                      ) : null}
+                      <p className="mt-1 text-[11px] text-slate-500">Relatório IA cita: {caminhoGrafo.join(' → ')}</p>
+                    </div>
+                  ) : null}
+                  {grafoCypher ? (
+                    <details className="rounded-xl border border-slate-200 bg-slate-950 p-3 dark:border-slate-800" open>
+                      <summary className="cursor-pointer text-[11px] font-bold text-slate-300">Cypher executado</summary>
+                      <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-emerald-100">
+                        {grafoCypher}
+                      </pre>
+                    </details>
+                  ) : null}
+                </div>
+              ) : undefined
+            }
           />
         </>
       ) : (

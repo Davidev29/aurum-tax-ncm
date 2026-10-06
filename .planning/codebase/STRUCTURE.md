@@ -9,40 +9,53 @@ Top 3 níveis (gerado por glob; `node_modules/`, `build/`, `dist/`, `release/`, 
 ├── .planning/                            ← GSD (PROJECT.md, ROADMAP.md, STATE.md, codebase/)
 ├── index.html                            ← shell (#raiz, tema anti-flash, /src/main.tsx)
 ├── package.json · vite.config.ts · vitest.config.ts · tsconfig.json
-├── src/ (96 arquivos)
+├── src/ (223 arquivos)
 │   ├── main.tsx · App.tsx · index.css · pdfmake.d.ts
-│   ├── pages/        ← Calculadora, Consulta, Lote, NfeXml, Produtos, Auxiliares, Legislacao
+│   ├── pages/        ← Calculadora, AurumChat, Consulta, ConsultaServicos, ConsultaCnaes, Lote,
+│   │                     NfeXml/NfeXmlPolida, Produtos, Auxiliares, Legislacao (+ DebugIA oculta `Ctrl+Shift+D`)
+│   ├── simples/      ← módulo Simples isolado (tabelas, calculo, store, page, DasModal, relatorio-analitico…)
+│   ├── simples-projection/ ← projeção dividida (camada aditiva sobre `simples/`)
 │   ├── ui/           ← Layout, kit, cartoes, detalhes, dialogos, divergencia, opcoes, motion,
 │   │                     skeleton, Marca, ModalLegislacao, TermoAceite
 │   ├── modais/       ← pagina, globais, reclassificacao
 │   ├── store/        ← base, sessao, ui, consulta, calculadora, lote, nfe, produtos, auxiliares, dialogo
 │   ├── domain/       ← entities, contrato, legislacao, capitulos.json,
-│   │                     services/ (classificacao, calculo, busca-texto, classificador-descricao,
-│   │                     detector-consulta, referencia-service, revogacao, format),
+│   │                     services/ (classificacao, calculo, busca-texto, classificador-descricao (+servicos),
+│   │                     detector-consulta, detector-chat, referencia-service, revogacao, format, cnae, cnae-nbs,
+│   │                     regras-hierarquicas, verificacao-servicos),
 │   │                     constants/ (index, tributarios, capitulos, seeds, aliases, cff-apis, siscomex-apis)
 │   ├── application/  ← base, atualizacao, auditoria, backup, reclassificacao, revalidacao,
 │   │                     produtos, empresas, emitente, notas-xml, nfe-insights, ncm-sync, cff-sync,
-│   │                     classificacao-inteligente, auxiliares, aux-meta
-│   └── infrastructure/← db/schema, base/ (base-service, classificacao-repo, reclassificacao-repo, normalizacao),
-│                         nfe/ (parse, analisar, apuracao, regime, credito, tipos),
+│   │                     classificacao-inteligente (+servicos), classificacao-ia (+servicos),
+│   │                     aurum-ai-chat/tools/registro/livre/contexto, consultar-por-cnae/cnpj,
+│   │                     auxiliares, aux-meta
+│   └── infrastructure/← db/schema (Dexie v13), base/ (base-service, classificacao-repo, reclassificacao-repo, normalizacao),
+│                         ia/ (classificacao-ia-repo), nfe/ (parse, analisar, apuracao, regime, credito, tipos),
 │                         sped/ (leitura, parse, analisar, tipos), siscomex/ncm-sync, cff/cff-sync,
 │                         receita/brasilapi, parsers/lote, arquivos/xml-storage,
 │                         exporters/relatorios, pdf/ (setup, menu-exportacao),
 │                         bridge, legislacao-texto
 ├── electron/
 │   ├── main.ts · preload.ts · esbuild.mjs
+│   ├── ia/ (worker IA offline: ia-worker.cjs, ia-service.cjs, caminhos-ia.cjs, perfil-modelo.cjs, modelo-seguro.cjs)
 │   └── dist/ (gerado: main.js, preload.cjs + maps)
 ├── public/
 │   ├── icone.png · icon.ico · escudo.png · logomarca*.png · manifest.webmanifest
 │   └── base/             ← bases NORMALIZADAS embutidas (saída do build-base)
 │       ├── reforma.json · classificacao-tributaria.json · nomenclatura.json · MANIFEST.json
-├── scripts/        ← build-base.mjs, gen-seeds.cjs, gen-capitulos.cjs, gen-contrato.py,
-│                       gen-licenca-rtf.py, kill-port.mjs, reparar-encoding.mjs, refazer-icone.py
-├── tests/ (~38 arquivos) ← calculo, classificacao-inteligente, busca-texto, nfe-*, sped-*, lote, csv,
+├── scripts/        ← build-base.mjs, build-grafo.mjs (10-01, pendente), gen-seeds.cjs, gen-capitulos.cjs,
+│                       gen-contrato.py, gen-licenca-rtf.py, kill-port.mjs, reparar-encoding.mjs, refazer-icone.py,
+│                       gerar-indice-ia.mjs, preparar-dados-ia.mjs, validar-conhecimento.mjs, testar-indice-ia.mjs,
+│                       cobertura-traducao.mjs, gerar-catalogo-rag.mjs, ofuscar-build.cjs, verificar-build.mjs, after-pack-ia.cjs
+│   └── grafo/          ← Phase 10: schema.cypher, spike-grafo.mjs (10-00 GO parcial), build-grafo-kglite.py (10-04)
+├── recursos-ia/      ← IA offline: modelo/*.gguf (Qwen3.5-2B, pin modelo.json) + indice-ncm/lexical-v2 (2335 docs) + conhecimento/
+│                         (sinonimos, dicionario, lc214-artigos, catalogo-rag…) + embedding/ (vazio — 10-03)
+├── tests/ (146 arquivos, 1560 casos) ← calculo, classificacao-inteligente/ia (+servicos), busca-texto, nfe-*, sped-*, lote, csv,
 │                       consulta-*, cff-*, brasilapi, siscomex-ncm, vigencia-ncm, reclassificacao-*,
 │                       revalidacao, revogacao, diferimento, mapeamento-legal, motor-unico,
 │                       legislacao-*, formato, aux-*, produtos, empresas-idempotentes, db-migracao,
-│                       base-embutida, pdf-exportacao + setup.ts
+│                       base-embutida, pdf-exportacao, simples/*, ia/*, chat-*, cnae-nbs*,
+│                       grafo-tracer (10-00) + setup.ts
 ├── docs/           ← SPEC-LOGICA-NEGOCIO.md + 2 contratos .docx
 ├── build/ · dist/ · release/  ← saída de empacotamento (ver § Generated)
 └── node_modules/ (não inspecionado)
@@ -54,7 +67,7 @@ Top 3 níveis (gerado por glob; `node_modules/`, `build/`, `dist/`, `release/`, 
 |---|---|
 | `index.html` | Shell web: `#raiz`, metadados pt-BR, anti-flash de tema, `src/main.tsx`. |
 | `src/main.tsx` | Bootstrap React; dispara `useBase.iniciar()` + `useSessao.iniciar()` não-bloqueante. |
-| `src/App.tsx` | Shell de views por `store/ui` (7 páginas) + portão de aceite (`domain/contrato`). |
+| `src/App.tsx` | Shell de views por `store/ui` (11 views: 10 no menu + DebugIA oculta) + portão de aceite (`domain/contrato`). |
 | `electron/main.ts` | Janela, IPC, menu nativo, auto-update, sandboxes `diretorioBase`/`diretorioXml`. |
 | `electron/preload.ts` | `window.aurum` via `contextBridge` (implementa `AurumBridge`). |
 | `electron/esbuild.mjs` | Compila main+preload (o `tsc` raiz não inclui `electron/`). |

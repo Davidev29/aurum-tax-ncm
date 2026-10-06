@@ -14,16 +14,20 @@ import { NOME_IA, ROTULO_FALLBACK, fmtConfiancaAurumAI } from '@/domain/aurum-ai
 import { classificarComIa } from '@/application/classificacao-ia'
 import { montarSistemaLivre, sanitizarLivre } from '@/application/aurum-ai-livre'
 import { SeloAurumAI, BarraConfiancaAurumAI } from '@/ui/aurum-ai'
-import { bridge, type StatusIaBridge } from '@/infrastructure/bridge'
+import { bridge, grafoConsultarGrafo, type ResultadoGrafoBridge, type StatusIaBridge } from '@/infrastructure/bridge'
 import { db } from '@/infrastructure/db/schema'
-import { taxaUsoIa, useIa, type DecisaoIa } from '@/store/ia'
+import { taxaUsoGrafo, taxaUsoIa, useIa, type DecisaoIa, type ModoVetorGrafo } from '@/store/ia'
 import { useUi } from '@/store/ui'
 import { Entrada, Secao } from '@/ui/motion'
 
 function seloVia(via: DecisaoIa['via']) {
-  return via === 'ia'
-    ? 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300'
-    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+  if (via === 'ia' || via === 'grafo+ia') {
+    return 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300'
+  }
+  if (via === 'grafo') {
+    return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+  }
+  return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
 }
 
 /** % de NÃO SEI no histórico (falha segura observada). */
@@ -81,6 +85,20 @@ export function DebugIA() {
   // Aceitação IA = decisões `via: ia` no histórico sem feedback "Não é esse"
   // (Dexie `ia_feedback`, best-effort). Rejeitada = mesmo par descrição+decisão.
   const [rejeitadas, setRejeitadas] = useState(0)
+  // Grafo fiscal híbrido (Phase 10-03 / GRAFO-03): snapshot + toggle de modo.
+  const modoVetor = useIa((s) => s.modoVetor)
+  const graphPaths = useIa((s) => s.graphPaths)
+  const cypher = useIa((s) => s.cypher)
+  const totalGrafo = useIa((s) => s.totalConsultasGrafo)
+  const consultasGrafo = useIa((s) => s.consultasGrafo)
+  const setGrafoSnapshot = useIa((s) => s.setGrafoSnapshot)
+  const registrarUsoGrafo = useIa((s) => s.registrarUsoGrafo)
+  const [textoGrafo, setTextoGrafo] = useState('aula de inglês online')
+  const [forcarFts, setForcarFts] = useState(() => {
+    try { return localStorage.getItem('aurum_grafo_modo_vetor') === 'fts-puro' } catch { return false }
+  })
+  const [respGrafo, setRespGrafo] = useState<ResultadoGrafoBridge | null>(null)
+  const [ocupadoGrafo, setOcupadoGrafo] = useState(false)
 
   useEffect(() => {
     let vivo = true
@@ -149,6 +167,18 @@ export function DebugIA() {
         em: new Date().toISOString(),
       }
       registrar(decisao)
+      // Phase 10-05: espelha a trilha do grafo (cypher executado + caminhos)
+      // no snapshot observável (DebugIA exibe `graphPaths` + cypher).
+      try {
+        if (r.grafoCypher) {
+          setGrafoSnapshot({ graphPaths: r.graphPaths ?? [], cypher: r.grafoCypher })
+          registrarUsoGrafo(true)
+        } else if (r.via === 'ia' || r.via === 'grafo' || r.via === 'grafo+ia') {
+          registrarUsoGrafo(false)
+        }
+      } catch {
+        /* observabilidade nunca quebra */
+      }
       // Snapshot de observabilidade (06-09): totais + taxas por inferência.
       const tot = total + 1
       const ia = viaIa + (decisao.via === 'ia' ? 1 : 0)
@@ -176,6 +206,27 @@ export function DebugIA() {
   const viaDet = total - viaIa
   const taxaNS = taxaNaoSei(historico)
   const aceitacao = viaIa > 0 ? Math.round(((viaIa - Math.min(rejeitadas, viaIa)) / viaIa) * 1000) / 10 : 100
+  const taxaGrafo = taxaUsoGrafo(totalGrafo, consultasGrafo)
+
+  const alternarModoGrafo = useCallback((fts: boolean) => {
+    setForcarFts(fts)
+    try { localStorage.setItem('aurum_grafo_modo_vetor', fts ? 'fts-puro' : 'hibrido') } catch { /* ignora */ }
+  }, [])
+
+  const consultarGrafo = useCallback(async () => {
+    const texto = textoGrafo.trim()
+    if (!texto || ocupadoGrafo) return
+    setOcupadoGrafo(true)
+    try {
+      const r = await grafoConsultarGrafo(texto, 8, undefined, forcarFts ? { modoVetor: 'fts-puro' } : undefined)
+      setRespGrafo(r)
+      registrarUsoGrafo(r.ok === true)
+      const mv: ModoVetorGrafo | null = r.modoVetor === 'hnsw' || r.modoVetor === 'fts-puro' ? r.modoVetor : null
+      setGrafoSnapshot({ graphPaths: r.caminhos, cypher: r.cypher || null, ...(mv ? { modoVetor: mv } : {}) })
+    } finally {
+      setOcupadoGrafo(false)
+    }
+  }, [textoGrafo, ocupadoGrafo, forcarFts, registrarUsoGrafo, setGrafoSnapshot])
 
   const conversarLivreTeste = useCallback(async () => {
     const p = perguntaLivre.trim()
@@ -270,6 +321,96 @@ export function DebugIA() {
           <div><dt className="font-bold text-slate-500">Aceitação IA</dt><dd className="font-mono">{aceitacao}%</dd></div>
           <div><dt className="font-bold text-slate-500">Taxa NÃO SEI</dt><dd className="font-mono">{taxaNS}%</dd></div>
         </dl>
+      </section>
+      </Entrada>
+
+      <Entrada>
+      <section className="rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] p-4 shadow-card">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-black">Grafo fiscal híbrido (10-03)</h2>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            taxa_uso_grafo: {taxaGrafo}% ({consultasGrafo}/{totalGrafo})
+            {modoVetor ? ` · modo: ${modoVetor}` : ''}
+          </span>
+          <label className="ml-auto flex items-center gap-2 text-xs">
+            <span className={!forcarFts ? 'font-bold' : 'text-slate-500'}>Híbrido (FTS+vetor)</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={forcarFts}
+              aria-label="Forçar modo FTS-puro do grafo"
+              onClick={() => alternarModoGrafo(!forcarFts)}
+              className={`relative h-5 w-10 rounded-full transition-colors ${forcarFts ? 'bg-amber-500' : 'bg-emerald-500'}`}
+            >
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${forcarFts ? 'left-5' : 'left-0.5'}`} />
+            </button>
+            <span className={forcarFts ? 'font-bold' : 'text-slate-500'}>FTS-puro</span>
+          </label>
+        </div>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            value={textoGrafo}
+            onChange={(e) => setTextoGrafo(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void consultarGrafo() }}
+            placeholder="Ex.: aula de inglês online"
+            className="min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-brand-500"
+            aria-label="Texto para consultar o grafo fiscal"
+          />
+          <button
+            type="button"
+            className="btn btn-press btn-sm bg-brand-600 font-bold text-white hover:bg-brand-500 disabled:opacity-50"
+            disabled={ocupadoGrafo || !textoGrafo.trim()}
+            onClick={() => void consultarGrafo()}
+          >
+            {ocupadoGrafo ? 'Consultando…' : 'Consultar grafo'}
+          </button>
+        </div>
+        {respGrafo ? (
+          <div className="mt-3 space-y-2 text-xs">
+            <p className="text-slate-500">
+              {respGrafo.ok
+                ? `${respGrafo.candidatos.length} candidato(s) · ${respGrafo.modoVetor ?? '?'} · ${respGrafo.tempoMs} ms${respGrafo.embedding ? ` · embedding ${respGrafo.embedding.modo}` : ' · sem vetor'}`
+                : `fallback: ${respGrafo.fallback ?? 'lexical'}${respGrafo.motivo ? ` (${respGrafo.motivo})` : ''} — fora do Electron, rode via npm run dev.`}
+            </p>
+            {respGrafo.ok && respGrafo.candidatos.length ? (
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="text-slate-500">
+                    <th className="py-1 pr-2">Código</th>
+                    <th className="py-1 pr-2">Tipo</th>
+                    <th className="py-1 pr-2">Score (base+boost)</th>
+                    <th className="py-1 pr-2">fts/vetor/pr</th>
+                    <th className="py-1">Boost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {respGrafo.candidatos.map((c) => (
+                    <tr key={`${c.tipo}:${c.codigo}`} className="border-t border-[var(--line)]">
+                      <td className="py-1 pr-2 font-mono font-bold">{c.codigo}</td>
+                      <td className="py-1 pr-2">{c.tipo}</td>
+                      <td className="py-1 pr-2 font-mono">{c.score}{c.scoreBase !== undefined && c.scoreBase !== c.score ? ` (base ${c.scoreBase})` : ''}</td>
+                      <td className="py-1 pr-2 font-mono text-slate-500">
+                        {c.scores ? `${c.scores.fts}/${c.scores.vetor}/${c.scores.pagerank}` : '—'}
+                      </td>
+                      <td className="py-1 font-mono">{c.boost ?? '—'}{c.boostValor ? ` +${c.boostValor}` : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+            {graphPaths.length ? (
+              <details>
+                <summary className="cursor-pointer font-bold">graphPaths ({graphPaths.length}) + cypher</summary>
+                <ul className="mt-1 space-y-1 font-mono text-[11px]">
+                  {graphPaths.slice(0, 8).map((p, i) => (
+                    <li key={i}>{p.join(' → ')}</li>
+                  ))}
+                </ul>
+                {cypher ? <pre className="mt-1 whitespace-pre-wrap font-mono text-[11px] text-slate-500">{cypher}</pre> : null}
+              </details>
+            ) : null}
+          </div>
+        ) : null}
       </section>
       </Entrada>
 

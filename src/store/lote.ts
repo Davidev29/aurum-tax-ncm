@@ -59,6 +59,18 @@ export const useLote = create<LoteState>((set, get) => ({
     if (!item || !alvo) return
     item.escolhida = alvo
     set({ resumo: { ...r } })
+    // GRAFO-08: escolha em <select> alimenta o overlay (só reordena).
+    try {
+      void import('@/application/grafo-overlay').then((m) => {
+        try {
+          m.registrarEscolhaUso(String(item.nome || item.ncm || ''), String(item.ncm || ''))
+        } catch {
+          /* best-effort */
+        }
+      }).catch(() => undefined)
+    } catch {
+      /* overlay nunca quebra o lote */
+    }
   },
 
   salvarTodos: async () => {

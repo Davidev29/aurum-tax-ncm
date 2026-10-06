@@ -43,7 +43,9 @@ const opcoesComuns = {
   // `electron`/`electron-updater` são fornecidos pelo runtime; `node-llama-cpp`
   // (nativo + ESM-only) e o futuro stack vetorial NUNCA são bundlados —
   // o worker IA os carrega via `import()` dinâmico (achado C2 do spike).
-  external: ['electron', 'electron-updater', 'node-llama-cpp', '@xenova/transformers', 'vectra'],
+  // `@ladybugdb/core` (grafo fiscal 10-02) também fica externo: o
+  // `grafo-service.cjs` o carrega com try/catch preguiçoso (só no worker).
+  external: ['electron', 'electron-updater', 'node-llama-cpp', '@xenova/transformers', 'vectra', '@ladybugdb/core'],
 }
 
 async function compilar() {
@@ -89,6 +91,14 @@ async function compilar() {
   const perfilOrigem = path.join(raizElectron, 'ia', 'perfil-modelo.cjs')
   const perfilDestino = path.join(pastaSaida, 'perfil-modelo.cjs')
   copyFileSync(perfilOrigem, perfilDestino)
+  // Grafo fiscal (10-02 / GRAFO-02): runtime Cypher/FTS consultado pelo worker
+  // (`ia-worker.cjs`, comando `grafo`) via `require('./grafo-service.cjs')`
+  // relativo — COPIADO, nunca bundlado (o fork precisa de arquivo real; o
+  // `ia-service.cjs` bundlado no main.js também o embute para o caminho
+  // direto sem worker). `@ladybugdb/core` fica external (try/catch preguiçoso).
+  const grafoOrigem = path.join(raizElectron, 'ia', 'grafo-service.cjs')
+  const grafoDestino = path.join(pastaSaida, 'grafo-service.cjs')
+  copyFileSync(grafoOrigem, grafoDestino)
 
   console.log('✔ Electron compilado com sucesso:')
   console.log(`   ${saidaMain}`)
@@ -97,6 +107,7 @@ async function compilar() {
   console.log(`   ${caminhosDestino} (copiado, sem bundle)`)
   console.log(`   ${seguroDestino} (copiado, sem bundle — 06-08)`)
   console.log(`   ${perfilDestino} (copiado, sem bundle — camada de compatibilidade)`)
+  console.log(`   ${grafoDestino} (copiado, sem bundle — grafo fiscal 10-02)`)
 }
 
 compilar().catch((erro) => {

@@ -32,9 +32,9 @@ Qwen, Llama, Mistral, Phi, Gemma…). O sistema consome o PERFIL
 (`electron/ia/perfil-modelo.cjs`), nunca o modelo — ver
 `docs/camada-modelo-rag.md`.
 
-1. Apague o `.gguf` atual e copie o novo para `recursos-ia/modelo/`
-   (ex.: o atual `Qwen3-0.6B-Q8_0.gguf`, ~640 MB, `Q8_0`,
-   fonte: https://huggingface.co/Qwen/Qwen3-0.6B-GGUF).
+1. O modelo oficial (2026-10-06) é o `Qwen3.5-2B-Q4_K_M.gguf` (~1221 MB, `Q4_K_M`,
+   pin em `recursos-ia/modelo/modelo.json`, família `qwen3`, ctx 4096).
+   Para trocar no futuro: apague o `.gguf` atual e copie o novo + ajuste o pin.
 2. (Opcional) Copie `recursos-ia/modelo/modelo.json.example` →
    `recursos-ia/modelo/modelo.json` para fixar `familia`/`templateChat`/
    `contextSize`/parâmetros. Sem ele, a família é detectada pelo nome.
@@ -48,7 +48,8 @@ Qwen, Llama, Mistral, Phi, Gemma…). O sistema consome o PERFIL
    node scripts/testar-modelo-ia.mjs            # qualquer .gguf (descoberta automática)
    node scripts/testar-modelo-ia.mjs --modelo recursos-ia\modelo\<novo>.gguf
    ```
-   Esperado: modo REAL, `restricao100=true`, latência < 15 s, RSS < 1.6 GB.
+   Esperado (Qwen3.5-2B-Q4_K_M): modo REAL, `restricao100=true`, latência < 15 s
+   (meta < 8 s p/ classificação), RSS < 3 GB.
    O `init` do worker responde com o `perfil` efetivo (confira no DebugIA).
 5. Se o modelo for distribuído cifrado: ver `docs/seguranca-ia.md` §5
    (`--cifrar` → `assets/aux.dat`, registrar `cifrado <sha256>  assets/aux.dat`

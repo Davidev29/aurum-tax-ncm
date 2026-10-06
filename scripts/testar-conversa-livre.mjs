@@ -24,8 +24,10 @@ function descobrirModelo() {
       }
     }
   } catch (_) { /* segue */ }
-  const legado = path.join(DIR_MODELO, 'Qwen3-0.6B-Q8_0.gguf');
+  const legado = path.join(DIR_MODELO, 'Qwen3.5-2B-Q4_K_M.gguf');
   if (fs.existsSync(legado)) return legado;
+  const legadoAntigo = path.join(DIR_MODELO, 'Qwen3-0.6B-Q8_0.gguf');
+  if (fs.existsSync(legadoAntigo)) return legadoAntigo;
   try {
     if (fs.existsSync(DIR_MODELO)) {
       const ggufs = fs.readdirSync(DIR_MODELO)

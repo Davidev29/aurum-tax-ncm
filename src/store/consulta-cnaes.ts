@@ -239,6 +239,20 @@ export const useCnaes = create<CnaesState>((set, get) => ({
     try {
       const consulta = await consultarPorCnae(cnae7 || cnaeBruto, { anoReferencia: ano })
       set({ consulta, nbsEscolhida: null, consultando: false })
+      // GRAFO-08: CNAE consultado alimenta o overlay (carteira).
+      try {
+        if (cnae7 && /^\d{7}$/.test(cnae7)) {
+          void import('@/application/grafo-overlay').then((m) => {
+            try {
+              m.registrarCnaeUso(cnae7, null)
+            } catch {
+              /* best-effort */
+            }
+          }).catch(() => undefined)
+        }
+      } catch {
+        /* overlay nunca quebra */
+      }
     } catch (e) {
       set({
         consulta: null,
@@ -249,8 +263,25 @@ export const useCnaes = create<CnaesState>((set, get) => ({
   },
 
   nbsEscolhida: null,
-  setNbsEscolhida: (nbs) =>
-    set({ nbsEscolhida: nbs ? nbs.replace(/\D+/g, '').slice(0, 9) : null }),
+  setNbsEscolhida: (nbs) => {
+    const dig = nbs ? nbs.replace(/\D+/g, '').slice(0, 9) : null
+    set({ nbsEscolhida: dig })
+    // GRAFO-08: escolha de NBS no painel CNAE alimenta o overlay.
+    if (dig && dig.length === 9) {
+      try {
+        const cnae = get().consulta?.regra.cnae7 ?? ''
+        void import('@/application/grafo-overlay').then((m) => {
+          try {
+            m.registrarUsoLocal({ tipo: 'NCM-ESCOLHIDO', termo: cnae ? `CNAE ${cnae}` : '', codigo: dig, peso: 0.1 })
+          } catch {
+            /* best-effort */
+          }
+        }).catch(() => undefined)
+      } catch {
+        /* overlay nunca quebra */
+      }
+    }
+  },
 
   limpar: () =>
     set({

@@ -456,5 +456,19 @@ export async function consultarPorCnpj(
     doCache,
     resumo: veredito.resumo,
   })
+  // GRAFO-08: CNAEs da carteira (via CNPJ) alimentam o overlay.
+  try {
+    const { registrarCnaeUso } = await import('./grafo-overlay')
+    for (const a of atividades.slice(0, 10)) {
+      try {
+        const cnae7 = String((a as { cnae7?: unknown }).cnae7 ?? (a as { codigo?: unknown }).codigo ?? '').replace(/\D+/g, '')
+        if (/^\d{7}$/.test(cnae7)) registrarCnaeUso(cnae7, cnpj)
+      } catch {
+        /* item best-effort */
+      }
+    }
+  } catch {
+    /* overlay nunca quebra o CNPJ */
+  }
   return veredito
 }

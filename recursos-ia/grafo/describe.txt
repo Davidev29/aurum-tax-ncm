@@ -1,0 +1,28 @@
+# Grafo fiscal Aurum Tax NCM — describe() KGLite (Phase 10-04)
+# Espelho textual de scripts/grafo/schema.cypher p/ agentes dev (curadoria, offline).
+# Gerado em: 2026-10-06T01:40:53.149151+00:00 · versao: grafo-v1 · modo: full
+# Contadores: 20559 nodos · 30107 arestas · score 1.0
+
+## Nos (PRIMARY KEY = codigo/nome/numero/termo)
+- NCM(codigo, descricao, vigente, capitulo)
+- SH6(codigo, descricao) · SH4(codigo, descricao) · Capitulo(codigo, descricao) · Secao(codigo, descricao)
+- CCT(codigo, descricao, redIBS, redCBS)
+- Anexo(nome, rotulo) · ArtigoLC214(numero, titulo)
+- CNAE(codigo, descricao, anexoSimples) · NBS(codigo, descricao) · Termo(termo)
+
+## Relacoes (toda aresta carrega proveniencia: origem + confianca + anoReferencia)
+- NCM -[PERTENCE_A]-> SH6 (-[SH6_EM]-> SH4 -[SH4_EM]-> Capitulo -[CAP_EM]-> Secao)
+- NCM -[TEM_CLASSIFICACAO]-> CCT · NBS -[TEM_CLASSIFICACAO_NBS]-> CCT
+- CCT -[REDUZ_PARA]-> Anexo -[FUNDAMENTA_EM]-> ArtigoLC214
+- CNAE -[MAPEIA]-> NBS (ponte nao-oficial: por_codigo|triangulado)
+- Termo -[SINONIMO_DE]-> NCM · Termo -[SINONIMO_NBS]-> NBS
+
+## Caminho canonico auditavel (via:grafo)
+NCM→SH6→SH4→Cap→CCT→Anexo→Artigo · servicos: CNAE→NBS→CCT
+Origens validas: por_codigo|triangulado|heranca|curadoria (+uso_local do overlay 10-08).
+
+## Regras duras
+- O grafo PROPOE candidatos; o resolvedor deterministico DECIDE (via:grafo em trilha).
+- 100% offline (LadybugDB .lbug no app; .kgl so p/ curadoria/CI). Fail-closed:
+  sem .lbug/sem embedding → FTS-puro → lexical → NAO SEI. Nunca mock silencioso.
+- MCP dev: kglite-mcp-server --graph recursos-ia/grafo/grafo.kgl (stdio local, sem PII remota).

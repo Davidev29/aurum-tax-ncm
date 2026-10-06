@@ -1548,6 +1548,11 @@ async function montarRespostaNcm(
   const multiAviso = !resolvido.regraGeral && resolvido.lista.length > 1 && !extra.alternativas?.length
     ? `\nEste NCM tem ${resolvido.lista.length} enquadramentos oficiais — diga "só tem esse?" para ver todos.`
     : ''
+  // Phase 10-05: citação do caminho do grafo (só com proveniência + cypher).
+  const blocoGrafo = gate.grafoCypher && gate.caminhoGrafo?.length && gate.provenienciaGrafo?.length
+    ? `\n**Trilha do grafo (via:grafo):** ${gate.caminhoGrafo.join(' → ')} (proveniência: ${gate.provenienciaGrafo.map((p) => p.origem).join(', ')})` +
+      `${gate.boostGrafo === 'uso_local' ? ` · seu uso (boost: uso_local +${gate.boostValorGrafo ?? 0})` : ''}`
+    : ''
   return {
     texto:
       `${extra.notaDominio ? `${extra.notaDominio}\n` : ''}` +
@@ -1558,7 +1563,7 @@ async function montarRespostaNcm(
       `**Base legal:** ${baseLegalLinha}\n` +
       `**Nível de confiança: ${rotuloNivel(nivel, conf)}**\n` +
       `**Simulação de referência (R$ 1.000,00):** IBS ${fmtMoeda(calc.vIBS)} + CBS ${fmtMoeda(calc.vCBS)} = ${fmtMoeda(calc.total)}` +
-      `${atencao ? `${atencao}` : ''}${vaga}${multiAviso}${blocoAlternativas}\n` +
+      `${atencao ? `${atencao}` : ''}${vaga}${multiAviso}${blocoAlternativas}${blocoGrafo}\n` +
       `${fecho}`,
     codigo: gate.ncmValidado,
     tipoCodigo: 'ncm',
@@ -1637,6 +1642,10 @@ function montarRespostaNbs(gate: ResultadoGateIaServicos, t0: number, notaDomini
   const fecho = compacto
     ? `**Quer detalhar?** Me diga o valor, o CNPJ ou "tem mais algum?" para ver as opções.`
     : `**Próximo passo sugerido:** quer a tributação deste NBS ou simular no Simples? Me diga o valor/CNPJ — e se for empresa, posso listar as atividades pelo CNPJ.`
+  const blocoGrafoNbs = gate.grafoCypher && gate.caminhoGrafo?.length && gate.provenienciaGrafo?.length
+    ? `\n**Trilha do grafo (via:grafo):** ${gate.caminhoGrafo.join(' → ')} (proveniência: ${gate.provenienciaGrafo.map((p) => p.origem).join(', ')})` +
+      `${gate.boostGrafo === 'uso_local' ? ` · seu uso (boost: uso_local +${gate.boostValorGrafo ?? 0})` : ''}`
+    : ''
   return {
     texto:
       `${notaDominio ? `${notaDominio}\n` : ''}` +
@@ -1646,6 +1655,7 @@ function montarRespostaNbs(gate: ResultadoGateIaServicos, t0: number, notaDomini
       `**Base legal:** LC 214/2025${ficha ? ` (CST ${ficha.cst} · cClassTrib ${ficha.cClassTrib})` : ''} + LC 116/2003 (ISS municipal, conforme o serviço)\n` +
       `**Nível de confiança: ${rotuloNivel(nivel, conf)}**\n` +
       `${compacto ? '' : `**Pontos de atenção:** confirme tomador, local da prestação e vigência (transição 2026–2033); ISS varia por município.\n`}` +
+      `${blocoGrafoNbs}` +
       `${fecho}`,
     codigo: gate.nbsValidado,
     tipoCodigo: 'nbs',

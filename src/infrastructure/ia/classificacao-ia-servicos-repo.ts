@@ -37,6 +37,19 @@ export interface ResultadoConsultaIaServicos {
   veredito: VereditoServico | null
   fontes: string[]
   cnaeOrigem: string | null
+  grafoCypher?: string | null
+  graphPaths?: string[][]
+  caminhoGrafo?: string[] | null
+  provenienciaGrafo?: Array<{
+    de: string
+    para: string
+    tipo: string
+    origem: string
+    confianca: number
+    anoReferencia?: number | null
+  }> | null
+  boostGrafo?: 'uso_local' | null
+  boostValorGrafo?: number
 }
 
 export async function classificarComIAServicos(
@@ -71,6 +84,12 @@ export async function classificarComIAServicos(
       veredito: gate.veredito,
       fontes: gate.fontes,
       cnaeOrigem,
+      grafoCypher: gate.grafoCypher ?? null,
+      graphPaths: gate.graphPaths ?? [],
+      caminhoGrafo: gate.caminhoGrafo ?? null,
+      provenienciaGrafo: gate.provenienciaGrafo ?? null,
+      boostGrafo: gate.boostGrafo ?? null,
+      boostValorGrafo: gate.boostValorGrafo ?? 0,
     }
     void registrarAuditoria('consultas_ia_servicos', texto.slice(0, 80) || '(vazia)', 'criar', null, {
       via: vazio.via,
@@ -78,6 +97,7 @@ export async function classificarComIAServicos(
       confianca: 0,
       motivo: gate.motivo,
       cnaeOrigem,
+      ...(gate.grafoCypher ? { cypher: gate.grafoCypher, graphPaths: gate.graphPaths ?? [] } : {}),
     })
     void anexarConsultaIaJsonl({
       quando: new Date().toISOString(),
@@ -90,6 +110,7 @@ export async function classificarComIAServicos(
       mock: gate.mock,
       candidatos: gate.candidatos,
       ms: gate.ms,
+      ...(gate.grafoCypher ? { cypher: gate.grafoCypher, graphPaths: gate.graphPaths ?? [] } : {}),
     })
     return vazio
   }
@@ -121,6 +142,12 @@ export async function classificarComIAServicos(
     veredito: gate.veredito,
     fontes: gate.fontes,
     cnaeOrigem,
+    grafoCypher: gate.grafoCypher ?? null,
+    graphPaths: gate.graphPaths ?? [],
+    caminhoGrafo: gate.caminhoGrafo ?? null,
+    provenienciaGrafo: gate.provenienciaGrafo ?? null,
+    boostGrafo: gate.boostGrafo ?? null,
+    boostValorGrafo: gate.boostValorGrafo ?? 0,
   }
 
   void registrarAuditoria('consultas_ia_servicos', texto.slice(0, 80) || '(vazia)', 'criar', null, {
@@ -129,6 +156,7 @@ export async function classificarComIAServicos(
     confianca: resultado.confiancaIa,
     motivo: resultado.motivo,
     cnaeOrigem,
+    ...(gate.grafoCypher ? { cypher: gate.grafoCypher, graphPaths: gate.graphPaths ?? [] } : {}),
   })
   void anexarConsultaIaJsonl({
     quando: new Date().toISOString(),
@@ -141,6 +169,7 @@ export async function classificarComIAServicos(
     mock: resultado.mock,
     candidatos: resultado.candidatos,
     ms: resultado.ms,
+    ...(gate.grafoCypher ? { cypher: gate.grafoCypher, graphPaths: gate.graphPaths ?? [] } : {}),
   })
   return resultado
 }

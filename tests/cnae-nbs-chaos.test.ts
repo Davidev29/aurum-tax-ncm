@@ -9,7 +9,7 @@
  * - (g) template consolidado reutilizado em menu + CNPJ + chat;
  * - (h) CNAE de bens → faixa NCM (badge distinto, sem resolvedor);
  * - (i) 98-NBS com destaque + escolha funcional.
- * Preserva: `__COMPARAR_*__` intactos, rollback v12→v13 aditivo,
+ * Preserva: `__COMPARAR_*__` intactos, rollback v13→v14 aditivo,
  * `npm run base` sem os arquivos-fonte degrada gracioso, três badges
  * distintos, sem-lastro nunca com redução.
  *
@@ -441,12 +441,13 @@ describe('chaos-09 — preserva (regressão zero)', () => {
     ).not.toBe('cnae')
   })
 
-  it('caso 18 — rollback v12→v13: migração aditiva, stores antigas intactas', async () => {
-    expect(DB_VERSION).toBe(13)
+  it('caso 18 — rollback v13→v14: migração aditiva, stores antigas intactas', async () => {
+    expect(DB_VERSION).toBe(14)
     expect(STORES.CNAE_NBS).toBe('cnaeNbs')
     expect(STORES.LC_NBS).toBe('lcNbs')
     expect(STORES.CLASS_CONSOLIDADA).toBe('classificacoesConsolidadas')
-    // Stores v12 (Phase 7/8) seguem povoadas junto das v13 — nenhum `clear()`.
+    expect(STORES.GRAFOMETA).toBe('grafometa')
+    // Stores v13 (Phase 9) seguem povoadas junto da v14 — nenhum `clear()`.
     expect(await db.cnae.count()).toBeGreaterThan(0)
     expect(await db.cnaeNbs.count()).toBeGreaterThan(0)
     expect(await db.classificacoesConsolidadas.count()).toBeGreaterThan(0)
@@ -454,7 +455,7 @@ describe('chaos-09 — preserva (regressão zero)', () => {
       path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'infrastructure', 'db', 'schema.ts'),
       'utf8',
     )
-    expect(schema).toContain('this.version(12)')
+    expect(schema).toContain('this.version(13)')
     expect(schema).toContain('this.version(DB_VERSION)')
   })
 

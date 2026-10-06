@@ -15,3 +15,6 @@ export * from './cenario-dividido';
 export * from './entrada';
 export * from './relatorio';
 export * from './ferramentas';
+export * from './pro-labore';
+export * from './fator-r-dividido';
+export * from './analise-retorno';

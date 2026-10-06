@@ -52,6 +52,12 @@ import {
 } from './aurum-ai-contexto'
 import type { ViaClassificacao } from '@/store/ia'
 import {
+  consultarGrafoPrimeiro,
+  fundirCandidatosGrafoLexical,
+  trilhaVazia,
+  type TrilhaGrafo,
+} from './grafo-consumo'
+import {
   normalizarBusca,
   tokensRelevantes,
 } from '@/domain/services/busca-texto'
@@ -82,6 +88,24 @@ export interface ResultadoGateIa {
   veredito: VereditoAurumAI | null
   /** Bases lidas nesta predição (auditoria + UI). */
   fontes: string[]
+  /**
+   * Trilha do grafo (Phase 10-05 / GRAFO-05): cypher executado + caminhos
+   * multi-hop + proveniência. `null` quando o grafo não respondeu
+   * (fallback lexical bit-idêntico).
+   */
+  grafoCypher?: string | null
+  graphPaths?: string[][]
+  caminhoGrafo?: string[] | null
+  provenienciaGrafo?: Array<{
+    de: string
+    para: string
+    tipo: string
+    origem: string
+    confianca: number
+    anoReferencia?: number | null
+  }> | null
+  boostGrafo?: 'uso_local' | null
+  boostValorGrafo?: number
 }
 
 function combinarContextoIa(entrada: EntradaDescricao): string {
@@ -110,7 +134,9 @@ function combinarContextoIa(entrada: EntradaDescricao): string {
 async function selecionarAurumAILocal(
   descricao: string,
   candidatos: CandidatoIa[],
+  _trilhaGrafo?: TrilhaGrafo,
 ): Promise<{ codigo: string; confianca: number; motivo: string; ficha: FichaAbsoluta | null; veredito: VereditoAurumAI | null }> {
+  void _trilhaGrafo
   // Contexto LIMPO: só tokens relevantes (sem "de", "para", "com") + sinônimos.
   // Stopwords no conjunto inflavam todos os candidatos por igual e apagavam a
   // diferença entre o certo e o errado.
@@ -216,6 +242,13 @@ async function selecionarAurumAILocal(
     // Feedback negativo exato: já rejeitado para esta descrição → perde força
     // (mas continua como pista auditável no Top, nunca some da lista).
     if (rejeitados.has(String(c.codigo).replace(/\D+/g, ''))) scoreAbsoluto -= 500
+    // Grafo primeiro (10-05): candidato vindo do grafo ganha bônus de desempate
+    // (+2) + boost de uso local já com teto. Só reordena — o resolvedor decide.
+    // Sem grafo (fallback), `viaGrafo` é undefined e o score é bit-idêntico.
+    const ehGrafo = Boolean((c as CandidatoIa).viaGrafo)
+    if (ehGrafo) scoreAbsoluto += 2
+    const boostLocal = Number((c as CandidatoIa).boostValorGrafo) || 0
+    if (boostLocal > 0) scoreAbsoluto += Math.min(boostLocal, 0.3)
     pontuados.push({ c, pontosTexto, pontosProprios, scoreAbsoluto, ficha, dict: temPinDict })
   }
   pontuados.sort((a, b) => b.scoreAbsoluto - a.scoreAbsoluto || a.c.codigo.localeCompare(b.c.codigo))
@@ -475,13 +508,25 @@ export async function classificarComIa(
   // preenche no "Refinar predição" — antes o RAG lia só a descrição e perdia
   // o contexto). `descricao` do candidato é a descrição pura do item (o
   // caminho/hierarquia a Aurum AI lê via ficha absoluta).
+  // Phase 10-05 (GRAFO-05): grafo PRIMEIRO — antes do Top-20 lexical. Sem
+  // `.lbug`/sem canal (`ok:false`), segue bit-idêntico ao pré-grafo.
   opts?.aoWorker?.(true)
   const contextoRico = combinarContextoIa(entrada)
   // Modelo multilíngue nativo: o contexto vai puro ao RAG (sem camada de
   // tradução — anexar o EN quebrava o AND estrito na TEC).
   const textoBusca = contextoRico || entrada.descricao
+  let trilhaGrafo: TrilhaGrafo = trilhaVazia()
+  let respostaGrafo: import('@/infrastructure/bridge').ResultadoGrafoBridge | null = null
+  try {
+    const g = await consultarGrafoPrimeiro(textoBusca, 5)
+    trilhaGrafo = g.trilha
+    respostaGrafo = g.resposta
+  } catch {
+    trilhaGrafo = trilhaVazia()
+    respostaGrafo = null
+  }
   const achados = await buscarNomenclaturaPorTexto(textoBusca, 20)
-  const candidatos: CandidatoIa[] = achados.map((a) => ({
+  const lexicais: CandidatoIa[] = achados.map((a) => ({
     codigo: a.codigo,
     descricao: a.descricao,
     score: a.score,
@@ -489,15 +534,19 @@ export async function classificarComIa(
   // Dicionário comercial: pins curados entram no Top mesmo quando o RAG
   // lexical não os encontra ("parmesão" ∉ TEC). O resolvedor valida abaixo.
   for (const acerto of buscarNoDicionarioComercial(textoBusca).slice(0, 6)) {
-    if (candidatos.some((c) => c.codigo === acerto.ncm)) continue
+    if (lexicais.some((c) => c.codigo === acerto.ncm)) continue
     let descricaoPin = `Dicionário comercial (“${acerto.termo}”)`
     try {
       descricaoPin = (await buscarNomenclatura(acerto.ncm))?.descricao ?? descricaoPin
     } catch {
       /* sem nomenclatura: o resolvedor barra o pin abaixo */
     }
-    candidatos.push({ codigo: acerto.ncm, descricao: descricaoPin, score: 999 })
+    lexicais.push({ codigo: acerto.ncm, descricao: descricaoPin, score: 999 })
   }
+  // Fusão: grafo primeiro, dedupe por código. Sem grafo → lexical intacto.
+  const candidatos: CandidatoIa[] = fundirCandidatosGrafoLexical(respostaGrafo, lexicais, trilhaGrafo)
+  const usouGrafo = trilhaGrafo.usouGrafo
+  const viaBase: ViaClassificacao = usouGrafo ? (bridge?.ia ? 'grafo+ia' : 'grafo') : 'ia'
 
   let escolha: { codigo: string; confianca: number; motivo: string; ficha: FichaAbsoluta | null; veredito: VereditoAurumAI | null } = {
     codigo: 'NÃO SEI',
@@ -526,7 +575,7 @@ export async function classificarComIa(
         // vínculo + capítulo + vigência) — nem que demore instantes, a
         // decisão provisória usa tudo que o sistema já leu.
         try {
-          const segundaOpiniao = await selecionarAurumAILocal(contextoRico || entrada.descricao, candidatos)
+          const segundaOpiniao = await selecionarAurumAILocal(contextoRico || entrada.descricao, candidatos, trilhaGrafo)
           if (segundaOpiniao.codigo !== 'NÃO SEI') {
             escolha = {
               ...segundaOpiniao,
@@ -551,7 +600,7 @@ export async function classificarComIa(
         escolha = { codigo: r.codigo, confianca: Math.round(confianca * 100) / 100, motivo: r.motivo, ficha, veredito }
       }
     } else {
-      escolha = await selecionarAurumAILocal(contextoRico || entrada.descricao, candidatos)
+      escolha = await selecionarAurumAILocal(contextoRico || entrada.descricao, candidatos, trilhaGrafo)
     }
   }
 
@@ -600,7 +649,7 @@ export async function classificarComIa(
               candidatos.push(...candidatos2.filter((c) => !candidatos.some((x) => x.codigo === c.codigo)))
             }
           } else {
-            const escolha2 = await selecionarAurumAILocal(textoCorrigido, candidatos2)
+            const escolha2 = await selecionarAurumAILocal(textoCorrigido, candidatos2, trilhaGrafo)
             if (escolha2.codigo !== 'NÃO SEI') {
               escolha = {
                 ...escolha2,
@@ -622,6 +671,7 @@ export async function classificarComIa(
     'Capítulos NCM + flags in natura (Art. 137) e alimentos (Art. 135)',
     'Vigência (NCM extinto · cClassTrib · revogação CFF)',
     'Base oficial · correspondências por nome (NCMs avaliados no Top)',
+    ...(usouGrafo ? ['Grafo fiscal local (FTS + vetor + 2-hops, caminho auditável)'] : []),
     ...(escolha.motivo === 'dicionario-comercial' ? ['Dicionário comercial (nomes populares → NCM)'] : []),
     ...(escolha.motivo.includes('pista-ancorada-base-oficial') || escolha.motivo.includes('ancorado')
       ? ['Hipótese provisória ancorada — lastro oficial com confiança baixa, a verificar com 1–2 detalhes']
@@ -629,15 +679,45 @@ export async function classificarComIa(
     ...(escolha.motivo.includes('correcao-ortografica') ? ['Correção ortográfica (segunda chance)'] : []),
     ...(escolha.motivo.includes('segunda-opiniao') ? ['Segunda opinião ancorada (worker recusou, seletor reavaliou o Top oficial)'] : []),
   ]
+  // Motivo carrega a trilha auditável quando o grafo participou (cypher vai
+  // para `audit_log` + `.jsonl` + DebugIA via `grafoCypher`).
+  const motivoComGrafo = usouGrafo && trilhaGrafo.cypher
+    ? `${escolha.motivo}/via-grafo`
+    : escolha.motivo
+  const grafoTrilha = usouGrafo
+    ? {
+        grafoCypher: trilhaGrafo.cypher,
+        graphPaths: trilhaGrafo.caminhos,
+        caminhoGrafo: escolha.codigo !== 'NÃO SEI'
+          ? (trilhaGrafo.caminhoPorCodigo.get(String(escolha.codigo).replace(/\D+/g, '')) ?? null)
+          : null,
+        provenienciaGrafo: escolha.codigo !== 'NÃO SEI'
+          ? (trilhaGrafo.provenienciaPorCodigo.get(String(escolha.codigo).replace(/\D+/g, '')) ?? null)
+          : null,
+        boostGrafo: escolha.codigo !== 'NÃO SEI'
+          ? (trilhaGrafo.boostPorCodigo.get(String(escolha.codigo).replace(/\D+/g, ''))?.boost ?? null)
+          : null,
+        boostValorGrafo: escolha.codigo !== 'NÃO SEI'
+          ? (trilhaGrafo.boostPorCodigo.get(String(escolha.codigo).replace(/\D+/g, ''))?.valor ?? 0)
+          : 0,
+      }
+    : {
+        grafoCypher: null,
+        graphPaths: [],
+        caminhoGrafo: null,
+        provenienciaGrafo: null,
+        boostGrafo: null,
+        boostValorGrafo: 0,
+      }
 
   if (escolha.codigo === 'NÃO SEI') {
     return {
-      via: 'ia',
+      via: viaBase,
       sugestao,
       candidatos,
       codigoEscolhido: null,
       confiancaIa: 0,
-      motivo: escolha.motivo,
+      motivo: motivoComGrafo,
       mock,
       ncmValidado: null,
       regraGeral: false,
@@ -645,6 +725,7 @@ export async function classificarComIa(
       ficha: escolha.ficha,
       veredito: escolha.veredito,
       fontes,
+      ...grafoTrilha,
     }
   }
 
@@ -658,12 +739,12 @@ export async function classificarComIa(
   const valido = validacao.lista.length > 0 && !validacao.extinto && validacao.nomenclatura != null
   if (!valido) {
     return {
-      via: 'ia',
+      via: viaBase,
       sugestao,
       candidatos,
       codigoEscolhido: escolha.codigo,
       confiancaIa: 0,
-      motivo: escolha.motivo,
+      motivo: motivoComGrafo,
       mock,
       ncmValidado: null,
       regraGeral: false,
@@ -671,17 +752,28 @@ export async function classificarComIa(
       ficha: null,
       veredito: null,
       fontes,
+      ...grafoTrilha,
     }
   }
-  const fichaFinal = escolha.ficha ?? (await montarFichaAbsoluta(escolha.codigo).catch(() => null))
+  const fichaBase = escolha.ficha ?? (await montarFichaAbsoluta(escolha.codigo).catch(() => null))
+  // Enriquecimento da ficha com o caminho do grafo (só com proveniência).
+  const fichaFinal = fichaBase
+    ? {
+        ...fichaBase,
+        ...(grafoTrilha.caminhoGrafo ? { grafoCaminho: grafoTrilha.caminhoGrafo } : {}),
+        ...(grafoTrilha.grafoCypher ? { grafoCypher: grafoTrilha.grafoCypher } : {}),
+        ...(grafoTrilha.provenienciaGrafo ? { grafoProveniencia: grafoTrilha.provenienciaGrafo } : {}),
+        ...(grafoTrilha.boostGrafo ? { grafoBoost: grafoTrilha.boostGrafo, grafoBoostValor: grafoTrilha.boostValorGrafo } : {}),
+      }
+    : null
   const vereditoFinal = escolha.veredito ?? (fichaFinal ? analisarFichaAbsoluta(fichaFinal) : null)
   return {
-    via: 'ia',
+    via: viaBase,
     sugestao,
     candidatos,
     codigoEscolhido: escolha.codigo,
     confiancaIa: escolha.confianca,
-    motivo: escolha.motivo,
+    motivo: motivoComGrafo,
     mock,
     ncmValidado: escolha.codigo,
     regraGeral: validacao.regraGeral,
@@ -689,5 +781,6 @@ export async function classificarComIa(
     ficha: fichaFinal,
     veredito: vereditoFinal,
     fontes,
+    ...grafoTrilha,
   }
 }

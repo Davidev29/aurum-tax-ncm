@@ -5,8 +5,8 @@
 
 /** Nome/versão do IndexedDB legado (paridade com a v1). */
 export const DB_NAME = 'aurum_tax_ncm_v1'
-/** Versão do IndexedDB. A v13 adiciona `cnaeNbs` + `lcNbs` + `classificacoesConsolidadas` (Phase 9, ponte CNAE → NBS). */
-export const DB_VERSION = 13
+/** Versão do IndexedDB. A v14 adiciona `grafometa` (Phase 10-01, hash/versão do grafo fiscal). */
+export const DB_VERSION = 14
 
 /** Itens por página nas listagens. */
 export const PAGE_SIZE = 10
@@ -110,6 +110,8 @@ export const STORES = {
   LC_NBS: 'lcNbs',
   /** Templates consolidados por CNAE (Phase 9, conferência entre fontes). */
   CLASS_CONSOLIDADA: 'classificacoesConsolidadas',
+  /** Metadados do grafo fiscal local (Phase 10-01, `MANIFEST.grafo.json`). */
+  GRAFOMETA: 'grafometa',
 } as const
 
 export type StoreName = (typeof STORES)[keyof typeof STORES]

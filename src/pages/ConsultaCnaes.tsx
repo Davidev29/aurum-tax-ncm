@@ -338,7 +338,19 @@ export function ConsultaCnaes() {
               <span className="text-lg">📋</span> Painel do CNAE
             </h2>
             {consulta ? (
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{consulta.resumo}</p>
+              <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <span>{consulta.resumo}</span>
+                {consulta.estadoNbs === 'mapeado' ? (
+                  <span
+                    className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
+                    title="NBS vinculadas via caminho do grafo CNAE→NBS→CCT (multi-hop auditável, com proveniência). O resolvedor validou cada NBS."
+                    role="status"
+                    aria-label="via:grafo"
+                  >
+                    via:grafo
+                  </span>
+                ) : null}
+              </p>
             ) : null}
           </div>
           <div className="space-y-4 p-5">

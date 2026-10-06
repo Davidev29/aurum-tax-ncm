@@ -955,6 +955,27 @@ async function tratar(msg) {
       return { id, ok: true, cmd, candidatos: resultados, total: ind.totalDocs ?? ind.docs.length, ms: agoraMs() - tIni }
     }
 
+    if (cmd === 'grafo') {
+      // Phase 10-02 (GRAFO-02): Cypher/FTS no worker via `grafo-service.cjs`
+      // (nunca no renderer/main quente). Sem `.lbug` → `ok:false` +
+      // `fallback:'lexical'` — nunca lança, nunca mock silencioso.
+      try {
+        const gs = require('./grafo-service.cjs')
+        const r = await gs.grafoConsultar(
+          {
+            texto: msg.texto ?? msg.consulta,
+            k: msg.k,
+            anoReferencia: msg.anoReferencia,
+            ...(msg.modoVetor === 'fts-puro' ? { modoVetorForcado: 'fts-puro' } : {}),
+          },
+          {},
+        )
+        return { id, cmd, ...r, ms: agoraMs() - tIni, ramMB: ramMB() }
+      } catch (e) {
+        return { id, ok: false, cmd, fallback: 'lexical', erro: String((e && e.message) || e).slice(0, 160) }
+      }
+    }
+
     // Comando `traduzir` removido: modelo multilíngue nativo, sem camada de
     // tradução no app. Os mapas internos (traduzirParaPT/EN) seguem em uso
     // apenas na recuperação lexical do índice PT (buscar + gate de sanidade).

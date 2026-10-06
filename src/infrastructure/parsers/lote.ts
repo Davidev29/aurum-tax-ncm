@@ -268,7 +268,23 @@ export async function processarArquivoLote(
         veredito = await resolverClassificacoes(chave)
         cache.set(chave, veredito)
       }
-      item.classificacoes = veredito.lista
+      // Phase 10-05: desempate multi-opção via caminho do grafo (só reordena;
+      // sem grafo, ordem oficial bit-idêntica). Best-effort, nunca lança.
+      let listaEfetiva = veredito.lista
+      try {
+        if (veredito.lista.length > 1) {
+          const { consultarGrafoPrimeiro, desempatarPorGrafo } = await import('@/application/grafo-consumo')
+          const textoLote = String(cel(row, map.nome) || chave).slice(0, 120) || chave
+          const g = await consultarGrafoPrimeiro(textoLote, 5).catch(() => null)
+          if (g && g.trilha.usouGrafo) {
+            const r = desempatarPorGrafo(veredito.lista, g.trilha, chave)
+            if (r.usouGrafo) listaEfetiva = r.lista
+          }
+        }
+      } catch {
+        /* desempate é best-effort; mantém a ordem oficial */
+      }
+      item.classificacoes = listaEfetiva
       item.regraGeral = veredito.regraGeral
       item.manual = veredito.manual || veredito.lista.some((c) => c.manual != null)
       item.nomenclatura = veredito.nomenclatura
@@ -278,7 +294,7 @@ export async function processarArquivoLote(
       const analise = analisarItemLoteIA({
         nome: item.nome,
         ncm: chave,
-        classificacoes: veredito.lista,
+        classificacoes: listaEfetiva,
         regraGeral: veredito.regraGeral,
         manual: item.manual ?? false,
         extinto: veredito.extinto,

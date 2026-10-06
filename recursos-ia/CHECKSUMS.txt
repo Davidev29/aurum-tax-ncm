@@ -1,7 +1,12 @@
 # CHECKSUMS — recursos-ia (Phase 6, IA-01/IA-04)
 # Formato: "<sha256-hex>  <caminho-relativo-a-recursos-ia/>"
-# Modelo atual: Qwen3-0.6B-Instruct Q8_0 (~640MB), fonte:
-# https://huggingface.co/Qwen/Qwen3-0.6B-GGUF (arquivo Qwen3-0.6B-Q8_0.gguf).
+# Modelo oficial (2026-10-06): Qwen3.5-2B Q4_K_M (~1221MB), pin em modelo/modelo.json.
+# Modelo anterior (compat): Qwen3-0.6B-Instruct Q8_0 (~640MB),
+# fonte: https://huggingface.co/Qwen/Qwen3-0.6B-GGUF (arquivo Qwen3-0.6B-Q8_0.gguf).
 # Para recalcular:
-#   certutil -hashfile recursos-ia\modelo\Qwen3-0.6B-Q8_0.gguf SHA256
+#   certutil -hashfile recursos-ia\modelo\Qwen3.5-2B-Q4_K_M.gguf SHA256
+aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223  modelo/Qwen3.5-2B-Q4_K_M.gguf
 9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031  modelo/Qwen3-0.6B-Q8_0.gguf
+
+d6032fe4f0ef926b95c5a8ac9e2f13a476202e95b705cdb1ef8771893de27a1a  embedding/vetores-ncm.json
+b7c1045586dfed80f2341da45c1513edc0770f43869b7cfa60e42ec42e50e70b  embedding/MANIFEST-embedding.json

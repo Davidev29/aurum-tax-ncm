@@ -13,7 +13,7 @@ function nomeBase(mesInicio: string): string {
 
 export function exportarProjecaoCSV(rel: RelatorioProjecao): void {
   const linhas: string[][] = [
-    ['mes', 'receita_total', 'receita_mae', 'receita_nova', 'rbt12_mae', 'rbt12_nova', 'faixa_mae', 'faixa_nova', 'aliq_mae', 'aliq_nova', 'das_mae', 'das_nova', 'das_unificado', 'economia_mes', 'economia_acumulada'],
+    ['mes', 'receita_total', 'receita_mae', 'receita_nova', 'rbt12_mae', 'rbt12_nova', 'rbt12_ref', 'faixa_mae', 'faixa_nova', 'faixa_ref', 'aliq_nominal_mae', 'aliq_nominal_nova', 'aliq_nominal_ref', 'aliq_efet_mae', 'aliq_efet_nova', 'aliq_efet_ref', 'das_mae', 'das_nova', 'das_unificado', 'economia_mes', 'economia_acumulada'],
     ...rel.serieMensal.map((l) => [
       l.mes,
       l.receitaTotal.toFixed(2),
@@ -21,10 +21,16 @@ export function exportarProjecaoCSV(rel: RelatorioProjecao): void {
       l.receitaNova.toFixed(2),
       l.rbt12Mae.toFixed(2),
       l.rbt12Nova.toFixed(2),
+      (l.rbt12Ref ?? 0).toFixed(2),
       String(l.faixaMae),
       String(l.faixaNova),
+      String(l.faixaRef ?? ''),
+      (l.aliquotaNominalMae ?? 0).toFixed(6),
+      (l.aliquotaNominalNova ?? 0).toFixed(6),
+      (l.aliquotaNominalRef ?? 0).toFixed(6),
       l.aliquotaEfetivaMae.toFixed(6),
       l.aliquotaEfetivaNova.toFixed(6),
+      (l.aliquotaEfetivaRef ?? 0).toFixed(6),
       l.dasMae.toFixed(2),
       l.dasNova.toFixed(2),
       l.dasUnificadoReferencia.toFixed(2),

@@ -28,7 +28,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const NOME_GGUF = 'Qwen3-0.6B-Q8_0.gguf'
+const NOME_GGUF = 'Qwen3.5-2B-Q4_K_M.gguf'
 
 /**
  * CAMADA DE COMPATIBILIDADE (modelo agnóstico): `NOME_GGUF` acima é o nome

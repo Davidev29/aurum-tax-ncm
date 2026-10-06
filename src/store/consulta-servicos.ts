@@ -90,6 +90,12 @@ interface ServicosState {
   fichaIa: import('@/application/classificacao-ia-servicos').FichaAbsolutaServico | null
   vereditoIa: import('@/application/classificacao-ia-servicos').VereditoServico | null
   fontesIa: string[]
+  grafoCypherIa: string | null
+  graphPathsIa: string[][]
+  caminhoGrafoIa: string[] | null
+  provenienciaGrafoIa: Array<{ de: string; para: string; tipo: string; origem: string; confianca: number; anoReferencia?: number | null }> | null
+  boostGrafoIa: 'uso_local' | null
+  boostValorGrafoIa: number
 
   cnpjEntrada: string
   buscandoCnpj: boolean
@@ -147,6 +153,12 @@ export const useServicos = create<ServicosState>((set, get) => ({
   fichaIa: null,
   vereditoIa: null,
   fontesIa: [],
+  grafoCypherIa: null,
+  graphPathsIa: [],
+  caminhoGrafoIa: null,
+  provenienciaGrafoIa: null,
+  boostGrafoIa: null,
+  boostValorGrafoIa: 0,
 
   cnpjEntrada: '',
   buscandoCnpj: false,
@@ -293,6 +305,19 @@ export const useServicos = create<ServicosState>((set, get) => ({
     seqDescricao++
     set({ entrada: fmtNbs(digitos) })
     await get().consultar(digitos)
+    // GRAFO-08: escolha NBS alimenta o overlay.
+    try {
+      const termo = get().entrada || digitos
+      void import('@/application/grafo-overlay').then((m) => {
+        try {
+          m.registrarEscolhaUso(String(termo).slice(0, 120), digitos)
+        } catch {
+          /* best-effort */
+        }
+      }).catch(() => undefined)
+    } catch {
+      /* overlay nunca quebra */
+    }
   },
 
   classificarDescricao: async (entrada) => {
@@ -318,6 +343,12 @@ export const useServicos = create<ServicosState>((set, get) => ({
         fichaIa: null,
         vereditoIa: null,
         fontesIa: [],
+        grafoCypherIa: null,
+        graphPathsIa: [],
+        caminhoGrafoIa: null,
+        provenienciaGrafoIa: null,
+        boostGrafoIa: null,
+        boostValorGrafoIa: 0,
       })
       return
     }
@@ -341,6 +372,12 @@ export const useServicos = create<ServicosState>((set, get) => ({
         fichaIa: r.ficha,
         vereditoIa: r.veredito,
         fontesIa: r.fontes,
+        grafoCypherIa: (r as { grafoCypher?: string | null }).grafoCypher ?? null,
+        graphPathsIa: (r as { graphPaths?: string[][] }).graphPaths ?? [],
+        caminhoGrafoIa: (r as { caminhoGrafo?: string[] | null }).caminhoGrafo ?? null,
+        provenienciaGrafoIa: (r as { provenienciaGrafo?: { de: string; para: string; tipo: string; origem: string; confianca: number; anoReferencia?: number | null }[] | null }).provenienciaGrafo ?? null,
+        boostGrafoIa: (r as { boostGrafo?: 'uso_local' | null }).boostGrafo ?? null,
+        boostValorGrafoIa: (r as { boostValorGrafo?: number }).boostValorGrafo ?? 0,
       })
     } catch {
       if (seq !== seqDescricao) return
@@ -358,6 +395,12 @@ export const useServicos = create<ServicosState>((set, get) => ({
         fichaIa: null,
         vereditoIa: null,
         fontesIa: [],
+        grafoCypherIa: null,
+        graphPathsIa: [],
+        caminhoGrafoIa: null,
+        provenienciaGrafoIa: null,
+        boostGrafoIa: null,
+        boostValorGrafoIa: 0,
       })
     }
   },
@@ -378,7 +421,7 @@ export const useServicos = create<ServicosState>((set, get) => ({
 
   feedbackIaNegativo: async () => {
     const s = get()
-    if (!s.codigoIa && s.via !== 'ia') return
+    if (!s.codigoIa && s.via !== 'ia' && s.via !== 'grafo' && s.via !== 'grafo+ia') return
     if (s.feedbackIaEnviado) return
     try {
       await registrarFeedbackIa({

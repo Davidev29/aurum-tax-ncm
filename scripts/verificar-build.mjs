@@ -5,6 +5,8 @@
  *   1. Base tributária `public/base/`: 4 artefatos + MANIFEST com contagens
  *      oficiais (164 referência, 2335 NCM, 15156 nomenclatura, 1090 CNAE,
  *      122 NBS, 17 CST, 132 CST×cClassTrib).
+ *   1b. Grafo fiscal `public/base/grafo/`: `grafo.lbug` (+ espelho
+ *      `grafo.lbug.json`) + `MANIFEST.grafo.json` com hash íntegro.
  *   2. IA offline: `ncm-para-ia.json` (2335) + índice lexical + hash MANIFEST
  *      sincronizado + sinônimos + conhecimento curado + GGUF (~640MB) com
  *      SHA256 conferido contra `CHECKSUMS.txt`.
@@ -61,7 +63,7 @@ function ehOfuscado(conteudo) {
 }
 
 function verificarBase() {
-  console.log('\n[1/4] Base tributária (public/base/)')
+  console.log('\n[1/5] Base tributária (public/base/)')
   const dir = path.join(RAIZ, 'public', 'base')
   for (const f of ['classificacao-tributaria.json', 'reforma.json', 'nomenclatura.json', 'cnae.json', 'MANIFEST.json']) {
     if (!fs.existsSync(path.join(dir, f))) fail(`public/base/${f} ausente (rode npm run base:completa)`)
@@ -106,7 +108,7 @@ function verificarBase() {
 }
 
 function verificarIA() {
-  console.log('\n[2/4] IA offline embutida (recursos-ia/)')
+  console.log('\n[2/5] IA offline embutida (recursos-ia/)')
   const baseIa = path.join(RAIZ, 'recursos-ia', 'dados-brutos', 'ncm-para-ia.json')
   const indice = path.join(RAIZ, 'recursos-ia', 'indice-ncm', 'indice-lexical.json')
   const hashFile = path.join(RAIZ, 'recursos-ia', 'indice-ncm', '.manifest-hash')
@@ -196,8 +198,50 @@ async function verificarHashIndice() {
   }
 }
 
+/**
+ * Phase 10-01 (GRAFO-01) — grafo fiscal versionado (`[3/5]`).
+ * Confere existência do `.lbug` (+ espelho `.json`) e a integridade do
+ * `MANIFEST.grafo.json` (hash recomputado do payload + contadores).
+ */
+async function verificarGrafo() {
+  console.log('\n[3/5] Grafo fiscal (public/base/grafo/)')
+  const dir = path.join(RAIZ, 'public', 'base', 'grafo')
+  const lbug = path.join(dir, 'grafo.lbug')
+  const lbugJson = path.join(dir, 'grafo.lbug.json')
+  const mani = path.join(dir, 'MANIFEST.grafo.json')
+  if (!fs.existsSync(lbug)) fail('grafo.lbug ausente (rode npm run base)')
+  if (!fs.existsSync(lbugJson)) fail('grafo.lbug.json ausente (rode npm run base)')
+  if (!fs.existsSync(mani)) fail('MANIFEST.grafo.json ausente (rode npm run base)')
+  if (falhas.length) return
+  try {
+    const m = lerJson(mani)
+    for (const campo of ['versao', 'geradoEm', 'hashBase', 'hash', 'nodos', 'arestas', 'embedding']) {
+      if (m[campo] === undefined || m[campo] === null) fail(`MANIFEST.grafo sem campo "${campo}"`)
+    }
+    if (!/^[0-9a-f]{64}$/i.test(String(m.hash ?? ''))) fail('MANIFEST.grafo com hash inválido')
+    if (!(m.nodos > 0) || !(m.arestas > 0)) fail(`MANIFEST.grafo vazio (nodos=${m.nodos}, arestas=${m.arestas})`)
+    if (falhas.length) return
+    ok(`MANIFEST.grafo: ${m.versao} · ${m.nodos} nodos · ${m.arestas} arestas · embedding:${m.embedding}`)
+    const { hashGrafo } = await import('./build-grafo.mjs')
+    const payload = lerJson(lbugJson)
+    const real = hashGrafo(payload.nodos ?? [], payload.arestas ?? [])
+    if (real !== m.hash) {
+      fail(`hash do grafo diverge (payload ${real.slice(0, 12)}… ≠ MANIFEST ${String(m.hash).slice(0, 12)}…) — rode npm run base`)
+    } else {
+      ok(`hash do grafo íntegro (${real.slice(0, 12)}…)`)
+    }
+    if ((payload.nodos ?? []).length !== m.nodos || (payload.arestas ?? []).length !== m.arestas) {
+      fail('contadores do MANIFEST.grafo ≠ tamanho do payload — rode npm run base')
+    } else {
+      ok('contadores conferem com o payload')
+    }
+  } catch (e) {
+    fail(`leitura do grafo: ${e.message}`)
+  }
+}
+
 function verificarSaidas() {
-  console.log('\n[3/4] Saídas compiladas (dist/ + electron/dist/)')
+  console.log('\n[4/5] Saídas compiladas (dist/ + electron/dist/)')
   const indexHtml = path.join(RAIZ, 'dist', 'index.html')
   if (!fs.existsSync(indexHtml)) fail('dist/index.html ausente (rode vite build)')
   else ok('renderer dist/ ok')
@@ -205,14 +249,14 @@ function verificarSaidas() {
   const jsRenderer = fs.existsSync(assets) ? fs.readdirSync(assets).filter((f) => f.endsWith('.js')) : []
   if (!jsRenderer.length) fail('dist/assets/*.js ausentes')
   else ok(`renderer: ${jsRenderer.length} chunk(s) JS`)
-  for (const f of ['main.js', 'preload.cjs', 'ia-worker.cjs', 'caminhos-ia.cjs', 'modelo-seguro.cjs', 'perfil-modelo.cjs']) {
+  for (const f of ['main.js', 'preload.cjs', 'ia-worker.cjs', 'caminhos-ia.cjs', 'modelo-seguro.cjs', 'perfil-modelo.cjs', 'grafo-service.cjs']) {
     if (!fs.existsSync(path.join(RAIZ, 'electron', 'dist', f))) fail(`electron/dist/${f} ausente (rode build:electron)`)
   }
   if (!falhas.length) ok('electron/dist/ ok (main+preload+IA)')
 }
 
 function verificarOfuscacao() {
-  console.log('\n[4/4] Anti-engenharia reversa (ofuscação + sem sourcemap)')
+  console.log('\n[5/5] Anti-engenharia reversa (ofuscação + sem sourcemap)')
   const mapas = []
   const coletar = (dir) => {
     if (!fs.existsSync(dir)) return
@@ -256,6 +300,7 @@ async function main() {
   verificarBase()
   verificarIA()
   await verificarHashIndice()
+  await verificarGrafo()
   if (pre) {
     if (falhas.length) {
       console.error(`\n✖ BUILD INCOMPLETA (--pre): ${falhas.length} falha(s).`)

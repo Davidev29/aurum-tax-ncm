@@ -93,7 +93,8 @@ interface ConsultaState {
   /**
    * Camada Aurum AI (Phase 6 / 06-06): `via` indica se o determinístico venceu
    * (`deterministico`, sem worker) ou o fallback Aurum AI acionou (`ia`).
-   * Só quando `via === 'ia'` a UI exibe a seção "Sugerido por Aurum AI".
+   * Phase 10-05: `grafo` / `grafo+ia` quando o grafo fiscal participou.
+   * Só quando `via` é `ia`/`grafo`/`grafo+ia` a UI exibe a seção "Sugerido por Aurum AI".
    */
   via: ViaClassificacao | null
   candidatosIa: CandidatoIa[]
@@ -109,6 +110,13 @@ interface ConsultaState {
   fichaIa: import('@/application/aurum-ai-contexto').FichaAbsoluta | null
   vereditoIa: import('@/application/aurum-ai-contexto').VereditoAurumAI | null
   fontesIa: string[]
+  /** Trilha do grafo (`via:grafo` auditável — cypher + caminho + proveniência). */
+  grafoCypherIa: string | null
+  graphPathsIa: string[][]
+  caminhoGrafoIa: string[] | null
+  provenienciaGrafoIa: Array<{ de: string; para: string; tipo: string; origem: string; confianca: number; anoReferencia?: number | null }> | null
+  boostGrafoIa: 'uso_local' | null
+  boostValorGrafoIa: number
 
   setCodigo: (v: string) => void
   consultar: (codigo?: string) => Promise<void>
@@ -206,6 +214,12 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
   fichaIa: null,
   vereditoIa: null,
   fontesIa: [],
+  grafoCypherIa: null,
+  graphPathsIa: [],
+  caminhoGrafoIa: null,
+  provenienciaGrafoIa: null,
+  boostGrafoIa: null,
+  boostValorGrafoIa: 0,
 
   setCodigo: (v) => set({ codigo: v }),
 
@@ -316,6 +330,12 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
         fichaIa: null,
         vereditoIa: null,
         fontesIa: [],
+        grafoCypherIa: null,
+        graphPathsIa: [],
+        caminhoGrafoIa: null,
+        provenienciaGrafoIa: null,
+        boostGrafoIa: null,
+        boostValorGrafoIa: 0,
       })
       return
     }
@@ -372,6 +392,12 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
         fichaIa: null,
         vereditoIa: null,
         fontesIa: [],
+        grafoCypherIa: null,
+        graphPathsIa: [],
+        caminhoGrafoIa: null,
+        provenienciaGrafoIa: null,
+        boostGrafoIa: null,
+        boostValorGrafoIa: 0,
       })
     }
     await Promise.allSettled(tarefas)
@@ -386,6 +412,19 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
     seqDescricao++
     set({ modo: 'ncm', entrada: fmtNcm(digitos) })
     await get().consultar(digitos)
+    // GRAFO-08: escolha da consulta alimenta o overlay (termo → NCM).
+    try {
+      const termo = get().entrada || get().descricao || digitos
+      void import('@/application/grafo-overlay').then((m) => {
+        try {
+          m.registrarEscolhaUso(String(termo).slice(0, 120), digitos)
+        } catch {
+          /* best-effort */
+        }
+      }).catch(() => undefined)
+    } catch {
+      /* overlay nunca quebra a consulta */
+    }
   },
 
   setPrefillSalvar: (p) => set({ prefillSalvar: p }),
@@ -420,6 +459,12 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
         fichaIa: null,
         vereditoIa: null,
         fontesIa: [],
+        grafoCypherIa: null,
+        graphPathsIa: [],
+        caminhoGrafoIa: null,
+        provenienciaGrafoIa: null,
+        boostGrafoIa: null,
+        boostValorGrafoIa: 0,
       })
       return
     }
@@ -448,7 +493,26 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
         fichaIa: r.ficha,
         vereditoIa: r.veredito,
         fontesIa: r.fontes,
+        grafoCypherIa: r.grafoCypher ?? null,
+        graphPathsIa: r.graphPaths ?? [],
+        caminhoGrafoIa: r.caminhoGrafo ?? null,
+        provenienciaGrafoIa: r.provenienciaGrafo ?? null,
+        boostGrafoIa: r.boostGrafo ?? null,
+        boostValorGrafoIa: r.boostValorGrafo ?? 0,
       })
+      // Observabilidade do grafo (10-03): espelha a trilha no store da IA.
+      try {
+        const { useIa } = await import('./ia')
+        const st = useIa.getState()
+        if (r.grafoCypher) {
+          st.setGrafoSnapshot({ graphPaths: r.graphPaths ?? [], cypher: r.grafoCypher })
+          st.registrarUsoGrafo(true)
+        } else if (r.via === 'ia' || r.via === 'grafo' || r.via === 'grafo+ia') {
+          st.registrarUsoGrafo(false)
+        }
+      } catch {
+        /* observabilidade nunca quebra */
+      }
     } catch {
       if (seq !== seqDescricao) return
       set({
@@ -467,6 +531,12 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
         fichaIa: null,
         vereditoIa: null,
         fontesIa: [],
+        grafoCypherIa: null,
+        graphPathsIa: [],
+        caminhoGrafoIa: null,
+        provenienciaGrafoIa: null,
+        boostGrafoIa: null,
+        boostValorGrafoIa: 0,
       })
     }
   },
@@ -487,7 +557,7 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
 
   feedbackIaNegativo: async () => {
     const s = get()
-    if (!s.codigoIa && s.via !== 'ia') return
+    if (!s.codigoIa && s.via !== 'ia' && s.via !== 'grafo' && s.via !== 'grafo+ia') return
     if (s.feedbackIaEnviado) return
     try {
       await registrarFeedbackIa({
@@ -539,6 +609,12 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
       fichaIa: null,
       vereditoIa: null,
       fontesIa: [],
+      grafoCypherIa: null,
+      graphPathsIa: [],
+      caminhoGrafoIa: null,
+      provenienciaGrafoIa: null,
+      boostGrafoIa: null,
+      boostValorGrafoIa: 0,
     }),
 }))
 

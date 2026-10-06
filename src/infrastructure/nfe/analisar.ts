@@ -67,9 +67,27 @@ export async function analisarItensNfe(
     if (lista.length > 0) {
       // Múltiplas classificações: mantém lista[0] como estimativa, mas
       // sinaliza ambiguidade via opcoesClassificacao para UI/relatório.
-      classificacao = lista[0]
+      // Phase 10-05: desempate via caminho do grafo (só reordena; o
+      // resolvedor continua sendo a única verdade). Best-effort.
+      let listaEfetiva = lista
+      try {
+        if (lista.length > 1) {
+          const { consultarGrafoPrimeiro, desempatarPorGrafo } = await import('@/application/grafo-consumo')
+          const textoItem = String((item as { descricao?: unknown }).descricao || String(item.ncm || cod) || cod)
+          const g = await consultarGrafoPrimeiro(textoItem.slice(0, 120), 5).catch(() => null)
+          if (g && g.trilha.usouGrafo) {
+            const r = desempatarPorGrafo(lista, g.trilha, cod)
+            if (r.usouGrafo) listaEfetiva = r.lista
+          }
+        }
+      } catch {
+        /* mantém a ordem oficial */
+      }
+      classificacao = listaEfetiva[0]
       regraGeral = regraGeralDaBase
-      manual = manualDoNcm || lista[0].manual != null
+      manual = manualDoNcm || listaEfetiva[0].manual != null
+      // Expõe a contagem original (o desempate não cria nem remove opções).
+      lista = listaEfetiva
     } else if (valido) {
       let nom = cacheNomen.get(cod)
       if (nom === undefined) {

@@ -2,23 +2,26 @@
  * Simples Projection — resultado reativo da divisão (componente PURO).
  *
  * Apenas formata `RelatorioProjecao` do motor. Nenhum cálculo fiscal aqui:
- * faixa, alíquota, DAS, economia e payback vêm de `simularCenarioDividido`.
- * Gráficos elegantes via `GraficoChatView` (Chart.js + relevo 3D do projeto),
- * reativos por `useMemo` — qualquer edição no modal recalcula e redesenha.
+ * faixa, alíquota, DAS, economia, Fator R e payback vêm de
+ * `simularCenarioDividido` (+ `pro-labore.ts` para INSS/IRPF do pró-labore).
+ * Gráficos essenciais via `GraficoChatView` (2: DAS e economia acumulada);
+ * o restante é tabela de progressividade + diagnóstico do Fator R.
  */
 import { useMemo } from 'react';
 import { fmtCarga, fmtMoeda } from '@/domain/services/format';
 import { GraficoChatView } from '@/ui/grafico-chat';
-import { Painel } from '@/ui/kit';
+import { Painel, Pill } from '@/ui/kit';
 import type { GraficoChat } from '@/application/aurum-ai-graficos';
+import { analisarRetorno, type AnaliseRetorno } from './analise-retorno';
+import { TETO_INSS_MENSAL_REF_2025 } from './pro-labore';
 import type { RelatorioProjecao } from './types';
 
 function Kpi({ rotulo, valor, sub, destaque, alerta }: { rotulo: string; valor: string; sub?: string; destaque?: boolean; alerta?: boolean }) {
   return (
-    <div className={`rounded-xl border px-4 py-3 ${destaque ? 'border-emerald-600/40 bg-emerald-50 dark:bg-emerald-950/30' : alerta ? 'border-red-600/40 bg-red-50 dark:bg-red-950/30' : 'border-[var(--line)] bg-white dark:bg-slate-900'}`}>
-      <span className="block text-[10px] font-bold uppercase tracking-widest text-slate-400">{rotulo}</span>
-      <span className={`mt-1 block font-mono text-xl font-black tabular-nums ${destaque ? 'text-emerald-700 dark:text-emerald-300' : alerta ? 'text-red-700 dark:text-red-300' : ''}`}>{valor}</span>
-      {sub ? <span className="mt-0.5 block text-[11px] text-slate-500">{sub}</span> : null}
+    <div className={`rounded-xl border px-3 py-2 ${destaque ? 'border-emerald-600/40 bg-emerald-50 dark:bg-emerald-950/30' : alerta ? 'border-red-600/40 bg-red-50 dark:bg-red-950/30' : 'border-[var(--line)] bg-white dark:bg-slate-900'}`}>
+      <span className="block text-[9px] font-bold uppercase tracking-widest text-slate-400">{rotulo}</span>
+      <span className={`mt-0.5 block font-mono text-[15px] font-black tabular-nums ${destaque ? 'text-emerald-700 dark:text-emerald-300' : alerta ? 'text-red-700 dark:text-red-300' : ''}`}>{valor}</span>
+      {sub ? <span className="block truncate text-[10px] text-slate-500" title={sub}>{sub}</span> : null}
     </div>
   );
 }
@@ -28,12 +31,40 @@ function rotuloMes(mes: string): string {
   return `${m}/${String(a).slice(2)}`;
 }
 
+const VEREDITO: Record<AnaliseRetorno['status'], { titulo: string; classe: string; dica: string }> = {
+  'lucro-imediato': {
+    titulo: 'Vale a pena desde o 1º mês',
+    classe: 'border-emerald-600/40 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100',
+    dica: 'Todo mês o dividido paga menos — o acumulado nunca volta a zerar.',
+  },
+  'payback-horizonte': {
+    titulo: 'Há retorno dentro do horizonte',
+    classe: 'border-sky-600/40 bg-sky-50 text-sky-900 dark:bg-sky-950/40 dark:text-sky-100',
+    dica: 'Os primeiros meses pagam mais (custo da nova), depois a economia compensa.',
+  },
+  'sem-payback': {
+    titulo: 'Sem retorno no horizonte',
+    classe: 'border-amber-600/40 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100',
+    dica: 'Existem meses positivos, mas insuficientes para zerar o acumulado.',
+  },
+  prejuizo: {
+    titulo: 'Só prejuízo no horizonte',
+    classe: 'border-red-600/40 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-100',
+    dica: 'Nenhum mês paga menos — dividir só aumenta o custo. Revise % ou custos.',
+  },
+};
+
 export function ResultadoDividido({ relatorio, custoMensalNova }: { relatorio: RelatorioProjecao; custoMensalNova: number }) {
   const serie = relatorio.serieMensal;
 
+  const retorno: AnaliseRetorno = useMemo(
+    () => relatorio.analiseRetorno ?? analisarRetorno(serie, custoMensalNova),
+    [relatorio.analiseRetorno, serie, custoMensalNova],
+  );
+  const veredito = VEREDITO[retorno.status];
+
   const graficos = useMemo(() => {
     const labels = serie.map((l) => rotuloMes(l.mes));
-    const aliqRef = serie.map((l) => (l.receitaTotal > 0 ? (l.dasUnificadoReferencia / l.receitaTotal) * 100 : 0));
     const somaDividida = serie.map((l) => Math.round((l.dasMae + l.dasNova) * 100) / 100);
 
     const gDas: GraficoChat = {
@@ -53,67 +84,51 @@ export function ResultadoDividido({ relatorio, custoMensalNova }: { relatorio: R
       origem: 'simples-projection:das',
     };
 
-    const gAliq: GraficoChat = {
-      titulo: 'Alíquota efetiva mensal — queda por faixa',
-      subtitulo: 'Efetiva = (RBT12 × nominal − dedução) ÷ RBT12 · motor `calculo.ts`',
-      tipo: 'linha',
-      labels,
-      series: [
-        { nome: 'Ref. unificada (%)', valores: aliqRef.map((v) => Math.round(v * 100) / 100) },
-        { nome: `Mãe (%)`, valores: serie.map((l) => Math.round(l.aliquotaEfetivaMae * 100 * 100) / 100) },
-        { nome: `Nova (%)`, valores: serie.map((l) => Math.round(l.aliquotaEfetivaNova * 100 * 100) / 100) },
-      ],
-      unidade: 'percent',
-      insight: 'A nova empresa tende a operar em faixas iniciais — a curva dela revela a redução de alíquota.',
-      colunas: ['Mês', 'Ref (%)', 'Mãe (%)', 'Nova (%)'],
-      linhasTabela: serie.map((l, i) => [l.mes, aliqRef[i]!.toFixed(2), (l.aliquotaEfetivaMae * 100).toFixed(2), (l.aliquotaEfetivaNova * 100).toFixed(2)]),
-      alternativas: ['barra', 'tabela'],
-      origem: 'simples-projection:aliquota',
-    };
-
-    const gFaixa: GraficoChat = {
-      titulo: 'Faixa mensal — mãe × nova',
-      subtitulo: 'Faixa definida pelo RBT12 deslizante de cada empresa',
-      tipo: 'barra',
-      labels,
-      series: [
-        { nome: 'Faixa mãe', valores: serie.map((l) => l.faixaMae) },
-        { nome: 'Faixa nova', valores: serie.map((l) => l.faixaNova) },
-      ],
-      unidade: 'numero',
-      insight: undefined,
-      colunas: ['Mês', 'Faixa mãe', 'Faixa nova'],
-      linhasTabela: serie.map((l) => [l.mes, String(l.faixaMae), String(l.faixaNova)]),
-      alternativas: ['linha', 'tabela'],
-      origem: 'simples-projection:faixa',
-    };
-
     const acum = serie.map((l) => l.economiaAcumulada);
     const gEcon: GraficoChat = {
-      titulo: 'Economia mensal e acumulada (líquida de custos)',
+      titulo: 'Economia acumulada — quando cruza o zero?',
       subtitulo: `Custo nova empresa ${fmtMoeda(custoMensalNova)}/mês já descontado`,
       tipo: 'linha',
       labels,
-      series: [
-        { nome: 'Economia mês', valores: serie.map((l) => l.economiaMes) },
-        { nome: 'Acumulada', valores: acum },
-      ],
+      series: [{ nome: 'Acumulada (líquida)', valores: acum }],
       unidade: 'moeda',
-      insight: relatorio.payback.mes ? `Payback em ${relatorio.payback.mes} (${relatorio.payback.mesesAtePayback}º mês).` : 'Sem payback no horizonte — o custo da nova empresa supera a economia de DAS.',
+      insight: retorno.mesPayback
+        ? `Retorno em ${rotuloMes(retorno.mesPayback)} (${retorno.mesesParaRetorno}º mês).`
+        : 'Não há retorno no horizonte — o acumulado nunca fica positivo.',
       colunas: ['Mês', 'Economia mês (R$)', 'Acumulada (R$)'],
       linhasTabela: serie.map((l) => [l.mes, l.economiaMes.toFixed(2), l.economiaAcumulada.toFixed(2)]),
       alternativas: ['barra', 'tabela'],
       origem: 'simples-projection:economia',
     };
 
-    return { gDas, gAliq, gFaixa, gEcon };
-  }, [serie, relatorio, custoMensalNova]);
+    return { gDas, gEcon };
+  }, [serie, relatorio, custoMensalNova, retorno]);
 
   const economiaPositiva = relatorio.economiaTotal >= 0;
+  const fr = relatorio.analiseFatorR;
 
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+    <div className="space-y-3">
+      {/* Veredito do retorno */}
+      <div className={`rounded-xl border px-3 py-2 ${veredito.classe}`} role="status">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <strong className="text-xs font-black tracking-tight">
+            {veredito.titulo}
+            {retorno.mesPayback ? ` · payback em ${rotuloMes(retorno.mesPayback)} (${retorno.mesesParaRetorno}º mês)` : ''}
+          </strong>
+          <span className="font-mono text-xs font-bold tabular-nums">
+            {retorno.mesesPositivos} meses positivos · {retorno.mesesNegativos} negativos
+          </span>
+        </div>
+        <p className="mt-1 text-xs opacity-80">{veredito.dica}</p>
+        <p className="mt-1 font-mono text-[11px] tabular-nums opacity-80">
+          Economia bruta de DAS {fmtMoeda(retorno.totalEconomiaBrutaDAS)} − custos {fmtMoeda(retorno.totalCustos)} = {fmtMoeda(retorno.economiaTotal)} no horizonte
+          {retorno.melhorMes ? ` · melhor mês ${rotuloMes(retorno.melhorMes.mes)} (${fmtMoeda(retorno.melhorMes.valor)})` : ''}
+          {retorno.piorMes && retorno.piorMes.valor < 0 ? ` · pior mês ${rotuloMes(retorno.piorMes.mes)} (${fmtMoeda(retorno.piorMes.valor)})` : ''}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
         <Kpi
           rotulo={economiaPositiva ? 'Economia total (líquida)' : 'Custo adicional total'}
           valor={`${economiaPositiva ? '' : '+ '}${fmtMoeda(Math.abs(relatorio.economiaTotal))}`}
@@ -122,9 +137,21 @@ export function ResultadoDividido({ relatorio, custoMensalNova }: { relatorio: R
           alerta={!economiaPositiva}
         />
         <Kpi
-          rotulo="Payback"
-          valor={relatorio.payback.mes ? rotuloMes(relatorio.payback.mes) : '—'}
-          sub={relatorio.payback.mes ? `${relatorio.payback.mesesAtePayback}º mês · ${fmtMoeda(relatorio.payback.valorAcumuladoNoPayback ?? 0)} acumulado` : 'Sem retorno no horizonte'}
+          rotulo="Tempo até o retorno"
+          valor={
+            retorno.status === 'lucro-imediato'
+              ? 'Imediato'
+              : retorno.mesPayback
+                ? `${retorno.mesesParaRetorno} meses`
+                : 'Sem retorno'
+          }
+          sub={
+            retorno.mesPayback
+              ? `payback em ${rotuloMes(retorno.mesPayback)} · ${fmtMoeda(retorno.economiaTotal)} no horizonte`
+              : retorno.status === 'prejuizo'
+                ? 'só prejuízo — reveja % ou custos'
+                : 'aumente o horizonte ou reduza custos'
+          }
         />
         <Kpi
           rotulo="Custo nova empresa"
@@ -133,50 +160,66 @@ export function ResultadoDividido({ relatorio, custoMensalNova }: { relatorio: R
         />
       </div>
 
-      <GraficoChatView grafico={graficos.gDas} />
-      <GraficoChatView grafico={graficos.gAliq} />
-      <GraficoChatView grafico={graficos.gFaixa} />
-      <GraficoChatView grafico={graficos.gEcon} />
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <GraficoChatView grafico={graficos.gDas} />
+        <GraficoChatView grafico={graficos.gEcon} />
+      </div>
 
-      <Painel>
-        <div className="border-b border-[var(--line)] px-5 py-3">
-          <h3 className="text-sm font-black tracking-tight">Redução de faixa e alíquota — mês a mês</h3>
-          <p className="mt-0.5 text-[11px] text-slate-500">Cada linha compara o unificado (referência) com mãe + nova. Verde = pagou menos naquele mês.</p>
-        </div>
-        <div className="overflow-x-auto p-4">
-          <table className="tbl tbl-compacta w-full min-w-[720px]">
+      {/* Progressividade: mãe × nova × referência, com RBT12p */}
+      <details className="overflow-hidden rounded-xl border border-[var(--line)] bg-white dark:bg-slate-900">
+        <summary className="cursor-pointer px-3 py-2">
+          <span className="text-xs font-black tracking-tight">Progressividade — mãe × nova × unificado</span>
+          <span className="block text-[10px] font-normal text-slate-500">
+            RBT12p = soma dos 12 meses anteriores. Clique para expandir a tabela mês a mês.
+          </span>
+        </summary>
+        <div className="overflow-x-auto border-t border-[var(--line)] p-2.5">
+          <table className="tbl tbl-compacta w-full min-w-[960px]">
             <thead>
               <tr>
-                <th scope="col">Mês</th>
-                <th scope="col" className="th-r">RBT12 mãe</th>
-                <th scope="col" className="th-r">RBT12 nova</th>
+                <th scope="col" rowSpan={2}>Mês</th>
+                <th scope="col" colSpan={5} className="text-center">Mãe (Anexo {relatorio.metadados.anexoMae})</th>
+                <th scope="col" colSpan={5} className="text-center">Nova (Anexo {relatorio.metadados.anexoNova})</th>
+                <th scope="col" colSpan={4} className="text-center">Unificado (ref.)</th>
+                <th scope="col" rowSpan={2} className="th-r">Economia</th>
+              </tr>
+              <tr>
+                <th scope="col" className="th-r">RBT12p</th>
                 <th scope="col" className="th-r">Faixa</th>
-                <th scope="col" className="th-r">Alíquota</th>
-                <th scope="col" className="th-r">DAS dividido</th>
-                <th scope="col" className="th-r">DAS unificado</th>
-                <th scope="col" className="th-r">Economia</th>
+                <th scope="col" className="th-r">Nominal</th>
+                <th scope="col" className="th-r">Efetiva</th>
+                <th scope="col" className="th-r">DAS</th>
+                <th scope="col" className="th-r">RBT12p</th>
+                <th scope="col" className="th-r">Faixa</th>
+                <th scope="col" className="th-r">Nominal</th>
+                <th scope="col" className="th-r">Efetiva</th>
+                <th scope="col" className="th-r">DAS</th>
+                <th scope="col" className="th-r">RBT12p</th>
+                <th scope="col" className="th-r">Faixa</th>
+                <th scope="col" className="th-r">Efetiva</th>
+                <th scope="col" className="th-r">DAS</th>
               </tr>
             </thead>
             <tbody className="font-mono tabular-nums">
               {serie.map((l) => {
-                const ref = l.receitaTotal > 0 ? l.dasUnificadoReferencia / l.receitaTotal : 0;
-                const novaMelhor = l.faixaNova < l.faixaMae;
                 const positiva = l.economiaMes >= 0;
                 return (
                   <tr key={l.mes} className="border-t border-[var(--line)]">
                     <td className="font-sans font-bold">{rotuloMes(l.mes)}</td>
                     <td className="num text-right">{fmtMoeda(l.rbt12Mae)}</td>
+                    <td className="num text-right">{l.faixaMae}ª</td>
+                    <td className="num text-right">{l.aliquotaNominalMae != null ? fmtCarga(l.aliquotaNominalMae * 100) : '—'}</td>
+                    <td className="num text-right">{fmtCarga(l.aliquotaEfetivaMae * 100)}</td>
+                    <td className="num text-right">{fmtMoeda(l.dasMae)}</td>
                     <td className="num text-right">{fmtMoeda(l.rbt12Nova)}</td>
-                    <td className="num text-right">
-                      {l.faixaMae}ª → <strong className={novaMelhor ? 'text-emerald-600 dark:text-emerald-400' : ''}>{l.faixaNova}ª</strong>{' '}
-                      {novaMelhor ? <span className="pill bg-emerald-100 text-emerald-800">−{l.faixaMae - l.faixaNova}</span> : null}
-                    </td>
-                    <td className="num text-right">
-                      {fmtCarga(l.aliquotaEfetivaNova * 100)}{' '}
-                      <span className="text-slate-400">(ref {fmtCarga(ref * 100)})</span>
-                    </td>
-                    <td className="num text-right">{fmtMoeda(l.dasMae + l.dasNova)}</td>
-                    <td className="num text-right">{fmtMoeda(l.dasUnificadoReferencia)}</td>
+                    <td className="num text-right">{l.faixaNova}ª</td>
+                    <td className="num text-right">{l.aliquotaNominalNova != null ? fmtCarga(l.aliquotaNominalNova * 100) : '—'}</td>
+                    <td className="num text-right">{fmtCarga(l.aliquotaEfetivaNova * 100)}</td>
+                    <td className="num text-right">{fmtMoeda(l.dasNova)}</td>
+                    <td className="num text-right text-slate-500">{fmtMoeda(l.rbt12Ref ?? 0)}</td>
+                    <td className="num text-right text-slate-500">{l.faixaRef ?? '—'}ª</td>
+                    <td className="num text-right text-slate-500">{fmtCarga((l.aliquotaEfetivaRef ?? 0) * 100)}</td>
+                    <td className="num text-right text-slate-500">{fmtMoeda(l.dasUnificadoReferencia)}</td>
                     <td className={`num text-right font-black ${positiva ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}>
                       {positiva ? '− ' : '+ '}{fmtMoeda(Math.abs(l.economiaMes))}
                     </td>
@@ -185,6 +228,105 @@ export function ResultadoDividido({ relatorio, custoMensalNova }: { relatorio: R
               })}
             </tbody>
           </table>
+        </div>
+      </details>
+
+      {/* Fator R + pró-labore */}
+      <Painel>
+        <div className="border-b border-[var(--line)] px-3 py-2">
+          <h3 className="text-xs font-black tracking-tight">Fator R — quanto falta para os 28%?</h3>
+          <p className="mt-0.5 line-clamp-2 text-[10px] text-slate-500">
+            Folha 12m ÷ RBT12p. Abaixo de 28% → Anexo V; o déficit mostra o pró-labore p/ voltar ao III.
+          </p>
+        </div>
+        <div className="space-y-2.5 p-3">
+          {fr ? (
+            <>
+              {(['mae', 'nova'] as const).map((lado) => {
+                const ultimo = fr.linhas[fr.linhas.length - 1]?.[lado];
+                if (!ultimo) return null;
+                if (!ultimo.aplicaFatorR) {
+                  return (
+                    <p key={lado} className="rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                      {lado === 'mae' ? 'Mãe' : 'Nova'} no Anexo {ultimo.anexo}: sem Fator R — folha dispensada.
+                    </p>
+                  );
+                }
+                const resumoMeses = lado === 'mae' ? fr.resumo.mesesAbaixo28Mae : fr.resumo.mesesAbaixo28Nova;
+                const maior = lado === 'mae' ? fr.resumo.maiorDeficitMae : fr.resumo.maiorDeficitNova;
+                const custo = lado === 'mae' ? fr.resumo.custoMaiorProLaboreMae : fr.resumo.custoMaiorProLaboreNova;
+                return (
+                  <div key={lado} className="rounded-2xl border border-[var(--line)] p-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <strong className="text-sm">{lado === 'mae' ? 'Mãe' : 'Nova'} — Anexo {ultimo.anexo}</strong>
+                      {ultimo.atinge28 ? <Pill cor="emerald">≥ 28% · fica no III</Pill> : <Pill cor="amber">&lt; 28% · cai no V</Pill>}
+                      <span className="font-mono text-xs text-slate-500">
+                        índice {(ultimo.indice * 100).toFixed(2)}% no último mês · {resumoMeses}/{fr.linhas.length} meses abaixo de 28%
+                      </span>
+                    </div>
+                    {maior.valor > 0 && maior.mes ? (
+                      <div className="mt-2 space-y-1 text-xs">
+                        <p>
+                          Maior déficit em <strong>{rotuloMes(maior.mes)}</strong>: faltam{' '}
+                          <strong className="font-mono">{fmtMoeda(maior.valor)}</strong> na folha 12m →{' '}
+                          <strong className="font-mono">{fmtMoeda(maior.valor / 12)}/mês</strong> de pró-labore adicional.
+                        </p>
+                        {custo ? (
+                          <p className="font-mono text-[11px] text-slate-500">
+                            Sobre esse pró-labore: INSS 11% {fmtMoeda(custo.inss)} + IRPF 2026 {fmtMoeda(custo.irpf)} ={' '}
+                            descontos {fmtMoeda(custo.descontosPF)} · líquido {fmtMoeda(custo.liquido)}
+                            {custo.cppPatronalPorFora > 0 ? ` · CPP patronal por fora (Anexo IV) ${fmtMoeda(custo.cppPatronalPorFora)}` : ''}
+                            {custo.tetoINSSAplicado ? ' · teto do RGPS aplicado' : ''}
+                          </p>
+                        ) : null}
+                        <p className="text-[11px] text-slate-400">
+                          Sugestão: elevar o pró-labore dos sócios (entra na folha e conta para os 28%). Avalie com o contador o ponto
+                          em que o custo do pró-labore supera a economia do Anexo III.
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">
+                        Folha suficiente em todos os meses — há margem de {fmtMoeda(ultimo.folha12 - ultimo.rbt12p * 0.28)} sobre os 28% no último mês.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+
+              <details className="rounded-2xl border border-[var(--line)] px-4 py-3 text-xs">
+                <summary className="cursor-pointer font-bold">
+                  Pró-labore mensal sugerido — mês a mês (unificado × dividido)
+                </summary>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Quanto de pró-labore/mês seria preciso para bater 28% em cada cenário. Unificado = mesma equipe, tudo na mãe.
+                </p>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="tbl tbl-compacta w-full min-w-[560px]">
+                    <thead>
+                      <tr>
+                        <th scope="col">Mês</th>
+                        <th scope="col" className="th-r">Só na mãe (unificado)</th>
+                        <th scope="col" className="th-r">Mãe (dividido)</th>
+                        <th scope="col" className="th-r">Nova (dividido)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="font-mono tabular-nums">
+                      {fr.linhas.map((l) => (
+                        <tr key={l.mes} className="border-t border-[var(--line)]">
+                          <td className="font-sans font-bold">{rotuloMes(l.mes)}</td>
+                          <td className="num text-right">{l.unificado.aplicaFatorR ? fmtMoeda(l.unificado.proLaboreMensalSugerido) : '—'}</td>
+                          <td className="num text-right">{l.mae.aplicaFatorR ? fmtMoeda(l.mae.proLaboreMensalSugerido) : '—'}</td>
+                          <td className="num text-right">{l.nova.aplicaFatorR ? fmtMoeda(l.nova.proLaboreMensalSugerido) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            </>
+          ) : (
+            <p className="text-xs text-slate-400">Diagnóstico do Fator R indisponível neste relatório.</p>
+          )}
         </div>
       </Painel>
 
@@ -203,7 +345,8 @@ export function ResultadoDividido({ relatorio, custoMensalNova }: { relatorio: R
       ) : null}
 
       <p className="px-1 text-[10px] leading-relaxed text-slate-400">
-        Projeção informativa com o motor oficial do Simples (`calculo.ts`). Grupo econômico pode exigir consolidação de receita — valide com o contador.
+        Projeção informativa com o motor oficial do Simples (`calculo.ts`). INSS 11% com teto RGPS {fmtMoeda(TETO_INSS_MENSAL_REF_2025)} (ref. 2025);
+        IRPF pela tabela mensal 2026 (Leis 15.191 e 15.270/2025). Grupo econômico pode exigir consolidação de receita — valide com o contador.
       </p>
     </div>
   );

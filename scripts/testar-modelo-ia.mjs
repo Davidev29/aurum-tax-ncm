@@ -2,7 +2,8 @@
 /**
  * testar-modelo-ia.mjs — Plan 06-04 [IA-04] (Phase 6).
  *
- * Valida o LLM local `Qwen3-0.6B-Q8_0.gguf` (~640MB) pelo caminho REAL de
+ * Valida o LLM local `Qwen3.5-2B-Q4_K_M.gguf` (~1221MB, pin em
+ * `recursos-ia/modelo/modelo.json`) pelo caminho REAL de
  * produção: `electron/ia/ia-worker.cjs` via fork (trava lexical + prompt PT
  * nativo + geração restrita por gramática — nunca inventa código), ou roda em
  * MODO MOCK quando o GGUF está ausente.
@@ -52,8 +53,10 @@ function descobrirGgufPadrao() {
       }
     }
   } catch (_) { /* segue */ }
-  const legado = path.join(DIR_MODELO, 'Qwen3-0.6B-Q8_0.gguf');
+  const legado = path.join(DIR_MODELO, 'Qwen3.5-2B-Q4_K_M.gguf');
   try { if (fs.existsSync(legado)) return legado; } catch (_) { /* segue */ }
+  const legadoAntigo = path.join(DIR_MODELO, 'Qwen3-0.6B-Q8_0.gguf');
+  try { if (fs.existsSync(legadoAntigo)) return legadoAntigo; } catch (_) { /* segue */ }
   try {
     if (fs.existsSync(DIR_MODELO)) {
       const ggufs = fs.readdirSync(DIR_MODELO)
@@ -70,10 +73,11 @@ const MODELO_PADRAO = descobrirGgufPadrao();
 const CHECKSUMS = path.join(REPO_ROOT, 'recursos-ia', 'CHECKSUMS.txt');
 const WORKER = path.join(REPO_ROOT, 'electron', 'ia', 'ia-worker.cjs');
 
-// Medido em 2026-10-04 (Qwen3-0.6B-Q8_0, CPU, via worker): load 5.6s,
-// inferência ~0.4s/caso, RSS ~1.3GB com modelo residente; gibberish barrado
-// na trava lexical sem acordar o LLM (0ms).
-const ORCAMENTO = { latenciaMsTeto: 15000, latenciaMsMeta: 8000, rssMBTeto: 1800, rssMBMeta: 1400 };
+// Medido em 2026-10-06 (Qwen3.5-2B-Q4_K_M, CPU, via worker): load 8.6s,
+// inferência 0.9–2.7s/caso, RSS ~2.2GB com modelo residente; gibberish barrado
+// na trava lexical sem acordar o LLM (0ms). Anterior 2026-10-04 (Qwen3-0.6B-Q8_0):
+// load 5.6s, inferência ~0.4s/caso, RSS ~1.3GB.
+const ORCAMENTO = { latenciaMsTeto: 15000, latenciaMsMeta: 8000, rssMBTeto: 2600, rssMBMeta: 2200 };
 
 // Casos de fumaça (somente NCM — NBS fora de escopo neste módulo).
 const CASOS = [
@@ -212,7 +216,7 @@ function sha256Arquivo(caminho) {
 
 async function inferenciaReal(modelPath, descricao, candidatos) {
   // node-llama-cpp v3: `LlamaCompletion.generateCompletion` sobre a sequência
-  // (mesmo caminho do worker `electron/ia/ia-worker.cjs`). Qwen3-0.6B: ctx 2048.
+  // (mesmo caminho do worker `electron/ia/ia-worker.cjs`). ctx do perfil (4096 no pin oficial).
   // NOTA: mantida como referência direta; o `main()` valida pelo worker via
   // fork (caminho de produção). Esta função segue o mesmo protocolo.
   const { getLlama, LlamaCompletion, LlamaGrammar } = await import('node-llama-cpp');
@@ -454,7 +458,7 @@ async function main() {
       rssOk: realAtivo ? rssMax <= ORCAMENTO.rssMBTeto : null,
       notaMock: realAtivo
         ? 'medidas reais do modelo'
-        : 'medidas do MOCK — NÃO provam orçamento do GGUF real (~640MB, ~1.4GB RAM)',
+        : 'medidas do MOCK — NÃO provam orçamento do GGUF real (~1221MB, ~2.2GB RAM)',
     },
   };
 

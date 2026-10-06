@@ -90,8 +90,10 @@ function resolverModeloEfetivo(app) {
   try {
     const dir = path.join(raiz, 'recursos-ia', 'modelo')
     const ggufs = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.gguf')) : []
-    const legado = path.join(dir, 'Qwen3-0.6B-Q8_0.gguf')
+    const legado = path.join(dir, 'Qwen3.5-2B-Q4_K_M.gguf')
     if (fs.existsSync(legado)) return { caminho: legado, formato: 'gguf' }
+    const legadoAntigo = path.join(dir, 'Qwen3-0.6B-Q8_0.gguf')
+    if (fs.existsSync(legadoAntigo)) return { caminho: legadoAntigo, formato: 'gguf' }
     if (ggufs.length) return { caminho: path.join(dir, ggufs.slice().sort()[0]), formato: 'gguf' }
   } catch (_) { /* retorna nulo abaixo */ }
   return { caminho: null, formato: null }

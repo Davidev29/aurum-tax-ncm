@@ -88,6 +88,17 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **CNAE-06**: Chaos 22 casos (sorteio fora-508, 3 anos, cache, divergência, template, bens, 98-NBS; preserva `__COMPARAR`/rollback/degradação), gate `tsc 0 + npm test` ≥85%
 - [x] **CNAE-07**: Docs + UAT (MANIFEST completo, precedência oficial>ponte>auxiliar documentada, aceite incl. bens e 98-NBS)
 
+### Grafo Fiscal Híbrido — LadybugDB + KGLite, com overlay local (GRAFO) — IMPLEMENTADA (Phase 10, 2026-10-06)
+
+- [x] **GRAFO-01**: Schema + build (`schema.cypher` + `scripts/build-grafo.mjs` → `public/base/grafo/grafo.lbug` via `npm run base`, MANIFEST.grafo, Dexie `grafometa`)
+- [x] **GRAFO-02**: Runtime no worker (`electron/ia/grafo-service.cjs` + `ia:grafo` IPC + `bridge.ia.grafoConsultar`, FTS+traversal <50ms, fallback sem `.lbug`)
+- [x] **GRAFO-03**: Retrieval híbrido (FTS seeds + HNSW 384-d + expansão 2-hops + PageRank/Louvain rerank + `taxa_uso_grafo`)
+- [x] **GRAFO-04**: KGLite tooling (`build-grafo-kglite.py` → `.kgl`, audit scorecard, `describe()` → system prompt + catálogo, MCP dev, `docs/grafo-mcp.md`)
+- [x] **GRAFO-05**: Consumo (`classificarComIa` + chat + lote + XML usam grafo primeiro, `via:grafo`, fichas com caminho, UI trilha + "por que sugeriu")
+- [x] **GRAFO-06**: Vetores offline (`recursos-ia/embedding/` versionado, `CHECKSUMS.txt`, `extraResources`, modo FTS-puro se ausente)
+- [x] **GRAFO-07**: Chaos 22 + docs + UAT (`tests/grafo-chaos.test.ts` 22/22, `docs/grafo-{arquitetura,manual,chaos,uat}.md`, UAT 5/5)
+- [x] **GRAFO-08**: Overlay de aprendizado local (`aprendizado.json` só-na-máquina, boost com teto 0.3, demote/TTL 90d/teto 5.000, veto do resolvedor, rollback por apagamento)
+
 ### Persistence & Settings (PER)
 - [ ] **PER-01**: Persistir classificações do usuário em IndexedDB (sobrevivem a reinícios)
 - [ ] **PER-02**: Persistir configurações: tema, caminho último arquivo importado, preferências de exportação
@@ -178,10 +189,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CNAE-05 | Phase 9 | Implemented |
 | CNAE-06 | Phase 9 | Implemented |
 | CNAE-07 | Phase 9 | Implemented |
+| GRAFO-01 | Phase 10 | Implemented |
+| GRAFO-02 | Phase 10 | Implemented |
+| GRAFO-03 | Phase 10 | Implemented |
+| GRAFO-04 | Phase 10 | Implemented |
+| GRAFO-05 | Phase 10 | Implemented |
+| GRAFO-06 | Phase 10 | Implemented |
+| GRAFO-07 | Phase 10 | Implemented |
+| GRAFO-08 | Phase 10 | Implemented |
 
 **Coverage:**
-- v1 requirements: 42 total (31 + 11 IA NCM-only com spike 06-00)
-- Mapped to phases: 42
+- v1 requirements: 50 total (31 + 11 IA NCM-only com spike 06-00 + 8 GRAFO Phase 10)
+- Mapped to phases: 50
 - Unmapped: 0 ✓
 
 ---

@@ -200,6 +200,27 @@ Plans:
 - [x] 09-06: Chaos 22 + docs/UAT (rev. 2) — 22/22 100% (`docs/chaos-phase-09.md`, `docs/uat-phase-09.md` 5/5)
   (ver `.planning/phase-09/09-PLAN.md` + `09-RESEARCH.md`)
 
+### Phase 10: Grafo Fiscal Híbrido (LadybugDB + KGLite) — IMPLEMENTADA (2026-10-06)
+**Goal**: Aurum AI consulta grafo fiscal local como base/referência (multi-hop NCM→família→CCT→Anexo→Artigo + CNAE→NBS, FTS BM25 + HNSW all-MiniLM + PageRank, `via:grafo` auditável, 100% offline, fallback total) + overlay de aprendizado só-na-máquina (base congelada + `uso_local` mutável, boost com teto e travas). KGLite espelha schema em Python p/ curadoria/describe()/MCP dev.
+**Depends on**: Phase 6/7/8/9
+**Requirements**: [GRAFO-01..GRAFO-08]
+**Success Criteria** (all TRUE, verificado em 2026-10-06: `tsc` 0 + 1621/1621 testes, chaos grafo 22/22, UAT 5/5 — ver `docs/grafo-chaos.md`, `docs/grafo-uat.md`):
+  1. `npm run base` gera `grafo.lbug` versionado (MANIFEST.grafo + Dexie `grafometa`)
+  2. `ia:grafo` no worker responde Cypher 2-hops <50ms; sem `.lbug` → fallback lexical bit-idêntico
+  3. HNSW embarcado (1× download, CHECKSUMS) + modo FTS-puro se ausente; `taxa_uso_grafo` no DebugIA
+  4. KGLite `.kgl` + audit scorecard + `describe()` no system prompt + MCP dev documentado
+  5. `tsc 0 + npm test` verde + chaos 22 ≥85% (22/22 100%) + UAT
+  6. Overlay `uso_local`: boost com teto no "por que sugeriu", demote/TTL/teto ativos, apagar overlay restaura base bit-idêntica
+**Plans**: 7 plans (tracer 10-00 + 10-01..10-06; GRAFO-08 overlay folded em 10-02/10-03/10-05/10-06)
+- [x] 10-00: Tracer GO parcial (schema OK, base 10515 NCM8 / 1671 vínculo exato ≈15,9% / 6641 links CNAE→NBS, fallback `{ok:false,fallback:'lexical'}`; nativo `@ladybugdb/core` + `kglite` instalam em 10-02/10-04) — `scripts/grafo/{schema.cypher,spike-grafo.mjs,build-grafo-kglite.py}`, `tests/grafo-tracer.test.ts` 4/4, `tsc 0`
+- [x] 10-01: Schema + build do grafo [GRAFO-01] — `tests/grafo-base.test.ts` verde, MANIFEST + `grafometa`
+- [x] 10-02: Runtime no worker + IPC [GRAFO-02] — `tests/grafo-ipc.test.ts` verde
+- [x] 10-03: Retrieval híbrido + vetores [GRAFO-03, GRAFO-06] — `tests/grafo-hibrido.test.ts` verde
+- [x] 10-04: KGLite tooling + MCP [GRAFO-04] — `tests/grafo-kglite.test.ts` verde, `docs/grafo-mcp.md`
+- [x] 10-05: Consumo pela IA + UI [GRAFO-05] — `tests/ia-grafo.test.ts` verde
+- [x] 10-06: Chaos + docs + UAT [GRAFO-07] — 22/22 100% (`docs/grafo-chaos.md`, `docs/grafo-uat.md` 5/5)
+  (ver `.planning/phase-10/10-CONTEXT.md` + `10-RESEARCH.md` + `10-PLAN.md`)
+
 ## Progress
 
 **Execution Order:**

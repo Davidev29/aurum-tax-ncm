@@ -14,8 +14,9 @@
  *
  * Descoberta (ordem):
  *   1. `modelo.json` → campo `arquivo` (quando existir e o .gguf existir);
+ *      pin oficial (2026-10-06): `Qwen3.5-2B-Q4_K_M.gguf`;
  *   2. env `AURUM_IA_MODEL` (caminho explícito, dev/teste);
- *   3. legado `Qwen3-0.6B-Q8_0.gguf` (compatibilidade);
+ *   3. legado `Qwen3-0.6B-Q8_0.gguf` (compatibilidade com instalações antigas);
  *   4. qualquer `*.gguf` no diretório (maior arquivo vence — heurística de
  *      "modelo real" vs placeholder); empate → ordem alfabética.
  *

@@ -30,9 +30,11 @@ import {
   classificarViaIa,
   conversarViaIa,
   encerrarIaService,
+  grafoConsultarViaGrafo,
   iniciarIaService,
   observarModelo,
   pararObservarModelo,
+  registrarUsoGrafoViaGrafo,
   statusIa,
 } from './ia/ia-service.cjs'
 
@@ -426,6 +428,30 @@ function registrarIpc(): void {
   /** `ia:buscar` — Top-k RAG lexical via worker (para a tela DebugIA). */
   ipcMain.handle('ia:buscar', async (_evento, consulta: string, k?: number) =>
     buscarViaIa(consulta, typeof k === 'number' ? k : 5),
+  )
+
+  /**
+   * `ia:grafo` — consulta o grafo fiscal local (Phase 10-02 / GRAFO-02):
+   * FTS + expansão 2-hops com caminho auditável. Sem `.lbug` responde
+   * `{ ok:false, fallback:'lexical' }` (o renderer cai no lexical atual).
+   */
+  ipcMain.handle(
+    'ia:grafo',
+    async (
+      _evento,
+      args?: { texto?: string; consulta?: string; k?: number; anoReferencia?: number; modoVetor?: 'hibrido' | 'fts-puro' },
+    ) => grafoConsultarViaGrafo(args ?? {}),
+  )
+
+  /**
+   * `ia:grafo-uso` — escritor do overlay (Phase 10-05 / GRAFO-08):
+   * `registrarUso({tipo, termo, codigo, emitente, peso})` com TTL 90d + teto
+   * 5000 + demote. Só reordena — nunca cria redução. Best-effort, nunca lança.
+   */
+  ipcMain.handle(
+    'ia:grafo-uso',
+    async (_evento, args?: { tipo?: string; termo?: string | null; codigo?: string | null; emitente?: string | null; peso?: number }) =>
+      registrarUsoGrafoViaGrafo(args ?? {}),
   )
 
   /** `ia:conversar` — conversa livre via Qwen3 real (IA-06, exige modelo; sem modelo `ok:false`). */

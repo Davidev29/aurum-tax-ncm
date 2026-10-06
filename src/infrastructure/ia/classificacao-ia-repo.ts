@@ -53,6 +53,20 @@ export interface ResultadoConsultaIa {
   veredito: import('@/application/aurum-ai-contexto').VereditoAurumAI | null
   /** Bases lidas nesta predição. */
   fontes: string[]
+  /** Trilha do grafo (`via:grafo` auditável — cypher + caminhos). */
+  grafoCypher?: string | null
+  graphPaths?: string[][]
+  caminhoGrafo?: string[] | null
+  provenienciaGrafo?: Array<{
+    de: string
+    para: string
+    tipo: string
+    origem: string
+    confianca: number
+    anoReferencia?: number | null
+  }> | null
+  boostGrafo?: 'uso_local' | null
+  boostValorGrafo?: number
 }
 
 export interface FeedbackIa {
@@ -125,12 +139,19 @@ export async function classificarComIA(
       ficha: gate.ficha,
       veredito: gate.veredito,
       fontes: gate.fontes,
+      grafoCypher: gate.grafoCypher ?? null,
+      graphPaths: gate.graphPaths ?? [],
+      caminhoGrafo: gate.caminhoGrafo ?? null,
+      provenienciaGrafo: gate.provenienciaGrafo ?? null,
+      boostGrafo: gate.boostGrafo ?? null,
+      boostValorGrafo: gate.boostValorGrafo ?? 0,
     }
     void registrarAuditoria('consultas_ia', texto.slice(0, 80) || '(vazia)', 'criar', null, {
       via: vazio.via,
       decisao: null,
       confianca: 0,
       motivo: gate.motivo,
+      ...(gate.grafoCypher ? { cypher: gate.grafoCypher, graphPaths: gate.graphPaths ?? [] } : {}),
     })
     void anexarConsultaIaJsonl({
       quando: new Date().toISOString(),
@@ -142,6 +163,7 @@ export async function classificarComIA(
       mock: gate.mock,
       candidatos: gate.candidatos,
       ms: gate.ms,
+      ...(gate.grafoCypher ? { cypher: gate.grafoCypher, graphPaths: gate.graphPaths ?? [] } : {}),
     })
     return vazio
   }
@@ -174,6 +196,12 @@ export async function classificarComIA(
     ficha: gate.ficha,
     veredito: gate.veredito,
     fontes: gate.fontes,
+    grafoCypher: gate.grafoCypher ?? null,
+    graphPaths: gate.graphPaths ?? [],
+    caminhoGrafo: gate.caminhoGrafo ?? null,
+    provenienciaGrafo: gate.provenienciaGrafo ?? null,
+    boostGrafo: gate.boostGrafo ?? null,
+    boostValorGrafo: gate.boostValorGrafo ?? 0,
   }
 
   void registrarAuditoria('consultas_ia', texto.slice(0, 80) || '(vazia)', 'criar', null, {
@@ -181,6 +209,7 @@ export async function classificarComIA(
     decisao: resultado.codigoEscolhido,
     confianca: resultado.confiancaIa,
     motivo: resultado.motivo,
+    ...(gate.grafoCypher ? { cypher: gate.grafoCypher, graphPaths: gate.graphPaths ?? [] } : {}),
   })
   void anexarConsultaIaJsonl({
     quando: new Date().toISOString(),
@@ -192,6 +221,7 @@ export async function classificarComIA(
     mock: resultado.mock,
     candidatos: resultado.candidatos,
     ms: resultado.ms,
+    ...(gate.grafoCypher ? { cypher: gate.grafoCypher, graphPaths: gate.graphPaths ?? [] } : {}),
   })
   return resultado
 }
@@ -199,6 +229,7 @@ export async function classificarComIA(
 /**
  * Registra o feedback "Não é esse" (Dexie `ia_feedback` v9 + `audit_log` +
  * `.jsonl`). Best-effort: falha de trilha nunca quebra a UI.
+ * Phase 10-05 (GRAFO-08): feedback ± alimenta o overlay (demote com TTL).
  */
 export async function registrarFeedbackIa(fb: FeedbackIa): Promise<void> {
   const quando = new Date().toISOString()
@@ -214,6 +245,14 @@ export async function registrarFeedbackIa(fb: FeedbackIa): Promise<void> {
     })
   } catch {
     /* Dexie indisponível (ex.: teste sem fake-indexeddb) — segue p/ auditoria */
+  }
+  // GRAFO-08: demote por feedback negativo (boost zerado, TTL 90d).
+  try {
+    const { registrarFeedbackUso } = await import('@/application/grafo-overlay')
+    const negativo = String(fb.motivo ?? 'feedback-negativo').includes('negativo') || fb.motivo === 'feedback-negativo'
+    registrarFeedbackUso(String(fb.descricao ?? ''), fb.decisao ? String(fb.decisao) : null, !negativo)
+  } catch {
+    /* overlay nunca quebra o feedback */
   }
   void registrarAuditoria('ia_feedback', fb.descricao.slice(0, 80) || '(vazia)', 'criar', null, {
     via: fb.via,

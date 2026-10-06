@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Layout } from '@/ui/Layout';
 import { AssistenteInstalacao } from '@/ui/TermoAceite';
 import { lerAceite } from '@/domain/contrato';
@@ -25,6 +25,22 @@ export function App() {
   const view = useUi((s) => s.view);
   // Portão de aceite local: exibido antes de qualquer tela até o aceite v1.
   const [aceito, setAceito] = useState(() => lerAceite() !== null);
+
+  // GRAFO-08: job incremental do overlay ao abrir + ocioso (<1s, nunca
+  // rebuild diário — só poda TTL + teto). Best-effort, nunca lança.
+  useEffect(() => {
+    try {
+      void import('@/application/grafo-overlay').then((m) => {
+        try {
+          m.agendarJobOverlay()
+        } catch {
+          /* job nunca quebra o boot */
+        }
+      }).catch(() => undefined)
+    } catch {
+      /* ignora */
+    }
+  }, [])
 
   let pagina: ReactNode;
   switch (view) {

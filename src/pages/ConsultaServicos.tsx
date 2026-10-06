@@ -302,7 +302,7 @@ export function ConsultaServicos() {
                   ) : null}
                   {classificando ? <StatusAurumAI estado="processando">analisando…</StatusAurumAI> : null}
                 </h3>
-                {classificando && !sugestao && via !== 'ia' ? (
+                {classificando && !sugestao && via !== 'ia' && via !== 'grafo' && via !== 'grafo+ia' ? (
                   <CarregandoAurumAI entrada={entrada} />
                 ) : sugestao?.foraDeEscopo ? (
                   <MolduraAurumAI detalhe="recusa de escopo · sem consulta à base">
@@ -317,10 +317,23 @@ export function ConsultaServicos() {
                     Descreva com mais contexto para a {NOME_IA} sugerir o NBS — sempre ancorada na base oficial.
                   </div>
                 )}
-                {via === 'ia' && decisaoIa ? (
+                {(via === 'ia' || via === 'grafo' || via === 'grafo+ia') && decisaoIa ? (
                   <MolduraAurumAI detalhe="decisão validada pela base oficial">
                     <div className="space-y-2">
-                      <BarraConfiancaAurumAI valor={confiancaIa} compact />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <BarraConfiancaAurumAI valor={confiancaIa} compact />
+                        {via === 'grafo' || via === 'grafo+ia' ? (
+                          <span
+                            className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
+                            title="Resposta com caminho do grafo fiscal local — o resolvedor validou o código."
+                            role="status"
+                            aria-label={via === 'grafo+ia' ? 'via:grafo+ia' : 'via:grafo'}
+                          >
+                            {via === 'grafo+ia' ? 'via:grafo+ia' : 'via:grafo'}
+                          </span>
+                        ) : null}
+                      </div>
+                      <BlocoTrilhaServicos />
                       <CartaoEnxuto
                         cl={decisaoIa}
                         nomenclatura={null}
@@ -630,6 +643,40 @@ function SecaoSugestaoNbs() {
       <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
         <SeloAurumAI variante="fantasma" />
       </div>
+    </div>
+  )
+}
+
+function BlocoTrilhaServicos() {
+  const caminho = useServicos((s) => s.caminhoGrafoIa)
+  const proveniencia = useServicos((s) => s.provenienciaGrafoIa)
+  const cypher = useServicos((s) => s.grafoCypherIa)
+  const boost = useServicos((s) => s.boostGrafoIa)
+  const boostValor = useServicos((s) => s.boostValorGrafoIa)
+  if (!caminho?.length || !proveniencia?.length) return null
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+        <strong>Por que sugeriu:</strong> base: {caminho.join(' → ')}
+        {boost === 'uso_local' && Number(boostValor) > 0 ? (
+          <span className="font-mono font-bold"> + seu uso (boost: uso_local +{Number(boostValor)})</span>
+        ) : null}
+      </p>
+      <details className="rounded-xl border border-[var(--line)] bg-slate-50 px-3 py-2 dark:bg-slate-950/40">
+        <summary className="cursor-pointer text-[11px] font-bold">🕸️ Trilha do grafo (caminho + proveniência + cypher)</summary>
+        <ul className="mt-1 space-y-1 font-mono text-[11px] text-slate-500">
+          {proveniencia.map((p, i) => (
+            <li key={i}>
+              {p.de} —[{p.tipo}/{p.origem} conf {p.confianca}
+              {p.anoReferencia ? ` ano ${p.anoReferencia}` : ''}]→ {p.para}
+            </li>
+          ))}
+        </ul>
+        {cypher ? (
+          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-slate-500">{cypher}</pre>
+        ) : null}
+        <p className="mt-1 text-[11px] text-slate-500">Relatório IA cita: {caminho.join(' → ')}</p>
+      </details>
     </div>
   )
 }

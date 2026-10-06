@@ -278,6 +278,7 @@ function PainelBaseOficial() {
     credPresumido: number
     indOper: number
     geradoEm: string | null
+    grafo: { nodos: number; arestas: number; hash: string; versao: string } | null
   } | null>(null)
   const [erro, setErro] = useState<string | null>(null)
   const [tentativa, setTentativa] = useState(0)
@@ -312,6 +313,7 @@ function PainelBaseOficial() {
         ['🏭', 'Produtos DFe', status.produtosDfe],
         ['💰', 'Crédito pres.', status.credPresumido],
         ['📍', 'Locais operação', status.indOper],
+        ['🕸', 'Grafo fiscal', status.grafo ? `${qtdSegura(status.grafo.nodos)} nós · ${qtdSegura(status.grafo.arestas)} arestas` : 'ausente (lexical)'],
       ]
     : []
 
@@ -333,6 +335,11 @@ function PainelBaseOficial() {
           CST/cClassTrib → referência oficial com reduções, anexos e documentos). Para atualizar,
           use Configurações → Bases de dados.
         </p>
+        {status?.grafo ? (
+          <p className="mb-3 font-mono text-[10px] text-slate-400 dark:text-slate-500">
+            🕸 grafo {textoCurto(status.grafo.versao, 16)} · hash {textoCurto(status.grafo.hash.slice(0, 12), 16)}… · índice derivado (o resolvedor segue sendo a única verdade fiscal)
+          </p>
+        ) : null}
         {erro ? (
           <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
             <div className="font-bold">Não foi possível ler o status da base</div>

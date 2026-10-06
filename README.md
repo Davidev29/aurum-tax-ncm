@@ -14,7 +14,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](./LICENSE)
 
 *Aplicativo desktop (Windows / macOS / Linux) + modo web, 100% local e offline-first.*
-*Versão atual: **1.0.0** · **131 suítes / 1346 casos Vitest** · 11 views (10 no menu + Diagnóstico IA oculto).*
+*Versão atual: **1.0.0** · **152 suítes / 1621 casos Vitest** · 11 views (10 no menu + Diagnóstico IA oculto).*
 
 [✨ Proposta](#-proposta-do-sistema) • [🆕 Novidades](#-novidades) • [🚀 Começo rápido](#-começo-rápido) • [📖 Guia de uso](#-guia-de-uso-módulo-a-módulo) • [🧮 Regras tributárias](#-como-o-cálculo-funciona) • [🛠️ Desenvolvimento](#️-desenvolvimento)
 
@@ -45,7 +45,7 @@ Tudo roda **localmente** (IndexedDB via Dexie, sem servidor, sem enviar dados fi
 
 ## 🆕 Novidades
 
-Estado real do código em `main` (05/10/2026):
+Estado real do código em `main` (06/10/2026):
 
 | Área | Situação |
 |---|---|
@@ -53,7 +53,8 @@ Estado real do código em `main` (05/10/2026):
 | 🧰 **Serviços NBS/CNAE/CNPJ (Phase 7, implementada)** | Consulta NBS manual (9 dígitos) + automática por CNPJ, base viva (`CNAE X ANEXO.json` 1.090 CNAEs + `NBS SERVIÇOS.json` 137→112 após dedupe + 10 NBS do Anexo IX resgatados do overflow NCM = 122 vínculos), resolvedor NBS próprio (`resolverClassificacoesNbs`, regra geral `000/000001` fora da base), busca textual + IA de serviços com vocabulário/sinais próprios, ponte CNAE→NBS, `CartaoCnae`/`FaixaCnae`, trilha de auditoria. |
 | 🧾 **NF-e XML com 2 layouts** | `NfeXml` (clássica, com Chart.js) + `NfeXmlPolida` (padrão, veredito→ação→5 abas, zero canvas, count-up, copy-on-click, `localStorage['xml-layout']`). Hero executivo (a pagar / saldo credor / zerado), entradas × saídas, quarentena, ranking de fornecedores, top produtos/NCM/CFOP/CST, confronto Antigo × Novo, evolução mensal, apuração IBS/CBS **assistida** (crédito **efetivo** destacado no XML abate o saldo; estimativa via NCM é informativa, com divergência nota − NCM), bloco **Naturezas da operação** (CFOP diferente de venda / imobilizado / imunidades LC 214 — informativo, sem crédito), selo **CEST/ST** por item (lista de 1.010 registros, “sujeito a ST”, nunca afirmação), relatório IA + modal de relatório. |
 | 🧬 **Herança hierárquica NCM + diferimento** | A lei opera por **família** (capítulo 2d → posição SH4 → subposição SH6): sem vínculo exato de 8 dígitos, o resolvedor herda de irmãos da mesma família com limiares (SH6 ≥60%, SH4 ≥75%, capítulo curado ≥95%) e carimbo de confiança; condicionais, exceções e divergências viram hipótese “a confirmar”, nunca benefício inventado. Anexo IX condicional (CST 200) ganha **2ª opção de tributação** (normal com redução × hipótese de diferimento CST 515, alíquota 0% — a operação decide). Revalidação por `scripts/mapear-familias-ncm.mjs` + `docs/MAPEAMENTO-HIERARQUICO-NCM.md`. |
-| 🤖 **Aurum AI integrada (offline)** | Bypass determinístico → RAG lexical (`indice-lexical.json` + sinônimos) → modelo local **Qwen3-0.6B** (`recursos-ia/modelo/*.gguf`) em `utilityProcess` isolado, com hot-swap sem reiniciar. Geração restrita validada pelo resolvedor oficial (anti-alucinação: `99999999` e NCM sem nomenclatura viram “NÃO SEI”). Chat com Fator R explicativo (folha mínima, gap mensal, botão de recálculo), intenção contínua em pilha, híbrido sob demanda (guias DAS sem CBS + DARF CBS por fora) e motor de percentuais/reduções no diálogo. Trilha em `audit_log` + `ia_feedback` + `logs/consultas-ia.jsonl`. Diagnóstico em `Ctrl+Shift+D` (view oculta `debugia`). Índice reconstruído por hash do `MANIFEST.json`. Inclui tradução PT↔EN, dicionário comercial e cobertura de tradução. |
+| 🤖 **Aurum AI integrada (offline)** | Bypass determinístico → RAG lexical (`indice-lexical.json` + sinônimos) → modelo local **Qwen3.5-2B** (`recursos-ia/modelo/*.gguf`, pin em `modelo.json`) em `utilityProcess` isolado, com hot-swap sem reiniciar. Geração restrita validada pelo resolvedor oficial (anti-alucinação: `99999999` e NCM sem nomenclatura viram “NÃO SEI”). Chat com Fator R explicativo (folha mínima, gap mensal, botão de recálculo), intenção contínua em pilha, híbrido sob demanda (guias DAS sem CBS + DARF CBS por fora) e motor de percentuais/reduções no diálogo. Trilha em `audit_log` + `ia_feedback` + `logs/consultas-ia.jsonl`. Diagnóstico em `Ctrl+Shift+D` (view oculta `debugia`). Índice reconstruído por hash do `MANIFEST.json`. Inclui tradução PT↔EN, dicionário comercial e cobertura de tradução. |
+| 🕸️ **Grafo fiscal híbrido (Phase 10, implementada)** | A Aurum AI consulta um **grafo fiscal local** como base/referência: `NCM→SH6→SH4→Cap→CCT→Anexo→Artigo` + `CNAE→NBS→CCT` (20.559 nodos / 30.107 arestas, `public/base/grafo/grafo.lbug` gerado por `npm run base` via `scripts/build-grafo.mjs`). Retrieval em 4 estágios (FTS BM25 + HNSW all-MiniLM-L6-v2 + expansão 2-hops + PageRank), `via:grafo` auditável (cypher + caminho + proveniência por aresta), badge `via:grafo` + modal de trilha + “por que sugeriu”. Overlay de aprendizado só-na-máquina (`uso_local`, boost com teto, TTL 90d, rollback por apagamento). 100% offline com fallback lexical bit-idêntico; KGLite espelha o schema em Python p/ curadoria/MCP dev (`docs/grafo-*.md`). |
 | 🐾 **Pet Aurum (Aurinha)** | Mascote reativo na sidebar (estados por tela, celebra exportações, falas por horário, farejo, locomoção). Stores dedicadas `pet*` + sprite/CSS próprios. |
 | ⚖️ **Legislação ampliada** | LC 214/2025 + Decreto 12.955/2026 (CBS) + Resolução CGIBS nº 6/2026 (IBS) + RICMS-CE + portais, leitura in-app via `ModalLegislacao`, deep-link `#art128` etc. |
 | 🔄 **Bases e sincronizações** | Bases **embutidas e versionadas** (`public/base/` + `bases-fonte/`). Sync Siscomex (NCM vigente com diff novos/alterados/extintos), sync CFF (classTrib, anexos, crédito presumido, NFCom/NFAg/NF3e/NFGas — alguns exigem certificado ICP-Brasil, com importação manual de fallback), consulta CNPJ via BrasilAPI (DV local + cache 30d). Verificação de atualização via GitHub Releases em **Configurações → Atualização**. |
@@ -113,7 +114,7 @@ npm run dev:web
 # Só checagem de tipos
 npm run typecheck
 
-# Testes (Vitest, 131 suítes / 1346 casos)
+# Testes (Vitest, 152 suítes / 1621 casos)
 npm test
 ```
 
@@ -139,7 +140,7 @@ Os artefatos saem em `./release/`:
 | `AurumTaxNCM-Setup-<versão>-win-x64.exe` | Instalador NSIS (PT-BR, por usuário, com atalho + desinstalador) |
 | `AurumTaxNCM-Portatil-<versão>-win-x64.exe` | Versão portátil (sem instalar) |
 
-O instalador leva **só o app**: interface + base tributária embutida + índice da IA + modelo Qwen3-0.6B via `extraResources`.
+O instalador leva **só o app**: interface + base tributária embutida + índice da IA + modelo Qwen3.5-2B via `extraResources`.
 `.planning/`, `docs/`, `tests/`, `scripts/` e pastas de modelo/embedding ficam de fora por regra explícita no `build.files` do `package.json`.
 Os dados do usuário (XMLs importados, IndexedDB) vivem em `%APPDATA%` — fora da pasta do programa — e sobrevivem a atualizações/desinstalações.
 
@@ -292,7 +293,7 @@ híbrido: DASreduzido = DAS − CBSdentro; CBSfora = MAX(0, débitos − crédit
 aurum-tax-ncm/
 ├── electron/            # main.ts, preload.ts, esbuild.mjs
 │   ├── dist/            # compilados (main.js, preload.cjs, workers IA)
-│   └── ia/              # worker IA offline (utilityProcess isolado, RAG lexical + GGUF Qwen3-0.6B)
+│   └── ia/              # worker IA offline (utilityProcess isolado, RAG lexical + GGUF Qwen3.5-2B + grafo-service.cjs do grafo fiscal)
 ├── src/
 │   ├── App.tsx          # shell: Calculadora, Simples, Consulta, Serviços, Lote,
 │   │                    #  NfeXml/NfeXmlPolida, Produtos, Auxiliares, Legislacao (+ DebugIA oculta)
@@ -319,10 +320,10 @@ aurum-tax-ncm/
 │   ├── ui/              # 26 arquivos: Layout, kit, Marca, PetAurum, ModalLegislacao,
 │   │                    #  motion, consulta-enxuta/premium, servicos, cartoes, cest, diferimento-opcoes…
 │   └── modais/          # 3 arquivos: globais (empresas/config/emitente/backup…), pagina, reclassificacao
-├── recursos-ia/         # IA offline: GGUF Qwen3-0.6B + índice lexical + conhecimento (via extraResources)
+├── recursos-ia/         # IA offline: GGUF Qwen3.5-2B + índice lexical + conhecimento (via extraResources)
 ├── bases-fonte/         # 8 JSONs-fonte oficiais + vivos (ver tabela abaixo)
-├── scripts/             # build-base, gerar-indice-ia, cobertura-traducao, ofuscar, verificar, after-pack…
-├── tests/               # 131 suítes (122 raiz + 9 em tests/ia) — 1346 casos
+├── scripts/             # build-base, build-grafo, gerar-embeddings, gerar-indice-ia, cobertura-traducao, ofuscar, verificar, after-pack…
+├── tests/               # 152 suítes — 1621 casos (incl. 7 suítes do grafo fiscal + chaos 22/22)
 ├── docs/                # SPEC-LOGICA-NEGOCIO.md, arquitetura/segurança/troubleshooting IA,
 │                        #  diagnósticos fase 0–6/8 + final, manuais + 2 contratos .docx (fora do instalador)
 ├── public/              # assets + base JSON embutida versionada (5 JSONs + MANIFEST)
@@ -337,7 +338,7 @@ Arquitetura: **React + Clean Architecture** — `domain` (regras puras) → `app
 - **Desktop:** Electron 44 + electron-builder (NSIS PT-BR, DMG, AppImage)
 - **Front:** React 19, Vite 8 (`base: './'` p/ file://), TailwindCSS 4, Zustand 5, Framer Motion, Chart.js
 - **Dados:** Dexie 4 (IndexedDB `aurum_tax_ncm_v1`), XLSX (SheetJS), pdfmake, fast-xml-parser
-- **IA local:** node-llama-cpp (Qwen3-0.6B Q8_0) em `utilityProcess`
+- **IA local:** node-llama-cpp (Qwen3.5-2B Q4_K_M) em `utilityProcess`
 - **Qualidade:** TypeScript strict, Vitest + jsdom + fake-indexeddb, esbuild, ofuscação + verificação de build
 
 ### Dados / base tributária
@@ -378,7 +379,7 @@ Na Consulta você vê os N cards; na Classificação e no Lote você escolhe no 
 Sim: `npm run dev:web` ou sirva a pasta `dist/` após `npm run build`. O Electron só adiciona janela nativa, menu, workers IA isolados e instalador.
 
 **A IA funciona sem internet / sem baixar modelo?**
-Sim. O app embarca o índice lexical + o modelo Qwen3-0.6B e opera 100% offline. Nada é baixado sozinho. O índice é reconstruído por hash do `MANIFEST.json` quando a base muda.
+Sim. O app embarca o índice lexical + o modelo Qwen3.5-2B e opera 100% offline. Nada é baixado sozinho. O índice é reconstruído por hash do `MANIFEST.json` quando a base muda.
 
 **Onde ficam meus XMLs e meu banco?**
 XMLs importados vão para `%APPDATA%/Aurum Tax NCM/xml/<cnpj>/<chave>.xml`; o banco (empresas, produtos, auxiliares) fica no IndexedDB local. Nada sai da máquina e nada se perde ao atualizar.

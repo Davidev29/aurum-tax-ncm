@@ -54,8 +54,10 @@ function descobrirGgufPadrao() {
       }
     }
   } catch (_) { /* segue */ }
-  const legado = path.join(RAIZ, 'recursos-ia', 'modelo', 'Qwen3-0.6B-Q8_0.gguf');
+  const legado = path.join(RAIZ, 'recursos-ia', 'modelo', 'Qwen3.5-2B-Q4_K_M.gguf');
   if (fs.existsSync(legado)) return legado;
+  const legadoAntigo = path.join(RAIZ, 'recursos-ia', 'modelo', 'Qwen3-0.6B-Q8_0.gguf');
+  if (fs.existsSync(legadoAntigo)) return legadoAntigo;
   try {
     const dir = path.join(RAIZ, 'recursos-ia', 'modelo');
     if (fs.existsSync(dir)) {

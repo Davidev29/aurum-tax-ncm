@@ -20,6 +20,12 @@ import {
   resolverClassificacoesNbs,
 } from '@/infrastructure/base/classificacao-repo'
 import { bridge, type CandidatoIa } from '@/infrastructure/bridge'
+import {
+  consultarGrafoPrimeiro,
+  fundirCandidatosGrafoLexical,
+  trilhaVazia,
+  type TrilhaGrafo,
+} from './grafo-consumo'
 import { LIMIAR_NAO_SEI, calibrarConfiancaFinal } from '@/domain/aurum-ai'
 import type { ViaClassificacao } from '@/store/ia'
 import { normalizarBusca, tokensRelevantes } from '@/domain/services/busca-texto'
@@ -43,6 +49,18 @@ export interface FichaAbsolutaServico {
   regraGeral: boolean
   /** CNAE de origem quando a consulta veio do modo CNPJ. */
   cnaeOrigem: string | null
+  grafoCaminho?: string[] | null
+  grafoCypher?: string | null
+  grafoProveniencia?: Array<{
+    de: string
+    para: string
+    tipo: string
+    origem: string
+    confianca: number
+    anoReferencia?: number | null
+  }> | null
+  grafoBoost?: 'uso_local' | null
+  grafoBoostValor?: number
 }
 
 export interface VereditoServico {
@@ -66,6 +84,19 @@ export interface ResultadoGateIaServicos {
   ficha: FichaAbsolutaServico | null
   veredito: VereditoServico | null
   fontes: string[]
+  grafoCypher?: string | null
+  graphPaths?: string[][]
+  caminhoGrafo?: string[] | null
+  provenienciaGrafo?: Array<{
+    de: string
+    para: string
+    tipo: string
+    origem: string
+    confianca: number
+    anoReferencia?: number | null
+  }> | null
+  boostGrafo?: 'uso_local' | null
+  boostValorGrafo?: number
 }
 
 function combinarContextoIaServicos(entrada: EntradaDescricaoServico): string {
@@ -209,6 +240,11 @@ async function selecionarAurumAILocalNbs(
     let score = pontos
     if (pinsDict.has(String(c.codigo).replace(/\D+/g, ''))) score += 2
     if (rejeitados.has(String(c.codigo).replace(/\D+/g, ''))) score -= 500
+    // Grafo primeiro (10-05): bônus de desempate + boost uso_local (teto).
+    // Sem grafo, `viaGrafo` ausente → score bit-idêntico.
+    if (Boolean((c as CandidatoIa).viaGrafo)) score += 2
+    const boostLocalNbs = Number((c as CandidatoIa).boostValorGrafo) || 0
+    if (boostLocalNbs > 0) score += Math.min(boostLocalNbs, 0.3)
     pontuados.push({ c, pontos: score, pontosTitulo })
   }
   // Título decide o desempate (nome do serviço > juridiquês genérico).
@@ -290,11 +326,22 @@ export async function classificarComIaServicos(
   opts?.aoWorker?.(true)
   const contextoRico = combinarContextoIaServicos(entrada)
   const textoBusca = contextoRico || entrada.descricao
+  // Phase 10-05 (GRAFO-05): grafo primeiro (fail-closed → lexical bit-idêntico).
+  let trilhaGrafo: TrilhaGrafo = trilhaVazia()
+  let respostaGrafo: import('@/infrastructure/bridge').ResultadoGrafoBridge | null = null
+  try {
+    const g = await consultarGrafoPrimeiro(textoBusca, 5)
+    trilhaGrafo = g.trilha
+    respostaGrafo = g.resposta
+  } catch {
+    trilhaGrafo = trilhaVazia()
+    respostaGrafo = null
+  }
   const achados = await buscarNbsPorTexto(textoBusca, 20)
   // Sem truncamento cego: o vocabulário distintivo mora no fim do texto
   // jurídico ("…espetáculos teatrais…") — cortar em 300 chars amputava o
   // match do seletor (que lê tokens, não substring como o RAG estrito).
-  const candidatos: CandidatoIa[] = achados.map((a) => ({
+  const lexicais: CandidatoIa[] = achados.map((a) => ({
     codigo: a.codigo,
     descricao: `${a.titulo} — ${a.descricao}`.slice(0, 2000),
     score: a.score,
@@ -302,13 +349,19 @@ export async function classificarComIaServicos(
   // Dicionário de serviços: pins entram no Top mesmo quando o RAG lexical
   // não os encontra ("dentista" ∉ juridiquês). O resolvedor valida abaixo.
   for (const pin of buscarNoDicionarioServicos(textoBusca).slice(0, 6)) {
-    if (candidatos.some((c) => String(c.codigo).replace(/\D+/g, '') === pin.nbs)) continue
-    candidatos.push({
+    if (lexicais.some((c) => String(c.codigo).replace(/\D+/g, '') === pin.nbs)) continue
+    lexicais.push({
       codigo: pin.nbs,
       descricao: `Dicionário de serviços (“${pin.termo}” → ${pin.categoria})`,
       score: 999,
     })
   }
+  const candidatos: CandidatoIa[] = fundirCandidatosGrafoLexical(respostaGrafo, lexicais, trilhaGrafo)
+  const usouGrafo = trilhaGrafo.usouGrafo
+  const viaBase: import('@/store/ia').ViaClassificacao = usouGrafo ? (bridge?.ia ? 'grafo+ia' : 'grafo') : 'ia'
+  const fontes = usouGrafo
+    ? [...FONTES_GATE_NBS, 'Grafo fiscal local (FTS + vetor + 2-hops, caminho auditável)']
+    : [...FONTES_GATE_NBS]
 
   let escolha: { codigo: string; confianca: number; motivo: string } = {
     codigo: 'NÃO SEI',
@@ -343,20 +396,31 @@ export async function classificarComIaServicos(
   }
 
   if (escolha.codigo === 'NÃO SEI') {
+    const motivoGrafoNbs = usouGrafo && trilhaGrafo.cypher ? `${escolha.motivo}/via-grafo` : escolha.motivo
     return {
-      via: 'ia',
+      via: viaBase,
       sugestao,
       candidatos,
       codigoEscolhido: null,
       confiancaIa: 0,
-      motivo: escolha.motivo,
+      motivo: motivoGrafoNbs,
       mock,
       nbsValidado: null,
       regraGeral: false,
       ms: Date.now() - t0,
       ficha: null,
       veredito: null,
-      fontes: FONTES_GATE_NBS,
+      fontes,
+      ...(usouGrafo
+        ? {
+            grafoCypher: trilhaGrafo.cypher,
+            graphPaths: trilhaGrafo.caminhos,
+            caminhoGrafo: null,
+            provenienciaGrafo: null,
+            boostGrafo: null,
+            boostValorGrafo: 0,
+          }
+        : { grafoCypher: null, graphPaths: [], caminhoGrafo: null, provenienciaGrafo: null, boostGrafo: null, boostValorGrafo: 0 }),
     }
   }
 
@@ -365,38 +429,74 @@ export async function classificarComIaServicos(
   const validacao = await resolverClassificacoesNbs(digitos)
   const valido = digitos.length === 9 && validacao.lista.length > 0
   if (!valido) {
+    const motivoGrafoNbs2 = usouGrafo && trilhaGrafo.cypher ? `${escolha.motivo}/via-grafo` : escolha.motivo
     return {
-      via: 'ia',
+      via: viaBase,
       sugestao,
       candidatos,
       codigoEscolhido: escolha.codigo,
       confiancaIa: 0,
-      motivo: escolha.motivo,
+      motivo: motivoGrafoNbs2,
       mock,
       nbsValidado: null,
       regraGeral: false,
       ms: Date.now() - t0,
       ficha: null,
       veredito: null,
-      fontes: FONTES_GATE_NBS,
+      fontes,
+      ...(usouGrafo
+        ? {
+            grafoCypher: trilhaGrafo.cypher,
+            graphPaths: trilhaGrafo.caminhos,
+            caminhoGrafo: trilhaGrafo.caminhoPorCodigo.get(digitos) ?? null,
+            provenienciaGrafo: trilhaGrafo.provenienciaPorCodigo.get(digitos) ?? null,
+            boostGrafo: trilhaGrafo.boostPorCodigo.get(digitos)?.boost ?? null,
+            boostValorGrafo: trilhaGrafo.boostPorCodigo.get(digitos)?.valor ?? 0,
+          }
+        : { grafoCypher: null, graphPaths: [], caminhoGrafo: null, provenienciaGrafo: null, boostGrafo: null, boostValorGrafo: 0 }),
     }
   }
   let confianca = Math.round(escolha.confianca * 100) / 100
   if (validacao.regraGeral && confianca > 0.6) confianca = 0.6
-  const ficha = await montarFichaServico(digitos, validacao.regraGeral, cnaeOrigem)
+  const fichaBase = await montarFichaServico(digitos, validacao.regraGeral, cnaeOrigem)
+  const motivoFinalNbs = usouGrafo && trilhaGrafo.cypher ? `${escolha.motivo}/via-grafo` : escolha.motivo
+  const ficha = fichaBase
+    ? {
+        ...fichaBase,
+        ...(usouGrafo && trilhaGrafo.caminhoPorCodigo.get(digitos)
+          ? {
+              grafoCaminho: trilhaGrafo.caminhoPorCodigo.get(digitos) ?? null,
+              grafoCypher: trilhaGrafo.cypher,
+              grafoProveniencia: trilhaGrafo.provenienciaPorCodigo.get(digitos) ?? null,
+              grafoBoost: trilhaGrafo.boostPorCodigo.get(digitos)?.boost ?? null,
+              grafoBoostValor: trilhaGrafo.boostPorCodigo.get(digitos)?.valor ?? 0,
+            }
+          : {}),
+      }
+    : null
   return {
-    via: 'ia',
+    via: viaBase,
     sugestao,
     candidatos,
     codigoEscolhido: digitos,
     confiancaIa: confianca,
-    motivo: escolha.motivo,
+    motivo: motivoFinalNbs,
     mock,
     nbsValidado: digitos,
     regraGeral: validacao.regraGeral,
     ms: Date.now() - t0,
     ficha,
     veredito: vereditoServico(ficha),
-    fontes: FONTES_GATE_NBS,
+    fontes,
+    ...(usouGrafo
+      ? {
+          grafoCypher: trilhaGrafo.cypher,
+          graphPaths: trilhaGrafo.caminhos,
+          caminhoGrafo: trilhaGrafo.caminhoPorCodigo.get(digitos) ?? null,
+          provenienciaGrafo: trilhaGrafo.provenienciaPorCodigo.get(digitos) ?? null,
+          boostGrafo: trilhaGrafo.boostPorCodigo.get(digitos)?.boost ?? null,
+          boostValorGrafo: trilhaGrafo.boostPorCodigo.get(digitos)?.valor ?? 0,
+        }
+      : { grafoCypher: null, graphPaths: [], caminhoGrafo: null, provenienciaGrafo: null, boostGrafo: null, boostValorGrafo: 0 }),
   }
 }

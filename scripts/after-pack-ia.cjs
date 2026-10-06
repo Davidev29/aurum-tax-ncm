@@ -27,17 +27,21 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const GGUF_LEGADO = 'Qwen3-0.6B-Q8_0.gguf'
+const GGUF_LEGADO = 'Qwen3.5-2B-Q4_K_M.gguf'
 
 /** Checagens duras: `[relativo-à-raiz, descrição]`. */
 const OBRIGATORIOS = [
   ['electron/dist/ia-worker.cjs', 'worker IA copiado pelo esbuild'],
   ['electron/dist/caminhos-ia.cjs', 'módulo de caminhos IA copiado pelo esbuild'],
   ['electron/dist/perfil-modelo.cjs', 'camada de compatibilidade do modelo (copiada pelo esbuild)'],
+  ['electron/dist/grafo-service.cjs', 'runtime do grafo fiscal 10-02 (copiado pelo esbuild)'],
   ['recursos-ia/dados-brutos/ncm-para-ia.json', 'base unificada 06-02 (2335 NCMs)'],
   ['recursos-ia/indice-ncm/indice-lexical.json', 'índice lexical RAG (fallback 06-03)'],
   ['recursos-ia/indice-ncm/.manifest-hash', 'hash semântico do MANIFEST (gatilho 06-03)'],
   ['recursos-ia/CHECKSUMS.txt', 'checksums dos artefatos IA'],
+  ['public/base/grafo/grafo.lbug', 'grafo fiscal 10-01 (nativo ou JSON portátil)'],
+  ['public/base/grafo/grafo.lbug.json', 'espelho portátil do grafo (fallback do runtime)'],
+  ['public/base/grafo/MANIFEST.grafo.json', 'manifesto versionado do grafo'],
 ]
 
 /** Qualquer `*.gguf` em `recursos-ia/modelo/` (modelo agnóstico). */
@@ -99,6 +103,24 @@ async function afterPackIa(contexto = {}) {
   } else {
     for (const g of ggufs) {
       console.log(`[afterPack:ia] ok: recursos-ia/modelo/${g.arquivo} (${tamanho(g.abs)} bytes)`)
+    }
+  }
+
+  // 10-03 (GRAFO-06) — vetores do grafo: AVISO, nunca falha o pack
+  // (modo FTS-puro é o fallback oficial quando o embedding está ausente).
+  for (const rel of [
+    'recursos-ia/embedding/vetores-ncm.json',
+    'recursos-ia/embedding/MANIFEST-embedding.json',
+    'public/base/grafo/vetores.json',
+  ]) {
+    const abs = path.join(raiz, rel)
+    if (existe(abs)) {
+      console.log(`[afterPack:ia] ok: ${rel} (${tamanho(abs)} bytes)`)
+    } else {
+      console.warn(
+        `[afterPack:ia] AVISO: ${rel} ausente (rode "node scripts/gerar-embeddings.mjs"; ` +
+          'sem ele o app usa FTS-puro).',
+      )
     }
   }
 

@@ -169,8 +169,8 @@ scripts/after-pack-ia.cjs`):
   (`.map`, `.planning/`, `docs/`, `tests/`, `scripts/`, modelo/embedding ficam de fora).
 - Via `extraResources` (fora do asar): `dados-brutos/` + `indice-lexical.json` +
   `.manifest-hash` + `sinonimos-gerados.json` + `conhecimento/*.json|md` +
-  `CHECKSUMS.txt` + `modelo/Qwen3-0.6B-Q8_0.gguf`.
-- **GGUF é obrigatório** (`recursos-ia/modelo/Qwen3-0.6B-Q8_0.gguf`, SHA
+  `CHECKSUMS.txt` + `modelo/Qwen3.5-2B-Q4_K_M.gguf` + `modelo/modelo.json` (pin oficial).
+- **GGUF é obrigatório** (`recursos-ia/modelo/Qwen3.5-2B-Q4_K_M.gguf`, SHA
   registrado em `recursos-ia/CHECKSUMS.txt`). Sem ele o pack **falha**
   (AI-first — instalador sem IA real não sai). Modelo nunca vai para o git
   (`*.gguf` no `.gitignore`).
@@ -210,9 +210,9 @@ Comandos úteis:
 - `Base de conhecimento válida (exit 1)` / `termo não normalizado / NCM extinto` →
   corrija o JSON em `recursos-ia/conhecimento/` (minúsculas, sem acento) ou o
   espelho TS, e rode `npm run ia:validar-conhecimento`.
-- `GGUF ausente / SHA diverge / CHECKSUMS sem linha` → copie o
-  `Qwen3-0.6B-Q8_0.gguf` para `recursos-ia/modelo/`, rode
-  `certutil -hashfile recursos-ia\modelo\Qwen3-0.6B-Q8_0.gguf SHA256`,
+- `GGUF ausente / SHA diverge / CHECKSUMS sem linha` → confira o pin em
+  `recursos-ia/modelo/modelo.json` (oficial `Qwen3.5-2B-Q4_K_M.gguf`), rode
+  `certutil -hashfile recursos-ia\modelo\Qwen3.5-2B-Q4_K_M.gguf SHA256`,
   cole em `recursos-ia/CHECKSUMS.txt`, valide com `node scripts/testar-modelo-ia.mjs`.
 - `JS SEM ofuscação / sourcemap vazando` → rode `node scripts/ofuscar-build.cjs`
   (nunca publique `release/` com `.map`).
