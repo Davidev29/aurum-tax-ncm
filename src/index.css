@@ -3417,3 +3417,13 @@
 .dark .dark\:bg-red-950\/40 { background-color: rgb(69 10 10 / 0.9); }
 .dark .dark\:bg-black\/20 { background-color: rgb(0 0 0 / 0.55); }
 .dark .dark\:bg-slate-900\/60 { background-color: rgb(15 23 42 / 0.9); }
+
+/* --- Tour guiado: quadro ilustrativo com cursor animado --------------------
+   O cursor desliza via framer-motion (entrada spring a cada passo); aqui
+   fica só o refinamento: sombra nítida do SVG e desligamento total de
+   qualquer resíduo animado quando o SO pede movimento reduzido. */
+.tour-cursor { will-change: transform, opacity; }
+.tour-cursor-sombra { display: block; }
+@media (prefers-reduced-motion: reduce) {
+  .tour-cursor { will-change: auto; }
+}

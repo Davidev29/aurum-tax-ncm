@@ -21,7 +21,11 @@ export interface PassoTour {
   comoUsar: string[]
   /** Dica prática / atalho. */
   dica: string
-  /** Texto do botão de ação ("Abrir …"). */
+  /**
+   * Texto do antigo botão "Abrir …" (removido da UI — o tour agora é
+   * 100% informativo com quadro animado; mantido só p/ contrato/testes).
+   * @deprecated não renderizar; o tour não navega mais sozinho.
+   */
   acao: string
 }
 

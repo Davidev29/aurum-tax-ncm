@@ -1,13 +1,14 @@
 /**
  * Estado do tour guiado — abre 1x após a instalação + sob demanda.
  *
+ * Tour 100% informativo: o modal nunca navega sozinho — o usuário aprende
+ * onde fica cada menu pelo quadro animado e navega por conta própria.
+ *
  * - `deveAbrirAposInstalacao()`: primeira execução (sem carimbo) → auto-abre.
  * - `abrir() / fechar() / concluir()`: controle via botão "Guia" no header.
- * - `irParaMenu()`: navega para o menu do passo sem fechar o tour.
  */
 import { create } from 'zustand'
 import { TOUR_KEY } from '@/domain/tutorial'
-import { useUi, type ViewId } from '@/store/ui'
 
 function lido(): string | null {
   try {
@@ -34,7 +35,6 @@ interface TutorialState {
   irPasso: (n: number) => void
   proximo: (total: number) => void
   anterior: () => void
-  irParaMenu: (view: ViewId) => void
 }
 
 export const useTutorial = create<TutorialState>((set, get) => ({
@@ -57,9 +57,6 @@ export const useTutorial = create<TutorialState>((set, get) => ({
     set({ passo: passo + 1 })
   },
   anterior: () => set((s) => ({ passo: Math.max(0, s.passo - 1) })),
-  irParaMenu: (view) => {
-    useUi.getState().trocarView(view)
-  },
 }))
 
 /** Primeira execução (tour nunca visto)? */

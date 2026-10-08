@@ -89,6 +89,7 @@ flowchart LR
 | 🖨️ **Emitente timbrado** | Razão social, CNPJ, logo, cor, rodapé — cabeçalho de todos os PDFs + modal de preview |
 | 🔄 **Atualização e bases** | GitHub Releases (Configurações → Atualização, com snapshot pré-update do banco). Bases embutidas renovadas a cada release. Complementos online: Siscomex + CFF + BrasilAPI (com fallback manual). Backup/restauração JSON das 27 tabelas (KEK e resumos fora por construção), idempotente, com validação prévia e snapshot pré-restore |
 | 🌙 **UX** | Tema claro/escuro, responsivo, sidebar recolhível (desktop) / drawer (móvel), transições em carrossel com respeito a `prefers-reduced-motion`, toasts 3,4 s, skeleton/count-up, aceite local no primeiro uso, fundo global animado |
+| ✨ **Tour guiado** | Abre 1x após a instalação e quando quiser no botão **✨ Guia** do topo. 10 passos (um por menu), 100% informativo: quadro animado com miniatura do menu lateral, cursor em loop clicando no item do passo e prévia viva de cada módulo — sem navegar sozinho |
 
 ---
 
