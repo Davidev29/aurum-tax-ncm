@@ -25,9 +25,9 @@
 
 ◈ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ◈
 
-**Versão `1.0.0` · `10` views · `152` suítes Vitest · `1.697` casos · `typecheck` limpo**
+**Versão `1.0.0` · `10` views · `154` suítes Vitest · `1.740` casos · `typecheck` limpo**
 
-*Estado auditado em **08/10/2026** a partir da árvore de trabalho (branch `main`, à frente do `origin/main`).*
+*Estado auditado em **08/10/2026** a partir da árvore de trabalho (branch `main`).*
 
 [◈ Estado atual](#-estado-atual--auditado-em-08102026) · [✨ Recursos](#-recursos-por-módulo) · [🚀 Começo rápido](#-começo-rápido) · [📖 Guia de uso](#-guia-de-uso--módulo-a-módulo) · [🧮 Regras de cálculo](#-como-o-cálculo-funciona) · [🛠️ Desenvolvimento](#️-desenvolvimento)
 
@@ -47,7 +47,7 @@
 | 🧪 Testes | **154 arquivos** · **1.740 casos** — `npm test` → **tudo passando** · `npm run typecheck` limpo |
 | ✅ Tipos | `npm run typecheck` (`tsc --noEmit`) — **limpo** |
 | 📦 Instaladores locais | `release/` com `Setup 1.0.0` + `Portátil 1.0.0` (ignorado no git, gerado por `npm run dist:win`) |
-| 🗄️ Base embutida | `public/base/` versionada: `reforma.json` 1,6 MB · `nomenclatura.json` 2,9 MB · `classificacoes-consolidadas.json` 1,7 MB · `cnae-nbs.json` 1,3 MB · grafo `grafo.lbug` 6,4 MB · `vetores.json` 12,5 MB |
+| 🗄️ Base embutida | `public/base/` versionada: `reforma.json` 1,6 MB · `nomenclatura.json` 2,9 MB · `classificacoes-consolidadas.json` 1,7 MB · `cnae-nbs.json` 1,3 MB · grafo `grafo.lbug` 6,1 MB · `vetores.json` 12 MB |
 
 ### ▲ O que mudou (verdade nua)
 
@@ -154,7 +154,7 @@ Artefatos em `./release/` (ignorado no git):
 | `AurumTaxNCM-Setup-<versão>-win-x64.exe` | Instalador NSIS (PT-BR, por usuário, atalho + desinstalador) |
 | `AurumTaxNCM-Portatil-<versão>-win-x64.exe` | Versão portátil (sem instalar) |
 
-O instalador leva **só o app**: interface + base tributária embutida + índice lexical + grafo fiscal. Modelo LLM **não** é mais empacotado. `.planning/`, `docs/`, `tests/`, `scripts/` ficam de fora por regra explícita no `build.files`. Dados do usuário (XMLs, SQLite `aurum.db`) vivem em `%APPDATA%` e sobrevivem a atualizações.
+O instalador leva **só o app**: interface + base tributária embutida + vetores do grafo + grafo fiscal. Modelo LLM **não** é mais empacotado, e os artefatos legados sem leitor em runtime (`dados-brutos/`, índice lexical, sinônimos gerados) também ficaram de fora. `.planning/`, `docs/`, `tests/`, `scripts/` ficam de fora por regra explícita no `build.files`. Dados do usuário (XMLs, SQLite `aurum.db`) vivem em `%APPDATA%` e sobrevivem a atualizações.
 
 ---
 
@@ -334,12 +334,13 @@ aurum-tax-ncm/
 │   │                    #  consulta-enxuta/premium, servicos, cartoes, cest,
 │   │                    #  diferimento-opcoes, grafo-trilha, aurum-ai (embutida)…
 │   └── modais/          # globais (empresas/config/emitente/backup…), pagina
-├── recursos-ia/         # busca local: índice lexical + conhecimento + grafo
-│                        # (modelo .gguf local ignorado; não empacotado)
+├── recursos-ia/         # busca local: vetores + conhecimento + grafo
+│                        # (sem modelo local — só pin e hashes; índice lexical
+│                        #  legado e dados-brutos não embarcam mais)
 ├── bases-fonte/         # JSONs-fonte oficiais + vivos (ver tabela abaixo)
 ├── scripts/             # build-base, build-grafo, gerar-embeddings/indice,
 │                        #  cobertura, ofuscar, verificar, after-pack…
-├── tests/               # 152 suítes · 1.697 casos (7 do grafo + chaos)
+├── tests/               # 154 suítes · 1.740 casos (tudo passando)
 ├── docs/                # SPEC, arquitetura, diagnósticos, manuais (.docx fora do installer)
 ├── public/base/         # base JSON embutida versionada + MANIFEST + grafo
 ├── build/               # icon.ico/png, LICENCA.rtf/txt (NSIS PT-BR)
@@ -353,14 +354,14 @@ Arquitetura: **React + Clean Architecture** — `domain` (regras puras) → `app
 - **Desktop:** Electron 44 + electron-builder (NSIS PT-BR, DMG, AppImage)
 - **Front:** React 19, Vite 8 (`base: './'` p/ file://), TailwindCSS 4, Zustand 5, Framer Motion, Chart.js
 - **Dados:** SQLite via Prisma 6 (`aurum.db` em userData, IPC no Electron), XLSX (SheetJS), pdfmake, fast-xml-parser
-- **Busca local:** índice lexical próprio + grafo fiscal (FTS BM25 + HNSW + 2-hops + PageRank, fallback bit-idêntico)
+- **Busca local:** busca textual no SQLite + grafo fiscal (FTS + vetores + 2-hops + PageRank, fallback idêntico)
 - **Qualidade:** TypeScript strict, Vitest + SQLite/Prisma (banco por arquivo), esbuild, ofuscação + verificação de build
 
 ### Dados / base tributária
 
 - `public/base/` carrega a base embutida gerada por `npm run base` (NCM × CST × cClassTrib + nomenclatura vigente + NBS + CNAE + `MANIFEST.json`).
 - Para atualizar: **Configurações → Importação da base** (`NCM + tabelasAuxiliares` ou `Nomenclaturas`). Só entram vínculos com NCM de 8 dígitos; o resto é descartado com aviso.
-- Backup: **Configurações → Backup** exporta tudo (empresas, produtos, auxiliares, emitente) em JSON; restauração idempotente.
+- Backup: **Configurações → Backup** exporta o banco (27 stores + emitente) em JSON; restauração idempotente com validação prévia e snapshot pré-restore.
 
 ### Onde baixar as bases oficiais
 
@@ -407,11 +408,7 @@ Não. São motores separados: **Calculadora** simula IBS/CBS por NCM; **Simples*
 
 ## ◈ Dívidas e próximos passos honestos
 
-- [ ] Estabilizar `servicos-topup` (seed de banco legado) e o flake de latência do `grafo-ipc`
 - [ ] Alinhar `package.json` (`UNLICENSED` + `private`) com o `LICENSE` MIT — decidir se publica ou mantém interno
-- [ ] Atualizar contadores de teste/notas de versão (`notas-versao.ts` ainda na `1.0.0` de 03/10/2026)
-- [ ] Documentar a API `POST /projecoes/simular-segregacao` (envelope em `simular-segregacao.ts`) no guia do Simples
-- [ ] Decidir destino do `.gguf` local e dos scripts `ia:finetuning*` removidos do `package.json` (curadoria fora do runtime)
 
 ---
 
