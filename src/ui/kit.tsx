@@ -374,17 +374,18 @@ export function Vazio({
 }
 
 export function BarraProgresso({ pct, etapa }: { pct: number; etapa?: string }) {
+  const arred = Math.round(pct)
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5" role="progressbar" aria-valuenow={arred} aria-valuemin={0} aria-valuemax={100}>
       <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
         <div
           className="h-2 rounded-full bg-gradient-to-r from-brand-700 to-aurum-500 transition-[width] duration-300"
-          style={{ width: `${Math.max(2, Math.min(100, pct))}%` }}
+          style={{ width: `${Math.max(2, Math.min(100, arred))}%` }}
         />
       </div>
       <div className="flex items-center justify-between text-[11px] text-slate-500">
         <span>{etapa ?? 'Processando…'}</span>
-        <span className="num font-mono">{pct}%</span>
+        <span className="num font-mono">{arred}%</span>
       </div>
     </div>
   )
@@ -463,7 +464,12 @@ export function Modal({
   useEffect(() => {
     if (!aberto) return
     seqModal += 1
-    setZ(60 + seqModal * 10)
+    // Teto 79: a pilha de modais cresce 65, 70, 75… mas NUNCA alcança o tour
+    // (80), o diálogo de confirmação (85), o termo (90) nem os toasts (100).
+    // Sem teto, o 2º modal empatava com o tour e o 3º cobria o diálogo —
+    // ex.: "Sobrescrever produto?" sumia atrás do modal que o chamou.
+    // (Produto → detalhe fiscal → legislação = 3 níveis distintos: 65/70/75.)
+    setZ(Math.min(60 + seqModal * 5, 79))
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && ehTopoEscapeModal(onKey)) fecharRef.current()
     }

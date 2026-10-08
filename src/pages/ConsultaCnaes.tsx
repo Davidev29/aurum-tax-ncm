@@ -129,14 +129,28 @@ export function ConsultaCnaes() {
     [],
   )
 
-  // Fecha o dropdown ao clicar fora.
+  // Fecha o dropdown ao clicar fora, ao rolar o conteúdo ou ao redimensionar.
+  // Sem isso o dropdown ficava aberto flutuando sobre os cards enquanto o
+  // usuário rolava a resposta (bug "sugestão persistente sobreposta").
   useEffect(() => {
     if (!aberto) return
     const aoClicar = (e: MouseEvent) => {
       if (caixaRef.current && !caixaRef.current.contains(e.target as Node)) setAberto(false)
     }
+    const aoRolar = (e: Event) => {
+      if (caixaRef.current?.contains(e.target as Node)) return
+      setAberto(false)
+    }
     document.addEventListener('mousedown', aoClicar)
-    return () => document.removeEventListener('mousedown', aoClicar)
+    document.getElementById('conteudo')?.addEventListener('scroll', aoRolar, { passive: true })
+    window.addEventListener('scroll', aoRolar, true)
+    window.addEventListener('resize', aoRolar)
+    return () => {
+      document.removeEventListener('mousedown', aoClicar)
+      document.getElementById('conteudo')?.removeEventListener('scroll', aoRolar)
+      window.removeEventListener('scroll', aoRolar, true)
+      window.removeEventListener('resize', aoRolar)
+    }
   }, [aberto])
 
   const pedirSugestoes = useDebounce((t: string) => {
@@ -358,8 +372,9 @@ export function ConsultaCnaes() {
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       {/* Busca acima dos detalhes: o dropdown absoluto precisa vencer a
-          seção seguinte no empilhamento (ambas usam motion/transform). */}
-      <Entrada className="relative z-30">
+          seção seguinte no empilhamento (ambas usam motion/transform).
+          FIX: isolate + z-50 (antes z-30 empatava com header e misturava). */}
+      <Entrada className="relative isolate z-50">
         <Painel>
           <div className="p-5 sm:p-6">
             <h2 className="flex items-center gap-2 text-base font-bold">
@@ -420,13 +435,13 @@ export function ConsultaCnaes() {
                 </span>
               </div>
 
-              {/* Dropdown de sugestões */}
+              {/* Dropdown de sugestões — FIX: z-50 opaco, nunca atrás do card */}
               {mostrarDropdown && sugestoes.length > 0 ? (
                 <div
                   id="sugestoes-cnae"
                   role="listbox"
                   aria-label="Sugestões de CNAE"
-                  className="absolute inset-x-0 top-full z-30 mt-1.5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-pop dark:border-slate-700 dark:bg-slate-900"
+                  className="absolute inset-x-0 top-full z-50 mt-1.5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-pop dark:border-slate-700 dark:bg-slate-900"
                 >
                   <ul className="scroll-elegante max-h-80 overflow-y-auto p-1.5">
                     {sugestoes.map((s, i) => {
@@ -474,7 +489,7 @@ export function ConsultaCnaes() {
                 </div>
               ) : null}
               {mostrarDropdown && !sugestoes.length && texto.trim().length >= 2 && !carregandoLista ? (
-                <div className="absolute inset-x-0 top-full z-30 mt-1.5 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 shadow-pop dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                <div className="absolute inset-x-0 top-full z-50 mt-1.5 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500 shadow-pop dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
                   Nenhum CNAE para “{texto.trim().slice(0, 40)}” — tente o número (ex.: 6201-5/01) ou outra palavra da atividade.
                 </div>
               ) : null}
@@ -496,7 +511,7 @@ export function ConsultaCnaes() {
         </Painel>
       </Entrada>
 
-      <Revelar className="relative z-10">
+      <Revelar className="relative isolate z-0">
         <div ref={cardRef} className="scroll-mt-24">
           <Painel className="p-5 sm:p-6">
             <div className="mb-4 flex items-center gap-2">

@@ -284,9 +284,28 @@ function BuscaCalculadora({
 
   const aberto = focado && texto.trim().length > 0
   const vazio = aberto && !prodSug.length && !nomSug.length
+  const caixaRef = useRef<HTMLDivElement>(null)
+
+  // Fecha ao rolar o conteúdo/redimensionar: sem isso o dropdown ficava aberto
+  // flutuando sobre os itens da calculadora (mesmo bug das Consultas).
+  useEffect(() => {
+    if (!aberto) return
+    const aoRolar = (e: Event) => {
+      if (caixaRef.current?.contains(e.target as Node)) return
+      setFocado(false)
+    }
+    document.getElementById('conteudo')?.addEventListener('scroll', aoRolar, { passive: true })
+    window.addEventListener('scroll', aoRolar, true)
+    window.addEventListener('resize', aoRolar)
+    return () => {
+      document.getElementById('conteudo')?.removeEventListener('scroll', aoRolar)
+      window.removeEventListener('scroll', aoRolar, true)
+      window.removeEventListener('resize', aoRolar)
+    }
+  }, [aberto])
 
   return (
-    <div className="relative">
+    <div ref={caixaRef} className={`relative isolate ${aberto ? 'z-40' : ''}`}>
       <div className="flex flex-col gap-2 sm:flex-row">
         <div className="field-wrap flex-1">
           <span className="field-icon">🔍</span>
@@ -361,7 +380,7 @@ function BuscaCalculadora({
           ) : null}
           {nomSug.length ? (
             <>
-              <div className="sticky top-0 z-10 border-b border-t border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-950/60">
+              <div className="border-b border-t border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:bg-slate-950/60">
                 NCM direto
               </div>
               {nomSug.map((n) => (
@@ -450,7 +469,10 @@ export function Calculadora() {
     <div className={`grid grid-cols-1 gap-6 transition-all duration-500 ease-out ${temItens ? 'lg:grid-cols-[minmax(0,1fr)_390px]' : ''}`}>
       <div className="min-w-0 space-y-6">
         <Entrada>
-        <Painel className="overflow-hidden">
+        {/* FIX sobreposição: Painel da busca nunca pode ter overflow-hidden —
+            cortava o dropdown .sugg na borda inferior. Arredondamento fica
+            nos blocos internos (header/steps), não no container da busca. */}
+        <Painel className="overflow-visible">
           <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] p-5">
             <IconeBadge nome="calculadora" tom="brand" tamanho="lg" />
             <div className="min-w-0 flex-1">
@@ -507,7 +529,6 @@ export function Calculadora() {
       </div>
 
       {temItens ? (
-      <Entrada atraso={0.08}>
       <aside className="calc-aside-enter space-y-4 lg:sticky lg:top-4 lg:h-fit" aria-live="polite">
         <div className="calc-hero overflow-hidden rounded-2xl">
           <div className="px-5 pb-4 pt-5">
@@ -517,7 +538,7 @@ export function Calculadora() {
                 {r.itens ? `${r.itens} ${r.itens === 1 ? 'item' : 'itens'}` : '—'}
               </span>
             </div>
-            <div className="calc-hero-valor mt-1 text-4xl text-white" aria-live="polite">
+            <div className="calc-hero-valor mt-1 break-all text-3xl leading-none tabular-nums xl:text-4xl text-white" aria-live="polite" title={fmtMoeda(r.total)}>
               {fmtMoeda(r.total)}
             </div>
             <div className="mt-1 flex items-center justify-between text-[11px] text-white/75">
@@ -612,7 +633,6 @@ export function Calculadora() {
         </div>
         </Secao>
       </aside>
-      </Entrada>
       ) : null}
 
       <ModalCalcCustom

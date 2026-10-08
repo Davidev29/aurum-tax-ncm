@@ -96,11 +96,8 @@ export function Consulta() {
 
   const descricao = useConsulta((s) => s.descricao)
   const destinacao = useConsulta((s) => s.destinacao)
-  const setDestinacao = useConsulta((s) => s.setDestinacao)
   const composicao = useConsulta((s) => s.composicao)
-  const setComposicao = useConsulta((s) => s.setComposicao)
   const usoDescricao = useConsulta((s) => s.usoDescricao)
-  const setUsoDescricao = useConsulta((s) => s.setUsoDescricao)
   const sugestao = useConsulta((s) => s.sugestao)
   const classificando = useConsulta((s) => s.classificandoDescricao)
   const classificarDescricao = useConsulta((s) => s.classificarDescricao)
@@ -223,7 +220,7 @@ export function Consulta() {
           let fam: typeof quickFam = null
           if (inten.deveBuscarExato && inten.digitos.length >= 2) {
             try {
-              nums = (await sugerirNomenclatura(inten.digitos, 8)) as typeof quickNum
+              nums = (await sugerirNomenclatura(inten.digitos, 6)) as typeof quickNum
             } catch {
               nums = []
             }
@@ -247,7 +244,7 @@ export function Consulta() {
           }
           if (inten.deveBuscarNome) {
             try {
-              txts = await buscarNomenclaturaPorTexto(atual, 8)
+              txts = await buscarNomenclaturaPorTexto(atual, 6)
             } catch {
               txts = []
             }
@@ -266,15 +263,24 @@ export function Consulta() {
     return () => window.clearTimeout(t)
   }, [entrada])
 
-  // Fecha o dropdown ao clicar fora do campo.
+  // Fecha o dropdown ao clicar fora do campo ou ao rolar o conteúdo.
+  // FIX sobreposição do print: dropdown ficava aberto sobre a resposta
+  // anterior enquanto o usuário rolava/digitava a 2ª busca.
   useEffect(() => {
     const aoClicar = (e: MouseEvent) => {
       if (wrapBuscaRef.current && !wrapBuscaRef.current.contains(e.target as Node)) {
         setQuickAberto(false)
       }
     }
+    const aoRolar = () => setQuickAberto(false)
     document.addEventListener('mousedown', aoClicar)
-    return () => document.removeEventListener('mousedown', aoClicar)
+    document.getElementById('conteudo')?.addEventListener('scroll', aoRolar, { passive: true })
+    window.addEventListener('resize', aoRolar)
+    return () => {
+      document.removeEventListener('mousedown', aoClicar)
+      document.getElementById('conteudo')?.removeEventListener('scroll', aoRolar)
+      window.removeEventListener('resize', aoRolar)
+    }
   }, [])
 
   // Permitido × negado por DFe (tabela CFF local) para os cClassTribs exibidos.
@@ -463,11 +469,18 @@ export function Consulta() {
                 onChange={(e) => {
                   setEntradaLocal(e.target.value)
                   // Nova digitação nunca herda destaque da busca anterior.
+                  // Não força abertura aqui: o efeito DEBOUNCE_QUICK abre só
+                  // quando houver dados frescos (evita flash da lista velha
+                  // sobre o resultado anterior — bug do print "Ovos").
                   setAtivoTexto(-1)
-                  setQuickAberto(true)
                 }}
                 onFocus={() => {
                   if (quickNum.length || quickTxt.length || quickFam) setQuickAberto(true)
+                }}
+                onBlur={() => {
+                  // Fecha ao sair do campo; o timeout permite o clique na
+                  // sugestão (que usa onMouseDown preventDefault) vencer.
+                  window.setTimeout(() => setQuickAberto(false), 120)
                 }}
                 onKeyDown={aoTecla}
                 role="combobox"
@@ -502,6 +515,7 @@ export function Consulta() {
                         aria-selected={idx === quickAtivo}
                         className={`sugg-item${idx === quickAtivo ? ' is-active' : ''}`}
                         onMouseEnter={() => setQuickAtivo(idx)}
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => escolherQuick(n.codigo)}
                         title={`Classificar ${n.codigoOriginal} oficialmente`}
                       >
@@ -524,6 +538,7 @@ export function Consulta() {
                           aria-selected={idx === quickAtivo}
                           className={`sugg-item${idx === quickAtivo ? ' is-active' : ''}`}
                           onMouseEnter={() => setQuickAtivo(idx)}
+                          onMouseDown={(e) => e.preventDefault()}
                           onClick={() => escolherQuick(r.codigo)}
                           title={`Classificar ${fmtNcm(r.codigo)} oficialmente`}
                         >
@@ -587,58 +602,6 @@ export function Consulta() {
               </span>
             ) : null}
           </div>
-
-          <details id="refino-predicao" className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-            <summary className="cursor-pointer font-semibold">
-              <span className="inline-flex items-center gap-1.5">
-                <IconeAurumPremium tamanho="sm" /> Refinar resposta (destinação, composição, uso — opcional)
-              </span>
-            </summary>
-            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-              <div className="field-wrap">
-                <Texto
-                  id="refino-destinacao"
-                  autoComplete="off"
-                  placeholder="Destinação (opcional): abate, plantio…"
-                  value={destinacao}
-                  onChange={(e) => setDestinacao(e.target.value)}
-                  aria-label="Destinação do produto"
-                />
-              </div>
-              <div className="field-wrap">
-                <Texto
-                  autoComplete="off"
-                  placeholder="Composição (opcional): teor de sal…"
-                  value={composicao}
-                  onChange={(e) => setComposicao(e.target.value)}
-                  aria-label="Composição do produto"
-                />
-              </div>
-              <div className="field-wrap">
-                <Texto
-                  autoComplete="off"
-                  placeholder="Uso (opcional): ração, consumo…"
-                  value={usoDescricao}
-                  onChange={(e) => setUsoDescricao(e.target.value)}
-                  aria-label="Uso do produto"
-                />
-              </div>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Btn
-                tam="sm"
-                variante="primary"
-                disabled={!entrada.trim()}
-                carregando={classificando}
-                onClick={() => void classificarDescricao({ descricao: entrada, destinacao, composicao, uso: usoDescricao })}
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  <IconeAurumPremium tamanho="sm" /> Classificar descrição
-                </span>
-              </Btn>
-              <span className="text-[11px]">A busca reavalia sozinha 3 s após parar de digitar; o botão força com o refino atual.</span>
-            </div>
-          </details>
         </div>
       </Painel>
       </Entrada>
@@ -652,7 +615,7 @@ export function Consulta() {
           />
         </Entrada>
       ) : (
-        <Revelar className="mt-6 space-y-4">
+        <Revelar className={`mt-6 space-y-4${quickAberto ? ' conteudo-esmaecido' : ''}`} inert={quickAberto ? true : undefined} aria-hidden={quickAberto || undefined}>
           {/* UMA resposta protagonista por vez — resto colapsado. */}
           {prioridadeIA ? (
             <section aria-label="Resposta automática" className="space-y-3">
@@ -1027,11 +990,6 @@ function ConteudoSugestao({
   onEscolherAlternativa?: (codigo: string) => void
 }) {
   const [modal, setModal] = useState<'ncms' | 'raciocinio' | null>(null)
-  const abrirRefino = () => {
-    document.getElementById('refino-predicao')?.setAttribute('open', '')
-    window.requestAnimationFrame(() => document.getElementById('refino-destinacao')?.focus())
-    toast('Complete o refino — a IA reavalia automaticamente.', 'warn')
-  }
   const alternativas = sugestao.alternativas.slice(0, 8)
   return (
     <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-950/40">
@@ -1092,12 +1050,10 @@ function ConteudoSugestao({
       </div>
 
       {sugestao.perguntasComplementares.length ? (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+        <p className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
           <strong>❓ Para refinar:</strong>{' '}
-          <button type="button" onClick={abrirRefino} className="font-semibold underline" title="Abrir o refino para responder — a IA reavalia sozinha">
-            {sugestao.perguntasComplementares[0].length > 90 ? `${sugestao.perguntasComplementares[0].slice(0, 90)}…` : sugestao.perguntasComplementares[0]}
-          </button>
-        </div>
+          {sugestao.perguntasComplementares[0].length > 90 ? `${sugestao.perguntasComplementares[0].slice(0, 90)}…` : sugestao.perguntasComplementares[0]}
+        </p>
       ) : null}
 
       <ModalNcmsAnalisados
@@ -1122,7 +1078,6 @@ function ConteudoSugestao({
         trilha={sugestao.trilha}
         json={jsonPedido}
         perguntas={sugestao.perguntasComplementares}
-        onRefinar={abrirRefino}
       />
     </div>
   )
