@@ -37,7 +37,7 @@
 
 ## ◈ Estado atual — auditado em 08/10/2026
 
-> Este README foi reconciliado com o código. A versão anterior prometia recursos que **já não existem** na árvore. A tabela abaixo contrasta **o que o README antigo dizia × o que o código tem hoje**.
+> Este README descreve somente o que existe hoje na árvore.
 
 ### ● Painel de saúde
 
@@ -48,19 +48,6 @@
 | ✅ Tipos | `npm run typecheck` (`tsc --noEmit`) — **limpo** |
 | 📦 Instaladores locais | `release/` com `Setup 1.0.0` + `Portátil 1.0.0` (ignorado no git, gerado por `npm run dist:win`) |
 | 🗄️ Base embutida | `public/base/` versionada: `reforma.json` 1,6 MB · `nomenclatura.json` 2,9 MB · `classificacoes-consolidadas.json` 1,7 MB · `cnae-nbs.json` 1,3 MB · grafo `grafo.lbug` 6,1 MB · `vetores.json` 12 MB |
-
-### ▲ O que mudou (verdade nua)
-
-| Área | README antigo dizia | Código hoje tem |
-|---|---|---|
-| 🤖 **IA com LLM** | Qwen3.5-2B via `node-llama-cpp` em `utilityProcess`, hot-swap, `Ctrl+Shift+D`, view `AurumChat` + `DebugIA` oculta | **Removido.** `node-llama-cpp` fora do `package.json`, `electron/ia/ia-service.cjs`, `ia-worker.cjs`, `modelo-seguro.cjs`, `perfil-modelo.cjs` deletados, páginas `AurumChat.tsx` e `DebugIA.tsx` deletadas, IPCs `ia:classificar` / `ia:buscar` / `ia:conversar` removidos do `electron/main.ts`. O `.gguf` segue no disco local (ignorado), mas **não é mais empacotado** (`extraResources` do modelo removido). Classificação agora é **100% determinística local**: Top-20 lexical + seletor ancorado + resolvedor oficial + grafo fiscal |
-| 🐾 **Pet Aurum (Aurinha)** | Mascote reativo na sidebar, 7 stores `pet*`, sprite/CSS próprios | **Removido.** `PetAurum.tsx`, `AurinhaAvatar.tsx`, `pet-aurum.css`, `pet-sprite.ts`, `aurinha-lote.tsx` e as 7 stores `pet*.ts` deletados + 8 suítes de teste do pet deletadas. `Layout.tsx` sem slot do pet |
-| 💬 **Chat dedicado** | View de chat com Fator R explicativo, intenção contínua, híbrido sob demanda | **Sem view de chat.** Restaram o motor de ferramentas (`aurum-ai-registro-ferramentas.ts`), RAG lexical e componentes (`ui/aurum-ai.tsx`, `chat-markdown.tsx`, `grafico-chat.tsx`) usados em relatórios/insights embutidos — mas **não há mais tela de conversa** no menu |
-| 🕸️ **Grafo fiscal** | `via:grafo` com worker + LLM | **Mantido e simplificado.** `electron/ia/grafo-service.cjs` chamado direto (sem worker), rota IPC única `ia:grafo` com fail-closed para lexical. `20.559` nodos / `30.107` arestas continuam gerados por `npm run base` |
-| 🧾 **Simples — projeção dividida** | Modal reativo simples (slider + tabela mensal) | **Evoluído para v2 com segregação.** Novos arquivos: `baseline.ts`, `das-segregado.ts`, `simular-segregacao.ts`, `SimuladorSegregacao.tsx`, `ControleSplit.tsx`, `NumeroAnimado.tsx`, `persistencia.ts`, `pro-labore.ts` + 2 novas suítes (`segregacao`, `store-sync`). Wizard em 5 etapas com RBT12 deslizante, split 0–100%, veredito, payback e alertas |
-| 🔢 **Contagem de testes** | 152 suítes / 1.621 casos, tudo passando | **154 suítes / 1.740 casos**, tudo passando (ver painel). Número antigo desatualizado |
-| 🗄️ **Banco local** | Dexie 4 (IndexedDB `aurum_tax_ncm_v1`, 14 versões) no renderer | **SQLite via Prisma 6** (`aurum.db` em `%APPDATA%`, Prisma no processo main + IPC `db:op`/`db:snapshot`, validação de domínio em toda escrita). 27 tabelas, seed transacional por lote, snapshot pré-restore, `integrity_check` + quarentena no boot, portão de base completa com autocura. Sem migração de dados (banco novo). Scripts: `npm run db:generate` (após editar `prisma/schema.prisma`), `npm run db:push` (dev) |
-| 📄 **Licença** | Badge MIT | Código-fonte sob **MIT** (`LICENSE`), mas `package.json` declara `license: UNLICENSED` + `private: true`. Na prática: **uso interno / sem publicação no npm** |
 
 ### ◆ Arquitetura em uma figura
 
@@ -154,7 +141,7 @@ Artefatos em `./release/` (ignorado no git):
 | `AurumTaxNCM-Setup-<versão>-win-x64.exe` | Instalador NSIS (PT-BR, por usuário, atalho + desinstalador) |
 | `AurumTaxNCM-Portatil-<versão>-win-x64.exe` | Versão portátil (sem instalar) |
 
-O instalador leva **só o app**: interface + base tributária embutida + vetores do grafo + grafo fiscal. Modelo LLM **não** é mais empacotado, e os artefatos legados sem leitor em runtime (`dados-brutos/`, índice lexical, sinônimos gerados) também ficaram de fora. `.planning/`, `docs/`, `tests/`, `scripts/` ficam de fora por regra explícita no `build.files`. Dados do usuário (XMLs, SQLite `aurum.db`) vivem em `%APPDATA%` e sobrevivem a atualizações.
+O instalador leva **só o app**: interface + base tributária embutida + vetores do grafo + grafo fiscal + conhecimento curado. Fora do instalador: `.planning/`, `docs/`, `tests/`, `scripts/`, artefatos de build intermediários e modelo LLM (classificação 100% determinística local). Dados do usuário (XMLs, SQLite `aurum.db`) vivem em `%APPDATA%` e sobrevivem a atualizações.
 
 ---
 
@@ -298,6 +285,7 @@ projeção        = RBT12(t) = Σ R[m], m ∈ [t−12, t−1]; nova < 12m usa m�
 | `npm run ia:indice` / `ia:testar-indice` / `ia:validar-conhecimento` / `ia:cobertura` | Pipeline de busca local (índice, teste, curadoria, cobertura PT↔EN) |
 | `npm run ofuscar` / `verificar` | Ofusca o build / valida o build |
 | `npm run typecheck` / `npm test` | Tipos / Vitest (`vitest run`) |
+| `npm run db:generate` / `db:push` | Regenera o client Prisma + DDL embarcado (após editar `prisma/schema.prisma`) / aplica o schema no banco de dev |
 | `npm run dist` / `dist:win` / `dist:mac` | Instaladores via electron-builder |
 | `npm run icon` | Gera `build/icon.ico` a partir do SVG |
 
@@ -309,7 +297,7 @@ aurum-tax-ncm/
 │   ├── dist/            # compilados (main.js, preload.cjs)
 │   └── ia/              # grafo-service.cjs + caminhos-ia.cjs (sem worker LLM)
 ├── src/
-│   ├── App.tsx          # shell com 10 views (sem chat, sem debug oculto)
+│   ├── App.tsx          # shell com 10 views
 │   ├── pages/           # 12 arquivos: Calculadora, Consulta, ConsultaServicos,
 │   │                    #  ConsultaCnaes, Lote, NfeXml, NfeXmlPolida (+ NfeNatureza,
 │   │                    #  NfePendentes, ModalRelatorioNfe), Produtos, Auxiliares, Legislacao
@@ -330,13 +318,13 @@ aurum-tax-ncm/
 │   │                    #  CFOP/curadoria, PDF/CSV, CFF/Siscomex/BrasilAPI, bridge IPC
 │   ├── store/           # Zustand (ui com 10 ViewId, sessão, calculadora, consulta,
 │   │                    #  lote, nfe, produtos, base, ia, dialogo, fundo, novidades…)
-│   ├── ui/              # Layout (sem pet), kit, Marca, ModalLegislacao, motion,
+│   ├── ui/              # Layout, kit, Marca, ModalLegislacao, motion,
 │   │                    #  consulta-enxuta/premium, servicos, cartoes, cest,
 │   │                    #  diferimento-opcoes, grafo-trilha, aurum-ai (embutida)…
 │   └── modais/          # globais (empresas/config/emitente/backup…), pagina
 ├── recursos-ia/         # busca local: vetores + conhecimento + grafo
-│                        # (sem modelo local — só pin e hashes; índice lexical
-│                        #  legado e dados-brutos não embarcam mais)
+│                        # (embarca vetores, conhecimento e grafo; build
+│                        #  intermediários e modelo local ficam de fora)
 ├── bases-fonte/         # JSONs-fonte oficiais + vivos (ver tabela abaixo)
 ├── scripts/             # build-base, build-grafo, gerar-embeddings/indice,
 │                        #  cobertura, ofuscar, verificar, after-pack…
@@ -353,7 +341,7 @@ Arquitetura: **React + Clean Architecture** — `domain` (regras puras) → `app
 
 - **Desktop:** Electron 44 + electron-builder (NSIS PT-BR, DMG, AppImage)
 - **Front:** React 19, Vite 8 (`base: './'` p/ file://), TailwindCSS 4, Zustand 5, Framer Motion, Chart.js
-- **Dados:** SQLite via Prisma 6 (`aurum.db` em userData, IPC no Electron), XLSX (SheetJS), pdfmake, fast-xml-parser
+- **Dados:** SQLite via Prisma 6 — 27 tabelas em `aurum.db` (`%APPDATA%`), Prisma no processo main + IPC, validação de domínio em toda escrita, seed transacional por lote, snapshot pré-restore, `integrity_check` + quarentena no boot. XLSX (SheetJS), pdfmake, fast-xml-parser
 - **Busca local:** busca textual no SQLite + grafo fiscal (FTS + vetores + 2-hops + PageRank, fallback idêntico)
 - **Qualidade:** TypeScript strict, Vitest + SQLite/Prisma (banco por arquivo), esbuild, ofuscação + verificação de build
 
