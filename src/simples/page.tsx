@@ -11,13 +11,13 @@
  */
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ANEXO_LABEL, type AnexoSimplesId } from './tabelas';
-import { calcularHibrido, fatorR, type RegraCreditoCBS } from './calculo';
+import { ANEXO_LABEL, SUBLIMITE, type AnexoSimplesId } from './tabelas';
+import { calcularConvencional, calcularHibrido, fatorR, type RegraCreditoCBS } from './calculo';
 import { orquestrarRelatorio } from './relatorio-analitico';
 import { gerarInsightsFallback } from './ia-insights';
 import { InsightsModal } from './InsightsModal';
 import { exportarRelatorioAnaliticoPDF } from './export-relatorio-analitico';
-import { creditoDaDespesa, envolveAnexoV, etapa1Pronta, normalizarListaAnexosSimples, preverAnexoFatorR, useSimples, type DespesaSimples } from './store';
+import { creditoDaDespesa, envolveAnexoV, etapa1Pronta, normalizarListaAnexosSimples, preverAnexoFatorR, rbaEfetiva, refsForaDoAnexo, sublimiteEstourado, useSimples, type DespesaSimples } from './store';
 import { tributoSTDoAnexo } from './segregacao-st';
 import { calcularSegregado, pseudoConvDoSegregado, somaParcelas, anexoEfetivoParcela, type ParcelaSegEntrada } from './segregacao-receita';
 import { EMITENTE_PADRAO } from '@/domain/entities';
@@ -397,6 +397,9 @@ export function SimplesNacional() {
   const pronta1 = etapa1Pronta(s);
   /** Passo 1 concluído: RBT12 + receita do mês informados (antes do anexo). */
   const valoresOk = s.rbt12 > 0 && s.receitaMes > 0;
+  /** Sublimite estadual detectado já no passo 1 (RBT12/RBA > R$ 3,6M). */
+  const estouradoPasso1 = sublimiteEstourado(s);
+  const rbaPasso1 = rbaEfetiva(s);
   const comFolha = envolveAnexoV(s);
   // Folha também quando a segregação envolve o Anexo V (Fator R só se
   // calcula sobre o V — III puro já é III, sem decisão).
@@ -424,12 +427,12 @@ export function SimplesNacional() {
     if (resto > 0) parcelas.push({ anexoId: segRestoAnexo, receitaMes: resto, st: false, resto: true, escolhido: s.anexoId });
     try {
       // Folha compartilhada: vale p/ todas as parcelas (Fator R no V).
-      return calcularSegregado(s.rbt12, parcelas, s.usarRba ? s.rba : s.rbt12, s.folha12);
+      return calcularSegregado(s.rbt12, parcelas, s.usarRba ? s.rba : s.rbt12, s.folha12, { aliqRefICMS: s.aliqRefICMS, aliqRefISS: s.aliqRefISS });
     } catch {
       return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s.segAtivo, s.convencional, s.segParcelas, segSoma, s.receitaMes, s.rbt12, s.usarRba, s.rba, s.folha12, segRestoAnexo]);
+  }, [s.segAtivo, s.convencional, s.segParcelas, segSoma, s.receitaMes, s.rbt12, s.usarRba, s.rba, s.folha12, segRestoAnexo, s.aliqRefICMS, s.aliqRefISS]);
   // Base de exibição: segregado (pseudo-conv) ou convencional único.
   // A ST já vem deduzida por parcela dentro do segregado — sem ajuste global.
   const convBase = useMemo(
@@ -437,10 +440,13 @@ export function SimplesNacional() {
     [segResultado, s.convencional],
   );
   // Bruto normal (sem segregar) × final (segregado): a diferença é a economia.
+  // Com excesso de sublimite a exibição é a GUIA (sem ICMS/ISS/IBS fora);
+  // a carga total (guia + fora) aparece em bloco próprio.
   const convExib = convBase;
-  const dasExib = convBase?.das ?? 0;
-  const repExib = convBase?.reparticao;
-  const dasBruto = s.convencional?.das ?? 0;
+  const dasExib = convBase?.dasGuia ?? convBase?.das ?? 0;
+  const cargaTotalExib = convBase?.cargaTotal ?? convBase?.das ?? 0;
+  const repExib = convBase?.reparticaoGuia ?? convBase?.reparticao;
+  const dasBruto = s.convencional?.dasGuia ?? s.convencional?.das ?? 0;
   /** Dedução ST por tributo (p/ riscado). Chave ausente = sem ST naquele tributo. */
   const deducaoSTPorTributo = useMemo(() => {
     const out: Partial<Record<'ICMS' | 'ISS', number>> = {};
@@ -464,7 +470,7 @@ export function SimplesNacional() {
     }
     return out;
   }, [segResultado]);
-  const repBrutaExib = segResultado?.temST ? segResultado.reparticaoBruta : convBase?.reparticao;
+  const repBrutaExib = segResultado?.temST ? segResultado.reparticaoBrutaGuia : convBase?.reparticaoGuia;
   /** Resumo ST p/ guia/exports/legendas (null sem ST com dedução). */
   const stResumo = useMemo(() => {
     if (!segResultado?.temST) return null;
@@ -510,6 +516,45 @@ export function SimplesNacional() {
     () => (precisaFolha && s.rbt12 > 0 && s.folha12 > 0 ? fatorR(s.folha12, s.rbt12) : null),
     [precisaFolha, s.folha12, s.rbt12],
   );
+  /**
+   * Anexos efetivos do cálculo (p/ saber quais referências fora da guia
+   * mostrar): com segregação, a união das parcelas; sem, o anexo efetivo
+   * (Fator R já aplicado quando houver folha).
+   */
+  const anexosEfetivosRefs = useMemo((): AnexoSimplesId[] => {
+    if (s.segAtivo) {
+      const validas = s.segParcelas.filter((p) => p.valor > 0);
+      if (validas.length > 0) {
+        const out: AnexoSimplesId[] = [];
+        for (const p of validas) {
+          const eff = p.anexoId === 'V' && s.rbt12 > 0 && s.folha12 > 0 && precisaFolha
+            ? preverAnexoFatorR(s.rbt12, s.folha12).anexo
+            : p.anexoId;
+          if (!out.includes(eff)) out.push(eff);
+        }
+        return out;
+      }
+    }
+    if (precisaFolha && s.folha12 > 0 && s.rbt12 > 0) return [preverAnexoFatorR(s.rbt12, s.folha12).anexo];
+    return [s.anexoId];
+  }, [s.segAtivo, s.segParcelas, s.anexoId, s.rbt12, s.folha12, precisaFolha]);
+  const mostraRefICMS = estouradoPasso1 && anexosEfetivosRefs.some((a) => refsForaDoAnexo(a).includes('ICMS'));
+  const mostraRefISS = estouradoPasso1 && anexosEfetivosRefs.some((a) => refsForaDoAnexo(a).includes('ISS'));
+  /** Prévia do convencional (só p/ exibir as alíquotas automáticas do fora). */
+  const previaConv = useMemo(() => {
+    if (!(s.rbt12 > 0) || !(s.receitaMes > 0) || !estouradoPasso1) return null;
+    try {
+      let anexoEff = anexosEfetivosRefs[0] ?? s.anexoId;
+      return calcularConvencional({
+        anexoId: anexoEff,
+        rbt12: s.rbt12,
+        receitaMes: s.receitaMes,
+        rba: s.usarRba ? s.rba : s.rbt12,
+      });
+    } catch {
+      return null;
+    }
+  }, [s.rbt12, s.receitaMes, s.usarRba, s.rba, estouradoPasso1, anexosEfetivosRefs, s.anexoId]);
   const podeVisualizar = pronta1 && s.rbt12 > 0 && s.receitaMes > 0 && segValida && !gerando;
   const mostrando = s.relatorioVisivel && s.convencional;
   // Resultado em tela cheia na etapa 3; skeleton breve durante o "pensar".
@@ -541,6 +586,8 @@ export function SimplesNacional() {
         folha12: s.folha12,
         cbsRef: s.cbsRef,
         despesas: s.despesas.map((d) => ({ rotulo: d.rotulo, valor: d.valor, regra: d.regra })),
+        aliqRefICMS: s.aliqRefICMS,
+        aliqRefISS: s.aliqRefISS,
         contexto: {
           modo: s.modo,
           anexoSelecionado: s.convencional.anexoId,
@@ -549,7 +596,7 @@ export function SimplesNacional() {
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mostrando, s.modo, s.empresaNome, s.cnpj, s.cnaeEscolhido, s.opcoes, s.rbt12, s.receitaMes, s.folha12, s.cbsRef, s.despesas, s.usarRba, s.rba, s.convencional, segResultado],
+    [mostrando, s.modo, s.empresaNome, s.cnpj, s.cnaeEscolhido, s.opcoes, s.rbt12, s.receitaMes, s.folha12, s.cbsRef, s.despesas, s.usarRba, s.rba, s.convencional, segResultado, s.aliqRefICMS, s.aliqRefISS],
   );
   const insightsAnaliticos = useMemo(
     () => (relatorioAnalitico ? gerarInsightsFallback(relatorioAnalitico) : []),
@@ -631,6 +678,9 @@ export function SimplesNacional() {
       toast('Informe RBT12 e receita do mês.', 'warn');
       return;
     }
+    // Sublimite estourado no passo 1 → o híbrido passa a ser comparado
+    // sozinho (o usuário pode desmarcar no passo 2).
+    if (estouradoPasso1 && !s.compararHibrido) s.set({ compararHibrido: true });
     setEtapa(2);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -662,10 +712,10 @@ export function SimplesNacional() {
           /** Referência sem segregar (anexo único) — p/ linha própria no CSV. */
           dasReferencia: dasBruto,
           st: stResumo
-            ? { ativo: true as const, tributo: stResumo.tributo, valorST: stResumo.valorST, deducao: stResumo.deducao, detalhe: stResumo.detalhe, detalhePorTributo: segResultado?.stDetalhe.map((d) => ({ tributo: d.tributo, valorST: d.valorST, deducao: d.deducao })) ?? [], dasIntegral: segResultado?.dasBruto ?? dasBruto, dasFinal: dasExib }
+            ? { ativo: true as const, tributo: stResumo.tributo, valorST: stResumo.valorST, deducao: stResumo.deducao, detalhe: stResumo.detalhe, detalhePorTributo: segResultado?.stDetalhe.map((d) => ({ tributo: d.tributo, valorST: d.valorST, deducao: d.deducao })) ?? [], dasIntegral: segResultado?.dasBrutoGuia ?? dasBruto, dasFinal: dasExib }
             : { ativo: false as const, tributo: '', valorST: 0, deducao: 0, detalhe: '', detalhePorTributo: [] as Array<{ tributo: string; valorST: number; deducao: number }>, dasIntegral: dasBruto, dasFinal: dasExib },
           seg: segResultado
-            ? { ativo: true as const, anexos: segResultado.anexos, dasBruto: segResultado.dasBruto, parcelas: segResultado.parcelas.map((d) => ({ anexoId: d.anexoId, anexoCalculado: d.anexoCalculado, escolhido: d.escolhido, receitaMes: d.receitaMes, faixa: d.faixa, aliquotaEfetiva: d.aliquotaEfetiva, das: d.das, dasBruto: d.dasBruto, st: d.st, tributoST: d.tributoST, deducaoST: d.deducaoST, resto: d.resto })) }
+            ? { ativo: true as const, anexos: segResultado.anexos, dasBruto: segResultado.dasBrutoGuia, parcelas: segResultado.parcelas.map((d) => ({ anexoId: d.anexoId, anexoCalculado: d.anexoCalculado, escolhido: d.escolhido, receitaMes: d.receitaMes, faixa: d.faixa, aliquotaEfetiva: d.aliquotaEfetiva, das: d.dasGuia, dasBruto: d.dasBrutoGuia, st: d.st, tributoST: d.tributoST, deducaoST: d.deducaoST, resto: d.resto })) }
             : { ativo: false as const, anexos: [], dasBruto: 0, parcelas: [] },
         }
       : null;
@@ -723,6 +773,29 @@ export function SimplesNacional() {
                   <CampoMoeda rotulo="RBT12 — 12 meses" valor={s.rbt12} onValor={(v) => { s.set({ rbt12: v }); s.tocarEntrada(); }} dica="Soma 12m (teto 4,8M)" />
                   <CampoMoeda rotulo="Receita do mês" valor={s.receitaMes} onValor={(v) => { s.set({ receitaMes: v }); s.tocarEntrada(); }} dica="Base do DAS" />
                 </div>
+              </SubCard>
+              <SubCard
+                titulo="Sublimite estadual · R$ 3,6M"
+                aside={s.rbt12 > 0 ? (
+                  <span className={`rounded-full px-2 py-px text-[10px] font-bold ${estouradoPasso1 ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200' : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200'}`}>
+                    {estouradoPasso1 ? 'acima do sublimite' : 'dentro do sublimite'}
+                  </span>
+                ) : <span className="text-[10px] text-slate-400">RBT12 define</span>}
+              >
+                <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold">
+                  <input type="checkbox" className="h-4 w-4 accent-brand-700" checked={s.usarRba} onChange={(e) => { s.set({ usarRba: e.target.checked }); s.tocarEntrada(); }} />
+                  RBA do ano diferente do RBT12
+                </label>
+                {s.usarRba ? (
+                  <div className="animate-fade-up mt-2">
+                    <CampoMoeda rotulo="RBA — acumulada no ano" valor={s.rba} onValor={(v) => { s.set({ rba: v }); s.tocarEntrada(); }} dica="Só quando a receita do ano difere do RBT12" />
+                  </div>
+                ) : null}
+                <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                  {estouradoPasso1
+                    ? `RBT12 ${fmtMoeda(s.rbt12)}${s.usarRba ? ` · RBA ${fmtMoeda(rbaPasso1)}` : ''} acima de ${fmtMoeda(SUBLIMITE)}: ICMS/ISS/IBS saem da guia DAS e o híbrido é ativado sozinho.`
+                    : `Abaixo de ${fmtMoeda(SUBLIMITE)}: tudo dentro da guia DAS.`}
+                </p>
               </SubCard>
               <SubCard
                 titulo="Folha · Fator R (opcional)"
@@ -1086,17 +1159,49 @@ export function SimplesNacional() {
                 </SubCard>
                 <details className="rounded-xl border border-dashed border-[var(--line)] px-3 py-2">
                   <summary className="cursor-pointer text-xs font-bold">
-                    Avançado — RBA e regime híbrido
-                    {s.usarRba || s.compararHibrido ? <span className="ml-1 rounded-full bg-brand-100 px-1.5 py-px text-[10px] text-brand-700">ativo</span> : null}
+                    Avançado — sublimite e regime híbrido
+                    {s.compararHibrido || estouradoPasso1 ? <span className="ml-1 rounded-full bg-brand-100 px-1.5 py-px text-[10px] text-brand-700">ativo</span> : null}
                   </summary>
                   <div className="mt-2 space-y-2">
-                    <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold">
-                      <input type="checkbox" className="h-4 w-4 accent-brand-700" checked={s.usarRba} onChange={(e) => { s.set({ usarRba: e.target.checked }); s.tocarEntrada(); }} />
-                      RBA só se estourou R$ 3,6M no ano
-                    </label>
-                    {s.usarRba ? (
-                      <div className="animate-fade-up">
-                        <CampoMoeda rotulo="RBA — acumulada no ano" valor={s.rba} onValor={(v) => { s.set({ rba: v }); s.tocarEntrada(); }} dica="Só preencha se a receita do ano passou de R$ 3,6M" />
+                    <p className={`rounded-xl px-2.5 py-1.5 text-[11px] leading-relaxed ${estouradoPasso1 ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-slate-50 text-slate-500 dark:bg-slate-950/40 dark:text-slate-400'}`}>
+                      {estouradoPasso1
+                        ? `Sublimite estourado na etapa 1 (RBT12 ${fmtMoeda(s.rbt12)}${s.usarRba ? ` · RBA ${fmtMoeda(rbaPasso1)}` : ''} > ${fmtMoeda(SUBLIMITE)}). Para ajustar, volte à etapa 1 — aqui se informa só a alíquota de fora.`
+                        : `Dentro do sublimite (${fmtMoeda(SUBLIMITE)}). Para informar RBA, volte à etapa 1.`}
+                    </p>
+                    {estouradoPasso1 && (mostraRefICMS || mostraRefISS) ? (
+                      <div className="animate-fade-up space-y-2 rounded-xl border border-amber-200 bg-amber-50/50 p-2.5 dark:border-amber-900 dark:bg-amber-950/20">
+                        <span className="field-label">Fora da guia (sublimite) — alíquota de referência</span>
+                        {mostraRefICMS ? (
+                          <div>
+                            <span className="field-label">ICMS fora da guia (%)</span>
+                            <Texto
+                              type="number" step="0.01" min={0} max={30} mono className="field num-input !py-2 text-[13px]"
+                              value={s.aliqRefICMS != null ? String((s.aliqRefICMS * 100).toFixed(2)) : previaConv ? String((previaConv.aliquotasFora.icms * 100).toFixed(2)) : ''}
+                              placeholder={previaConv ? `Auto ${(previaConv.aliquotasFora.icms * 100).toFixed(2)}%` : 'Ex.: 18,00'}
+                              onChange={(e) => { const t = e.target.value.replace(',', '.'); const v = t === '' ? null : Number(t) / 100; s.set({ aliqRefICMS: v == null || !(v >= 0) ? null : v }); s.tocarEntrada(); }}
+                            />
+                            <span className="mt-0.5 block text-[10px] text-slate-400">
+                              {s.aliqRefICMS != null ? 'Manual — vale a alíquota informada.' : `Automático 5ª faixa (${previaConv ? (previaConv.aliquotasFora.icms * 100).toFixed(2) : '—'}%).`} <button type="button" className="font-bold underline" onClick={() => { s.set({ aliqRefICMS: null }); s.tocarEntrada(); }}>restaurar auto</button>
+                            </span>
+                          </div>
+                        ) : null}
+                        {mostraRefISS ? (
+                          <div>
+                            <span className="field-label">ISS fora da guia (%)</span>
+                            <Texto
+                              type="number" step="0.01" min={0} max={30} mono className="field num-input !py-2 text-[13px]"
+                              value={s.aliqRefISS != null ? String((s.aliqRefISS * 100).toFixed(2)) : previaConv ? String((previaConv.aliquotasFora.iss * 100).toFixed(2)) : ''}
+                              placeholder={previaConv ? `Auto ${(previaConv.aliquotasFora.iss * 100).toFixed(2)}%` : 'Ex.: 5,00'}
+                              onChange={(e) => { const t = e.target.value.replace(',', '.'); const v = t === '' ? null : Number(t) / 100; s.set({ aliqRefISS: v == null || !(v >= 0) ? null : v }); s.tocarEntrada(); }}
+                            />
+                            <span className="mt-0.5 block text-[10px] text-slate-400">
+                              {s.aliqRefISS != null ? 'Manual — vale a alíquota informada.' : `Automático 5ª faixa (${previaConv ? (previaConv.aliquotasFora.iss * 100).toFixed(2) : '—'}%).`} <button type="button" className="font-bold underline" onClick={() => { s.set({ aliqRefISS: null }); s.tocarEntrada(); }}>restaurar auto</button>
+                            </span>
+                          </div>
+                        ) : null}
+                        <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                          O fora = receita do mês × referência. A guia DAS não muda — só o bloco “fora da guia” e a carga total.
+                        </p>
                       </div>
                     ) : null}
                     <label className="flex cursor-pointer items-center gap-2 text-xs font-bold">
@@ -1323,11 +1428,11 @@ export function SimplesNacional() {
                                 : d.resto ? `Restante · Anexo ${d.anexoId}` : `Anexo ${d.anexoId}`}
                               {d.anexoCalculado !== d.escolhido ? <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200" title="Fator R ≥ 28%: Anexo V tributado como III">Fator R</span> : null}
                               {d.st && d.deducaoST > 0 ? <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">ST {d.tributoST}</span> : null}
-                              {d.st && d.deducaoST <= 0 ? <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-300" title="ST marcada, mas o tributo é zerado nesta faixa — nada a deduzir">ST sem dedução</span> : null}
+                              {d.st && d.deducaoST <= 0 ? <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-300" title={d.excedeSublimite && d.tributosFora.includes(d.tributoST ?? '') ? 'ST marcada, mas o tributo já está fora da guia pelo sublimite — nada a deduzir' : 'ST marcada, mas o tributo é zerado nesta faixa — nada a deduzir'}>ST sem dedução</span> : null}
                             </strong>
                             <span className="font-mono">
-                              {d.st && d.deducaoST > 0 ? <span className="mr-1.5 text-slate-400 line-through" title="DAS da parcela antes da ST">{fmtMoeda(d.dasBruto)}</span> : null}
-                              <strong className="font-black">{fmtMoeda(d.das)}</strong>
+                              {d.st && d.deducaoST > 0 ? <span className="mr-1.5 text-slate-400 line-through" title="Guia da parcela antes da ST">{fmtMoeda(d.dasBrutoGuia)}</span> : null}
+                              <strong className="font-black">{fmtMoeda(d.dasGuia)}</strong>
                             </span>
                           </div>
                           <div className="mt-0.5 flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] text-slate-500">
@@ -1348,8 +1453,8 @@ export function SimplesNacional() {
                   {segResultado ? (
                     <div className="space-y-1 text-[12px]">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="shrink-0 text-slate-500">1 · DAS bruto (sem ST)</span>
-                        <span className="font-mono font-semibold">{fmtMoeda(segResultado.dasBruto)}</span>
+                        <span className="shrink-0 text-slate-500">1 · Guia bruta (sem ST)</span>
+                        <span className="font-mono font-semibold">{fmtMoeda(segResultado.dasBrutoGuia)}</span>
                       </div>
                       {segResultado.tributosST.map((t) => (
                         <div key={t} className="flex items-center justify-between gap-3" title={infoSTPorTributo[t] ?? t}>
@@ -1364,14 +1469,20 @@ export function SimplesNacional() {
                         </div>
                       ) : null}
                       <div className="flex items-center justify-between gap-3 border-t border-[var(--line)] pt-1.5">
-                        <span className="font-black">{segResultado.temST ? '3 · DAS a pagar' : '2 · DAS a pagar'}</span>
-                        <span className="font-mono font-black">{fmtMoeda(segResultado.das)}</span>
+                        <span className="font-black">{segResultado.temST ? '3 · Guia DAS a pagar' : '2 · Guia DAS a pagar'}</span>
+                        <span className="font-mono font-black">{fmtMoeda(segResultado.dasGuia)}</span>
                       </div>
+                      {segResultado.excedeSublimite ? (
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="shrink-0 text-slate-500">+ fora sublimite</span>
+                          <span className="font-mono font-semibold">{fmtMoeda(segResultado.foraSublimite.total)}</span>
+                        </div>
+                      ) : null}
                     </div>
                   ) : (
                     <div className="flex items-center justify-between gap-3 text-[12px]">
-                      <span className="font-black">DAS a pagar</span>
-                      <span className="font-mono font-black">{fmtMoeda(convBase?.das ?? 0)}</span>
+                      <span className="font-black">{convBase?.excedeSublimite ? 'Guia DAS a pagar' : 'DAS a pagar'}</span>
+                      <span className="font-mono font-black">{fmtMoeda(convBase?.dasGuia ?? convBase?.das ?? 0)}</span>
                     </div>
                   )}
                 </div>
@@ -1385,14 +1496,19 @@ export function SimplesNacional() {
                       {convBase!.cenario === 1 ? 's/ sublimite' : `cen. ${convBase!.cenario}`}
                     </span>
                   </div>
-                  <NumeroAnimado valor={dasExib} formatar={(n) => `DAS: ${fmtMoeda(n)}`} className="calc-hero-valor mt-0.5 block truncate text-2xl tabular-nums leading-tight text-white" />
+                  <NumeroAnimado valor={dasExib} formatar={(n) => `${convExib!.excedeSublimite ? 'Guia DAS' : 'DAS'}: ${fmtMoeda(n)}`} className="calc-hero-valor mt-0.5 block truncate text-2xl tabular-nums leading-tight text-white" />
+                  {convExib!.excedeSublimite ? (
+                    <div className="mt-0.5 text-[10px] leading-relaxed text-white/75">
+                      Guia sem {convExib!.tributosFora.join(' + ')} · fora {fmtMoeda(convExib!.foraSublimite.total)} → carga {fmtMoeda(cargaTotalExib)}
+                    </div>
+                  ) : null}
                   {s.segAtivo && segResultado ? (
                     <div className="mt-0.5 text-[10px] leading-relaxed text-white/75">
-                      Bruto {fmtMoeda(segResultado.dasBruto)} − diferença {fmtMoeda(segResultado.dasBruto - dasExib)}
+                      Bruto {fmtMoeda(segResultado.dasBrutoGuia)} − diferença {fmtMoeda(segResultado.dasBrutoGuia - dasExib)}
                       {stResumo ? ` (ST ${stResumo.tributo})` : ''} = Final
                     </div>
                   ) : null}
-                  {s.segAtivo && segResultado && s.convencional && Math.abs(dasBruto - segResultado.dasBruto) > 0.005 ? (
+                  {s.segAtivo && segResultado && s.convencional && Math.abs(dasBruto - segResultado.dasBrutoGuia) > 0.005 ? (
                     <div className="mt-0.5 text-[10px] leading-relaxed text-white/60">
                       Sem segregar ({ANEXO_LABEL[s.convencional.anexoId]}): {fmtMoeda(dasBruto)} — referência
                     </div>
@@ -1449,8 +1565,17 @@ export function SimplesNacional() {
                   ) : null}
                   {convBase!.cenario !== 1 ? (
                     <p className="rounded-lg bg-sky-50 px-2 py-1 text-[10px] text-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
-                      Sublimite cen. {convBase!.cenario} · {fmtMoeda(convBase!.detalhes.receitaNaoExcedente)} + {fmtMoeda(convBase!.detalhes.receitaExcedente)}.
+                      Sublimite cen. {convBase!.cenario} · guia {fmtMoeda(dasExib)} + fora {fmtMoeda(convBase!.foraSublimite.total)} = carga {fmtMoeda(cargaTotalExib)}.
                     </p>
+                  ) : null}
+                  {convExib!.excedeSublimite ? (
+                    <div className="space-y-1 rounded-lg bg-amber-50 px-2 py-1.5 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                      <p className="font-bold">Fora da guia (sublimite){convExib!.usouReferencia.icms || convExib!.usouReferencia.iss ? ' · referência manual' : ' · automático 5ª faixa'}</p>
+                      {convExib!.foraSublimite.icms > 0 ? <div className="flex justify-between"><span>ICMS {(convExib!.aliquotasFora.icms * 100).toFixed(2)}%</span><strong className="font-mono">{fmtMoeda(convExib!.foraSublimite.icms)}</strong></div> : null}
+                      {convExib!.foraSublimite.iss > 0 ? <div className="flex justify-between"><span>ISS {(convExib!.aliquotasFora.iss * 100).toFixed(2)}%</span><strong className="font-mono">{fmtMoeda(convExib!.foraSublimite.iss)}</strong></div> : null}
+                      {convExib!.foraSublimite.ibs > 0 ? <div className="flex justify-between"><span>IBS {(convExib!.aliquotasFora.ibs * 100).toFixed(2)}%</span><strong className="font-mono">{fmtMoeda(convExib!.foraSublimite.ibs)}</strong></div> : null}
+                      <div className="flex justify-between border-t border-amber-200 pt-1 font-bold"><span>Carga total do mês</span><span className="font-mono">{fmtMoeda(cargaTotalExib)}</span></div>
+                    </div>
                   ) : null}
                   {fr && precisaFolha ? (
                     <p className={`rounded-lg px-2 py-1 text-[10px] ${fr.anexo === 'III' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'}`}>
@@ -1482,12 +1607,12 @@ export function SimplesNacional() {
                 </div>
               </div>
 
-              <div key={`graf-${segResultado?.das ?? 0}-${stResumo?.deducao ?? 0}`} className={segResultado ? 'animate-fade-up' : undefined}>
+              <div key={`graf-${segResultado?.dasGuia ?? 0}-${stResumo?.deducao ?? 0}`} className={segResultado ? 'animate-fade-up' : undefined}>
                 <LimiteErroGrafico>
                   <GraficosDAS
                     final={repExib!}
-                    bruta={segResultado?.temST ? segResultado.reparticaoBruta : undefined}
-                    dasBruto={segResultado?.dasBruto ?? dasExib}
+                    bruta={segResultado?.temST ? segResultado.reparticaoBrutaGuia : undefined}
+                    dasBruto={segResultado?.dasBrutoGuia ?? dasExib}
                     dasFinal={dasExib}
                     temST={!!stResumo}
                   />
@@ -1497,13 +1622,19 @@ export function SimplesNacional() {
               {s.compararHibrido && hibExib ? (
                 <Painel>
                   <div className="border-b border-[var(--line)] px-3 py-2">
-                    <h3 className="text-[11px] font-black text-slate-500">⚖ Convencional × Híbrido{segResultado ? ' (seg.)' : ''}</h3>
+                    <h3 className="text-[11px] font-black text-slate-500">⚖ Convencional × Híbrido{segResultado ? ' (seg.)' : ''}{convExib!.excedeSublimite ? ' · guia' : ''}</h3>
                   </div>
                   <div className="space-y-1.5 p-3 text-[11px]">
-                    <div className="flex justify-between"><span className="text-slate-500">DAS conv.{stResumo ? ' (c/ ST)' : ''}</span><strong className="font-mono">{fmtMoeda(dasExib)}</strong></div>
-                    <div className="flex justify-between"><span className="text-slate-500">DAS reduzido</span><strong className="font-mono">{fmtMoeda(hibExib.dasReduzido)}</strong></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Guia conv.{stResumo ? ' (c/ ST)' : ''}</span><strong className="font-mono">{fmtMoeda(dasExib)}</strong></div>
+                    <div className="flex justify-between"><span className="text-slate-500">DAS reduzido (guia s/ CBS)</span><strong className="font-mono">{fmtMoeda(hibExib.dasReduzido)}</strong></div>
                     <div className="flex justify-between"><span className="text-slate-500">CBS fora</span><strong className="font-mono">{fmtMoeda(hibExib.cbsFora)}</strong></div>
-                    <div className="flex justify-between border-t border-[var(--line)] pt-1.5"><span className="font-bold">Total híbrido</span><strong className="font-mono">{fmtMoeda(hibExib.total)}</strong></div>
+                    <div className="flex justify-between border-t border-[var(--line)] pt-1.5"><span className="font-bold">Total híbrido (guia)</span><strong className="font-mono">{fmtMoeda(hibExib.total)}</strong></div>
+                    {convExib!.excedeSublimite ? (
+                      <>
+                        <div className="flex justify-between"><span className="text-slate-500">+ fora sublimite ({convExib!.tributosFora.join('+')})</span><strong className="font-mono">{fmtMoeda(convExib!.foraSublimite.total)}</strong></div>
+                        <div className="flex justify-between"><span className="font-bold">Carga híbrida total</span><strong className="font-mono">{fmtMoeda(hibExib.cargaTotal)}</strong></div>
+                      </>
+                    ) : null}
                     <div className={`rounded-xl px-2.5 py-1.5 text-center text-[11px] font-bold ${
                       hibExib.melhor === 'hibrido' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200'
                       : hibExib.melhor === 'convencional' ? 'bg-sky-100 text-sky-800 dark:bg-sky-950/50 dark:text-sky-200'

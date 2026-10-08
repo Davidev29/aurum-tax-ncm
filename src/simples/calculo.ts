@@ -143,12 +143,60 @@ export function cenarioSublimite(rbt12: number, rba: number): CenarioSublimite {
   return 1;
 }
 
+/** true quando há excesso de sublimite (cenários 2–4): ICMS/ISS/IBS saem da guia DAS. */
+export function excedeSublimite(rbt12: number, rba?: number): boolean {
+  const rbt = Number(rbt12) || 0;
+  const rbaNum = rba == null ? rbt : Number(rba) || 0;
+  return cenarioSublimite(rbt, rbaNum) !== 1;
+}
+
+/**
+ * Tributos que saem da guia DAS quando há excesso de sublimite (LC 123/2006).
+ * - Comércio/Indústria (I/II): ICMS + IBS por fora.
+ * - Serviços (III/IV/V): ISS + IBS por fora.
+ * CBS, IRPJ, CSLL, CPP e IPI permanecem na guia.
+ */
+export function tributosForaSublimite(anexoId: AnexoSimplesId): TributoSimples[] {
+  if (anexoId === 'I' || anexoId === 'II') return ['ICMS', 'IBS'];
+  return ['ISS', 'IBS'];
+}
+
+export interface ForaSublimite {
+  icms: number;
+  iss: number;
+  ibs: number;
+  /** Soma ICMS + ISS + IBS fora da guia. */
+  total: number;
+}
+
+export interface AliquotasFora {
+  /** Alíquota efetiva de ICMS fora (fração, ex. 0.02 = 2%). 0 quando não sai. */
+  icms: number;
+  iss: number;
+  ibs: number;
+}
+
+export const FORA_ZERADA: ForaSublimite = { icms: 0, iss: 0, ibs: 0, total: 0 };
+export const ALIQ_FORA_ZERADA: AliquotasFora = { icms: 0, iss: 0, ibs: 0 };
+
 export interface EntradaConvencional {
   anexoId: AnexoSimplesId;
   rbt12: number;
   receitaMes: number;
   /** RBA acumulada (para sublimite). Default = rbt12 quando omitida. */
   rba?: number;
+  /**
+   * Alíquota de referência de ICMS fora da guia (fração, ex. 0.18 = 18%).
+   * Só vale com excesso de sublimite em anexo com ICMS fora (I/II).
+   * null/undefined = automático (efetiva da 5ª faixa, como a planilha).
+   */
+  aliqRefICMS?: number | null;
+  /**
+   * Alíquota de referência de ISS fora da guia (fração, ex. 0.05 = 5%).
+   * Só vale com excesso de sublimite em anexo com ISS fora (III/IV/V).
+   * null/undefined = automático (efetiva da 5ª faixa, como a planilha).
+   */
+  aliqRefISS?: number | null;
 }
 
 export interface ResultadoConvencional {
@@ -161,9 +209,32 @@ export interface ResultadoConvencional {
   aliquotaISSBruta: number;
   aliquotaISSFinal: number;
   excedenteISS: number;
+  /**
+   * Carga total do mês (guia DAS + tributos fora, quando há sublimite).
+   * Mantido como "total" por compatibilidade com relatórios/exports.
+   */
   das: number;
+  /**
+   * Valor DENTRO da guia DAS (sem ICMS/ISS/IBS do sublimite).
+   * Sem excesso de sublimite, é igual a `das`.
+   */
+  dasGuia: number;
+  /** Alias explícito: guia + fora. Igual a `das`. */
+  cargaTotal: number;
+  /** ICMS/ISS/IBS calculados por fora da guia (zeros sem excesso). */
+  foraSublimite: ForaSublimite;
+  /** Alíquotas efetivas usadas no fora (referência do usuário ou 5ª faixa). */
+  aliquotasFora: AliquotasFora;
+  /** Quais tributos saíram da guia (vazio sem excesso). */
+  tributosFora: TributoSimples[];
+  /** true nos cenários 2–4. */
+  excedeSublimite: boolean;
+  /** true quando a alíquota de referência do usuário foi usada no fora. */
+  usouReferencia: { icms: boolean; iss: boolean };
   cbsDentroDAS: number;
   reparticao: Reparticao;
+  /** Repartição só do que fica NA GUIA (fora zerado). Igual a `reparticao` sem excesso. */
+  reparticaoGuia: Reparticao;
   acrescimosISS: { IRPJ: number; CSLL: number; CBS: number; CPP: number };
   detalhes: {
     receitaNaoExcedente: number;
@@ -171,6 +242,43 @@ export interface ResultadoConvencional {
     icmsEfetivo?: number;
     ibsEfetivo?: number;
   };
+}
+
+/** Monta o bloco de sublimite zerado (cenário 1 / entrada inválida). */
+function resultadoSemSublimite(
+  base: Omit<ResultadoConvencional, 'dasGuia' | 'cargaTotal' | 'foraSublimite' | 'aliquotasFora' | 'tributosFora' | 'excedeSublimite' | 'usouReferencia' | 'reparticaoGuia'>,
+): ResultadoConvencional {
+  return {
+    ...base,
+    dasGuia: base.das,
+    cargaTotal: base.das,
+    foraSublimite: { ...FORA_ZERADA },
+    aliquotasFora: { ...ALIQ_FORA_ZERADA },
+    tributosFora: [],
+    excedeSublimite: false,
+    usouReferencia: { icms: false, iss: false },
+    reparticaoGuia: { ...base.reparticao },
+  };
+}
+
+/**
+ * Separa guia vs. fora: tudo que está em `tributosFora` sai da repartição
+ * da guia; `dasGuia = das - fora.total`.
+ */
+function aplicarSeparacaoGuia(
+  das: number,
+  rep: Reparticao,
+  tributosFora: TributoSimples[],
+  fora: ForaSublimite,
+  aliquotas: AliquotasFora,
+  usouReferencia: { icms: boolean; iss: boolean },
+): { dasGuia: number; reparticaoGuia: Reparticao } {
+  const repGuia: Reparticao = { ...rep };
+  for (const t of tributosFora) repGuia[t] = 0;
+  const dasGuia = Math.max(0, round2(das - fora.total));
+  void aliquotas;
+  void usouReferencia;
+  return { dasGuia, reparticaoGuia: repGuia };
 }
 
 /**
@@ -186,7 +294,7 @@ export function calcularConvencional(e: EntradaConvencional): ResultadoConvencio
   const cenario = cenarioSublimite(rbt12, rba);
 
   if (!faixa || receita <= 0 || rbt12 <= 0) {
-    return {
+    return resultadoSemSublimite({
       anexoId: e.anexoId,
       faixa: faixa?.faixa ?? 0,
       cenario,
@@ -201,8 +309,14 @@ export function calcularConvencional(e: EntradaConvencional): ResultadoConvencio
       reparticao: { ...ZERADA },
       acrescimosISS: { IRPJ: 0, CSLL: 0, CBS: 0, CPP: 0 },
       detalhes: { receitaNaoExcedente: receita, receitaExcedente: 0 },
-    };
+    });
   }
+
+  const refICMSraw = e.aliqRefICMS == null ? null : Number(e.aliqRefICMS);
+  const refISSraw = e.aliqRefISS == null ? null : Number(e.aliqRefISS);
+  const refICMS = refICMSraw != null && Number.isFinite(refICMSraw) && refICMSraw >= 0 ? refICMSraw : null;
+  const refISS = refISSraw != null && Number.isFinite(refISSraw) && refISSraw >= 0 ? refISSraw : null;
+  const tributosFora = tributosForaSublimite(e.anexoId);
 
   const f5 = faixa5(anexo);
   const aliq = aliquotaEfetiva(rbt12, faixa);
@@ -253,7 +367,7 @@ export function calcularConvencional(e: EntradaConvencional): ResultadoConvencio
       // Para não inflar, DAS permanece receita*aliq (faixa 6 nominal) — ver testes.
       void aliqTotal;
     }
-    return {
+    return resultadoSemSublimite({
       anexoId: e.anexoId,
       faixa: faixa.faixa,
       cenario,
@@ -268,7 +382,7 @@ export function calcularConvencional(e: EntradaConvencional): ResultadoConvencio
       reparticao: rep,
       acrescimosISS: trava.acrescimos,
       detalhes: { receitaNaoExcedente: receita, receitaExcedente: 0 },
-    };
+    });
   }
 
   // --- Cenários 2–4: sublimite. Receita excedente = MIN(receita, MAX(0, RBA-3.6M))
@@ -287,65 +401,131 @@ export function calcularConvencional(e: EntradaConvencional): ResultadoConvencio
   let rep: Reparticao = { ...ZERADA };
 
   if (cenario === 2) {
-    // RBT12 na 6ª, RBA abaixo: federais (faixa 6) + ICMS/ISS/IBS da 5ª sobre TODA receita
+    // RBT12 na 6ª, RBA abaixo: federais (faixa 6) + ICMS/ISS/IBS da 5ª sobre TODA receita.
+    // O ICMS/ISS/IBS sai da guia DAS (sublimite) — a guia fica só com os federais.
     const aICMS = aliq5rbt * (f5.reparticao.ICMS ?? 0);
     const aIBS = aliq5rbt * (f5.reparticao.IBS ?? 0);
     const aISSb = aliq5rbt * (f5.reparticao.ISS ?? 0);
     const trava = aplicarTravaISS(anexo, aISSb, cbsBase);
     const aISS = trava.issFinal;
     const aIPI = aliq5rbt * (f5.reparticao.IPI ?? 0);
+    const usaRefICMS = refICMS != null && tributosFora.includes('ICMS');
+    const usaRefISS = refISS != null && tributosFora.includes('ISS');
+    const foraICMS = usaRefICMS ? round2(receita * (refICMS as number)) : round2(receita * aICMS);
+    const foraIBS = round2(receita * aIBS);
+    const foraISS = usaRefISS ? round2(receita * (refISS as number)) : round2(receita * aISS);
+    const aliqForaICMS = receita > 0 ? foraICMS / receita : 0;
+    const aliqForaIBS = receita > 0 ? foraIBS / receita : 0;
+    const aliqForaISS = receita > 0 ? foraISS / receita : 0;
     const aliqTotal = aliq + aICMS + aISS + aIBS + aIPI;
-    das = round2(receita * aliqTotal);
+    const foraTotal = round2(
+      (tributosFora.includes('ICMS') ? foraICMS : 0) +
+      (tributosFora.includes('IBS') ? foraIBS : 0) +
+      (tributosFora.includes('ISS') ? foraISS : 0),
+    );
+    das = round2(receita * aliq + receita * aIPI + foraTotal);
     // repartição aproximada: federais proporcionais + ICMS/ISS/IBS/IPI da 5ª
     rep = repartirDAS(round2(receita * aliq), faixa);
     rep.ICMS = round2(receita * aICMS);
     rep.IBS = round2(receita * aIBS);
     rep.IPI = round2(receita * aIPI);
     rep.ISS = round2(receita * aISS);
+    if (usaRefICMS) rep.ICMS = foraICMS;
+    if (usaRefISS) rep.ISS = foraISS;
     if (trava.excedente > 0) {
       rep.CBS = round2(receita * trava.cbsFinal);
       rep.IRPJ = round2(rep.IRPJ + receita * trava.acrescimos.IRPJ);
       rep.CSLL = round2(rep.CSLL + receita * trava.acrescimos.CSLL);
       rep.CPP = round2(rep.CPP + receita * trava.acrescimos.CPP);
     }
+    const fora: ForaSublimite = {
+      icms: tributosFora.includes('ICMS') ? foraICMS : 0,
+      iss: tributosFora.includes('ISS') ? foraISS : 0,
+      ibs: tributosFora.includes('IBS') ? foraIBS : 0,
+      total: foraTotal,
+    };
+    const aliqs: AliquotasFora = {
+      icms: tributosFora.includes('ICMS') ? aliqForaICMS : 0,
+      iss: tributosFora.includes('ISS') ? aliqForaISS : 0,
+      ibs: tributosFora.includes('IBS') ? aliqForaIBS : 0,
+    };
+    const { dasGuia, reparticaoGuia } = aplicarSeparacaoGuia(das, rep, tributosFora, fora, aliqs, { icms: usaRefICMS, iss: usaRefISS });
     return {
       anexoId: e.anexoId, faixa: faixa.faixa, cenario,
-      aliquotaEfetiva: aliqTotal,
+      aliquotaEfetiva: receita > 0 ? das / receita : aliqTotal,
       aliquotaEfetivaCBS: cbsBase,
       aliquotaEfetivaCBSFinal: trava.cbsFinal,
       aliquotaISSBruta: aISSb, aliquotaISSFinal: aISS, excedenteISS: trava.excedente,
-      das, cbsDentroDAS: round2(receita * trava.cbsFinal),
-      reparticao: rep, acrescimosISS: trava.acrescimos,
-      detalhes: { receitaNaoExcedente: receita, receitaExcedente: 0, icmsEfetivo: aICMS, ibsEfetivo: aIBS },
+      das, dasGuia, cargaTotal: das,
+      foraSublimite: fora, aliquotasFora: aliqs, tributosFora: [...tributosFora],
+      excedeSublimite: true, usouReferencia: { icms: usaRefICMS, iss: usaRefISS },
+      cbsDentroDAS: round2(receita * trava.cbsFinal),
+      reparticao: rep, reparticaoGuia, acrescimosISS: trava.acrescimos,
+      detalhes: { receitaNaoExcedente: receita, receitaExcedente: 0, icmsEfetivo: aliqForaICMS, ibsEfetivo: aliqForaIBS },
     };
   }
 
   if (cenario === 3) {
-    // RBT12 na 5ª (ou abaixo), RBA acima: federais sobre tudo + ICMS/IBS do sublimite 3.6M
+    // RBT12 na 5ª (ou abaixo), RBA acima: federais sobre tudo + ICMS/IBS do sublimite 3.6M.
+    // ICMS/IBS/ISS do sublimite saem da guia DAS.
     const aICMS = aliq5sub * (pctICMS || f5.reparticao.ICMS || 0);
     const aIBS = aliq5sub * (pctIBS || f5.reparticao.IBS || 0);
-    das = round2(receita * aliqFed + receita * aICMS + receita * aIBS);
     const issB = issBrutaBase;
     const trava = aplicarTravaISS(anexo, issB, cbsBase);
-    das = round2(das + receita * trava.issFinal);
+    const usaRefICMS = refICMS != null && tributosFora.includes('ICMS');
+    const usaRefISS = refISS != null && tributosFora.includes('ISS');
+    const foraICMS = usaRefICMS ? round2(receita * (refICMS as number)) : round2(receita * aICMS);
+    const foraIBS = round2(receita * aIBS);
+    const foraISS = usaRefISS ? round2(receita * (refISS as number)) : round2(receita * trava.issFinal);
+    const foraTotal = round2(
+      (tributosFora.includes('ICMS') ? foraICMS : 0) +
+      (tributosFora.includes('IBS') ? foraIBS : 0) +
+      (tributosFora.includes('ISS') ? foraISS : 0),
+    );
+    das = round2(receita * aliqFed + receita * trava.issFinal + round2(receita * aICMS) + round2(receita * aIBS));
+    if (usaRefICMS || usaRefISS) {
+      das = round2(das
+        - (tributosFora.includes('ICMS') ? round2(receita * aICMS) : 0)
+        - (tributosFora.includes('ISS') ? round2(receita * trava.issFinal) : 0)
+        + (tributosFora.includes('ICMS') ? foraICMS : 0)
+        + (tributosFora.includes('ISS') ? foraISS : 0));
+    }
     rep = repartirDAS(round2(receita * aliqFed), faixa);
     rep.ICMS = round2(receita * aICMS);
     rep.IBS = round2(receita * aIBS);
     rep.ISS = round2(receita * trava.issFinal);
     rep.CBS = round2(receita * trava.cbsFinal);
+    if (usaRefICMS) rep.ICMS = foraICMS;
+    if (usaRefISS) rep.ISS = foraISS;
+    const fora: ForaSublimite = {
+      icms: tributosFora.includes('ICMS') ? foraICMS : 0,
+      iss: tributosFora.includes('ISS') ? foraISS : 0,
+      ibs: tributosFora.includes('IBS') ? foraIBS : 0,
+      total: foraTotal,
+    };
+    const aliqs: AliquotasFora = {
+      icms: tributosFora.includes('ICMS') && receita > 0 ? foraICMS / receita : 0,
+      iss: tributosFora.includes('ISS') && receita > 0 ? foraISS / receita : 0,
+      ibs: tributosFora.includes('IBS') && receita > 0 ? foraIBS / receita : 0,
+    };
+    const { dasGuia, reparticaoGuia } = aplicarSeparacaoGuia(das, rep, tributosFora, fora, aliqs, { icms: usaRefICMS, iss: usaRefISS });
     return {
       anexoId: e.anexoId, faixa: faixa.faixa, cenario,
       aliquotaEfetiva: receita > 0 ? das / receita : 0,
       aliquotaEfetivaCBS: cbsBase,
       aliquotaEfetivaCBSFinal: trava.cbsFinal,
       aliquotaISSBruta: issB, aliquotaISSFinal: trava.issFinal, excedenteISS: trava.excedente,
-      das, cbsDentroDAS: round2(receita * trava.cbsFinal),
-      reparticao: rep, acrescimosISS: trava.acrescimos,
-      detalhes: { receitaNaoExcedente: receitaNaoExc, receitaExcedente: receitaExc, icmsEfetivo: aICMS, ibsEfetivo: aIBS },
+      das, dasGuia, cargaTotal: das,
+      foraSublimite: fora, aliquotasFora: aliqs, tributosFora: [...tributosFora],
+      excedeSublimite: true, usouReferencia: { icms: usaRefICMS, iss: usaRefISS },
+      cbsDentroDAS: round2(receita * trava.cbsFinal),
+      reparticao: rep, reparticaoGuia, acrescimosISS: trava.acrescimos,
+      detalhes: { receitaNaoExcedente: receitaNaoExc, receitaExcedente: receitaExc, icmsEfetivo: aliqs.icms, ibsEfetivo: aliqs.ibs },
     };
   }
 
-  // Cenário 4: ambos acima — federais + ICMS/IBS separados + ISS ponderado
+  // Cenário 4: ambos acima — federais + ICMS/IBS separados + ISS ponderado.
+  // ICMS/ISS/IBS saem da guia DAS (sublimite).
   const aICMSnao = aliq5rbt * (f5.reparticao.ICMS ?? 0);
   const aICMSexc = aliq5sub * (f5.reparticao.ICMS ?? 0);
   const aIBSnao = aliq5rbt * (f5.reparticao.IBS ?? 0);
@@ -354,29 +534,64 @@ export function calcularConvencional(e: EntradaConvencional): ResultadoConvencio
   const aISSexc = aliq5sub * (f5.reparticao.ISS ?? 0);
   const issPond = receita > 0 ? (receitaNaoExc * aISSnao + receitaExc * aISSexc) / receita : 0;
   const trava = aplicarTravaISS(anexo, issPond, cbsBase);
+  const usaRefICMS = refICMS != null && tributosFora.includes('ICMS');
+  const usaRefISS = refISS != null && tributosFora.includes('ISS');
+  const defICMS = round2(receitaNaoExc * aICMSnao + receitaExc * aICMSexc);
+  const defIBS = round2(receitaNaoExc * aIBSnao + receitaExc * aIBSexc);
+  const defISS = round2(receita * trava.issFinal);
+  const foraICMS = usaRefICMS ? round2(receita * (refICMS as number)) : defICMS;
+  const foraIBS = defIBS;
+  const foraISS = usaRefISS ? round2(receita * (refISS as number)) : defISS;
   das = round2(
     receita * aliq +
-    receitaNaoExc * aICMSnao + receitaExc * aICMSexc +
-    receitaNaoExc * aIBSnao + receitaExc * aIBSexc +
-    receita * trava.issFinal,
+    defICMS +
+    defIBS +
+    defISS,
   );
+  if (usaRefICMS || usaRefISS) {
+    das = round2(das
+      + (tributosFora.includes('ICMS') ? foraICMS - defICMS : 0)
+      + (tributosFora.includes('ISS') ? foraISS - defISS : 0));
+  }
   // Para o Anexo I/II (sem ISS) o termo federales aliq já cobre tudo uma vez;
   // ICMS/IBS extras acima são o diferencial do sublimite (conforme C47).
   rep = repartirDAS(round2(receita * aliq), faixa);
-  rep.ICMS = round2(receitaNaoExc * aICMSnao + receitaExc * aICMSexc);
-  rep.IBS = round2(receitaNaoExc * aIBSnao + receitaExc * aIBSexc);
-  rep.ISS = round2(receita * trava.issFinal);
+  rep.ICMS = defICMS;
+  rep.IBS = defIBS;
+  rep.ISS = defISS;
   rep.CBS = round2(receita * trava.cbsFinal);
+  if (usaRefICMS) rep.ICMS = foraICMS;
+  if (usaRefISS) rep.ISS = foraISS;
   if (pctIPI) rep.IPI = round2(receita * aliq * pctIPI);
+  const foraTotal = round2(
+    (tributosFora.includes('ICMS') ? foraICMS : 0) +
+    (tributosFora.includes('IBS') ? foraIBS : 0) +
+    (tributosFora.includes('ISS') ? foraISS : 0),
+  );
+  const fora: ForaSublimite = {
+    icms: tributosFora.includes('ICMS') ? foraICMS : 0,
+    iss: tributosFora.includes('ISS') ? foraISS : 0,
+    ibs: tributosFora.includes('IBS') ? foraIBS : 0,
+    total: foraTotal,
+  };
+  const aliqs: AliquotasFora = {
+    icms: tributosFora.includes('ICMS') && receita > 0 ? foraICMS / receita : 0,
+    iss: tributosFora.includes('ISS') && receita > 0 ? foraISS / receita : 0,
+    ibs: tributosFora.includes('IBS') && receita > 0 ? foraIBS / receita : 0,
+  };
+  const { dasGuia, reparticaoGuia } = aplicarSeparacaoGuia(das, rep, tributosFora, fora, aliqs, { icms: usaRefICMS, iss: usaRefISS });
   return {
     anexoId: e.anexoId, faixa: faixa.faixa, cenario,
     aliquotaEfetiva: receita > 0 ? das / receita : 0,
     aliquotaEfetivaCBS: cbsBase,
     aliquotaEfetivaCBSFinal: trava.cbsFinal,
     aliquotaISSBruta: issPond, aliquotaISSFinal: trava.issFinal, excedenteISS: trava.excedente,
-    das, cbsDentroDAS: round2(receita * trava.cbsFinal),
-    reparticao: rep, acrescimosISS: trava.acrescimos,
-    detalhes: { receitaNaoExcedente: receitaNaoExc, receitaExcedente: receitaExc, icmsEfetivo: aICMSnao, ibsEfetivo: aIBSnao },
+    das, dasGuia, cargaTotal: das,
+    foraSublimite: fora, aliquotasFora: aliqs, tributosFora: [...tributosFora],
+    excedeSublimite: true, usouReferencia: { icms: usaRefICMS, iss: usaRefISS },
+    cbsDentroDAS: round2(receita * trava.cbsFinal),
+    reparticao: rep, reparticaoGuia, acrescimosISS: trava.acrescimos,
+    detalhes: { receitaNaoExcedente: receitaNaoExc, receitaExcedente: receitaExc, icmsEfetivo: aliqs.icms, ibsEfetivo: aliqs.ibs },
   };
 }
 
@@ -432,20 +647,40 @@ export interface ResultadoHibrido {
   dasReduzido: number;
   cbsFora: number;
   saldoCredor: number;
+  /** Total NA GUIA no híbrido (DAS reduzido + CBS fora). Sem sublimite = carga total. */
   total: number;
+  /** ICMS/ISS/IBS do sublimite (herdados do convencional — iguais nos dois regimes). */
+  foraSublimite: ForaSublimite;
+  /** Carga total no híbrido = total (guia) + fora do sublimite. */
+  cargaTotal: number;
+  /**
+   * Economia do híbrido vs. convencional na MESMA base (guia vs. guia).
+   * Com sublimite o fora cancela dos dois lados, então a decisão não é
+   * distorcida pelo fora.
+   */
   economiaVsConvencional: number;
   melhor: 'convencional' | 'hibrido' | 'empate';
 }
 
-/** DAS reduzido = DAS - CBS dentro; CBS fora = MAX(0, débitos - créditos). */
+/**
+ * DAS reduzido = GUIA - CBS dentro; CBS fora = MAX(0, débitos - créditos).
+ * Com excesso de sublimite a base é a guia (sem ICMS/ISS/IBS) — o fora é
+ * somado à parte como `cargaTotal` e não distorce o duelo.
+ */
 export function calcularHibrido(e: EntradaHibrido): ResultadoHibrido {
-  const dasReduzido = Math.max(0, round2(e.convencional.das - e.convencional.cbsDentroDAS));
+  const conv = e.convencional;
+  const guia = conv.dasGuia ?? conv.das;
+  const fora: ForaSublimite = conv.foraSublimite ?? { ...FORA_ZERADA };
+  const dasReduzido = Math.max(0, round2(guia - conv.cbsDentroDAS));
   const cbsFora = Math.max(0, round2(e.debitosCBS - e.creditosCBS));
   const saldoCredor = Math.max(0, round2(e.creditosCBS - e.debitosCBS));
   const total = round2(dasReduzido + cbsFora);
-  const economia = round2(e.convencional.das - total);
+  const cargaTotal = round2(total + (fora.total || 0));
+  const economia = round2(guia - total);
   return {
     dasReduzido, cbsFora, saldoCredor, total,
+    foraSublimite: { ...fora },
+    cargaTotal,
     economiaVsConvencional: economia,
     melhor: economia > 0.005 ? 'hibrido' : economia < -0.005 ? 'convencional' : 'empate',
   };

@@ -44,14 +44,28 @@ export function origemLinhaLote(item: ItemLote): string {
   if (item.manual) return 'manual · sua regra'
   if (item.nomenclatura?.dataFim) return 'NCM extinto · referência histórica'
   if (item.regraGeral) return 'regra geral'
-  if (!a || a.situacao === 'unica') return 'única · confirmada'
+  if (!a) return 'classificada'
+  const idx = Math.max(
+    0,
+    item.classificacoes.findIndex((x) => x.id === item.escolhida?.id && x.cst === item.escolhida?.cst),
+  )
+  if (a.situacao === 'unica') {
+    // Única com integral trocável: oficial fixada ou troca do usuário.
+    if (item.classificacoes.length > 1 && idx !== a.maisProvavelIndice) {
+      return `sua escolha: integral (segurança) (Opção ${idx + 1})`
+    }
+    return 'única · confirmada'
+  }
   if (a.situacao === 'multipla') {
     const sugerida = a.maisProvavelIndice
-    const idx = Math.max(
-      0,
-      item.classificacoes.findIndex((x) => x.id === item.escolhida?.id && x.cst === item.escolhida?.cst),
+    const escolhida = item.classificacoes[idx]
+    const ehIntegral = Boolean(
+      escolhida && (escolhida.integralFallback || (escolhida.cst === '000' && escolhida.cClassTrib === '000001')),
     )
-    return idx === sugerida ? `IA sugere Opção ${sugerida + 1} ✓` : `sua escolha (Opção ${idx + 1})`
+    if (idx === sugerida) {
+      return ehIntegral ? `integral sugerida (segurança) Opção ${sugerida + 1} · a escolher` : `IA sugere Opção ${sugerida + 1} ✓`
+    }
+    return ehIntegral ? `sua escolha: integral (Opção ${idx + 1})` : `sua escolha (Opção ${idx + 1})`
   }
   return 'classificada'
 }

@@ -231,7 +231,7 @@ describe('segregacao por anexo', () => {
       st: { ativo: true, tributo: 'ICMS', valorST: 6000, deducao: seg.deducaoST, detalhe: '', detalhePorTributo: seg.stDetalhe.map((d) => ({ tributo: d.tributo, valorST: d.valorST, deducao: d.deducao })), dasIntegral: seg.dasBruto, dasFinal: seg.das },
       seg: { ativo: true, anexos: seg.anexos, dasBruto: seg.dasBruto, parcelas: seg.parcelas.map((d) => ({ anexoId: d.anexoId, anexoCalculado: d.anexoCalculado, escolhido: d.escolhido, receitaMes: d.receitaMes, faixa: d.faixa, aliquotaEfetiva: d.aliquotaEfetiva, das: d.das, dasBruto: d.dasBruto, st: d.st, tributoST: d.tributoST, deducaoST: d.deducaoST, resto: d.resto })) },
     });
-    expect(csv).toContain('DAS segregado (final)');
+    expect(csv).toContain('DAS segregado (guia)');
     expect(csv).toContain('DAS convencional (anexo único, referência)');
     expect(csv).toContain('Dedução ST (ICMS)');
     expect(csv).toContain('DAS final (guia)');

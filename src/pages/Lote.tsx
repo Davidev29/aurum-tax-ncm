@@ -54,7 +54,7 @@ type FiltroLote = 'todos' | 'multiplas' | 'regra-geral' | 'invalidos' | 'unicas'
 
 const FILTROS: { id: FiltroLote; rotulo: string; dica: string }[] = [
   { id: 'todos', rotulo: 'Todos', dica: 'Todas as linhas processadas' },
-  { id: 'multiplas', rotulo: 'Escolha assistida', dica: 'NCM com 2+ tributações — o sistema sugere a mais provável' },
+  { id: 'multiplas', rotulo: 'Escolha assistida', dica: 'NCM com 2+ tributações — o sistema pré-seleciona a integral de segurança e você escolhe' },
   { id: 'regra-geral', rotulo: 'Regra geral', dica: 'Sem vínculo oficial — tributação integral vigente' },
   { id: 'invalidos', rotulo: 'Inválidos', dica: 'NCM fora do padrão de 8 dígitos' },
   { id: 'unicas', rotulo: 'Únicas', dica: 'Tributação única confirmada' },
@@ -157,9 +157,9 @@ export function Lote() {
             </div>
             <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
               Envie CSV/Excel com colunas COD/SKU, NOME DO PRODUTO, NCM, CFOP, CST, PIS, COFINS.
-              A busca automática lê o <strong>nome + NCM</strong> de cada linha: com 1 tributação ela confirma;
-              com 2+ ela explica <strong>por que há várias</strong> e
-              <strong> pré-seleciona a mais provável</strong> — você confere e confirma.
+              A busca automática lê o <strong>nome + NCM</strong> de cada linha: com 1 tributação ela confirma e fixa;
+              com 2+ (incluindo diferimento) ela explica <strong>por que há várias</strong> e
+              <strong> pré-seleciona a tributação integral de segurança</strong> — você confere e escolhe pela operação real.
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <AtribuicaoAurumAI detalhe="nome + NCM = tributação provável" />
@@ -240,8 +240,8 @@ export function Lote() {
             <div className="lote-como-funciona mt-4 grid gap-2 sm:grid-cols-3">
               {[
                 { t: '1 · NCM manda', d: 'Cada linha é resolvida pelo motor único (vínculos oficiais ou regra geral).' },
-                { t: '2 · Nome assiste', d: 'Com 2+ opções, a IA ordena pela aderência do nome e explica cada base legal.' },
-                { t: '3 · Você decide', d: 'A sugestão já vem pré-selecionada — troque se a operação pedir e salve.' },
+                { t: '2 · Nome compara', d: 'Com 2+ opções, a IA mostra a aderência do nome a cada base legal — sem fixar benefício.' },
+                { t: '3 · Você decide', d: 'A integral já vem pré-selecionada por segurança — troque só com benefício confirmado e salve.' },
               ].map((c) => (
                 <div key={c.t} className="lote-mini">
                   <div className="text-[11px] font-black">{c.t}</div>
@@ -304,12 +304,12 @@ export function Lote() {
 /* ---------------------------------------------------------- resumo hero -- */
 
 function ResumoHero({ resumo }: { resumo: ResumoLote }) {
-  const assistidas = resumo.assistidas ?? resumo.itens.filter((i) => (i.analiseIA?.confianca ?? 0) >= 0.6 && i.analiseIA?.situacao === 'multipla').length
+  const assistidas = resumo.assistidas ?? resumo.itens.filter((i) => i.analiseIA?.situacao === 'multipla').length
   const unicas = resumo.unicas ?? resumo.itens.filter((i) => i.analiseIA?.situacao === 'unica').length
   const cards = [
     { rot: 'Linhas', val: resumo.itens.length, sub: resumo.nomeArquivo, tom: '' as const, icone: '📄' },
     { rot: 'Classificadas', val: resumo.comClassificacao, sub: `${unicas} únicas confirmadas`, tom: 'ok' as const, icone: '✅' },
-    { rot: '✨ Sugestão automática', val: resumo.ambiguos, sub: `${assistidas} com sugestão forte`, tom: 'ia' as const, icone: '✨' },
+    { rot: '🛡 Escolha necessária', val: resumo.ambiguos, sub: `${assistidas} na integral de segurança`, tom: 'ia' as const, icone: '🛡' },
     { rot: 'Regra geral', val: resumo.regraGeral, sub: 'tributação integral vigente', tom: 'warn' as const, icone: '⚡' },
     { rot: 'Revisar', val: resumo.semNcm, sub: `${resumo.semNcm} inválidos`, tom: 'err' as const, icone: '👁' },
   ]
@@ -398,7 +398,7 @@ function BarraFerramentas({
         </div>
       </div>
       <p className="lote-toolbar-dica">
-        ✨ O resultado automático já vem <strong>pré-selecionado</strong> em cada linha — abra a linha, leia o porquê e confirme ou troque. <strong>Nada é salvo sem a sua revisão e aceite no “Revisar e salvar…”.</strong>
+        ✨ Com 1 tributação o oficial já vem <strong>fixado</strong> (com a integral de segurança trocável na linha); com 2+ (incluindo diferimento) a <strong>integral de segurança já vem pré-selecionada</strong> — abra a linha, leia o porquê e escolha pela operação real. <strong>Nada é salvo sem a sua revisão e aceite no “Revisar e salvar…”.</strong>
       </p>
     </Painel>
   )
@@ -439,6 +439,12 @@ function ModalRevisaoSalvamento({
   const alertas = useMemo(() => {
     const extintos = gravaveis.filter((i) => i.nomenclatura?.dataFim)
     const regraGeral = gravaveis.filter((i) => i.regraGeral)
+    const naIntegral = gravaveis.filter((i) => {
+      const a = i.analiseIA
+      if (!a || a.situacao !== 'multipla') return false
+      const esc = i.escolhida
+      return Boolean(esc && (esc.integralFallback || (esc.cst === '000' && esc.cClassTrib === '000001')))
+    })
     const trocadas = gravaveis.filter((i) => {
       const a = i.analiseIA
       if (!a || a.situacao !== 'multipla') return false
@@ -448,7 +454,7 @@ function ModalRevisaoSalvamento({
       )
       return idx !== a.maisProvavelIndice
     })
-    return { extintos, regraGeral, trocadas }
+    return { extintos, regraGeral, trocadas, naIntegral }
   }, [gravaveis])
 
   const preview = gravaveis.slice(0, 8)
@@ -549,7 +555,7 @@ function ModalRevisaoSalvamento({
           </div>
         ) : null}
 
-        {alertas.extintos.length || alertas.regraGeral.length || alertas.trocadas.length ? (
+        {alertas.extintos.length || alertas.regraGeral.length || alertas.trocadas.length || alertas.naIntegral.length ? (
           <div className="lote-confirm-bloco lote-confirm-bloco--alerta">
             <div className="lote-confirm-titulo">⚠ Pontos de atenção antes de confirmar</div>
             <ul className="lote-confirm-lista">
@@ -559,8 +565,11 @@ function ModalRevisaoSalvamento({
               {alertas.regraGeral.length ? (
                 <li>⚡ {alertas.regraGeral.length} em regra geral (tributação integral vigente — sem vínculo oficial).</li>
               ) : null}
+              {alertas.naIntegral.length ? (
+                <li>🛡 {alertas.naIntegral.length} com 2+ tributações salvos na integral de segurança — nenhum benefício (redução/diferimento) foi fixado. Só troque com lastro confirmado.</li>
+              ) : null}
               {alertas.trocadas.length ? (
-                <li>✨ {alertas.trocadas.length} onde você trocou o resultado automático — vale a sua escolha.</li>
+                <li>✨ {alertas.trocadas.length} onde você escolheu um benefício em vez da integral — vale a sua escolha (confira o lastro).</li>
               ) : null}
             </ul>
           </div>
@@ -583,7 +592,7 @@ function contarFiltros(resumo: ResumoLote): Record<FiltroLote, number> {
   const itens = resumo.itens
   return {
     todos: itens.length,
-    multiplas: itens.filter((i) => i.classificacoes.length > 1).length,
+    multiplas: itens.filter((i) => i.analiseIA?.situacao === 'multipla').length,
     'regra-geral': itens.filter((i) => i.regraGeral).length,
     invalidos: itens.filter((i) => i.ncm.length !== 8).length,
     unicas: itens.filter((i) => i.analiseIA?.situacao === 'unica').length,
@@ -616,7 +625,7 @@ function TabelaLote({
     return resumo.itens
       .map((item, indiceOriginal) => ({ item, indiceOriginal }))
       .filter(({ item }) => {
-        if (filtro === 'multiplas' && item.classificacoes.length <= 1) return false
+        if (filtro === 'multiplas' && item.analiseIA?.situacao !== 'multipla') return false
         if (filtro === 'regra-geral' && !item.regraGeral) return false
         if (filtro === 'invalidos' && item.ncm.length === 8) return false
         if (filtro === 'unicas' && item.analiseIA?.situacao !== 'unica') return false
@@ -755,7 +764,11 @@ function LinhaLote({
     item.classificacoes.findIndex((x) => x.id === c?.id && x.cst === c?.cst),
   )
   const trocouSugestao = analise && analise.totalOpcoes > 1 && indiceEscolhido !== sugerida
-  const precisaRevisao = item.ncm.length !== 8 || item.classificacoes.length > 1
+  // Revisão forçada: NCM inválido, 2+ tributações ou única cujo nome não
+  // adere ao benefício (alerta de finalidade/descrição).
+  const precisaRevisao = item.ncm.length !== 8
+    || analise?.situacao === 'multipla'
+    || (analise?.situacao === 'unica' && (analise.alertas.length > 0))
 
   return (
     <>
@@ -836,15 +849,15 @@ function CelulaIA({ item, indiceEscolhido, trocouSugestao }: { item: ItemLote; i
   }
   return (
     <span className="lote-ia lote-ia--multi" title={a.resumo}>
-      <span aria-hidden="true">✨</span> sugere Opção {a.maisProvavelIndice + 1}/{a.totalOpcoes}
+      <span aria-hidden="true">🛡</span> integral sugerida · Opção {a.maisProvavelIndice + 1}/{a.totalOpcoes}
       <BarraConfiancaAurumAI valor={a.confianca} compact />
       {trocouSugestao ? (
-        <span className="lote-ia-trocou" title={`Você escolheu a Opção ${indiceEscolhido + 1}; o sistema sugeria a Opção ${a.maisProvavelIndice + 1}. A decisão final é sua.`}>
+        <span className="lote-ia-trocou" title={`Você escolheu a Opção ${indiceEscolhido + 1}; a segurança sugeria a integral (Opção ${a.maisProvavelIndice + 1}). A decisão final é sua.`}>
           você optou pela {indiceEscolhido + 1}
         </span>
       ) : (
-        <span className="lote-ia-ok" title="O resultado automático está selecionado — confira a análise abrindo a linha.">
-          pré-selecionada ✓
+        <span className="lote-ia-ok" title="A integral de segurança está selecionada — abra a linha e escolha o benefício somente com lastro.">
+          escolha sua ⚠
         </span>
       )}
     </span>
@@ -906,6 +919,7 @@ function PainelAnaliseIA({
             const selecionada = op.indice === indiceEscolhido
             const ehSugerida = op.indice === sugerida
             const ehFallback = item.classificacoes[op.indice]?.integralFallback === true
+            const ehIntegral = ehFallback || (op.cst === '000' && op.cClassTrib === '000001')
             return (
               <div
                 key={op.indice}
@@ -932,14 +946,18 @@ function PainelAnaliseIA({
                     <span className="lote-opcao-selo lote-opcao-selo--fallback" title="Não se encaixa nessa qualificação? Aplique a tributação integral — última opção de segurança.">
                       🛡 integral · segurança
                     </span>
+                  ) : ehSugerida && ehIntegral ? (
+                    <span className="lote-opcao-selo lote-opcao-selo--fallback" title="Integral pré-selecionada por segurança — o sistema não fixou benefício. Troque somente com lastro.">
+                      🛡 integral sugerida · escolha sua
+                    </span>
                   ) : ehSugerida ? (
-                    <span className="lote-opcao-selo" title="Resultado automático pela aderência do nome — confira a base legal antes de salvar.">
-                      ✨ sugestão automática
+                    <span className="lote-opcao-selo" title={item.analiseIA?.situacao === 'unica' ? 'Única oficial fixada — troque pela integral se a finalidade/descrição não der lastro ao benefício.' : 'Opção sugerida — confira a base legal antes de salvar.'}>
+                      {item.analiseIA?.situacao === 'unica' ? '✓ oficial única (trocável)' : '✨ sugestão automática'}
                     </span>
                   ) : null}
-                  {selecionada && !ehSugerida && !ehFallback ? (
-                    <span className="lote-opcao-selo lote-opcao-selo--sua" title="Você trocou o resultado automático — a decisão final é sua e fica registrada.">
-                      sua escolha
+                  {selecionada && !ehSugerida && !ehIntegral ? (
+                    <span className="lote-opcao-selo lote-opcao-selo--sua" title="Você escolheu um benefício — a decisão final é sua e fica registrada. Confira o lastro antes de salvar.">
+                      sua escolha · benefício ⚠
                     </span>
                   ) : null}
                   {selecionada && ehFallback ? (
@@ -1143,11 +1161,20 @@ function celulaLote(
       </div>
     )
   }
-  if (item.classificacoes.length === 1 && c) {
+  if ((item.classificacoes.length === 1 || a?.situacao === 'unica') && c) {
+    // Única oficial — fixada no oficial, com a integral trocável quando
+    // houver alternativa (finalidade/descrição podem não dar lastro).
+    const temAlternativa = item.classificacoes.length > 1
+    const naIntegral = temAlternativa && indiceEscolhido !== (a?.maisProvavelIndice ?? 0)
     return (
       <div className="lote-celula min-w-[170px]">
         <div className="font-mono text-[11px] font-bold">
-          {c.cst} · {c.cClassTrib} <span className="lote-ok" title={a?.resumo ?? 'Tributação única oficial.'}>✓ auto</span>
+          {c.cst} · {c.cClassTrib}{' '}
+          {naIntegral ? (
+            <span className="lote-sugere" title="Você trocou a única oficial pela integral de segurança — vale para este produto.">sua escolha · integral</span>
+          ) : (
+            <span className="lote-ok" title={a?.resumo ?? 'Tributação única oficial.'}>✓ auto</span>
+          )}
           {c.heranca ? (
             <span className="lote-sugere" title={`Enquadramento herdado por família (${c.heranca.origem} ${c.heranca.prefixo}, ${c.heranca.irmaosVinculados} irmãos) — sem vínculo exato na base.${c.heranca.aConfirmar ? ' Confirme antes de operar.' : ''}`}>
               {' '}🧬 família
@@ -1157,6 +1184,22 @@ function celulaLote(
         <div className="truncate text-[10px] text-slate-500" title={r?.descricaoCClassTrib}>
           {r?.descricaoCClassTrib || c.baseLegal}
         </div>
+        {temAlternativa ? (
+          <select
+            className="field field-sm field-mono lote-select mt-1 w-full"
+            value={indiceEscolhido}
+            onChange={(e) => escolher(indice, Number(e.target.value))}
+            aria-label="Única oficial fixada — troque pela integral de segurança se o produto não atender ao benefício"
+            title="Única oficial fixada — troque pela integral se a finalidade/descrição não der lastro ao benefício"
+          >
+            {item.classificacoes.map((op, j) => (
+              <option key={`${op.id}-${j}`} value={j}>
+                {op.integralFallback ? '🛡 ' : j === a?.maisProvavelIndice ? '✓ ' : ''}{op.cst} · {op.cClassTrib} —{' '}
+                {op.integralFallback ? 'Tributação integral (trocar)' : `${(op.resumo?.descricaoCClassTrib || op.baseLegal || '').slice(0, 60)} (oficial)`}
+              </option>
+            ))}
+          </select>
+        ) : null}
         {seloExtinto}
       </div>
     )
@@ -1170,8 +1213,8 @@ function celulaLote(
           ⚠ {totalOficiais} opções{temFallback ? ' + integral' : ''}
         </span>
         {a ? (
-          <span className="lote-sugere" title={`O sistema sugere a Opção ${a.maisProvavelIndice + 1} pelo nome — já pré-selecionada. ${a.resumo}`}>
-            ✨ sugere {a.maisProvavelIndice + 1}
+          <span className="lote-sugere" title={`Por segurança, a integral (Opção ${a.maisProvavelIndice + 1}) vem pré-selecionada — nenhum benefício foi fixado. ${a.resumo}`}>
+            🛡 integral {a.maisProvavelIndice + 1}
           </span>
         ) : null}
       </div>
@@ -1209,9 +1252,11 @@ function paraLinhaLote(it: ItemLote): LinhaLote {
         ? 'manual · usuário (isenta o sistema)'
         : it.regraGeral
           ? 'regra geral'
-          : it.classificacoes.length > 1
-            ? `${it.classificacoes.length} opções · automática sugere Opção ${(a?.maisProvavelIndice ?? 0) + 1} · escolha do usuário`
-            : `classificada${a ? ' · automática confirma' : ''}`
+          : a?.situacao === 'multipla'
+            ? `${it.classificacoes.length} opções · integral sugerida (segurança) Opção ${(a?.maisProvavelIndice ?? 0) + 1} · escolha do usuário`
+            : it.classificacoes.length > 1
+              ? `única oficial + integral disponível · escolha do usuário`
+              : `classificada${a ? ' · automática confirma' : ''}`
 
   return {
     linha: it.indice,

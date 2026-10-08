@@ -590,11 +590,16 @@ function parsePayloadComparar(texto: string): { rbt12: number; receita: number; 
  * Puro: só formata números do motor.
  */
 function blocoGuiasHibrido(conv: ResultadoConvencional, hib: ResultadoHibrido, debitos: number, creditos: number): string {
-  return (
+  const guiaConv = conv.dasGuia ?? conv.das;
+  const fora = conv.foraSublimite?.total ?? 0;
+  const base =
     `• Guia DAS (sem CBS): **${fmtMoeda(hib.dasReduzido)}**\n` +
     `• Guia DARF (CBS por fora): **${fmtMoeda(hib.cbsFora)}** (débitos ${fmtMoeda(debitos)} − créditos ${fmtMoeda(creditos)})\n` +
-    `• Total no híbrido: **${fmtMoeda(hib.total)}**/mês (convencional: ${fmtMoeda(conv.das)})`
-  )
+    `• Total no híbrido (guia): **${fmtMoeda(hib.total)}**/mês (guia convencional: ${fmtMoeda(guiaConv)})`;
+  if (conv.excedeSublimite && fora > 0) {
+    return base + `\n• Fora da guia (sublimite ${conv.tributosFora.join('+')}): **${fmtMoeda(fora)}** → carga híbrida total ${fmtMoeda(hib.cargaTotal)}/mês`;
+  }
+  return base;
 }
 
 /**
@@ -627,7 +632,7 @@ function responderHibridoAnexo(args: {
   const veredito = hib.melhor === 'empate' ? 'Empate técnico' : hib.melhor === 'hibrido' ? 'Híbrido vence' : 'Convencional vence'
   const pedidoHib = detectarPedidoGrafico(`${args.origem} ${anexo} ${rbt12} ${receita}`)
   const graficoHib: GraficoChat | null = graficoConvXHibrido({
-    anexo, dasConv: conv.das, dasReduzido: hib.dasReduzido,
+    anexo, dasConv: conv.dasGuia ?? conv.das, dasReduzido: hib.dasReduzido,
     cbsFora: hib.cbsFora, totalHib: hib.total, economia: hib.economiaVsConvencional,
   })
   const graficoFinal = pedidoHib.tipo ? aplicarTipoPreferido(graficoHib, pedidoHib.tipo) : graficoHib
@@ -3320,6 +3325,10 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
   )
   const USA_FATOR_R = (anexoId === 'III' || anexoId === 'V') && (!anexoFoiEscolhido || folhaCtx != null || pediuFatorR || anexoId === 'V')
   const conv = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: receita as number })
+  const guiaChat = conv.dasGuia ?? conv.das
+  const notaSubChat = conv.excedeSublimite
+    ? ` (guia sem ${conv.tributosFora.join('/')}; ${fmtMoeda(conv.foraSublimite.total)} fora da guia)`
+    : ''
   const fr = USA_FATOR_R ? fatorR(folhaCtx ?? 0, rbt12 as number) : null
   // Só herdados do DOMÍNIO Simples (nunca do IBS) — e sem avisos de exemplo.
   // Fine-tuning v6: eco explícito da edição ("Alterado: folha X → Y, mantidos ...").
@@ -3376,12 +3385,12 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
       const gapMensal = Math.round((gap / 12) * 100) / 100
       const dasIII = calcularConvencional({ anexoId: 'III', rbt12: rbt12 as number, receitaMes: receita as number })
       const dasV = calcularConvencional({ anexoId: 'V', rbt12: rbt12 as number, receitaMes: receita as number })
-      const economiaMes = Math.round((dasV.das - dasIII.das) * 100) / 100
+      const economiaMes = Math.round(((dasV.dasGuia ?? dasV.das) - (dasIII.dasGuia ?? dasIII.das)) * 100) / 100
       linhaFatorR = `\n• Fator R: ${pctFR} (folha ${fmtMoeda(folhaCtx)} / RBT12 ${fmtMoeda(rbt12 as number)}) — sugere Anexo ${fr.anexo}.`
       blocoFatorBaixo =
         `\n⚠️ Com Fator R abaixo de 28%, sua empresa **não é tributada pelo Anexo III** — ela se enquadra no **Anexo V** (LC 123, art. 18 §§5º-C a 5º-I). O DAS acima foi simulado no Anexo ${anexoId}; compare abaixo.` +
         `\n• Para enquadrar no III: folha mínima de 12 meses = **${fmtMoeda(folhaMinima)}** (28% × ${fmtMoeda(rbt12 as number)}). Faltam **${fmtMoeda(gap)}** (~${fmtMoeda(gapMensal)}/mês).` +
-        `\n• Comparativo no seu número: DAS III ${fmtMoeda(dasIII.das)} × DAS V ${fmtMoeda(dasV.das)} → ` +
+        `\n• Comparativo no seu número: DAS III ${fmtMoeda(dasIII.dasGuia ?? dasIII.das)} × DAS V ${fmtMoeda(dasV.dasGuia ?? dasV.das)} → ` +
         (economiaMes >= 0
           ? `economia de **${fmtMoeda(economiaMes)}/mês** se migrar para o III.`
           : `o III sairia **${fmtMoeda(Math.abs(economiaMes))}/mês mais caro** neste RBT12/receita — subir a folha só pelo DAS não se paga aqui.`) +
@@ -3408,7 +3417,7 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
   const pedidoSimples = detectarPedidoGrafico(pergunta)
   let graficoSimples: GraficoChat | null = null
   try {
-    graficoSimples = graficoReparticaoDAS(conv.reparticao, String(anexoId))
+    graficoSimples = graficoReparticaoDAS(conv.reparticaoGuia ?? conv.reparticao, String(anexoId))
     if (pedidoSimples.tipo) graficoSimples = aplicarTipoPreferido(graficoSimples, pedidoSimples.tipo)
   } catch {
     graficoSimples = null
@@ -3422,7 +3431,7 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
     try {
       const cMin = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: ivRec.min })
       const cMax = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: ivRec.max })
-      blocoIntervalo += `\n• Faixa informada: entre ${fmtMoeda(ivRec.min)} e ${fmtMoeda(ivRec.max)} — cálculo acima usa a média ${fmtMoeda(ivRec.media)} como referência (piso → DAS ${fmtMoeda(cMin.das)} · teto → DAS ${fmtMoeda(cMax.das)}).`
+      blocoIntervalo += `\n• Faixa informada: entre ${fmtMoeda(ivRec.min)} e ${fmtMoeda(ivRec.max)} — cálculo acima usa a média ${fmtMoeda(ivRec.media)} como referência (piso → DAS ${fmtMoeda(cMin.dasGuia ?? cMin.das)} · teto → DAS ${fmtMoeda(cMax.dasGuia ?? cMax.das)}).`
     } catch { /* cenário min/max é informativo — nunca quebra o DAS principal */ }
   }
   if (ivRbt != null) {
@@ -3469,7 +3478,7 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
         `${ctxLinha}` +
         `Alíquotas do cálculo — Anexo ${anexoId} · ${conv.faixa}ª faixa (RBT12 ${fmtMoeda(rbt12 as number)} · receita ${fmtMoeda(receita as number)}):\n` +
         `• Base (nominal): **${(nominal * 100).toFixed(2).replace('.', ',')}%** (dedução de ${fmtMoeda(deducao)})\n` +
-        `• Efetiva aplicada: **${(conv.aliquotaEfetiva * 100).toFixed(4).replace('.', ',')}%** → DAS **${fmtMoeda(conv.das)}**\n` +
+        `• Efetiva aplicada: **${(conv.aliquotaEfetiva * 100).toFixed(4).replace('.', ',')}%** → DAS **${fmtMoeda(guiaChat)}**${notaSubChat}\n` +
         `Fórmula: (${fmtMoeda(rbt12 as number)} × ${(nominal * 100).toFixed(2).replace('.', ',')}% − ${fmtMoeda(deducao)}) ÷ ${fmtMoeda(rbt12 as number)}` +
         `${blocoIntervalo}` +
         `${linhaFatorR}${blocoFatorBaixo}${avisoInferidoV}${alertaReceita}` +
@@ -3490,7 +3499,7 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
     texto:
       `${ctxLinha}` +
       `• Anexo ${anexoId} · ${conv.faixa}ª faixa · RBT12 ${fmtMoeda(rbt12 as number)} · receita ${fmtMoeda(receita as number)}\n` +
-      `• Alíquota efetiva ${(conv.aliquotaEfetiva * 100).toFixed(4)}% → DAS **${fmtMoeda(conv.das)}** (CBS dentro do DAS: ${fmtMoeda(conv.cbsDentroDAS)})` +
+      `• Alíquota efetiva ${(conv.aliquotaEfetiva * 100).toFixed(4)}% → DAS **${fmtMoeda(guiaChat)}**${notaSubChat} (CBS dentro do DAS: ${fmtMoeda(conv.cbsDentroDAS)})` +
       `${blocoIntervalo}` +
       `${linhaFatorR}${blocoFatorBaixo}${avisoInferidoV}${alertaReceita}` +
       `${fechoComparativo}${linhaNbsSimples}` +

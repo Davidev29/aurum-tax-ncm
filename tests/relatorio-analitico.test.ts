@@ -47,16 +47,20 @@ describe('relatório analítico — motor determinístico', () => {
     expect(r.hash).toMatch(/^[0-9a-f]{8}$/);
   });
 
-  it('golden: Anexo I RBT12 3,8MM receita 200k reproduz Dashboard (conv 25987,83)', () => {
+  it('golden: Anexo I RBT12 3,8MM receita 200k reproduz Dashboard (carga 25987,83 = guia + fora)', () => {
     const r = orquestrarRelatorio(
       inputBase({ rbt12: 3_800_000, rba: 50_000, receitaMes: 200_000, folha12: 0 }),
     );
     const iConv = r.cenarios.find((c) => c.scenarioId === 'I_CONV')!;
-    // Dashboard.txt:62 — DAS 25987.8352631579
-    expect(iConv.totalPagar).toBeCloseTo(25987.83, 1);
+    // Dashboard.txt:62 — carga total 25987.8352631579 (guia + ICMS/IBS fora).
+    // O duelo compara a GUIA; o fora sai à parte.
+    expect(iConv.excedeSublimite).toBe(true);
+    expect(iConv.totalPagar + iConv.foraSublimite).toBeCloseTo(25987.83, 1);
+    expect(iConv.dasGuia).toBe(iConv.totalPagar);
+    expect(iConv.foraSublimite).toBeGreaterThan(0);
     expect(iConv.cbsDentroDas).toBeCloseTo(6091.37, 1);
     const iHib = r.cenarios.find((c) => c.scenarioId === 'I_HIB')!;
-    // Híbrido maior neste perfil (convencional vence)
+    // Híbrido maior neste perfil (convencional vence) — na base da guia
     expect(iHib.totalPagar).toBeGreaterThan(iConv.totalPagar);
     expect(r.comparativo.tabelaOutrosAnexos.find((l) => l.anexo === 'I')?.vencedor).toBe('CONV');
   });

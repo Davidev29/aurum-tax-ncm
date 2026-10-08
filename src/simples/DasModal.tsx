@@ -86,16 +86,23 @@ export function montarDadosDas(
   const periodoApuracao = `${nomeMesLower(per)}/${per.getFullYear()}`;
   const competenciaCurta = `${String(per.getMonth() + 1).padStart(2, '0')}/${per.getFullYear()}`;
   const vencimento = `20/${String(hoje.getMonth() + 1).padStart(2, '0')}/${hoje.getFullYear()}`;
-  const itens: ItemDas[] = ORDEM.filter((t) => conv.reparticao[t] > 0.005).map((t) => ({
+  // Com excesso de sublimite a guia DAS NÃO contém ICMS/ISS/IBS do sublimite:
+  // o documento usa só a repartição da guia.
+  const repGuia = conv.reparticaoGuia ?? conv.reparticao;
+  const totalGuia = conv.dasGuia ?? conv.das;
+  const itens: ItemDas[] = ORDEM.filter((t) => repGuia[t] > 0.005).map((t) => ({
     codigo: CODIGO_DAS[t],
     denominacao: DENOMINACAO_DAS[t],
-    principal: conv.reparticao[t],
+    principal: repGuia[t],
     detalhe: competenciaCurta,
   }));
   const viaCnpj = opts.modo === 'cnpj' && opts.empresaNome.trim().length > 0;
   const empresa = viaCnpj ? opts.empresaNome.trim().toUpperCase() : 'CONTRIBUINTE — CÁLCULO MANUAL';
   const cnpj = viaCnpj ? opts.cnpj : null;
   const obsBase = `Anexo ${conv.anexoId} · ${conv.faixa}ª faixa · RBT12 ${fmtMoeda(opts.rbt12)} · Receita ${fmtMoeda(opts.receitaMes)}`;
+  const obsSub = conv.excedeSublimite
+    ? ` · Sublimite cen. ${conv.cenario}: ${conv.tributosFora.join('+')} por fora (${fmtMoeda(conv.foraSublimite.total)}) — guia sem esses tributos`
+    : '';
   const obsSeg = opts.seg
     ? ` · Segregado ${opts.seg.anexos.join(' + ')}${opts.seg.temResto ? ' (inclui restante automático)' : ''}${opts.seg.redir.length > 0 ? ` (${opts.seg.redir.join(', ')})` : ''}`
     : '';
@@ -104,8 +111,8 @@ export function montarDadosDas(
     : '';
   const observacoes =
     viaCnpj && opts.cnae
-      ? `${obsBase}${obsSeg}${obsST} · CNAE ${opts.cnae} · Documento elaborado pelo Aurum TAX`
-      : `${obsBase}${obsSeg}${obsST} · Documento elaborado pelo Aurum TAX – sem validade fiscal`;
+      ? `${obsBase}${obsSub}${obsSeg}${obsST} · CNAE ${opts.cnae} · Documento elaborado pelo Aurum TAX`
+      : `${obsBase}${obsSub}${obsSeg}${obsST} · Documento elaborado pelo Aurum TAX – sem validade fiscal`;
   return {
     empresa,
     cnpj,
@@ -114,7 +121,7 @@ export function montarDadosDas(
     vencimento,
     numeroDocumento: gerarNumero(conv),
     itens,
-    total: conv.das,
+    total: totalGuia,
     observacoes,
     emitidoEm: hoje.toLocaleString('pt-BR'),
   };

@@ -20,7 +20,7 @@
  *
  * PURA: consome `calcularConvencional` + `calcularST`. Sem I/O.
  */
-import { calcularConvencional, fatorR, round2, type Reparticao, type ResultadoConvencional } from './calculo';
+import { calcularConvencional, fatorR, round2, type ForaSublimite, type Reparticao, type ResultadoConvencional } from './calculo';
 import { calcularST, tributoSTDoAnexo, type TributoST } from './segregacao-st';
 import { SUBLIMITE, type AnexoSimplesId } from './tabelas';
 
@@ -43,13 +43,25 @@ export interface DetalheParcelaSeg {
   receitaMes: number;
   faixa: number;
   aliquotaEfetiva: number;
-  /** DAS da parcela já com a ST deduzida (vai à soma final). */
+  /** Carga total da parcela (guia + fora) já com a ST deduzida. */
   das: number;
-  /** DAS da parcela antes da ST (p/ legenda Bruto × Final). */
+  /** DAS da parcela DENTRO da guia (sem fora do sublimite), já com ST. */
+  dasGuia: number;
+  /** Carga total da parcela antes da ST. */
   dasBruto: number;
+  /** Guia da parcela antes da ST. */
+  dasBrutoGuia: number;
   reparticao: Reparticao;
+  /** Repartição da parcela só na guia (fora zerado, ST deduzida). */
+  reparticaoGuia: Reparticao;
   /** Repartição da parcela antes da ST (p/ riscado por tributo). */
   reparticaoBruta: Reparticao;
+  /** Repartição da guia antes da ST. */
+  reparticaoBrutaGuia: Reparticao;
+  /** ICMS/ISS/IBS da parcela fora da guia (sublimite). */
+  foraSublimite: ForaSublimite;
+  tributosFora: string[];
+  excedeSublimite: boolean;
   cbsDentroDAS: number;
   st: boolean;
   tributoST: TributoST | null;
@@ -68,6 +80,14 @@ export interface ResultadoSegregado {
   receitaMes: number;
   /** DAS final = soma das parcelas (ST já deduzida). */
   das: number;
+  /** DAS final DENTRO da guia (sem ICMS/ISS/IBS do sublimite). */
+  dasGuia: number;
+  /** Carga total = guia + fora do sublimite. */
+  cargaTotal: number;
+  /** ICMS/ISS/IBS fora da guia somados (sublimite). */
+  foraSublimite: ForaSublimite;
+  /** true quando ao menos 1 parcela excede o sublimite. */
+  excedeSublimite: boolean;
   /** DAS bruto = soma sem dedução ST (Bruto − Segregado = economia). */
   dasBruto: number;
   /** Total deduzido por ST (dasBruto − das). */
@@ -83,8 +103,14 @@ export interface ResultadoSegregado {
   receitaExcedente: number;
   /** Soma das repartições das parcelas (por tributo, já deduzida). */
   reparticao: Reparticao;
+  /** Soma das repartições só na guia (fora zerado, ST deduzida). */
+  reparticaoGuia: Reparticao;
   /** Soma das repartições brutas (antes da ST, p/ riscado). */
   reparticaoBruta: Reparticao;
+  /** Soma das repartições da guia antes da ST. */
+  reparticaoBrutaGuia: Reparticao;
+  /** Guia bruta (antes da ST) — p/ legenda. */
+  dasBrutoGuia: number;
   cbsDentroDAS: number;
   /** Alíquota média ponderada (DAS ÷ receita) — exibição. */
   aliquotaMedia: number;
@@ -126,6 +152,7 @@ export function calcularSegregado(
   parcelas: ParcelaSegEntrada[],
   rba?: number,
   folha12?: number,
+  refs?: { aliqRefICMS?: number | null; aliqRefISS?: number | null },
 ): ResultadoSegregado {
   const rbt = Math.max(0, Number(rbt12Total) || 0);
   if (!(rbt > 0)) throw new Error('rbt12-ausente-ou-invalido: informe RBT12 > 0');
@@ -171,8 +198,11 @@ export function calcularSegregado(
       rbt12: rbt,
       receitaMes: p.receitaMes,
       rba: rbasFinais[i],
+      aliqRefICMS: refs?.aliqRefICMS,
+      aliqRefISS: refs?.aliqRefISS,
     });
     const repBruta: Reparticao = { ...conv.reparticao };
+    const repBrutaGuia: Reparticao = { ...conv.reparticaoGuia };
     const baseDet = {
       anexoId: p.anexoId,
       anexoCalculado: anexoCalc,
@@ -180,6 +210,10 @@ export function calcularSegregado(
       faixa: conv.faixa,
       aliquotaEfetiva: conv.aliquotaEfetiva,
       reparticaoBruta: repBruta,
+      reparticaoBrutaGuia: repBrutaGuia,
+      foraSublimite: { ...conv.foraSublimite },
+      tributosFora: [...conv.tributosFora],
+      excedeSublimite: conv.excedeSublimite,
       cbsDentroDAS: conv.cbsDentroDAS,
       resto: p.resto,
       escolhido: p.escolhido,
@@ -189,13 +223,17 @@ export function calcularSegregado(
     };
     if (p.st === true) {
       // ST segue o anexo EFETIVO (V redirecionado → III deduz ISS, não ICMS).
+      // Com sublimite o tributo pode já estar fora da guia → dedução 0.
       const tax = tributoSTDoAnexo(anexoCalc);
       const rst = calcularST(conv, p.receitaMes, p.receitaMes, tax);
       return {
         ...baseDet,
-        das: rst.dasFinal,
+        das: rst.convAjustado.das,
+        dasGuia: rst.dasFinal,
         dasBruto: conv.das,
-        reparticao: { ...rst.reparticaoFinal },
+        dasBrutoGuia: conv.dasGuia,
+        reparticao: { ...rst.convAjustado.reparticao },
+        reparticaoGuia: { ...rst.reparticaoFinal },
         st: true,
         tributoST: tax,
         deducaoST: rst.deducao,
@@ -204,8 +242,11 @@ export function calcularSegregado(
     return {
       ...baseDet,
       das: conv.das,
+      dasGuia: conv.dasGuia,
       dasBruto: conv.das,
+      dasBrutoGuia: conv.dasGuia,
       reparticao: { ...conv.reparticao },
+      reparticaoGuia: { ...conv.reparticaoGuia },
       st: false,
       tributoST: null,
       deducaoST: 0,
@@ -224,8 +265,17 @@ export function calcularSegregado(
 
   const receitaMes = soma((d) => d.receitaMes);
   const das = soma((d) => d.das);
+  const dasGuia = soma((d) => d.dasGuia);
   const dasBruto = soma((d) => d.dasBruto);
+  const dasBrutoGuia = soma((d) => d.dasBrutoGuia);
   const deducaoST = round2(dasBruto - das);
+  const foraSublimite: ForaSublimite = {
+    icms: soma((d) => d.foraSublimite.icms),
+    iss: soma((d) => d.foraSublimite.iss),
+    ibs: soma((d) => d.foraSublimite.ibs),
+    total: soma((d) => d.foraSublimite.total),
+  };
+  const excedeSublimite = det.some((d) => d.excedeSublimite);
   const tributosST: TributoST[] = [];
   for (const d of det) {
     if (d.st && d.tributoST && d.deducaoST > 0 && !tributosST.includes(d.tributoST)) tributosST.push(d.tributoST);
@@ -241,13 +291,20 @@ export function calcularSegregado(
     rbt12: rbt,
     receitaMes: round2(receitaMes),
     das,
+    dasGuia,
+    cargaTotal: das,
+    foraSublimite,
+    excedeSublimite,
     dasBruto,
     deducaoST,
     temST: tributosST.length > 0,
     tributosST,
     stDetalhe,
     reparticao: somaRep((d) => d.reparticao),
+    reparticaoGuia: somaRep((d) => d.reparticaoGuia),
     reparticaoBruta: somaRep((d) => d.reparticaoBruta),
+    reparticaoBrutaGuia: somaRep((d) => d.reparticaoBrutaGuia),
+    dasBrutoGuia,
     cbsDentroDAS: soma((d) => d.cbsDentroDAS),
     aliquotaMedia: receitaMes > 0 ? das / receitaMes : 0,
     anexos,
@@ -274,6 +331,9 @@ export function pseudoConvDoSegregado(seg: ResultadoSegregado, base: ResultadoCo
   const primeira = seg.parcelas[0];
   const rec = seg.receitaMes;
   const aliqCBS = rec > 0 ? seg.cbsDentroDAS / rec : 0;
+  const tribFora: string[] = [];
+  for (const d of seg.parcelas) for (const t of d.tributosFora) if (!tribFora.includes(t)) tribFora.push(t);
+  const usouRef = { icms: false, iss: false };
   return {
     ...base,
     anexoId: base.anexoId,
@@ -282,11 +342,23 @@ export function pseudoConvDoSegregado(seg: ResultadoSegregado, base: ResultadoCo
     aliquotaEfetivaCBS: aliqCBS,
     aliquotaEfetivaCBSFinal: aliqCBS,
     aliquotaISSBruta: rec > 0 ? seg.reparticaoBruta.ISS / rec : 0,
-    aliquotaISSFinal: rec > 0 ? seg.reparticao.ISS / rec : 0,
+    aliquotaISSFinal: rec > 0 ? seg.reparticaoGuia.ISS / rec : 0,
     excedenteISS: round2(seg.parcelas.reduce((a, d) => a + d.excedenteISS, 0)),
     das: seg.das,
+    dasGuia: seg.dasGuia,
+    cargaTotal: seg.das,
+    foraSublimite: { ...seg.foraSublimite },
+    aliquotasFora: {
+      icms: rec > 0 ? seg.foraSublimite.icms / rec : 0,
+      iss: rec > 0 ? seg.foraSublimite.iss / rec : 0,
+      ibs: rec > 0 ? seg.foraSublimite.ibs / rec : 0,
+    },
+    tributosFora: tribFora as ResultadoConvencional['tributosFora'],
+    excedeSublimite: seg.excedeSublimite,
+    usouReferencia: usouRef,
     cbsDentroDAS: seg.cbsDentroDAS,
     reparticao: { ...seg.reparticao },
+    reparticaoGuia: { ...seg.reparticaoGuia },
     detalhes: { ...base.detalhes, receitaNaoExcedente: seg.receitaNaoExcedente, receitaExcedente: seg.receitaExcedente },
   };
 }

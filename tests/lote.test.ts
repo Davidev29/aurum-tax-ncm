@@ -142,9 +142,14 @@ describe('processarArquivoLote', () => {
       cofins: '01',
       regraGeral: false,
     })
-    expect(comVinculo.classificacoes).toHaveLength(1)
+    expect(comVinculo.classificacoes).toHaveLength(2)
+    // Único oficial fixado + integral de segurança trocável (última opção).
     expect(comVinculo.escolhida?.cClassTrib).toBe('000002')
     expect(comVinculo.escolhida?.regraGeral).toBe(false)
+    expect(comVinculo.escolhida?.integralFallback).not.toBe(true)
+    expect(comVinculo.classificacoes.at(-1)?.integralFallback).toBe(true)
+    expect(comVinculo.analiseIA?.situacao).toBe('unica')
+    expect(comVinculo.analiseIA?.maisProvavelIndice).toBe(0)
 
     expect(regraGeral.regraGeral).toBe(true)
     // Motor único: o cartão de regra geral aparece na lista, como na Consulta.

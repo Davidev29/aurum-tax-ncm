@@ -1,10 +1,10 @@
 /**
- * Aurum AI assistida do lote — nome + NCM = tributação provável.
+ * Aurum AI assistida do lote — nome + NCM = comparativo, decisão do usuário.
  *
  * Garantias:
- * - 1 opção → confirma (situação `unica`);
- * - N opções → explica o porquê SÓ com dados oficiais + sugere a mais
- *   aderente ao nome (escolha assistida);
+ * - 1 opção → confirma e fixa (situação `unica`);
+ * - N opções (incluindo diferimento) → NUNCA fixa benefício: sugere a
+ *   integral de segurança e explica o porquê SÓ com dados oficiais;
  * - nenhum comentário inventa CST, redução, anexo ou artigo.
  */
 import { describe, expect, it } from 'vitest'
@@ -68,7 +68,7 @@ describe('analisarItemLoteIA', () => {
     expect(a.opcoes[0].comentario).toContain('art. 11')
   })
 
-  it('múltiplas: explica o porquê com dados oficiais e sugere a mais aderente ao nome', () => {
+  it('múltiplas: nunca fixa benefício — sugere a integral e cita o comparativo do nome', () => {
     const a1 = opcao({
       cst: '000', cClassTrib: '000002',
       descricao: 'Alíquota zero — carne bovina in natura',
@@ -81,15 +81,22 @@ describe('analisarItemLoteIA', () => {
       baseLegal: 'LC 214/2025 — Anexo IX',
       resumo: { descricaoCClassTrib: 'Redução de 60% — insumo agropecuário', percentualReducaoIBS: 60, percentualReducaoCBS: 60, anexo: '9', urlLegislacao: null, documentosHabilitados: null },
     })
+    const integral = opcao({
+      cst: '000', cClassTrib: '000001',
+      descricao: 'Tributação integral',
+      baseLegal: 'LC 214/2025 — Regra geral',
+      resumo: { descricaoCClassTrib: 'Tributação integral', percentualReducaoIBS: 0, percentualReducaoCBS: 0, anexo: null, urlLegislacao: null, documentosHabilitados: null },
+    })
+    integral.integralFallback = true
     const a = analisarItemLoteIA({
       nome: 'Insumo agropecuário para plantio', ncm: '02011000',
-      classificacoes: [a1, b1],
+      classificacoes: [a1, b1, integral],
       regraGeral: false, manual: false, extinto: false, nomenclaturaDescricao: 'Carne bovina',
     })
     expect(a.situacao).toBe('multipla')
-    // O nome conversa com a opção 2 (insumo agropecuário), não com a 1.
-    expect(a.maisProvavelIndice).toBe(1)
-    expect(a.confianca).toBeGreaterThanOrEqual(0.6)
+    // Segurança: mesmo com o nome aderente ao benefício, a sugestão é a integral.
+    expect(a.maisProvavelIndice).toBe(2)
+    expect(a.confianca).toBeLessThan(0.5)
     // Porquê grounded: cita os dois CSTs e as duas reduções reais.
     expect(a.porqueMultiplas).toContain('000')
     expect(a.porqueMultiplas).toContain('200')
@@ -102,10 +109,11 @@ describe('analisarItemLoteIA', () => {
       expect(op.comentario).not.toMatch(/art\. 137/i)
       expect(op.comentario).not.toMatch(/art\. 135/i)
     }
-    expect(a.orientacaoEscolha).toMatch(/Opção 2/)
+    expect(a.orientacaoEscolha).toMatch(/Opção 3/)
+    expect(a.alertas.join(' ')).toMatch(/não fixou benefício|integral/i)
   })
 
-  it('empate no nome mantém a ordem oficial com confiança baixa', () => {
+  it('empate no nome sugere a integral com confiança baixa', () => {
     const a1 = opcao({ cst: '000', cClassTrib: '000001', descricao: 'Tributação integral', baseLegal: 'LC 214/2025' })
     const b1 = opcao({ cst: '000', cClassTrib: '000002', descricao: 'Alíquota zero', baseLegal: 'LC 214/2025' })
     const a = analisarItemLoteIA({
@@ -115,7 +123,7 @@ describe('analisarItemLoteIA', () => {
     expect(a.situacao).toBe('multipla')
     expect(a.maisProvavelIndice).toBe(0)
     expect(a.confianca).toBeLessThan(0.5)
-    expect(a.resumo).toMatch(/não desempatou|empate/i)
+    expect(a.resumo).toMatch(/integral|escolha/i)
   })
 
   it('nome comercial diferente do texto oficial não gera alerta — o NCM manda', () => {
@@ -128,8 +136,35 @@ describe('analisarItemLoteIA', () => {
       regraGeral: false, manual: false, extinto: false, nomenclaturaDescricao: 'Carne bovina fresca',
     })
     expect(a.divergenciaNome).toBe(false)
+    // Sem integral anexada, sem o que alertar além da confirmação.
     expect(a.alertas).toHaveLength(0)
     expect(a.maisProvavelIndice).toBe(0)
+  })
+
+  it('única com integral trocável: fixa o oficial e alerta sem aderência do nome', () => {
+    const oficial = opcao({
+      cst: '200', cClassTrib: '200007',
+      descricao: 'Fornecimento dos dispositivos de acessibilidade próprios para pessoas com deficiência',
+      baseLegal: 'LC 214/2025 — Anexo XIII',
+      resumo: { descricaoCClassTrib: 'Dispositivos de acessibilidade', percentualReducaoIBS: 60, percentualReducaoCBS: 60, anexo: '13', urlLegislacao: null, documentosHabilitados: null },
+    })
+    const integral = opcao({
+      cst: '000', cClassTrib: '000001', descricao: 'Tributação integral', baseLegal: 'LC 214/2025 — Regra geral',
+      resumo: { descricaoCClassTrib: 'Tributação integral', percentualReducaoIBS: 0, percentualReducaoCBS: 0, anexo: null, urlLegislacao: null, documentosHabilitados: null },
+    })
+    integral.integralFallback = true
+    const a = analisarItemLoteIA({
+      nome: 'ARMADOR GROSSO COM 12 PARES', ncm: '83024100',
+      classificacoes: [oficial, integral],
+      regraGeral: false, manual: false, extinto: false, nomenclaturaDescricao: 'Guarnições para móveis',
+    })
+    expect(a.situacao).toBe('unica')
+    // Fixa o oficial (índice 0), nunca a integral.
+    expect(a.maisProvavelIndice).toBe(0)
+    expect(a.totalOpcoes).toBe(2)
+    // Sem aderência do nome ao benefício → alerta + orientação de troca.
+    expect(a.alertas.join(' ')).toMatch(/finalidade|integral/i)
+    expect(a.orientacaoEscolha).toMatch(/Opção 2/)
   })
 
   it('regra geral e manual têm situações próprias', () => {

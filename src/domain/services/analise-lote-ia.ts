@@ -12,9 +12,13 @@
  *   oficiais por aderência textual (tokens do nome × texto oficial das
  *   opções) para sugerir a mais provável — escolha assistida, decisão final
  *   do usuário.
- * - Com 1 opção: confirma (o NCM manda — sem alerta de divergência nome × NCM).
- * - Com N opções: explica *por que* há N (comparando os campos oficiais que
- *   de fato diferem) + sugere a mais aderente ao nome + orienta a escolha.
+ * - Com 1 vínculo oficial: confirma e fixa o oficial (o NCM manda), mas com
+ *   a integral de segurança como ALTERNATIVA trocável — a finalidade e a
+ *   descrição da planilha podem não dar lastro ao benefício; sem aderência
+ *   do nome ao texto oficial, emite alerta para conferir.
+ * - Com N vínculos (incluindo diferimento): NUNCA fixa benefício — sugere a
+ *   integral de segurança e orienta a escolha (comparando os campos oficiais
+ *   que de fato diferem). Decisão final do usuário.
  */
 import { NOME_IA, nivelDeConfianca, type NivelConfiancaIa } from '@/domain/aurum-ai'
 import { rotuloAnexoOficial } from '@/domain/constants/tributarios'
@@ -410,9 +414,9 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
   }
 
   // ---- 1 ou N vínculos oficiais: nome ordena, base decide ----
-  // O fallback integral (última opção de segurança) nunca é sugerido como
-  // provável pelo nome: ele só vale quando o produto NÃO atende às
-  // qualificações com benefício. Por isso o desempate ignora o fallback.
+  // O fallback integral (última opção de segurança) nunca é pontuado pelo
+  // nome (score -1): em múltiplas ele é a SUGESTÃO (segurança), e o nome
+  // serve só como comparativo entre as oficiais — nunca como decisão.
   const { originais, expandidos } = tokensDoNome(nomeSeguro)
   const pontuadas = classificacoes.map((c, i) => {
     const { score, termos } = c.integralFallback
@@ -423,11 +427,23 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
   const ordenadas = [...pontuadas].sort((a, b) => b.score - a.score || a.i - b.i)
   const topoOficial = ordenadas.find((o) => !o.c.integralFallback) ?? ordenadas[0]
   const topo = topoOficial
-  const segunda = ordenadas.find((o) => o !== topo && !o.c.integralFallback)
-  const gap = topo && segunda ? topo.score - segunda.score : topo ? topo.score : 0
+  // Pré-calcula a integral de segurança (usada como sugestão em multipla).
+  const idxIntegralPre = (() => {
+    const f = classificacoes.findIndex((c) => c.integralFallback)
+    if (f >= 0) return f
+    return classificacoes.findIndex((c) => c.cst === '000' && c.cClassTrib === '000001')
+  })()
+  // Múltipla = 2+ OFICIAIS. "1 oficial + integral de segurança" continua
+  // `unica` (oficial fixado), mas com a integral trocável — a finalidade e a
+  // descrição da planilha podem não dar lastro ao benefício.
+  const totalOficiaisPre = classificacoes.filter((c) => !c.integralFallback).length
+  const ehMultipla = totalOficiaisPre > 1
+  const idxSugeridoPre = ehMultipla
+    ? (idxIntegralPre >= 0 ? idxIntegralPre : (topo ? topo.i : 0))
+    : (topo ? topo.i : 0)
 
   const opcoes: OpcaoAnalisada[] = pontuadas.map(({ c, i, score, termos }) => {
-    const ehSugerida = topo ? i === topo.i : i === 0
+    const ehSugerida = i === idxSugeridoPre
     const { comentario, redIBS, redCBS, anexo, anexoRotulo } = comentarOpcao(c, i, termos, nomeSeguro, ehSugerida)
     return {
       indice: i, cst: c.cst, cClassTrib: c.cClassTrib,
@@ -438,25 +454,41 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
     }
   })
 
-  if (classificacoes.length === 1 && topo) {
-    const alertas: string[] = []
+  if (!ehMultipla && topo) {
     const conf = !nomeSeguro ? 0.9 : topo.score > 0 ? 0.95 : 0.85
+    // Integral de segurança como ALTERNATIVA trocável (o lote anexa para
+    // todo benefício único): a finalidade/descrição pode não dar lastro.
+    const idxIntegral = classificacoes.findIndex((c) => c.integralFallback)
+    const temAlternativa = idxIntegral >= 0 && idxIntegral !== topo.i
+    const alertas: string[] = []
+    if (!topo.termos.length && temAlternativa) {
+      alertas.push(
+        `O nome (“${nomeSeguro.slice(0, 60) || '—'}”) não adere ao texto oficial do benefício — confira finalidade e descrição antes de salvar; a integral (Opção ${idxIntegral + 1}) está disponível.`,
+      )
+    }
     return {
       situacao: 'unica',
-      totalOpcoes: 1,
-      maisProvavelIndice: 0,
+      totalOpcoes: classificacoes.length,
+      maisProvavelIndice: topo.i,
       confianca: conf,
       nivel: nivelDeConfianca(conf),
-      titulo: 'Tributação única oficial — conferida pelo nome',
+      titulo: temAlternativa
+        ? 'Tributação única oficial — integral disponível se não houver lastro'
+        : 'Tributação única oficial — conferida pelo nome',
       resumo:
         `O NCM ${ncm} tem 1 vínculo oficial na base (${topo.c.cst}/${topo.c.cClassTrib} — ${topo.c.resumo?.descricaoCClassTrib || topo.c.descricao || '—'}). ` +
         (topo.termos.length
-          ? `O nome confirma: ${topo.termos.length} termo(s) casaram (${topo.termos.join(', ')}). Pode salvar.`
+          ? `O nome confirma: ${topo.termos.length} termo(s) casaram (${topo.termos.join(', ')}).`
           : nomeSeguro
             ? 'O nome não trouxe termos que batam na descrição oficial — o que é normal (nome comercial × texto legal). O vínculo único continua valendo.'
-            : 'Sem nome na planilha para confrontar — o vínculo único vale pela base oficial.'),
+            : 'Sem nome na planilha para confrontar — o vínculo único vale pela base oficial.') +
+        (temAlternativa
+          ? ` Se o produto NÃO atender à qualificação do benefício (finalidade, descrição, destinação), troque pela Opção ${idxIntegral + 1} (tributação integral).`
+          : ''),
       porqueMultiplas: null,
-      orientacaoEscolha: 'Tributação única: nenhuma escolha a fazer. Confira a base legal no cartão e salve.',
+      orientacaoEscolha: temAlternativa
+        ? `Tributação única pré-selecionada (Opção ${topo.i + 1}). Confira a base legal; se a finalidade/descrição do produto não der lastro ao benefício, selecione a integral (Opção ${idxIntegral + 1}) antes de salvar.`
+        : 'Tributação única: nenhuma escolha a fazer. Confira a base legal no cartão e salve.',
       alertas,
       opcoes,
       fontes,
@@ -466,45 +498,49 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
   }
 
   // ---- múltiplas ----
-  const sugerida = topo?.i ?? 0
+  // REGRA DO LOTE (segurança): com 2+ tributações o sistema NUNCA fixa um
+  // benefício (redução, alíquota zero ou diferimento — efetivo ou
+  // condicional) como escolha. A descrição da planilha pode não ser coerente
+  // com o produto real do cliente, então o sistema pré-seleciona a
+  // TRIBUTAÇÃO INTEGRAL (fallback de segurança, última opção) e deixa o
+  // usuário escolher. A aderência do nome serve só como comparativo entre
+  // as opções oficiais — nunca como decisão. Fixa (pré-seleção automática)
+  // só vale para referência única (unica / regra-geral / manual).
   const temFallback = classificacoes.some((c) => c.integralFallback)
   const totalOficiais = classificacoes.filter((c) => !c.integralFallback).length || classificacoes.length
-  const sufixoFallback = temFallback
-    ? ` Se o produto não atender a nenhuma qualificação com benefício (propósito, descrição ou destinação), use a última opção (tributação integral).`
+  let sugerida = classificacoes.findIndex((c) => c.integralFallback)
+  if (sugerida < 0) {
+    sugerida = classificacoes.findIndex((c) => c.cst === '000' && c.cClassTrib === '000001')
+  }
+  if (sugerida < 0) sugerida = topo?.i ?? 0
+  const integralSugerida = classificacoes[sugerida]
+  const ehIntegral = Boolean(
+    integralSugerida && (integralSugerida.integralFallback || (integralSugerida.cst === '000' && integralSugerida.cClassTrib === '000001')),
+  )
+  const melhorPorNome = topo && !topo.c.integralFallback ? topo : null
+  const sufixoFallback = temFallback || ehIntegral
+    ? ` A Opção ${sugerida + 1} (tributação integral) já vem pré-selecionada por segurança — troque somente se o produto atender a alguma qualificação com benefício.`
     : ''
-  let confianca: number
+  // Confiança baixa de propósito: integral é ponto de partida seguro, não
+  // predição — exige conferência do usuário em todos os casos.
+  const confianca = 0.35
   let resumo: string
   let orientacao: string
-  if (!originais.length) {
-    confianca = 0.35
-    resumo =
-      `O NCM ${ncm} tem ${totalOficiais} tributações oficiais possíveis e a linha veio sem nome para confrontar — ` +
-      `a busca manteve a ordem oficial (CST/cClassTrib crescente) como sugestão inicial. Abra cada opção e escolha pela operação real.${sufixoFallback}`
-    orientacao = 'Sem nome, sem desempate: leia cada base legal abaixo e escolha a que descreve a sua operação. A decisão final é sua.' + sufixoFallback
-  } else if (gap >= 10) {
-    confianca = 0.85
-    const top = opcoes[sugerida]
-    resumo =
-      `O NCM ${ncm} tem ${totalOficiais} tributações oficiais possíveis. ` +
-      `Pelo nome (“${nomeSeguro.slice(0, 60)}”), a mais provável é a Opção ${sugerida + 1} (CST ${top.cst}/${top.cClassTrib}) — ` +
-      `${top.termosCasados.length} termo(s) casaram (${top.termosCasados.join(', ')}), contra ${segunda?.score ? `${Math.round((segunda.score) / 10)} termo(s) na segunda colocada` : 'nenhum termo nas demais'}. Já deixei ela pré-selecionada, mas confira a base legal antes de salvar.${sufixoFallback}`
-    orientacao = `Sugestão automática: Opção ${sugerida + 1} (maior aderência ao nome). Se a sua operação for outra, troque — a escolha final é sua e fica registrada na linha.${sufixoFallback}`
-  } else if (gap > 0) {
-    confianca = 0.6
-    const top = opcoes[sugerida]
-    resumo =
-      `O NCM ${ncm} tem ${totalOficiais} tributações oficiais possíveis e o nome (“${nomeSeguro.slice(0, 60)}”) dá vantagem pequena à Opção ${sugerida + 1} ` +
-      `(CST ${top.cst}/${top.cClassTrib} — ${top.termosCasados.join(', ') || 'aderência parcial'}). Vale conferir as demais antes de salvar.${sufixoFallback}`
-    orientacao = `Sugestão fraca: Opção ${sugerida + 1} à frente por pouco. Compare as bases legais abaixo — em caso de dúvida, prevalece a operação real, não o nome.${sufixoFallback}`
-  } else {
-    confianca = 0.35
-    resumo =
-      `O NCM ${ncm} tem ${totalOficiais} tributações oficiais possíveis e o nome (“${nomeSeguro.slice(0, 60)}”) não desempatou ` +
-      `(empate ou nenhum termo no texto oficial). Mantive a ordem oficial como ponto de partida — a escolha precisa da sua conferência.${sufixoFallback}`
-    orientacao = `Empate técnico: o sistema não chutou — manteve a ordem oficial. Leia cada comentário (redução, anexo, base legal) e escolha pela operação real.${sufixoFallback}`
-  }
+  const nomeCurto = nomeSeguro.slice(0, 60)
+  const comparativoNome = melhorPorNome && originais.length && melhorPorNome.score > 0
+    ? ` Pelo nome (“${nomeCurto}”), a opção com maior aderência textual seria a Opção ${melhorPorNome.i + 1} (CST ${melhorPorNome.c.cst}/${melhorPorNome.c.cClassTrib} — ${melhorPorNome.termos.join(', ') || 'aderência parcial'}), mas o sistema NÃO a fixou: a descrição pode não corresponder ao produto real.`
+    : originais.length
+      ? ` O nome (“${nomeCurto}”) não foi usado para decidir — nenhuma aderência textual fixa benefício no lote.`
+      : ` A linha veio sem nome para confrontar — sem nome, sem desempate.`
+  resumo =
+    `O NCM ${ncm} tem ${totalOficiais} tributações oficiais possíveis${temFallback ? ' + a integral de segurança' : ''} e exige a sua escolha.` +
+    comparativoNome +
+    ` Por segurança, deixei pré-selecionada a Opção ${sugerida + 1} (tributação integral, alíquota cheia): use quando o produto NÃO atender a nenhuma qualificação com benefício (propósito, descrição, destinação ou composição — inclusive diferimento, que depende da operação).${temFallback || ehIntegral ? '' : ''}`
+  orientacao = `Escolha obrigatória: confira cada base legal abaixo e selecione a que descreve a sua operação/produto real. A integral (Opção ${sugerida + 1}) é o ponto de partida seguro — só saia dela com lastro (benefício confirmado). A decisão final é sua e fica registrada na linha.${sufixoFallback}`
 
-  const alertas: string[] = []
+  const alertas: string[] = [
+    'Mais de uma tributação oficial — o sistema não fixou benefício (nem redução, nem diferimento): a integral vem pré-selecionada por segurança.',
+  ]
 
   return {
     situacao: 'multipla',
@@ -512,10 +548,7 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
     maisProvavelIndice: sugerida,
     confianca,
     nivel: nivelDeConfianca(confianca),
-    titulo:
-      gap >= 10
-        ? `Mais provável: Opção ${sugerida + 1} — confira e confirme`
-        : 'Mais de uma tributação oficial — escolha assistida',
+    titulo: `Mais de uma tributação — integral sugerida, escolha sua`,
     resumo,
     porqueMultiplas: explicarMultiplas(classificacoes),
     orientacaoEscolha: orientacao,

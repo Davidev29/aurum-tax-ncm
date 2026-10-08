@@ -317,7 +317,11 @@ export async function exportarRelatorioAnaliticoPDF(
   if (menor) push(faixaVeredito(`Veredito: menor carga — ${menor.scenarioId.replace('_', ' · ')} (${fmtMoeda(menor.totalPagar)}). Regra do DAS: ${r.premissas.regraDas}.`));
   if (vereditoTxt) push({ text: pdfText(vereditoTxt), fontSize: 8, italics: true, color: '#344054', margin: [0, 0, 0, 4] as [number, number, number, number] });
 
-  // Seção 1 — duelo conforme elegibilidade
+  // Seção 1 — duelo conforme elegibilidade (sempre na base da GUIA;
+  // com sublimite o ICMS/ISS/IBS fora é igual nos dois regimes e sai à parte)
+  const notaGuia = r.premissas.guiaSemFora
+    ? ' Guia DAS sem ICMS/ISS/IBS do sublimite (fora à parte).'
+    : '';
   if (comMatriz) {
     const iiiC = cen(r, 'III_CONV');
     const vC = cen(r, 'V_CONV');
@@ -326,15 +330,15 @@ export async function exportarRelatorioAnaliticoPDF(
     const ecoConv = vC.totalPagar - iiiC.totalPagar;
     const ecoHib = vH.totalPagar - iiiH.totalPagar;
     push(tituloSecao('1', 'Anexo III × Anexo V — Convencional × Híbrido'));
-    push({ text: pdfText(`CNAE com dois anexos (III e V). Regra do DAS: ${r.premissas.regraDas}. CBS de referência: ${(r.premissas.cbsRef * 100).toFixed(2).replace('.', ',')}%.`), fontSize: 7.5, color: CINZA, margin: [0, 0, 0, 4] as [number, number, number, number] });
+    push({ text: pdfText(`CNAE com dois anexos (III e V). Regra do DAS: ${r.premissas.regraDas}.${notaGuia} CBS de referência: ${(r.premissas.cbsRef * 100).toFixed(2).replace('.', ',')}%.`), fontSize: 7.5, color: CINZA, margin: [0, 0, 0, 4] as [number, number, number, number] });
     push({
       table: {
         headerRows: 1,
         widths: ['32%', '23%', '23%', '22%'],
         body: [
           [th('Cenário'), th('Anexo III'), th('Anexo V'), th('Economia » III')],
-          [td('Convencional — DAS total'), tdN(iiiC.totalPagar, iiiC.vencedor), tdN(vC.totalPagar, vC.vencedor), td(`- ${fmtMoeda(ecoConv)}`, true, 'right')],
-          [td('Híbrido — DAS reduzido + CBS por fora'), tdN(iiiH.totalPagar, iiiH.vencedor), tdN(vH.totalPagar, vH.vencedor), td(`- ${fmtMoeda(ecoHib)}`, true, 'right')],
+          [td('Convencional — guia DAS'), tdN(iiiC.totalPagar, iiiC.vencedor), tdN(vC.totalPagar, vC.vencedor), td(`- ${fmtMoeda(ecoConv)}`, true, 'right')],
+          [td('Híbrido — guia (DAS reduzido + CBS por fora)'), tdN(iiiH.totalPagar, iiiH.vencedor), tdN(vH.totalPagar, vH.vencedor), td(`- ${fmtMoeda(ecoHib)}`, true, 'right')],
           [td('Alíquota efetiva no convencional', true), td(fmtCarga(iiiC.aliquotaEfetiva * 100), false, 'right'), td(fmtCarga(vC.aliquotaEfetiva * 100), false, 'right'), td(`${((vC.aliquotaEfetiva - iiiC.aliquotaEfetiva) * 100).toFixed(2).replace('.', ',')} p.p.`, true, 'right')],
         ],
       },
@@ -344,15 +348,15 @@ export async function exportarRelatorioAnaliticoPDF(
     if (hibridoTxt) push({ text: pdfText(hibridoTxt), fontSize: 8, italics: true, color: '#344054', margin: [0, 3, 0, 0] as [number, number, number, number] });
   } else {
     push(tituloSecao('1', `Convencional × Híbrido — Anexo ${d.anexo}`));
-    push({ text: pdfText(`CNAE de anexo único (${d.anexo}). Regra do DAS: ${r.premissas.regraDas}. CBS de referência: ${(r.premissas.cbsRef * 100).toFixed(2).replace('.', ',')}%. Alíquota efetiva no convencional: ${fmtCarga(d.aliquotaEfetivaConv * 100)}.`), fontSize: 7.5, color: CINZA, margin: [0, 0, 0, 4] as [number, number, number, number] });
+    push({ text: pdfText(`CNAE de anexo único (${d.anexo}). Regra do DAS: ${r.premissas.regraDas}.${notaGuia} CBS de referência: ${(r.premissas.cbsRef * 100).toFixed(2).replace('.', ',')}%. Alíquota efetiva no convencional: ${fmtCarga(d.aliquotaEfetivaConv * 100)}.`), fontSize: 7.5, color: CINZA, margin: [0, 0, 0, 4] as [number, number, number, number] });
     push({
       table: {
         headerRows: 1,
         widths: ['46%', '27%', '27%'],
         body: [
-          [th('Regime'), th('Total a pagar'), th('Situação')],
-          [td('Convencional — DAS com CBS dentro'), tdN(d.convTotal, d.vencedor === 'CONV'), d.vencedor === 'CONV' ? linhaIcone('check', 'Vantagem', { bold: true }) : d.vencedor === 'EMPATE' ? linhaIcone('vazio', 'Empate', { bold: true }) : linhaIcone('vazio', 'Desvantagem', { bold: true })],
-          [td(`Híbrido — DAS reduzido (${fmtMoeda(memFoco.dasReduzido)}) + CBS por fora (${fmtMoeda(memFoco.cbsARecolher)})`), tdN(d.hibTotal, d.vencedor === 'HIB'), d.vencedor === 'HIB' ? linhaIcone('check', 'Vantagem', { bold: true }) : d.vencedor === 'EMPATE' ? linhaIcone('vazio', 'Empate', { bold: true }) : linhaIcone('vazio', 'Desvantagem', { bold: true })],
+          [th('Regime'), th('Guia a pagar'), th('Situação')],
+          [td('Convencional — guia com CBS dentro'), tdN(d.convTotal, d.vencedor === 'CONV'), d.vencedor === 'CONV' ? linhaIcone('check', 'Vantagem', { bold: true }) : d.vencedor === 'EMPATE' ? linhaIcone('vazio', 'Empate', { bold: true }) : linhaIcone('vazio', 'Desvantagem', { bold: true })],
+          [td(`Híbrido — guia (DAS reduzido (${fmtMoeda(memFoco.dasReduzido)}) + CBS por fora (${fmtMoeda(memFoco.cbsARecolher)}))`), tdN(d.hibTotal, d.vencedor === 'HIB'), d.vencedor === 'HIB' ? linhaIcone('check', 'Vantagem', { bold: true }) : d.vencedor === 'EMPATE' ? linhaIcone('vazio', 'Empate', { bold: true }) : linhaIcone('vazio', 'Desvantagem', { bold: true })],
         ],
       },
     });

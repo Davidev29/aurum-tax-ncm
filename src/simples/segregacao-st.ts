@@ -65,33 +65,45 @@ export function calcularST(
 ): ResultadoST {
   const receita = Math.max(0, Number(receitaMes) || 0);
   const valorST = Math.min(Math.max(0, Number(valorSTBruto) || 0), receita);
-  const integral = round2(conv.reparticao[tributo] ?? 0);
+  // Com excesso de sublimite o ICMS/ISS/IBS já está fora da guia: a ST só
+  // deduz o que está NA GUIA (reparticaoGuia). Se o tributo saiu da guia,
+  // não há o que deduzir (dedução 0).
+  const guia = conv.dasGuia ?? conv.das;
+  const repGuia = conv.reparticaoGuia ?? conv.reparticao;
+  const integral = round2(repGuia[tributo] ?? 0);
   if (!(receita > 0) || !(valorST > 0) || !(integral > 0)) {
     return {
       tributo,
       valorST,
       deducao: 0,
-      dasFinal: conv.das,
-      dasIntegral: conv.das,
+      dasFinal: guia,
+      dasIntegral: guia,
       tributoIntegral: integral,
       tributoFinal: integral,
-      reparticaoFinal: { ...conv.reparticao },
+      reparticaoFinal: { ...repGuia },
       convAjustado: conv,
     };
   }
   const deducao = Math.min(integral, round2((integral * valorST) / receita));
   const tributoFinal = round2(integral - deducao);
-  const dasFinal = round2(conv.das - deducao);
-  const reparticaoFinal: Reparticao = { ...conv.reparticao, [tributo]: tributoFinal };
+  const dasFinal = round2(guia - deducao);
+  const reparticaoFinal: Reparticao = { ...repGuia, [tributo]: tributoFinal };
   return {
     tributo,
     valorST,
     deducao,
     dasFinal,
-    dasIntegral: conv.das,
+    dasIntegral: guia,
     tributoIntegral: integral,
     tributoFinal,
     reparticaoFinal,
-    convAjustado: { ...conv, das: dasFinal, reparticao: reparticaoFinal },
+    convAjustado: {
+      ...conv,
+      das: round2((conv.das ?? guia) - deducao),
+      dasGuia: dasFinal,
+      cargaTotal: round2((conv.cargaTotal ?? conv.das ?? guia) - deducao),
+      reparticao: { ...conv.reparticao, [tributo]: round2((conv.reparticao[tributo] ?? 0) - deducao) },
+      reparticaoGuia: reparticaoFinal,
+    },
   };
 }

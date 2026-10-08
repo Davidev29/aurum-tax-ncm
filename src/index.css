@@ -2138,6 +2138,91 @@
     background: linear-gradient(180deg, #d2a94e, #9a771f);
   }
 
+  /* --- carrossel de tributações (NCM com 2+ opções) ------------------------ */
+  /* Um card único + bloquinhos lado a lado com scroll horizontal (mesmo
+     padrão do SeletorTributacao de diferimento). Evita N cartões empilhados
+     e o scroll vertical infinito. */
+  .trib-carrossel {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    padding: 0.25rem 0.25rem 0.5rem;
+    -webkit-overflow-scrolling: touch;
+  }
+  .trib-opcao {
+    flex: 0 0 auto;
+    width: 15rem;
+    max-width: 78vw;
+    scroll-snap-align: start;
+    text-align: left;
+    border-radius: 0.75rem;
+    border: 2px solid transparent;
+    background: rgb(255 255 255 / 0.65);
+    padding: 0.6rem 0.7rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    cursor: pointer;
+  }
+  .trib-opcao:hover {
+    border-color: #c4b5fd;
+  }
+  .dark .trib-opcao {
+    background: rgb(15 23 42 / 0.6);
+  }
+  .trib-opcao.is-ativa {
+    border-color: var(--color-brand-500, #2440e6);
+    background: #fff;
+    box-shadow: 0 4px 14px -6px rgb(36 64 230 / 0.35);
+  }
+  .dark .trib-opcao.is-ativa {
+    border-color: var(--color-aurum-500, #d2a94e);
+    background: #0f172a;
+  }
+  .trib-opcao.is-fallback:not(.is-ativa) {
+    border-style: dashed;
+    border-color: #cbd5e1;
+  }
+  .dark .trib-opcao.is-fallback:not(.is-ativa) {
+    border-color: #475569;
+  }
+  .trib-radio {
+    display: grid;
+    place-items: center;
+    width: 1.1rem;
+    height: 1.1rem;
+    border-radius: 9999px;
+    border: 2px solid #cbd5e1;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 900;
+    color: transparent;
+    flex-shrink: 0;
+  }
+  .trib-radio.is-ativo {
+    border-color: var(--color-brand-600, #2440e6);
+    background: var(--color-brand-600, #2440e6);
+    color: #fff;
+  }
+  .dark .trib-radio.is-ativo {
+    border-color: var(--color-aurum-400, #d2a94e);
+    background: var(--color-aurum-400, #d2a94e);
+    color: #1e293b;
+  }
+  .trib-opcao-desc {
+    margin-top: 0.3rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 10px;
+    line-height: 1.45;
+    color: #64748b;
+  }
+  .dark .trib-opcao-desc {
+    color: #94a3b8;
+  }
+
   /* --- leitura interna da legislação (texto sanitizado da norma) ------------ */
   .leitura-norma {
     font-size: 13px;

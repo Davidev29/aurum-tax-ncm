@@ -434,13 +434,13 @@ export function orquestrarTodosAnexos(e: EntradaExploratoria): ResultadoExplorat
   const linhas: LinhaAnexoExploratorio[] = (Object.keys(ANEXOS_SIMPLES) as AnexoSimplesId[]).map((id) => {
     const conv = calcularConvencional({ anexoId: id, rbt12, receitaMes: receita });
     const hib = calcularHibrido({ convencional: conv, debitosCBS: debitos, creditosCBS: creditos });
-    const economia = Math.round((conv.das - hib.total) * 100) / 100;
+    const economia = hib.economiaVsConvencional;
     return {
       anexo: id,
       nome: ANEXOS_SIMPLES[id].nome,
       faixa: conv.faixa,
       aliquotaEfetiva: conv.aliquotaEfetiva,
-      das: conv.das,
+      das: conv.dasGuia ?? conv.das,
       cbsDentroDAS: conv.cbsDentroDAS,
       dasReduzido: hib.dasReduzido,
       debitosCbs: debitos,
@@ -449,7 +449,7 @@ export function orquestrarTodosAnexos(e: EntradaExploratoria): ResultadoExplorat
       totalHibrido: hib.total,
       vencedorRegime: hib.melhor === 'hibrido' ? 'HIB' : hib.melhor === 'convencional' ? 'CONV' : 'EMPATE',
       economiaConvHib: Math.abs(economia),
-      reparticao: { ...conv.reparticao },
+      reparticao: { ...(conv.reparticaoGuia ?? conv.reparticao) },
     };
   });
   const convOrdenado = [...linhas].sort((a, b) => a.das - b.das);

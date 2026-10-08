@@ -264,6 +264,11 @@ export function InsightsModal({ report, insights, aberto, onFechar }: { report: 
           {tab === 'resumo' ? (
             <div className="space-y-2.5">
               <p className="rounded-xl bg-[#0F3D3E] px-4 py-3 text-[15px] font-bold leading-relaxed text-white" role="status">✓ {veredito}</p>
+              {report.premissas.guiaSemFora ? (
+                <p className="rounded-xl bg-amber-50 px-4 py-2 text-[12px] leading-relaxed text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                  Sublimite estourado ({report.premissas.regraDas}): os duelos abaixo comparam a <strong>guia DAS</strong> (sem ICMS/ISS/IBS). O fora da guia é igual nos dois regimes e sai à parte.
+                </p>
+              ) : null}
               <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
                 {(comMatriz ? [
                   { rotulo: 'Menor total', valor: menor ? fmtMoeda(menor.totalPagar) : '—', sub: menor?.scenarioId.replace('_', ' · ') },

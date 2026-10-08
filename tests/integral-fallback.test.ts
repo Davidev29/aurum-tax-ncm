@@ -147,17 +147,18 @@ describe('fallback integral multi-opção (motor único)', () => {
     expect(observacaoIntegralFallback(null)).toBeNull()
   })
 
-  it('lote recebe o fallback e nunca o sugere como provável', async () => {
+  it('lote recebe o fallback e o sugere como ponto de partida seguro', async () => {
     const csv = ['SKU;Nome;NCM', `A;Insumo agropecuário;${NCM_2}`].join('\n')
     const lote = await processarArquivoLote(arquivo('l.csv', csv))
     const item = lote.itens[0]
-    expect(item.classificacoes).toHaveLength(3)
+    // 2 oficiais + hipótese de diferimento (200038 condicional) + integral.
+    expect(item.classificacoes).toHaveLength(4)
     expect(item.classificacoes.at(-1)?.integralFallback).toBe(true)
-    // Sugestão automática recai sobre oficial, nunca sobre o fallback.
+    // Segurança: a sugestão automática é a integral — nunca um benefício.
     expect(item.analiseIA?.situacao).toBe('multipla')
     const sugerida = item.classificacoes[item.analiseIA?.maisProvavelIndice ?? 0]
-    expect(sugerida?.integralFallback).not.toBe(true)
-    expect(item.escolhida?.integralFallback).not.toBe(true)
+    expect(sugerida?.integralFallback).toBe(true)
+    expect(item.escolhida?.integralFallback).toBe(true)
     expect(item.analiseIA?.porqueMultiplas).toMatch(/segurança/i)
   })
 })
@@ -167,10 +168,11 @@ describe('escopo por produto: escolha do lote não vaza para a Consulta', () => 
     const csv = ['SKU;Nome;NCM', `A;Item A;${NCM_2}`, `B;Item B;${NCM_2}`].join('\n')
     const lote = await processarArquivoLote(arquivo('l.csv', csv))
     expect(lote.itens).toHaveLength(2)
-    // Linha A mantém a oficial sugerida; linha B opta pela integral de segurança.
+    // Linha A e B nascem na integral de segurança; A troca para uma oficial.
     const idxIntegral = lote.itens[1].classificacoes.findIndex((c) => c.integralFallback)
     expect(idxIntegral).toBeGreaterThanOrEqual(2)
-    const escolhaA = lote.itens[0].escolhida!
+    expect(lote.itens[0].escolhida?.integralFallback).toBe(true)
+    const escolhaA = lote.itens[0].classificacoes.find((c) => !c.integralFallback)!
     const escolhaB = lote.itens[1].classificacoes[idxIntegral]!
     expect(escolhaA.integralFallback).not.toBe(true)
     expect(escolhaB.integralFallback).toBe(true)

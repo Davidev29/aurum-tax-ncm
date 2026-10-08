@@ -20,9 +20,11 @@
  * - os erros saem em `pt-BR` com a linha exata, em vez de "undefined";
  * - o resultado já traz os totais que a tela precisa (classificadas, regra
  *   geral, ambíguas, inválidas), evitando reprocessar na camada de UI.
- * - a **Aurum AI assistida** (`analisarItemLoteIA`) ordena as opções oficiais
- *   por aderência do **nome** (nome + NCM = tributação provável) e explica,
- *   com dados da base, por que há N tributações + qual é a mais provável.
+ * - a **Aurum AI assistida** (`analisarItemLoteIA`) compara o **nome** com os
+ *   textos oficiais (comparativo) mas NUNCA fixa benefício em lista múltipla:
+ *   com 2+ tributações (incluindo a hipótese de diferimento do Anexo IX) a
+ *   sugestão pré-selecionada é sempre a tributação INTEGRAL de segurança —
+ *   a escolha do benefício é do usuário, pela operação real.
  */
 import * as XLSX from 'xlsx'
 import { fmtCnpj, norm, normalizeHeader } from '../../domain/services/format'
@@ -270,6 +272,8 @@ export async function processarArquivoLote(
       }
       // Phase 10-05: desempate multi-opção via caminho do grafo (só reordena;
       // sem grafo, ordem oficial bit-idêntica). Best-effort, nunca lança.
+      // NOTA: o grafo NUNCA decide benefício no lote — só reordena oficiais;
+      // a pré-seleção final é sempre a integral (ver análise abaixo).
       let listaEfetiva = veredito.lista
       try {
         if (veredito.lista.length > 1) {
@@ -284,13 +288,64 @@ export async function processarArquivoLote(
       } catch {
         /* desempate é best-effort; mantém a ordem oficial */
       }
+      // Diferimento no lote: o Anexo IX condicional (ex.: CST 200/200038)
+      // conta como 2ª tributação (hipótese 515 de diferimento na operação,
+      // mesma regra da Consulta). Sem esta expansão, o condicional único
+      // parecia "tributação única" e o lote fixava o benefício sozinho.
+      // Dedupe: se a base já traz o 515/515001 oficial, não duplica o virtual.
+      if (!veredito.regraGeral && !veredito.manual && !veredito.extinto) {
+        try {
+          const { classificacaoDiferimentoAnexoIX, temOpcaoDiferimento } = await import('@/domain/services/calculo')
+          if (listaEfetiva.some((cl) => temOpcaoDiferimento(cl))) {
+            const chaves = new Set(listaEfetiva.map((cl) => `${cl.cst}|${cl.cClassTrib}`))
+            const expandida: typeof listaEfetiva = []
+            for (const cl of listaEfetiva) {
+              expandida.push(cl)
+              if (temOpcaoDiferimento(cl)) {
+                const virt = classificacaoDiferimentoAnexoIX(cl)
+                const chaveVirt = `${virt.cst}|${virt.cClassTrib}`
+                if (!chaves.has(chaveVirt)) {
+                  expandida.push(virt)
+                  chaves.add(chaveVirt)
+                }
+              }
+            }
+            listaEfetiva = expandida
+          }
+        } catch {
+          /* expansão é enriquecimento — nunca quebra o veredito oficial */
+        }
+        // Garantia da integral: toda lista sem integral ganha a tributação
+        // integral de segurança como ÚLTIMA opção (o resolvedor só anexa para
+        // multi oficial — o condicional único expandido e o benefício único
+        // ficariam sem). Em lista multi ela é a SUGESTÃO; em benefício único
+        // ela é ALTERNATIVA trocável — a finalidade/descrição da planilha pode
+        // não dar lastro ao benefício; a análise fixa o oficial e oferece a troca.
+        const temIntegral = listaEfetiva.some(
+          (cl) => cl.integralFallback || (cl.cst === '000' && cl.cClassTrib === '000001'),
+        )
+        if (!temIntegral) {
+          try {
+            const { classificacaoRegraGeral } = await import('@/infrastructure/base/classificacao-repo')
+            const fb = await classificacaoRegraGeral(chave, veredito.nomenclatura)
+            fb.integralFallback = true
+            fb.id = `INTEGRAL|${fb.codigo}`
+            listaEfetiva = [...listaEfetiva, fb]
+          } catch {
+            /* fallback é segurança — nunca quebra o veredito oficial */
+          }
+        }
+      }
       item.classificacoes = listaEfetiva
       item.regraGeral = veredito.regraGeral
       item.manual = veredito.manual || veredito.lista.some((c) => c.manual != null)
       item.nomenclatura = veredito.nomenclatura
-      // Aurum AI assistida: nome + NCM = tributação provável. O nome só
-      // ordena as opções oficiais (nunca cria tributação); a sugestão já
-      // nasce pré-selecionada (escolha assistida — o usuário confirma/troca).
+      // Aurum AI assistida no LOTE (regra de segurança):
+      // - 1 vínculo oficial (unica): fixa o oficial, com a integral como
+      //   ALTERNATIVA trocável (finalidade/descrição podem não dar lastro);
+      // - 2+ tributações (incluindo diferimento): NUNCA fixa benefício —
+      //   a análise sugere a INTEGRAL e o usuário escolhe pela operação real.
+      // - regra-geral / manual / extinto: sem alternativa, como antes.
       const analise = analisarItemLoteIA({
         nome: item.nome,
         ncm: chave,
@@ -301,7 +356,7 @@ export async function processarArquivoLote(
         nomenclaturaDescricao: veredito.nomenclatura?.descricao ?? null,
       })
       item.analiseIA = analise
-      const sugerida = veredito.lista[analise.maisProvavelIndice] ?? veredito.lista[0] ?? null
+      const sugerida = listaEfetiva[analise.maisProvavelIndice] ?? listaEfetiva[0] ?? null
       item.escolhida = sugerida
     } else {
       // Sem veredito do motor (NCM inválido): a IA ainda explica o que
@@ -329,8 +384,10 @@ export async function processarArquivoLote(
     regraGeral: itens.filter((i) => i.regraGeral).length,
     manuais: itens.filter((i) => i.manual).length,
     semNcm: itens.filter((i) => i.ncm.length !== 8).length,
-    ambiguos: itens.filter((i) => i.classificacoes.length > 1).length,
-    assistidas: itens.filter((i) => i.analiseIA?.situacao === 'multipla' && (i.analiseIA?.confianca ?? 0) >= 0.6).length,
+    ambiguos: itens.filter((i) => i.analiseIA?.situacao === 'multipla').length,
+    // Linhas multi que já nascem na integral de segurança (exigem escolha do
+    // usuário — não é "sugestão forte" de benefício, é ponto de partida seguro).
+    assistidas: itens.filter((i) => i.analiseIA?.situacao === 'multipla').length,
     divergentes: 0,
     unicas: comAnalise('unica'),
   }

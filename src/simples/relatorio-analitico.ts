@@ -64,6 +64,9 @@ export interface RelatorioInput {
   folha12: number;
   cbsRef: number;
   despesas: DespesaAnalitica[];
+  /** Alíquotas de referência fora da guia (sublimite). null = automático 5ª faixa. */
+  aliqRefICMS?: number | null;
+  aliqRefISS?: number | null;
   /**
    * Contexto de elegibilidade (CNAE/CNPJ × manual).
    * - CNPJ: `anexosElegiveis` = anexos do CNAE escolhido; `anexoSelecionado` = anexo efetivo.
@@ -113,6 +116,11 @@ export interface CenarioAnalitico {
   totalPagar: number;
   cenarioSublimite: number;
   regraDas: string;
+  /** Valor dentro da guia DAS (sem ICMS/ISS/IBS do sublimite). */
+  dasGuia: number;
+  /** ICMS/ISS/IBS fora da guia (0 sem excesso). */
+  foraSublimite: number;
+  excedeSublimite: boolean;
   vencedor?: boolean;
 }
 
@@ -186,6 +194,8 @@ export interface ReportAnalitico {
     sublimiteAnual: number;
     excedeSublimiteRbt12: boolean;
     excedeSublimiteRba: boolean;
+    /** true quando a guia DAS sai sem ICMS/ISS/IBS (cenários 2–4). */
+    guiaSemFora: boolean;
     regraDas: string;
   };
   fatorR: FatorRDetalhado;
@@ -286,7 +296,10 @@ function montarCenario(
 ): CenarioAnalitico {
   const anexo = ANEXOS_SIMPLES[conv.anexoId];
   const faixa = anexo.faixas.find((f) => f.faixa === conv.faixa);
-  const totalPagar = regime === 'CONVENCIONAL' ? conv.das : (hib?.total ?? conv.das);
+  // Duelo na MESMA base: a guia DAS (sem ICMS/ISS/IBS do sublimite).
+  // O fora é igual nos dois regimes e aparece à parte (foraSublimite).
+  const guiaConv = conv.dasGuia ?? conv.das;
+  const totalPagar = regime === 'CONVENCIONAL' ? guiaConv : (hib?.total ?? guiaConv);
   return {
     scenarioId,
     anexo: conv.anexoId,
@@ -295,7 +308,7 @@ function montarCenario(
     aliquotaNominal: faixa?.aliquotaNominal ?? 0,
     parcelaDeduzir: faixa?.parcelaDeduzir ?? 0,
     aliquotaEfetiva: conv.aliquotaEfetiva,
-    dasTotal: regime === 'CONVENCIONAL' ? conv.das : null,
+    dasTotal: regime === 'CONVENCIONAL' ? guiaConv : null,
     cbsDentroDas: conv.cbsDentroDAS,
     dasReduzidoSemCbs: regime === 'HIBRIDO' ? (hib?.dasReduzido ?? null) : null,
     debitosCbs: regime === 'HIBRIDO' ? round2(debitos) : null,
@@ -305,6 +318,9 @@ function montarCenario(
     totalPagar,
     cenarioSublimite: conv.cenario,
     regraDas: REGRA_DAS_LABEL[conv.cenario] ?? `Cenário ${conv.cenario}`,
+    dasGuia: conv.dasGuia ?? conv.das,
+    foraSublimite: conv.foraSublimite?.total ?? 0,
+    excedeSublimite: conv.excedeSublimite ?? false,
   };
 }
 
@@ -348,7 +364,7 @@ export function orquestrarRelatorio(input: RelatorioInput): ReportAnalitico {
   const convPorAnexo = new Map<AnexoSimplesId, ResultadoConvencional>();
   const anexos: AnexoSimplesId[] = ['I', 'II', 'III', 'IV', 'V'];
   for (const a of anexos) {
-    convPorAnexo.set(a, calcularConvencional({ anexoId: a, rbt12, receitaMes, rba }));
+    convPorAnexo.set(a, calcularConvencional({ anexoId: a, rbt12, receitaMes, rba, aliqRefICMS: input.aliqRefICMS, aliqRefISS: input.aliqRefISS }));
   }
 
   const pares: { anexo: AnexoSimplesId; convId: ScenarioId; hibId: ScenarioId }[] = [
@@ -386,7 +402,7 @@ export function orquestrarRelatorio(input: RelatorioInput): ReportAnalitico {
     });
     memoriaHibrido[a] = {
       anexo: a,
-      dasTotal: conv.das,
+      dasTotal: conv.dasGuia ?? conv.das,
       cbsDentroDas: conv.cbsDentroDAS,
       dasReduzido: hibCalc.dasReduzido,
       debitosCbs: round2(debitos),
@@ -506,6 +522,7 @@ export function orquestrarRelatorio(input: RelatorioInput): ReportAnalitico {
       sublimiteAnual: 3_600_000,
       excedeSublimiteRbt12: excedeRbt,
       excedeSublimiteRba: excedeRba,
+      guiaSemFora: (convPorAnexo.get('III')?.excedeSublimite ?? false) || excedeRbt || excedeRba,
       regraDas: REGRA_DAS_LABEL[cenarioRef] ?? `Cenário ${cenarioRef}`,
     },
     fatorR,
@@ -567,6 +584,8 @@ export function coletarNumerosPermitidos(report: ReportAnalitico): number[] {
     push(c.aliquotaNominal * 100);
     push(c.parcelaDeduzir);
     push(c.totalPagar);
+    push(c.dasGuia);
+    push(c.foraSublimite);
     if (c.dasTotal != null) push(c.dasTotal);
     if (c.cbsDentroDas != null) push(c.cbsDentroDas);
     if (c.dasReduzidoSemCbs != null) push(c.dasReduzidoSemCbs);

@@ -17,7 +17,9 @@ import {
   calcularHibrido,
   debitoCBS,
   creditoCBS,
+  excedeSublimite,
   fatorR,
+  tributosForaSublimite,
   type RegraCreditoCBS,
   type ResultadoConvencional,
   type ResultadoHibrido,
@@ -88,6 +90,13 @@ interface SimplesState {
   rba: number;
   usarRba: boolean;
   cbsRef: number;
+  /**
+   * Alíquotas de referência fora da guia (fração, ex. 0.18 = 18%).
+   * Só valem com excesso de sublimite: ICMS em I/II, ISS em III/IV/V.
+   * null = automático (efetiva da 5ª faixa). Editáveis só nesse caso.
+   */
+  aliqRefICMS: number | null;
+  aliqRefISS: number | null;
   despesas: DespesaSimples[];
   compararHibrido: boolean;
   // CNPJ
@@ -216,6 +225,34 @@ export function etapa1Pronta(s: Pick<SimplesState, 'modo' | 'escolheuAnexo' | 'c
   return s.modo === 'manual' ? s.escolheuAnexo : Boolean(s.cnaeEscolhido);
 }
 
+/**
+ * Excesso de sublimite estadual (R$ 3,6M) a partir dos valores do passo 1.
+ * RBA default = RBT12 quando o usuário não informa outra.
+ */
+export function sublimiteEstourado(s: Pick<SimplesState, 'rbt12' | 'rba' | 'usarRba'>): boolean {
+  const rbt = Number(s.rbt12) || 0;
+  if (!(rbt > 0)) return false;
+  const rba = s.usarRba ? Number(s.rba) || 0 : rbt;
+  return excedeSublimite(rbt, rba);
+}
+
+/** RBA efetiva do cálculo (passo 1). */
+export function rbaEfetiva(s: Pick<SimplesState, 'rbt12' | 'rba' | 'usarRba'>): number {
+  return s.usarRba ? Number(s.rba) || 0 : Number(s.rbt12) || 0;
+}
+
+/**
+ * Quais referências de fora da guia fazem sentido para o anexo efetivo:
+ * ICMS só em I/II, ISS só em III/IV/V (e IBS automático nos dois casos).
+ */
+export function refsForaDoAnexo(anexoId: AnexoSimplesId): Array<'ICMS' | 'ISS'> {
+  const fora = tributosForaSublimite(anexoId);
+  const out: Array<'ICMS' | 'ISS'> = [];
+  if (fora.includes('ICMS')) out.push('ICMS');
+  if (fora.includes('ISS')) out.push('ISS');
+  return out;
+}
+
 export const useSimples = create<SimplesState>((set, get) => ({
   modo: 'manual',
   anexoId: 'I',
@@ -226,6 +263,8 @@ export const useSimples = create<SimplesState>((set, get) => ({
   rba: 0,
   usarRba: false,
   cbsRef: CBS_REF_PADRAO,
+  aliqRefICMS: null,
+  aliqRefISS: null,
   despesas: normalizarDespesas(),
   compararHibrido: false,
   cnpj: '',
@@ -267,6 +306,11 @@ export const useSimples = create<SimplesState>((set, get) => ({
       set({ convencional: null, hibrido: null, debitosCBS: 0, creditosCBS: 0, relatorioVisivel: false });
       return;
     }
+    // Sublimite estadual (passo 1): RBT12/RBA acima de R$ 3,6M tira
+    // ICMS/ISS/IBS da guia. Com excesso, o comparativo híbrido é ativado
+    // sozinho (o usuário pode desmarcar) — é o cálculo que faz sentido.
+    const estourado = sublimiteEstourado(s);
+    const comparar = s.compararHibrido || estourado;
     // Fator R SOMENTE quando Anexo V envolvido.
     let anexoEfetivo = s.anexoId;
     if (envolveAnexoV(s) && s.folha12 > 0 && s.rbt12 > 0) {
@@ -277,8 +321,10 @@ export const useSimples = create<SimplesState>((set, get) => ({
       rbt12: s.rbt12,
       receitaMes: s.receitaMes,
       rba: s.usarRba ? s.rba : s.rbt12,
+      aliqRefICMS: s.aliqRefICMS,
+      aliqRefISS: s.aliqRefISS,
     });
-    if (!s.compararHibrido) {
+    if (!comparar) {
       set({ convencional: conv, hibrido: null, debitosCBS: 0, creditosCBS: 0, relatorioVisivel: true });
       return;
     }
@@ -286,7 +332,7 @@ export const useSimples = create<SimplesState>((set, get) => ({
     const creditos =
       Math.round(s.despesas.reduce((acc, d) => acc + (Number(d.valor) || 0) * (Number(s.cbsRef) || 0) * fatorDespesa(d), 0) * 100) / 100;
     const hib = calcularHibrido({ convencional: conv, debitosCBS: debitos, creditosCBS: creditos });
-    set({ convencional: conv, hibrido: hib, debitosCBS: debitos, creditosCBS: creditos, relatorioVisivel: true });
+    set({ convencional: conv, hibrido: hib, debitosCBS: debitos, creditosCBS: creditos, relatorioVisivel: true, compararHibrido: comparar });
   },
 
   buscarPorCnpj: async (opts) => {
@@ -406,6 +452,8 @@ export const useSimples = create<SimplesState>((set, get) => ({
       folha12: 0,
       rba: 0,
       usarRba: false,
+      aliqRefICMS: null,
+      aliqRefISS: null,
       compararHibrido: false,
       convencional: null,
       hibrido: null,

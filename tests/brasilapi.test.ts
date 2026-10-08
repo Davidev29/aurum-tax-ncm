@@ -9,6 +9,9 @@ import {
   extrairCnpjsDeTexto,
   limparCacheBrasilApi,
   mapearRespostaBrasilApi,
+  mapearRespostaCnpja,
+  mapearRespostaCnpjWs,
+  mapearRespostaReceitaWS,
 } from '@/infrastructure/receita/brasilapi'
 
 const RESPOSTA = {
@@ -108,5 +111,63 @@ describe('extrairCnpjsDeTexto', () => {
 
   it('ignora fragmentos curtos', () => {
     expect(extrairCnpjsDeTexto('nada aqui 12345')).toEqual([])
+  })
+})
+
+describe('cadeia de fallback', () => {
+  const RESP_CNPJA = {
+    taxId: '11222333000181',
+    alias: 'Exemplo',
+    company: { name: 'Empresa Exemplo LTDA', size: { acronym: 'ME' }, simples: { optant: true } },
+    address: { street: 'Rua A', number: '100', details: 'Sala 1', district: 'Centro', city: 'São Paulo', state: 'sp', zip: '01001-000' },
+    phones: [{ area: '11', number: '99999999' }],
+    emails: [{ address: 'a@b.com' }],
+    mainActivity: { id: 8550301, text: 'Administração de caixas escolares' },
+    sideActivities: [{ id: 9493600, text: 'Associativas' }],
+    status: { text: 'Ativa' },
+  }
+
+  /** `fetch` que responde por host (simula primário fora + fallback ok). */
+  const porHost = (mapa: Record<string, () => Response>) =>
+    ((url: string | URL | Request) => {
+      const u = String(url)
+      for (const [host, fn] of Object.entries(mapa)) if (u.includes(host)) return Promise.resolve(fn())
+      return Promise.resolve(new Response('{}', { status: 500 }))
+    }) as unknown as typeof fetch
+
+  it('usa o CNPJá quando a BrasilAPI dá 500', async () => {
+    limparCacheBrasilApi()
+    const f = porHost({
+      'brasilapi.com.br': () => new Response('{}', { status: 500 }),
+      'open.cnpja.com': () => new Response(JSON.stringify(RESP_CNPJA), { status: 200 }),
+    })
+    const d = await buscarCnpj('11222333000181', f)
+    expect(d.fonte).toBe('cnpja')
+    expect(d.razaoSocial).toBe('Empresa Exemplo LTDA')
+    expect(d.cnaePrincipal).toBe('8550301')
+    expect(d.cnaesSecundarios).toEqual([{ codigo: '9493600', descricao: 'Associativas' }])
+    expect(d.opcaoSimples).toBe(true)
+    expect(d.uf).toBe('SP')
+  })
+
+  it('agrega 404 de todas as bases em "não encontrado"', async () => {
+    limparCacheBrasilApi()
+    const tudo404 = (async () => new Response('{}', { status: 404 })) as unknown as typeof fetch
+    await expect(buscarCnpj('11222333000181', tudo404)).rejects.toThrow('não encontrado nas bases')
+  })
+
+  it('normaliza CNAE dos fallbacks (formatado, número, string)', () => {
+    expect(
+      mapearRespostaReceitaWS({ nome: 'X', atividade_principal: [{ code: '06.00-0-01', text: 'Petróleo' }] })?.cnaePrincipal,
+    ).toBe('0600001')
+    expect(
+      mapearRespostaCnpja({ company: { name: 'X' }, mainActivity: { id: 600001, text: 'Petróleo' } })?.cnaePrincipal,
+    ).toBe('0600001')
+    expect(
+      mapearRespostaCnpjWs({
+        razao_social: 'X',
+        estabelecimento: { atividade_principal: { id: '9430800', descricao: 'Assoc' } },
+      })?.cnaePrincipal,
+    ).toBe('9430800')
   })
 })

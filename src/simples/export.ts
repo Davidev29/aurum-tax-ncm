@@ -47,11 +47,18 @@ export function csvSimples(p: PayloadSimples): string {
       ...p.seg.parcelas.map((d) => [`${d.resto ? 'Restante' : 'Parcela'} Anexo ${d.anexoCalculado}${d.anexoCalculado !== d.escolhido ? ` (escolhido ${d.escolhido})` : ''} — receita`, d.receitaMes.toFixed(2)]),
       ...p.seg.parcelas.map((d) => [`${d.resto ? 'Restante' : 'Parcela'} Anexo ${d.anexoCalculado} — DAS (${(d.aliquotaEfetiva * 100).toFixed(4)}%, ${d.faixa}ª faixa)${d.st && d.tributoST ? ` · ST ${d.tributoST} −${Number(d.deducaoST).toFixed(2)}` : ''}`, d.das.toFixed(2)]),
       ['DAS bruto (soma parcelas)', p.seg.dasBruto.toFixed(2)],
-      ['DAS segregado (final)', p.conv.das.toFixed(2)],
+      ['DAS segregado (guia)', p.conv.dasGuia.toFixed(2)],
       ['DAS convencional (anexo único, referência)', p.dasReferencia.toFixed(2)],
     ] as unknown[][] : [
-      ['DAS convencional', p.conv.das.toFixed(2)],
+      ['DAS convencional (guia)', p.conv.dasGuia.toFixed(2)],
     ] as unknown[][]),
+    ...(p.conv.excedeSublimite ? [
+      ['Guia DAS (sem ICMS/ISS/IBS do sublimite)', p.conv.dasGuia.toFixed(2)],
+      ['ICMS fora da guia (sublimite)', p.conv.foraSublimite.icms.toFixed(2)],
+      ['ISS fora da guia (sublimite)', p.conv.foraSublimite.iss.toFixed(2)],
+      ['IBS fora da guia (sublimite)', p.conv.foraSublimite.ibs.toFixed(2)],
+      ['Carga total (guia + fora)', p.conv.cargaTotal.toFixed(2)],
+    ] as unknown[][] : []),
     ...(p.st?.ativo ? [
       ...p.st.detalhePorTributo.map((d) => [`Receita com ST (${d.tributo})`, Number(d.valorST).toFixed(2)]),
       ...p.st.detalhePorTributo.map((d) => [`Dedução ST (${d.tributo})`, Number(d.deducao).toFixed(2)]),
@@ -69,12 +76,13 @@ export function csvSimples(p: PayloadSimples): string {
   ];
   if (p.hib) {
     linhas.push(
-      ['DAS reduzido (híbrido)', p.hib.dasReduzido.toFixed(2)],
+      ['DAS reduzido (híbrido, guia)', p.hib.dasReduzido.toFixed(2)],
       ['Débitos CBS', p.debitosCBS.toFixed(2)],
       ['Créditos CBS', p.creditosCBS.toFixed(2)],
       ['CBS a recolher', p.hib.cbsFora.toFixed(2)],
-      ['Total híbrido', p.hib.total.toFixed(2)],
-      ['Melhor regime', p.hib.melhor],
+      ['Total híbrido (guia)', p.hib.total.toFixed(2)],
+      ...(p.conv.excedeSublimite ? [['Carga híbrida total (guia + fora)', p.hib.cargaTotal.toFixed(2)]] as unknown[][] : []),
+      ['Melhor regime (na guia)', p.hib.melhor],
     );
   }
   return montarCSV(linhas);

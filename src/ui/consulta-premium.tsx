@@ -346,7 +346,13 @@ export function ModalDetalheFiscal({
   const nomeCap = capNum ? nomeCapitulo(capNum) : ''
   const posicao = digitos.length >= 4 ? digitos.slice(0, 4) : ''
   const anexo = anexoOficial(visivel)
-  const descricaoNcm = limparTextoFiscal(nomenclatura?.descricao || visivel.descricao || '—')
+  // Bloco 1 (Produto/NCM) é EXCLUSIVO do produto: só a descrição Siscomex
+  // (`nomenclatura.descricao`, ex.: "Outros"). Nunca cai para
+  // `visivel.descricao` — esse é o texto do enquadramento da Reforma e mora
+  // no bloco 2 (significado). Sem nomenclatura, exibe aviso em vez de
+  // misturar os textos.
+  const descricaoNcm = limparTextoFiscal(nomenclatura?.descricao || '')
+  const temDescricaoNcm = descricaoNcm.trim().length > 0 && descricaoNcm.trim() !== '—'
   const descricaoServico = limparTextoFiscal(visivel.descricao || '—')
   const extinto = !ehNbs && Boolean(nomenclatura?.dataFim)
   const inicioNcm = !ehNbs ? fmtDataBr(nomenclatura?.dataInicio) : null
@@ -464,9 +470,15 @@ export function ModalDetalheFiscal({
             <div className="font-mono text-lg font-black tracking-tight text-slate-900 dark:text-white" title={digitos ? `Dígitos: ${digitos}` : undefined}>
               {codigoFormatado}
             </div>
-            <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200" title={descricaoNcm}>
-              {descricaoNcm}
-            </p>
+            {temDescricaoNcm ? (
+              <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200" title={descricaoNcm}>
+                {descricaoNcm}
+              </p>
+            ) : (
+              <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                Descrição do NCM indisponível na tabela Siscomex — o enquadramento da Reforma está na seção abaixo.
+              </p>
+            )}
             <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
               {capNum ? `Cap. ${capNum}${nomeCap ? ` · ${nomeCap}` : ''}` : ''}
               {posicao ? ` · Pos. ${posicao}` : ''}
