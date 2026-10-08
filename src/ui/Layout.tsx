@@ -245,6 +245,7 @@ function ChipEmpresa() {
         onClick={() => void limpar()}
         className="grid h-6 w-6 place-items-center rounded-full text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
         title="Remover empresa ativa"
+        aria-label="Remover empresa ativa"
       >
         ✕
       </button>
@@ -278,6 +279,7 @@ function BannerSemEmpresa() {
           }}
           className="rounded-md p-1 text-brand-700 hover:bg-brand-100 dark:text-brand-300 dark:hover:bg-brand-900/40"
           title="Dispensar"
+          aria-label="Dispensar aviso"
         >
           ✕
         </button>
@@ -312,6 +314,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-dvh min-h-0 w-full overflow-hidden text-[var(--ink)]">
+      {/* Skip-link: teclado/leitores pulam direto para o conteúdo. */}
+      <a
+        href="#conteudo"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] focus:rounded-lg focus:bg-brand-700 focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-white"
+      >
+        Pular para o conteúdo
+      </a>
       {/* Fundo animado global (Pexels) — abaixo de tudo; placas de vidro por cima. */}
       <FundoGlobal />
       <Sidebar />
@@ -345,6 +354,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               onClick={() => reabrirTour()}
               className="btn btn-press btn-ghost btn-sm"
               title="Tour guiado — aprenda menu por menu"
+              aria-label="Tour guiado — aprenda menu por menu"
             >
               ✨<span className="hidden sm:inline"> Guia</span>
             </button>
@@ -353,6 +363,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               onClick={() => abrirModal('empresas')}
               className="btn btn-press btn-ghost btn-sm"
               title="Empresas"
+              aria-label="Empresas"
             >
               <Icone nome="empresa" className="h-5 w-5" /><span className="hidden sm:inline"> Empresas</span>
             </button>
@@ -370,6 +381,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               onClick={() => abrirModal('config')}
               className="btn btn-press btn-ghost btn-sm text-lg leading-none"
               title="Configurações"
+              aria-label="Configurações"
             >
               ⚙
             </button>

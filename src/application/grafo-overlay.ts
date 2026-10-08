@@ -188,11 +188,11 @@ export function agendarJobOverlay(): void {
     jobAgendado = true
     const executar = () => {
       try {
-        const t0 = Date.now()
         const atual = lerLocal()
         const podado = podarLocal(atual, Date.now())
         if (podado.length !== atual.length) salvarLocal(podado)
-        void (Date.now() - t0)
+        // Sem timing: o job é só poda TTL+teto em memória (<1s por construção,
+        // sem rebuild) — o `void (Date.now() - t0)` anterior era expressão morta.
       } catch {
         /* job nunca quebra o app */
       }

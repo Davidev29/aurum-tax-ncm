@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { ErroFatal } from './ui/ErroFatal';
 import { useBase } from './store/base';
 import { useSessao } from './store/sessao';
 import { useNovidades } from './store/novidades';
@@ -25,7 +26,9 @@ if (aurum && !aurum.db) {
 
 createRoot(raiz).render(
   <StrictMode>
-    <App />
+    <ErroFatal nome="global">
+      <App />
+    </ErroFatal>
   </StrictMode>,
 );
 

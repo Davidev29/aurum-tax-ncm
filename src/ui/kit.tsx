@@ -441,6 +441,9 @@ export function Modal({
   const [z, setZ] = useState(60)
   const fecharRef = useRef(onFechar)
   fecharRef.current = onFechar
+  // Focus-trap + retorno de foco (a11y): guarda quem abriu o modal.
+  const caixaRef = useRef<HTMLDivElement>(null)
+  const retornoFocoRef = useRef<Element | null>(null)
 
   // Abertura e fechamento suaves: ao fechar, mantém montado ~180 ms para a
   // animação de saída terminar antes de desmontar.
@@ -481,6 +484,38 @@ export function Modal({
     }
   }, [aberto])
 
+  // Foco inicial + retorno (a11y): ao abrir, guarda quem tinha o foco e move
+  // para dentro do modal; ao fechar, devolve a quem abriu — o usuário de
+  // teclado nunca se perde. Best-effort, nunca lança.
+  useEffect(() => {
+    if (!aberto) return
+    try {
+      retornoFocoRef.current = document.activeElement
+    } catch {
+      retornoFocoRef.current = null
+    }
+    const t = window.setTimeout(() => {
+      try {
+        const caixa = caixaRef.current
+        const primeiro = caixa?.querySelector<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        )
+        ;(primeiro ?? caixa)?.focus?.()
+      } catch {
+        /* foco indisponível: segue */
+      }
+    }, 60)
+    return () => {
+      window.clearTimeout(t)
+      try {
+        const el = retornoFocoRef.current
+        if (el instanceof HTMLElement && document.contains(el)) el.focus({ preventScroll: true })
+      } catch {
+        /* ignora */
+      }
+    }
+  }, [aberto])
+
   if (!visivel) return null
   // Portal no `document.body`: o `fixed` do `.modal-backdrop` passa a ter a
   // viewport como referência. Sem isso, qualquer ancestral com
@@ -498,10 +533,36 @@ export function Modal({
       }}
     >
       <div
+        ref={caixaRef}
         className={`modal-box glass-box ${largura}${saindo ? ' is-saindo' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={titulo}
+        tabIndex={-1}
+        onKeyDown={(e) => {
+          // Focus-trap: Tab circula só dentro do modal.
+          if (e.key !== 'Tab') return
+          const caixa = caixaRef.current
+          if (!caixa) return
+          const focos = Array.from(
+            caixa.querySelectorAll<HTMLElement>(
+              'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+          ).filter((el) => el.offsetParent !== null || el === document.activeElement)
+          if (!focos.length) {
+            e.preventDefault()
+            return
+          }
+          const primeiro = focos[0]
+          const ultimo = focos[focos.length - 1]
+          if (e.shiftKey && document.activeElement === primeiro) {
+            e.preventDefault()
+            ultimo.focus()
+          } else if (!e.shiftKey && document.activeElement === ultimo) {
+            e.preventDefault()
+            primeiro.focus()
+          }
+        }}
       >
         <div className="glass-header flex items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
           <div>
