@@ -1,5 +1,12 @@
 # Bases-fonte — atualização de dados + compilação
 
+> ⚠️ **Nota de legado (08/10/2026):** o worker LLM/GGUF foi removido do app.
+> O pipeline oficial hoje é **só `npm run base`** (base tributária + índice lexical +
+> validação do conhecimento) — **sem GGUF obrigatório, sem `ia:embeddings`, sem
+> "AI-first" no pack**. Os trechos abaixo que exigem `Qwen3.5-2B-Q4_K_M.gguf`,
+> `modelo.json`, `testar-modelo-ia.mjs` em modo REAL ou `base:completa` com 4 etapas
+> são **históricos** e devem ser lidos como tal até este guia ser reescrito.
+
 É aqui que você atualiza os dados do programa. Sem IA solta, sem script extra:
 troque os JSONs-fonte nesta pasta, recompile, teste e gere o instalador.
 

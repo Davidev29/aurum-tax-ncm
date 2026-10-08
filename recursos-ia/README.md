@@ -1,4 +1,14 @@
-# recursos-ia — Artefatos de IA offline (Phase 6)
+# recursos-ia — Artefatos de busca local determinística
+
+> ⚠️ **Nota de legado (08/10/2026):** este README descrevia o worker LLM com GGUF
+> (`Qwen3.5-2B`, `ia-worker.cjs`, embeddings neurais). **Esse worker foi removido.**
+> Hoje `electron/ia/` tem só `grafo-service.cjs` + `caminhos-ia.cjs`, o app não
+> embarca nem baixa nenhum `.gguf`, e a classificação é 100% determinística
+> (léxico + sinônimos + grafo + resolvedor). O conteúdo abaixo sobre GGUF/embeddings/
+> Vectra é **histórico para experimentos** — não é exigido pelo `npm run base`,
+> `npm run build` nem pelo instalador. Se for reativar LLM um dia, revalidar tudo.
+
+# recursos-ia — Artefatos de IA offline (Phase 6) — LEGADO
 
 Diretório **fora de `public/`** (decisão 06-01: embarcado via `extraResources` do
 electron-builder em 06-07, nunca via bundle web). Nada aqui vai para o git

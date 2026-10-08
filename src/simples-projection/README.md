@@ -1,5 +1,9 @@
 # simples-projection — Projeção Financeira Multi-Empresa
 
+> ⚠️ **Nota (08/10/2026):** as menções abaixo a "LLM preenche insights" são legado.
+> Hoje não há LLM em runtime — `insightsSugeridos` permanece vazio e nenhum texto
+> qualitativo é gerado. Todo número exibido vem do motor determinístico.
+
 Camada **ADITIVA** ao módulo estável `src/simples/` (nunca alterado).
 Orquestra o motor existente (`calcularConvencional`, `fatorR`) para simular
 divisão de faturamento entre empresa mãe e nova empresa.
