@@ -20,6 +20,7 @@
     "ia:testar-indice": "node scripts/testar-indice-ia.mjs",
     "ia:validar-conhecimento": "node scripts/validar-conhecimento.mjs",
     "grafo:rebuild": "node scripts/build-grafo.mjs --forcar",
+    "grafo:avaliar": "node scripts/avaliar-grafo-rag.cjs",
     "ia:cobertura": "node scripts/cobertura-traducao.mjs --min 8 --top 25",
     "ofuscar": "node scripts/ofuscar-build.cjs",
     "ofuscar:check": "node scripts/ofuscar-build.cjs --check",
