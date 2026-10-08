@@ -128,6 +128,7 @@ const FONTE_LINK = ['por_codigo', 'triangulacao'] as const
 const DIRECAO_NOTA = ['entrada', 'saida', 'quarentena'] as const
 const OPERACAO_AUDIT = ['criar', 'atualizar', 'excluir'] as const
 const REGIME_TRIB = ['simples', 'mei', 'normal'] as const
+const CONTADOR_TIPO = ['pf', 'pj'] as const
 const CONFIANCA_CLASSPROD = ['explicita', 'presenca'] as const
 const TIPO_AUX = ['Entrada', 'Saída', 'Outros'] as const
 const TIPO_ANEXO = ['NCM', 'NBS'] as const
@@ -227,6 +228,16 @@ const VALIDADORES: Record<string, (r: Rec) => void> = {
     if (r.regimeTributario !== undefined && r.regimeTributario !== null) {
       enumeracao(r.regimeTributario, 'empresas', 'regimeTributario', REGIME_TRIB)
     }
+    if (r.contadorTipo !== undefined && r.contadorTipo !== null && r.contadorTipo !== '') {
+      enumeracao(r.contadorTipo, 'empresas', 'contadorTipo', CONTADOR_TIPO)
+    }
+    for (const c of ['contadorNome', 'contadorDoc', 'contadorCrc', 'contadorEmail', 'contadorTelefone']) {
+      if (r[c] !== undefined) textoOuNulo(r[c], 'empresas', c, 500)
+    }
+    if (typeof r.contadorDoc === 'string' && r.contadorDoc.trim()) {
+      const d = r.contadorDoc.replace(/\D/g, '')
+      if (d.length !== 11 && d.length !== 14) falha('empresas', 'contadorDoc-formato')
+    }
   },
   produtos: (r) => {
     if (r.id !== undefined) inteiro(r.id, 'produtos', 'id')
@@ -238,6 +249,12 @@ const VALIDADORES: Record<string, (r: Rec) => void> = {
     texto(r.cstIcms, 'produtos', 'cstIcms', 20, false)
     texto(r.pis, 'produtos', 'pis', 20, false)
     texto(r.cofins, 'produtos', 'cofins', 20, false)
+    // Tributação anterior por fluxo (entrada × saída): opcionais, mas quando
+    // presentes devem ser texto curto (a existência na tabela auxiliar é
+    // checada na camada de aplicação, com aviso — nunca bloqueio de base).
+    for (const c of ['cfopEntrada', 'cfopSaida', 'cstIcmsEntrada', 'cstIcmsSaida', 'pisEntrada', 'pisSaida', 'cofinsEntrada', 'cofinsSaida'] as const) {
+      if (r[c] !== undefined && r[c] !== null) texto(r[c], 'produtos', c, 20, false)
+    }
     numero(r.quantidade, 'produtos', 'quantidade')
     numero(r.valorUnitario, 'produtos', 'valorUnitario')
     digitos(r.cstReforma, 'produtos', 'cstReforma', [3])

@@ -17,7 +17,7 @@
  * `journal_mode=WAL` (escritas não bloqueiam leituras), `synchronous=NORMAL`,
  * `foreign_keys=ON`, `busy_timeout=5000`.
  */
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { closeSync, copyFileSync, existsSync, mkdirSync, openSync, readSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
@@ -44,6 +44,22 @@ function garantirDir(caminho: string): void {
   if (dir) mkdirSync(dir, { recursive: true })
 }
 
+/** Magic bytes do SQLite sem carregar o arquivo (prova rápida anti-rasgo). */
+function magiaSqlite(caminho: string): string {
+  const fd = openSync(caminho, 'r')
+  try {
+    const buf = Buffer.alloc(16)
+    if (readSync(fd, buf, 0, 16, 0) !== 16) return ''
+    return buf.toString('utf8')
+  } finally {
+    try {
+      closeSync(fd)
+    } catch {
+      /* best-effort */
+    }
+  }
+}
+
 function seqGlobal(): number {
   const g = globalThis as Record<string, unknown>
   const atual = typeof g.__aurumDbSeq === 'number' ? (g.__aurumDbSeq as number) : 0
@@ -53,12 +69,30 @@ function seqGlobal(): number {
 
 function caminhoTestes(): string {
   const template = process.env.AURUM_TEST_TEMPLATE ?? ''
-  const id = `${process.pid}-${process.env.VITEST_WORKER_ID ?? '0'}-${seqGlobal()}`
+  // Sufixo aleatório por cópia: o contador em `globalThis` supostamente basta,
+  // mas com workers reciclados ele pode repetir — duas suítes no mesmo arquivo
+  // rasgariam uma à outra. Colisão aqui = banco malformado no teste vizinho.
+  const id = `${process.pid}-${process.env.VITEST_WORKER_ID ?? '0'}-${seqGlobal()}-${Math.random().toString(36).slice(2, 10)}`
   const destino = join(tmpdir(), `aurum-test-${id}.db`)
   if (template && existsSync(template)) {
     garantirDir(destino)
-    copyFileSync(template, destino)
-    return destino
+    // Cópia verificada: o template é um `.db` autocontido (o setup faz
+    // checkpoint e remove sidecars antes de liberar), então a cópia sai
+    // íntegra — mas confirma magic + tamanho antes de entregar. Em caso de
+    // falha, tenta de novo uma vez; persistindo, cai no fallback (`db push`).
+    for (let tentativa = 0; tentativa < 2; tentativa++) {
+      try {
+        copyFileSync(template, destino)
+        if (magiaSqlite(destino) === 'SQLite format 3\0') return destino
+      } catch {
+        /* tenta de novo / cai no fallback */
+      }
+      try {
+        rmSync(destino, { force: true })
+      } catch {
+        /* best-effort */
+      }
+    }
   }
   // Fallback (setup não rodou): cria e empurra o schema de forma síncrona.
   garantirDir(destino)
@@ -82,12 +116,26 @@ export function resolverCaminhoBanco(caminhoExplicito?: string): string {
 }
 
 function aplicarPragmas(p: PrismaClientLike): Promise<void> {
+  // `busy_timeout` PRIMEIRO: sob contenção (seed + sync + UI, workers de teste
+  // disputando o template), os PRAGMAs seguintes esperam em vez de lançar
+  // `SQLITE_BUSY` e derrubar a conexão — era o `PRAGMA journal_mode=WAL`
+  // falhando no setup dos testes. Cada pragma é best-effort individual: um
+  // setter que o driver recusa (ex.: WAL em FS sem lock) não impede os demais.
   // PRAGMAs devolvem linha em setter ou getter — sempre via query.
   return (async () => {
-    await p.$queryRawUnsafe('PRAGMA journal_mode=WAL;')
-    await p.$queryRawUnsafe('PRAGMA synchronous=NORMAL;')
-    await p.$queryRawUnsafe('PRAGMA foreign_keys=ON;')
-    await p.$queryRawUnsafe('PRAGMA busy_timeout=5000;')
+    const pragmas = [
+      'PRAGMA busy_timeout=5000;',
+      'PRAGMA journal_mode=WAL;',
+      'PRAGMA synchronous=NORMAL;',
+      'PRAGMA foreign_keys=ON;',
+    ]
+    for (const pragma of pragmas) {
+      try {
+        await p.$queryRawUnsafe(pragma)
+      } catch {
+        /* best-effort por pragma: segue para o próximo */
+      }
+    }
   })()
 }
 
@@ -101,15 +149,42 @@ async function garantirSchema(p: PrismaClientLike): Promise<void> {
   const contagem = (await p.$queryRawUnsafe(
     "SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';",
   )) as Array<{ n: number | bigint }>
-  if (Number(contagem[0]?.n ?? 0) > 0) return
-  for (const pedaco of SCHEMA_SQL.split(';')) {
-    const stmt = pedaco
-      .split('\n')
-      .filter((l) => !/^\s*--/.test(l))
-      .join('\n')
-      .trim()
-    if (!stmt) continue
-    await p.$executeRawUnsafe(stmt)
+  if (Number(contagem[0]?.n ?? 0) === 0) {
+    for (const pedaco of SCHEMA_SQL.split(';')) {
+      const stmt = pedaco
+        .split('\n')
+        .filter((l) => !/^\s*--/.test(l))
+        .join('\n')
+        .trim()
+      if (!stmt) continue
+      await p.$executeRawUnsafe(stmt)
+    }
+    return
+  }
+  // Migração leve v1.1: colunas entrada × saída do Produto + contador da
+  // Empresa em bancos já existentes (instalação limpa já sai com elas via DDL
+  // acima). `ADD COLUMN` em coluna existente lança — segue para a próxima.
+  for (const [tabela, col] of [
+    ['Produto', 'cfopEntrada'],
+    ['Produto', 'cfopSaida'],
+    ['Produto', 'cstIcmsEntrada'],
+    ['Produto', 'cstIcmsSaida'],
+    ['Produto', 'pisEntrada'],
+    ['Produto', 'pisSaida'],
+    ['Produto', 'cofinsEntrada'],
+    ['Produto', 'cofinsSaida'],
+    ['Empresa', 'contadorTipo'],
+    ['Empresa', 'contadorNome'],
+    ['Empresa', 'contadorDoc'],
+    ['Empresa', 'contadorCrc'],
+    ['Empresa', 'contadorEmail'],
+    ['Empresa', 'contadorTelefone'],
+  ] as const) {
+    try {
+      await p.$executeRawUnsafe(`ALTER TABLE "${tabela}" ADD COLUMN "${col}" TEXT`)
+    } catch {
+      /* coluna já existe: segue */
+    }
   }
 }
 

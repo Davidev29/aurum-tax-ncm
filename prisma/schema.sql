@@ -123,7 +123,13 @@ CREATE TABLE "Empresa" (
     "uf" TEXT,
     "cep" TEXT,
     "telefone" TEXT,
-    "email" TEXT
+    "email" TEXT,
+    "contadorTipo" TEXT,
+    "contadorNome" TEXT,
+    "contadorDoc" TEXT,
+    "contadorCrc" TEXT,
+    "contadorEmail" TEXT,
+    "contadorTelefone" TEXT
 );
 
 -- CreateTable
@@ -137,6 +143,14 @@ CREATE TABLE "Produto" (
     "cstIcms" TEXT NOT NULL,
     "pis" TEXT NOT NULL,
     "cofins" TEXT NOT NULL,
+    "cfopEntrada" TEXT,
+    "cfopSaida" TEXT,
+    "cstIcmsEntrada" TEXT,
+    "cstIcmsSaida" TEXT,
+    "pisEntrada" TEXT,
+    "pisSaida" TEXT,
+    "cofinsEntrada" TEXT,
+    "cofinsSaida" TEXT,
     "quantidade" REAL NOT NULL,
     "valorUnitario" REAL NOT NULL,
     "cstReforma" TEXT NOT NULL,

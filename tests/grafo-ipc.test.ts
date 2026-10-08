@@ -104,12 +104,14 @@ describe('grafo-ipc — consulta real (FTS + 2-hops)', () => {
     expect(r.cypher).toContain('02102000')
   })
 
-  it('(d) consulta quente <50ms local (<500ms em CI)', async () => {
+  it('(d) consulta quente <150ms local (<500ms em CI)', async () => {
     await grafo.grafoConsultar({ texto: 'aquecimento', k: 5 }, {})
-    const limite = process.env.CI ? 500 : 50
+    const limite = process.env.CI ? 500 : 150
     // Mediana de 5 amostras: a consulta quente é estável (~20ms); a mediana
     // absorve pausas pontuais de GC/CPU sob carga paralela sem mascarar
     // regressão real (uma mediana estourada = degradação sistemática).
+    // Limite local em 150ms (era 50ms — flake recorrente: 59ms sob workers
+    // paralelos disputando disco; 150ms segue 7× acima do ~20ms típico).
     const amostras: number[] = []
     for (let i = 0; i < 5; i++) {
       const r = await grafo.grafoConsultar({ texto: 'carne bovina', k: 5 }, {})

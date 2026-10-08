@@ -171,12 +171,21 @@ model Empresa {
   cep              String?
   telefone         String?
   email            String?
+  contadorTipo     String?
+  contadorNome     String?
+  contadorDoc      String?
+  contadorCrc      String?
+  contadorEmail    String?
+  contadorTelefone String?
 
   @@index([cnpj])
   @@index([razaoSocial])
 }
 
 // Produtos do usuário (store `produtos`, `++id`).
+// Tributação anterior por fluxo (entrada × saída): colunas novas, nuláveis
+// para base existente (migração sem perda — legado `cfop/cstIcms/pis/cofins`
+// segue como fallback).
 model Produto {
   id                    Int      @id @default(autoincrement())
   empresaId             Int?
@@ -187,6 +196,14 @@ model Produto {
   cstIcms               String
   pis                   String
   cofins                String
+  cfopEntrada           String?
+  cfopSaida             String?
+  cstIcmsEntrada        String?
+  cstIcmsSaida          String?
+  pisEntrada            String?
+  pisSaida              String?
+  cofinsEntrada         String?
+  cofinsSaida           String?
   quantidade            Float
   valorUnitario         Float
   cstReforma            String

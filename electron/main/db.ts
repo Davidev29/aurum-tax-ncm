@@ -70,7 +70,17 @@ export async function prepararBanco(app: App): Promise<{ ok: boolean; detalhe: s
     const p = await prismaComo(caminho)
     const estado = await checarIntegridade(p)
     if (estado === 'ok') return { ok: true, detalhe: 'ok' }
-    // Corrompido: quarentena + recomeço.
+    // Corrompido: checkpoint best-effort (despeja o WAL no arquivo principal
+    // para a quarentena levar o estado completo), depois quarentena + recomeço.
+    // Os sidecars (`-wal`/`-shm`/`-journal`) pertencem à geração corrompida:
+    // são removidos junto — sem isso, um `-wal` órfão seria reanexado ao novo
+    // `aurum.db` vazio no próximo boot e a corrupção "voltava".
+    try {
+      const p = await prismaComo(caminho)
+      await p.$queryRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE);')
+    } catch {
+      /* checkpoint best-effort: segue para a quarentena mesmo assim */
+    }
     try {
       await fecharPrisma()
     } catch {
@@ -79,6 +89,15 @@ export async function prepararBanco(app: App): Promise<{ ok: boolean; detalhe: s
     const quarentena = `${caminho}.corrompido-${new Date().toISOString().replace(/[:.]/g, '-')}`
     try {
       if (existsSync(caminho)) renameSync(caminho, quarentena)
+      // Sidecars da geração corrompida não migram para o banco novo.
+      for (const sufixo of ['-wal', '-shm', '-journal']) {
+        try {
+          const lateral = `${caminho}${sufixo}`
+          if (existsSync(lateral)) renameSync(lateral, `${quarentena}${sufixo}`)
+        } catch {
+          /* best-effort por sidecar */
+        }
+      }
     } catch {
       /* sem quarentena: segue para recriação */
     }
