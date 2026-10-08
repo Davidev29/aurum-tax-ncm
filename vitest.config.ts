@@ -17,6 +17,10 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/domain/**', 'src/application/**', 'src/infrastructure/**'],
+      thresholds: {
+        'src/domain/services/calculo.ts': { lines: 95, branches: 90 },
+        'src/simples/calculo.ts': { lines: 90, branches: 85 },
+      },
     },
   },
 })

@@ -107,7 +107,9 @@ export function simularCenarioDividido(params: ParamsCenarioDividido): Relatorio
   /**
    * Apura UMA empresa num mês: mono-anexo (1 chamada ao motor) ou segregado
    * (1 chamada por parcela, RBT12 total em cada tabela, DAS somado).
-   * Retorna faixa/alíquota da maior parcela para exibição + detalhe auditável.
+   * A RBA é repassada explicitamente ao motor (sublimite calculado lá;
+   * aqui o sublimite é só-alerta em `alertas`). Retorna faixa/alíquota da
+   * maior parcela para exibição + detalhe auditável.
    */
   const apurarEmpresa = (
     cfg: ConfigEmpresaCenario,
@@ -122,8 +124,10 @@ export function simularCenarioDividido(params: ParamsCenarioDividido): Relatorio
     parcelaDeduzir?: number;
     detalhe?: DetalheParcelaMes[];
   } => {
+    // RBA efetiva do mês = RBT12 projetado (mesma base; sublimite só-alerta).
+    const rbaMes = rbt12;
     if (!comp) {
-      const conv = calcularConvencional({ anexoId: cfg.anexoId, rbt12, receitaMes: receita });
+      const conv = calcularConvencional({ anexoId: cfg.anexoId, rbt12, receitaMes: receita, rba: rbaMes });
       const tab = ANEXOS_SIMPLES[cfg.anexoId].faixas.find((f) => f.faixa === conv.faixa);
       return {
         das: conv.das,
@@ -137,7 +141,7 @@ export function simularCenarioDividido(params: ParamsCenarioDividido): Relatorio
       anexoId: c.anexoId,
       receitaMes: Math.round(receita * c.percentual * 100) / 100,
     }));
-    const seg = calcularDASegregado(rbt12, parcelas);
+    const seg = calcularDASegregado(rbt12, parcelas, { rba: rbaMes });
     const maior = seg.parcelas.reduce((a, b) => (b.receitaMes >= a.receitaMes ? b : a), seg.parcelas[0]!);
     const tabMaior = ANEXOS_SIMPLES[maior.anexoId].faixas.find((f) => f.faixa === maior.faixa);
     return {

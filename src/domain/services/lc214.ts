@@ -99,13 +99,13 @@ export const ARTIGOS_LC214: ArtigoLC214[] = [
   },
   {
     numero: '126',
-    titulo: 'Art. 126 — Profissionais e insumos da cesta (orientação)',
+    titulo: 'Art. 126 — Cesta básica: alcance e operacionalização (ver art. 125 e Anexo I)',
     tema: 'reduções',
-    aliases: ['cesta basica insumos', 'produtor rural cesta'],
-    resumo: 'Disciplina o alcance da cesta básica (cadeia e insumos correlatos, conforme anexos).',
-    claro: 'A lei estende o favor da cesta para os elos que a viabilizam, nos limites dos anexos.',
-    tecnico: 'Artigo-ponte: operacionaliza o art. 125 por anexo/NCM. A IA resolve pelo vínculo oficial (CST × cClassTrib × anexo), nunca pelo nome do alimento.',
-    quandoAplica: 'Quando o NCM cita Anexo I ou remissão ao art. 126 na base legal.',
+    aliases: ['cesta basica alcance', 'cesta basica operacionalizacao', 'cesta basica condicoes', 'cadeia cesta basica'],
+    resumo: 'Artigo-ponte da cesta básica: disciplina o alcance e a operacionalização da alíquota zero do art. 125 (Anexo I). O zero em si está no art. 125.',
+    claro: 'É o artigo que detalha COMO vale o zero da cesta — quais elos e condições. O imposto zerado está no art. 125.',
+    tecnico: 'Sem efeito próprio de alíquota — remete ao art. 125/Anexo I. A IA resolve pelo vínculo oficial (CST 200 × cClassTrib 200003), nunca pelo nome do alimento.',
+    quandoAplica: 'Quando a base legal do NCM remete ao art. 126 ou ao Anexo I.',
     anexo: 'I',
     reducao: 'zero (100%)',
     link: L('126'),
@@ -261,15 +261,15 @@ export const ARTIGOS_LC214: ArtigoLC214[] = [
   },
   {
     numero: '140',
-    titulo: 'Art. 140 — Transporte e logística vinculados (rol)',
+    titulo: 'Art. 140 — Comunicação institucional à administração pública (redução de 60%)',
     tema: 'reduções',
-    aliases: ['transporte reducao', 'logistica', 'frete reducao'],
-    resumo: 'Trata de reduções aplicáveis a elos de transporte/logística do rol.',
-    claro: 'Fretes e transportes listados entram nas reduções do rol.',
-    tecnico: 'Ver inciso e anexo correspondentes; transporte coletivo de passageiros tem artigo próprio (art. 286).',
-    quandoAplica: 'Operações de transporte listadas.',
+    aliases: ['comunicacao institucional', 'administracao publica', 'relacoes imprensa', 'redes sociais governo', 'paginas eletronicas governo', 'comunicacao governo'],
+    resumo: 'Redução de 60% de IBS/CBS para serviços de comunicação institucional à administração pública direta, autarquias e fundações públicas (páginas eletrônicas, redes sociais, imprensa, relações públicas).',
+    claro: 'Site, rede social e assessoria de imprensa feitos PARA o governo (administração direta, autarquia, fundação) têm 60% de desconto.',
+    tecnico: 'Redução 60% IBS/CBS; condição: tomador = administração pública direta/autarquia/fundação + serviço de comunicação institucional. Vínculo oficial 200/200040; sem vínculo → hipótese, não fato. Não confundir com transporte/logística (arts. 275–289).',
+    quandoAplica: 'Serviços de comunicação institucional contratados pela administração pública.',
     anexo: null,
-    reducao: 'conforme inciso',
+    reducao: '60% IBS/CBS',
     link: L('140'),
   },
   {
@@ -512,7 +512,7 @@ function normSimples(s: string): string {
   return String(s ?? '')
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
 }
 
 /**

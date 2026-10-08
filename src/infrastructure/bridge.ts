@@ -150,6 +150,12 @@ export interface DbPonte {
   ): Promise<import('@/infrastructure/db/motor').Registro | Array<import('@/infrastructure/db/motor').Registro> | number | string | null>
   /** Snapshot pré-restore (`db:snapshot`): cópia best-effort, nunca lança. */
   snapshotBanco?(): Promise<{ ok: boolean; caminho?: string; erro?: string }>
+  /**
+   * Lote atômico (`db:transaction` → transação SQLite real no main). Opcional:
+   * ausente em builds antigos — o `DriverIpc` lança `ipc:sem-transacao` e o
+   * chamador usa o replay sequencial documentado.
+   */
+  transacao?(ops: import('@/infrastructure/db/db-protocolo').DbOp[]): Promise<unknown[]>
 }
 
 /** Eventos do auto-updater repassados pelo processo principal. */

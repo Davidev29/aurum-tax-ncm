@@ -11,6 +11,8 @@
 import { SESSION_KEY } from '@/domain/constants'
 import { fmtCnpj, norm } from '@/domain/services/format'
 import type { Empresa } from '@/domain/entities'
+import type { DbOp } from '@/infrastructure/db/db-protocolo'
+import { executarOp, resolverDriver } from '@/infrastructure/db/motor'
 import { db } from '@/infrastructure/db/schema'
 import {
   buscarCnpj,
@@ -368,19 +370,47 @@ export async function listarProdutosResumoEmpresa(
   }
 }
 
+/**
+ * Exclui a empresa e tudo vinculado (produtos + notas XML) em **transação
+ * real**: as 3 remoções vão num único `transacionar(ops)` — tudo ou nada.
+ * Sem driver transacional (ou IPC com main antigo sem `db:transaction`),
+ * fallback sequencial com **falhas contabilizadas e lançadas em pt-BR**
+ * (nunca `.catch(()=>{})` silencioso — exclusão meia-boca não passa em
+ * silêncio).
+ */
 export async function excluirEmpresa(id: number): Promise<VinculosEmpresa> {
   const vinculos = await contarVinculosEmpresa(id)
-  try {
-    await db.transaction('rw', [db.empresas, db.produtos, db.nfeNotas], async () => {
-      await db.produtos.where('empresaId').equals(id).delete()
-      await db.nfeNotas.where('empresaId').equals(id).delete()
-      await db.empresas.delete(id)
-    })
-  } catch {
-    // Fallback sem transação (banco antigo/perfil restrito): apaga em sequência.
-    await db.produtos.where('empresaId').equals(id).delete().catch(() => {})
-    await db.nfeNotas.where('empresaId').equals(id).delete().catch(() => {})
-    await db.empresas.delete(id)
+  const ops: DbOp[] = [
+    { op: 'removerOnde', tabela: 'produtos', where: { tipo: 'equals', campo: 'empresaId', valor: id } },
+    { op: 'removerOnde', tabela: 'nfeNotas', where: { tipo: 'equals', campo: 'empresaId', valor: id } },
+    { op: 'remover', tabela: 'empresas', chave: id },
+  ]
+  const driver = resolverDriver()
+  if (typeof driver.transacionar === 'function') {
+    try {
+      await driver.transacionar(ops)
+      return vinculos
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      // Só o main antigo (sem canal transacional) cai no sequencial abaixo;
+      // falha real de transação é lançada em pt-BR.
+      if (!/sem-transacao/.test(msg)) {
+        throw new Error(`Não foi possível excluir a empresa: ${msg}`)
+      }
+    }
+  }
+  const falhas: string[] = []
+  for (const op of ops) {
+    try {
+      await executarOp(driver, op)
+    } catch (e) {
+      falhas.push(`${op.op}/${String(op.tabela ?? '?')}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  if (falhas.length) {
+    throw new Error(
+      `Não foi possível excluir a empresa por completo (${falhas.length} falha(s)): ${falhas.join('; ')}.`,
+    )
   }
   return vinculos
 }

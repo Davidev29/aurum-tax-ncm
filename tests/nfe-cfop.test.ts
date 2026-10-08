@@ -88,6 +88,17 @@ describe('classificarNatOp', () => {
     expect(classificarNatOp('')).toBe('indefinida')
     expect(classificarNatOp('EXPORTACAO DE MERCADORIAS')).toBe('nao-venda')
   })
+
+  it('venda sob ST por contribuinte substituído é venda (ST é outro assunto)', () => {
+    expect(classificarNatOp('VENDA MERCADORIA SOB O REG DE ST POR CONTR SUBSTITUIDO')).toBe('venda')
+    expect(classificarNatOp('VENDA PROD ESTAB - CONT SUBSTITUID')).toBe('venda')
+    // Sem VENDA explícita, substituição de mercadoria segue não-venda.
+    expect(classificarNatOp('REMESSA PARA SUBSTITUICAO DE PECA')).toBe('nao-venda')
+    expect(classificarNatOp('SUBSTITUICAO DE MERCADORIA')).toBe('nao-venda')
+    // Guardas: devolução/retorno com a palavra VENDA continuam não-venda.
+    expect(classificarNatOp('DEVOLUCAO DE VENDA')).toBe('nao-venda')
+    expect(classificarNatOp('RETORNO DE MERCADORIA PARA VENDA')).toBe('nao-venda')
+  })
 })
 
 describe('resumirNaturezas', () => {
@@ -123,6 +134,19 @@ describe('resumirNaturezas', () => {
     ])
     expect(r.qtdNaoVenda).toBe(1)
     expect(r.qtdSemEfeito).toBe(1)
+  })
+
+  it('venda sob ST por substituído não cai no bloco de não-venda', () => {
+    const r = resumirNaturezas([
+      {
+        ...notaBase,
+        chave: 'st1',
+        natOp: 'VENDA MERCADORIA SOB O REG DE ST POR CONTR SUBSTITUIDO',
+        itensAnalisados: [{ cfop: '5405' }],
+      },
+    ])
+    expect(r.qtdNaoVenda).toBe(0)
+    expect(r.grupos).toHaveLength(0)
   })
 
   it('expõe a seção de imunidades da LC para comparação', () => {

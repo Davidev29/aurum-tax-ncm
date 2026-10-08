@@ -7,7 +7,7 @@
  * feito com `definirDriver()` para que o bundle web/renderer jamais encoste
  * em `@prisma/client` ou `node:*`.
  */
-import { campoSeguro, somenteConhecidos, STORE_META, type ModoLote, type OpWhere } from './db-protocolo'
+import { campoSeguro, somenteConhecidos, STORE_META, type DbOp, type ModoLote, type OpWhere } from './db-protocolo'
 import { validarChave, validarRegistro } from './validacao'
 import { fecharPrisma, prismaComo, resolverCaminhoBanco } from './prisma-no'
 import { definirDriver, type Driver, type Registro } from './motor'
@@ -300,6 +300,90 @@ export class DriverPrisma implements Driver {
       this.delegate(t)
       const tab = await this.tabela(t)
       await comRetry(() => tab.deleteMany({}))
+    }
+  }
+
+  /**
+   * Lote heterogêneo em UMA transação SQLite real (`BEGIN IMMEDIATE` …
+   * `COMMIT`, com `ROLLBACK` em qualquer falha — tudo ou nada).
+   *
+   * Por que raw e não `$transaction([...])`: as ops têm dependências
+   * (ex.: `atualizar` lê antes de escrever; `lote/inserir` consulta
+   * duplicadas) que o modo array — só-promessas-preguiçosas — não expressa.
+   * O singleton (`prismaComo`) usa uma única conexão no SQLite, então os
+   * métodos acima participam da transação aberta. `BEGIN IMMEDIATE` reserva
+   * a escrita já no início (falha rápido com `SQLITE_BUSY`, coberta pelo
+   * `comRetry`, em vez de falhar no `COMMIT`). Concorrentes na mesma conexão
+   * durante a janela participariam da transação — os chamadores mantêm os
+   * lotes curtos por isso.
+   */
+  async transacionar(ops: DbOp[]): Promise<unknown[]> {
+    if (!ops.length) return []
+    const p = (await this.db()) as unknown as { $executeRawUnsafe(q: string): Promise<unknown> }
+    await comRetry(() => p.$executeRawUnsafe('BEGIN IMMEDIATE'))
+    const saida: unknown[] = []
+    try {
+      for (const op of ops) saida.push(await this.aplicarOpLocal(op))
+    } catch (e) {
+      try {
+        await p.$executeRawUnsafe('ROLLBACK')
+      } catch {
+        /* rollback best-effort: o erro original é o que importa */
+      }
+      throw e
+    }
+    try {
+      await comRetry(() => p.$executeRawUnsafe('COMMIT'))
+    } catch (e) {
+      try {
+        await p.$executeRawUnsafe('ROLLBACK')
+      } catch {
+        /* best-effort */
+      }
+      throw e
+    }
+    return saida
+  }
+
+  /** Uma op do protocolo contra a conexão local (dentro ou fora de txn). */
+  private async aplicarOpLocal(op: DbOp): Promise<unknown> {
+    switch (op.op) {
+      case 'buscar':
+        return this.buscar(op.tabela as string, op.where ?? null)
+      case 'contar':
+        return this.contar(op.tabela as string, op.where ?? null)
+      case 'porChave':
+        return this.porChave(op.tabela as string, op.chave as string | number)
+      case 'inserir':
+        return this.inserir(op.tabela as string, (op.registro ?? {}) as Record<string, unknown>)
+      case 'upsert':
+        return this.upsert(op.tabela as string, (op.registro ?? {}) as Record<string, unknown>)
+      case 'lote':
+        await this.lote(op.tabela as string, (op.registros ?? []) as Array<Record<string, unknown>>, op.modo ?? 'upsert')
+        return null
+      case 'atualizar':
+        return this.atualizar(
+          op.tabela as string,
+          op.chave as string | number,
+          (op.patch ?? {}) as Record<string, unknown>,
+        )
+      case 'remover':
+        await this.remover(op.tabela as string, op.chave as string | number)
+        return null
+      case 'limpar':
+        await this.limpar(op.tabela as string)
+        return null
+      case 'removerOnde': {
+        if (op.where === null || op.where === undefined) {
+          throw new Error(`sqlite:${String(op.tabela)}:where-obrigatorio`)
+        }
+        return this.removerOnde(op.tabela as string, op.where)
+      }
+      case 'apagarTudo':
+        await this.apagarTudo((op.tabelas ?? []) as string[])
+        return null
+      default:
+        throw new Error(`sqlite:op-desconhecida:${String((op as DbOp).op)}`)
     }
   }
 

@@ -1,6 +1,6 @@
 /**
- * Modais globais: **Empresas**, **Configurações** (emitente + bases de dados +
- * atualização do programa + backup) e a edição genérica de registros
+ * Modais globais: **Empresas**, **Configurações** (emitente + aparência +
+ * bases de dados + atualização do programa + backup) e a edição genérica de registros
  * das tabelas auxiliares.
  *
  * As bases tributárias (NCM, CST, cClassTrib, nomenclatura) viajam embutidas
@@ -23,8 +23,10 @@ import type { DadosCnpjBrasilApi } from '@/infrastructure/receita/brasilapi'
 import { useBase } from '@/store/base'
 import { confirmar } from '@/store/dialogo'
 import { useAuxiliares } from '@/store/auxiliares'
+import { useFundo } from '@/store/fundo'
 import { useSessao } from '@/store/sessao'
 import { useUi, toast } from '@/store/ui'
+import { ESTILOS_FUNDO, FREQUENCIAS_FUNDO, fmtIntervaloFundo } from '@/infrastructure/fundo/pexels'
 import { Area, BarraProgresso, Btn, Campo, Check, Modal, Painel, Texto, useAcaoTatil } from '@/ui/kit'
 import { ModalNovidades } from '@/ui/ModalNovidades'
 import { useNovidades } from '@/store/novidades'
@@ -1235,6 +1237,218 @@ function CoberturaTabelas() {
   )
 }
 
+/** Aba Aparência — estilo do fundo global + frequência de troca. */
+function AbaAparencia() {
+  const tema = useFundo((s) => s.tema)
+  const setTema = useFundo((s) => s.setTema)
+  const animar = useFundo((s) => s.animar)
+  const setAnimar = useFundo((s) => s.setAnimar)
+  const intervalo = useFundo((s) => s.intervalo)
+  const setIntervalo = useFundo((s) => s.setIntervalo)
+  const fotos = useFundo((s) => s.fotos)
+  const indice = useFundo((s) => s.indice)
+  const carregando = useFundo((s) => s.carregando)
+  const proximo = useFundo((s) => s.proximo)
+  const [edit, setEdit] = useState(tema)
+  const [aplicando, setAplicando] = useState(false)
+
+  useEffect(() => {
+    setEdit(tema)
+  }, [tema])
+
+  const estiloAtivo = ESTILOS_FUNDO.find((e) => e.query === tema.trim())?.id
+    ?? ESTILOS_FUNDO.find((e) => tema.trim().toLowerCase().includes(e.query.split(' ')[0]))?.id
+    ?? null
+
+  const aplicarEstilo = (query: string) => {
+    setTema(query)
+    setEdit(query)
+    setAplicando(true)
+    void useFundo.getState().atualizar().then(() => {
+      setAplicando(false)
+      toast(`Fundo alterado para "${query}".`, 'ok')
+    })
+  }
+
+  const aplicarLivre = () => {
+    const q = edit.trim() || 'natureza minimalista'
+    aplicarEstilo(q)
+  }
+
+  const fotoAtual = fotos.length ? fotos[indice % fotos.length] : null
+
+  return (
+    <section className="space-y-3">
+      <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-700 to-cyan-700 p-4 text-white shadow-card dark:from-violet-950 dark:via-indigo-950 dark:to-cyan-950 dark:ring-1 dark:ring-violet-900">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-white/20 text-2xl shadow-inner backdrop-blur">
+            🎨
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-black tracking-tight">Aparência do fundo</div>
+            <div className="mt-0.5 text-[11px] leading-relaxed text-violet-50/90 dark:text-slate-300">
+              {fotos.length
+                ? `${fotos.length} imagens · trocando a cada ${fmtIntervaloFundo(intervalo)}${animar ? '' : ' (pausado)'}`
+                : carregando || aplicando
+                  ? 'Buscando imagens do estilo…'
+                  : 'Sem imagens — usando degradê local'}
+            </div>
+          </div>
+          {fotos.length > 1 ? (
+            <button
+              type="button"
+              onClick={proximo}
+              className="btn-press shrink-0 rounded-xl bg-white/95 px-3 py-1.5 text-xs font-black text-indigo-800 shadow transition hover:bg-white"
+            >
+              ⏭ Próxima
+            </button>
+          ) : null}
+        </div>
+        {fotoAtual ? (
+          <div className="mt-3 flex items-center gap-2 overflow-hidden rounded-xl bg-black/25 p-2 backdrop-blur">
+            <img src={fotoAtual.url} alt="" className="h-12 w-20 shrink-0 rounded-lg object-cover" loading="lazy" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-xs font-bold">{fotoAtual.alt || 'Imagem atual'}</div>
+              <div className="truncate text-[10px] text-white/70">📷 {fotoAtual.autor || 'Pexels'}</div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">
+          🖼 Estilo das imagens
+        </h3>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {ESTILOS_FUNDO.map((e) => {
+            const ativo = estiloAtivo === e.id || tema.trim() === e.query
+            return (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => aplicarEstilo(e.query)}
+                aria-pressed={ativo}
+                title={`${e.rotulo} — ${e.descricao}`}
+                className={`card-hover rounded-2xl border p-2.5 text-left shadow-card transition ${
+                  ativo
+                    ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-200 dark:bg-brand-950/40 dark:ring-brand-800'
+                    : 'border-[var(--line)] bg-[var(--surface-2)] hover:border-brand-300'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="text-lg" aria-hidden="true">{e.icone}</span>
+                  <span className="truncate text-xs font-black">
+                    {e.rotulo} {ativo ? '✓' : ''}
+                  </span>
+                </div>
+                <div className="mt-1 line-clamp-2 text-[10px] leading-snug text-slate-400">{e.descricao}</div>
+              </button>
+            )
+          })}
+        </div>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <div className="flex-1">
+            <Texto
+              value={edit}
+              onChange={(ev) => setEdit(ev.target.value)}
+              placeholder="Tema livre — ex.: café aconchegante, minimalista"
+              aria-label="Tema livre do fundo"
+            />
+          </div>
+          <Btn tam="sm" carregando={aplicando || carregando} onClick={aplicarLivre}>
+            {aplicando || carregando ? 'Aplicando…' : '✨ Aplicar tema'}
+          </Btn>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">
+          ⏱ Frequência de troca
+        </h3>
+        <Painel className="space-y-3 p-3">
+          <Check
+            label={animar ? 'Troca automática ligada' : 'Troca automática pausada'}
+            checked={animar}
+            onChange={(ev) => setAnimar(ev.target.checked)}
+          />
+          <div className="flex flex-wrap gap-1.5">
+            {FREQUENCIAS_FUNDO.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setIntervalo(s)}
+                aria-pressed={intervalo === s}
+                className={`rounded-xl px-3 py-1.5 text-xs font-black transition ${
+                  intervalo === s
+                    ? 'bg-brand-600 text-white shadow'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'
+                }`}
+              >
+                {fmtIntervaloFundo(s)}
+              </button>
+            ))}
+          </div>
+          <div>
+            <div className="mb-1 flex items-center justify-between text-[11px] text-slate-500">
+              <span>Intervalo personalizado (até 24 h)</span>
+              <span className="num font-mono font-black text-slate-700 dark:text-slate-200">
+                a cada {fmtIntervaloFundo(intervalo)}
+              </span>
+            </div>
+            {(() => {
+              const unidade = intervalo >= 3600 && intervalo % 3600 === 0
+                ? 'h'
+                : intervalo >= 60 && intervalo % 60 === 0
+                  ? 'min'
+                  : 's'
+              const mult = unidade === 'h' ? 3600 : unidade === 'min' ? 60 : 1
+              const valor = Math.round(intervalo / mult)
+              const aplicarValor = (v: number, u: string) => {
+                const m = u === 'h' ? 3600 : u === 'min' ? 60 : 1
+                const total = Math.max(5, Math.min(86400, Math.round(v * m)))
+                setIntervalo(total)
+              }
+              return (
+                <div className="flex flex-col gap-1.5 sm:flex-row">
+                  <input
+                    type="number"
+                    min={unidade === 'h' ? 1 : unidade === 'min' ? 1 : 5}
+                    max={unidade === 'h' ? 24 : unidade === 'min' ? 1440 : 86400}
+                    step={1}
+                    value={valor}
+                    onChange={(ev) => aplicarValor(Number(ev.target.value) || 0, unidade)}
+                    className="field field-mono flex-1"
+                    aria-label="Valor do intervalo"
+                  />
+                  <select
+                    value={unidade}
+                    onChange={(ev) => aplicarValor(valor, ev.target.value)}
+                    className="field sm:w-36"
+                    aria-label="Unidade do intervalo"
+                  >
+                    <option value="s">segundos</option>
+                    <option value="min">minutos</option>
+                    <option value="h">horas</option>
+                  </select>
+                </div>
+              )
+            })()}
+            <div className="mt-1 flex justify-between text-[10px] text-slate-400">
+              <span>mín. 5 segundos</span>
+              <span>máx. 24 horas</span>
+            </div>
+          </div>
+          {!animar ? (
+            <p className="text-[11px] leading-relaxed text-amber-600 dark:text-amber-300">
+              ⏸ A troca está pausada — a imagem atual fica fixa até reativar.
+            </p>
+          ) : null}
+        </Painel>
+      </div>
+    </section>
+  )
+}
+
 function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => void }) {
   const status = useBase((s) => s.status)
   const recarregarStatus = useBase((s) => s.recarregar)
@@ -1247,7 +1461,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
   const [cor, setCor] = useState('#0f215c')
   const [mostrarPreview, setMostrarPreview] = useState(false)
   const [contagens, setContagens] = useState<Record<string, number>>({})
-  const [aba, setAba] = useState<'emitente' | 'bases' | 'backup' | 'atualizacao'>('emitente')
+  const [aba, setAba] = useState<'emitente' | 'aparencia' | 'bases' | 'backup' | 'atualizacao'>('emitente')
   const [buscandoCnpj, setBuscandoCnpj] = useState(false)
   const [cffStatus, setCffStatus] = useState<Awaited<ReturnType<typeof statusSincronizacao>> | null>(null)
   const [versao, setVersao] = useState<string>('—')
@@ -1306,6 +1520,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
     await persistirEmitente({ ...form, cor: corFinal })
     sessionStorage.removeItem('aurum_preview_pendente')
     toast('Emitente salvo.', 'ok')
+    onFechar()
   }
 
   /** Puxa razão social, endereço e contatos da BrasilAPI pelo CNPJ digitado. */
@@ -1386,7 +1601,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
       aberto={aberto}
       onFechar={onFechar}
       titulo="Configurações"
-      subtitulo="Emitente, bases de dados, sincronização CFF, atualização do programa e backup"
+      subtitulo="Emitente, aparência do fundo, bases de dados, atualização do programa e backup"
       largura="max-w-2xl"
       rodape={
         <>
@@ -1401,11 +1616,12 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
         </>
       }
     >
-      <div className="mb-3 flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+      <div className="mb-3 flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
         {(
           [
             ['emitente', '🏷 Emitente'],
-            ['bases', '🗂 Bases de dados'],
+            ['aparencia', '🎨 Aparência'],
+            ['bases', '🗂 Bases'],
             ['atualizacao', '🔄 Atualização'],
             ['backup', '💾 Backup'],
           ] as const
@@ -1530,6 +1746,8 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
           </div>
         </section>
         ) : null}
+
+        {aba === 'aparencia' ? <AbaAparencia /> : null}
 
         {aba === 'bases' ? (
         <section>

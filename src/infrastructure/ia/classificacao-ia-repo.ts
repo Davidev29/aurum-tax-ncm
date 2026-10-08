@@ -78,30 +78,15 @@ export interface FeedbackIa {
   mock?: boolean
 }
 
-function ehNode(): boolean {
-  try {
-    return typeof process !== 'undefined' && !!(process as unknown as { versions?: { node?: string } }).versions?.node
-  } catch {
-    return false
-  }
-}
-
 /**
- * Append best-effort em `logs/consultas-ia.jsonl`.
+ * Append em `logs/consultas-ia.jsonl` com rotação + scrub de PII.
+ * Delega a `acrescentarLog` (teto 5 MiB, 3 gerações, `descricao` sem PII).
  * No renderer (browser/Electron sem Node) é no-op — nunca quebra a consulta.
+ * Nunca lança.
  */
 export async function anexarConsultaIaJsonl(entrada: Record<string, unknown>): Promise<void> {
-  if (!ehNode()) return
-  try {
-    const fs = await import(/* @vite-ignore */ 'node:fs/promises')
-    const path = await import(/* @vite-ignore */ 'node:path')
-    const cwd = typeof process.cwd === 'function' ? process.cwd() : '.'
-    const dir = path.join(cwd, 'logs')
-    await fs.mkdir(dir, { recursive: true })
-    await fs.appendFile(path.join(dir, 'consultas-ia.jsonl'), `${JSON.stringify(entrada)}\n`, 'utf-8')
-  } catch {
-    /* trilha em disco é best-effort; o audit_log já cobre a auditoria */
-  }
+  const { acrescentarLog } = await import('@/application/log-rotacao')
+  await acrescentarLog('consultas-ia.jsonl', entrada)
 }
 
 /**

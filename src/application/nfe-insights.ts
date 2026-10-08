@@ -237,6 +237,36 @@ export function topNcm(notas: NotaMinima[], limite = 8): LinhaRanking[] {
   return [...mapa.values()].sort((a, b) => b.base - a.base).slice(0, limite)
 }
 
+/** Bucket da prontidão para um item. */
+export type BucketProntidao = 'conferem' | 'divergentes' | 'semXml'
+
+/**
+ * Classifica um item para a Prontidão dos XMLs.
+ *
+ * Item com tributação escolhida por você (`manual`) conta como **validado** e
+ * vai para `conferem`: você comparou No XML × legislação e decidiu — nada
+ * resta "a comparar". A divergência factual XML × sistema continua registrada
+ * no detalhe da nota (o núcleo `divergenciaXmlSistema` não muda).
+ */
+export function bucketProntidaoItem(item: {
+  manual?: boolean | null
+  classificacao?: { manual?: unknown | null; cst?: string | null; cClassTrib?: string | null } | null
+  cstIbsCbs?: string | null
+  cClassTribIbsCbs?: string | null
+  vIbsItem?: number | null
+  vCbsItem?: number | null
+  ibs?: number | null
+  cbs?: number | null
+}): { temXml: boolean; manual: boolean; bucket: BucketProntidao } {
+  const d = divergenciaXmlSistema(item)
+  const manual = item?.manual === true || item?.classificacao?.manual != null
+  return {
+    temXml: d.temXml,
+    manual,
+    bucket: manual ? 'conferem' : !d.temXml ? 'semXml' : d.diverge ? 'divergentes' : 'conferem',
+  }
+}
+
 /** Resumo das divergências XML × sistema (por item). */
 export function resumoDivergencias(notas: NotaXml[] | NotaMinima[]): {
   totalItens: number

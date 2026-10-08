@@ -174,7 +174,6 @@ function main() {
     'recursos-ia/grafo/grafo.lbug',
     'recursos-ia/grafo/grafo.lbug.json',
     'recursos-ia/grafo/MANIFEST.grafo.json',
-    'recursos-ia/grafo/vetores.json',
     'recursos-ia/embedding/vetores-ncm.json',
     'recursos-ia/embedding/MANIFEST-embedding.json',
     'recursos-ia/indice-ncm/indice-lexical.json',

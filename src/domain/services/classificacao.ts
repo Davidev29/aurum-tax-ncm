@@ -1,4 +1,4 @@
-import { REGRA_GERAL } from '../constants'
+import { LINK_LC214, REGRA_GERAL } from '../constants'
 import type {
   Classificacao,
   DocumentosHabilitados,
@@ -162,7 +162,10 @@ export function montarRegraGeral(
     percentualReducaoIBS: cctDet.pRedIBS ?? 0,
     percentualReducaoCBS: cctDet.pRedCBS ?? 0,
     anexo: null,
-    urlLegislacao: null,
+    // Regra geral = tributação integral da LC 214/2025: carrega o link oficial
+    // (antes vinha sem URL e as telas pediam fonte manual para aplicar o
+    // 000/000001 — ver `ModalEscolhaTributacao`).
+    urlLegislacao: LINK_LC214,
     documentosHabilitados: cstDet.docs ?? null,
   }
 
@@ -174,7 +177,7 @@ export function montarRegraGeral(
     creditoPresumido: false,
     diferimento: false,
     anexo: null,
-    urlLegislacao: null,
+    urlLegislacao: LINK_LC214,
     documentos: cstDet.docs ?? {},
   }
 

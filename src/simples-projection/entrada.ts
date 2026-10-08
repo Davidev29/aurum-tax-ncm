@@ -82,8 +82,8 @@ export async function prepararEntradaProjecao(
   if (errSerie) faltas.push(errSerie);
   const errHistMae = exigirSerie(input.historicoMae12, 'historicoMae12', true);
   if (errHistMae) faltas.push(errHistMae);
-  if (input.percentualNova == null || !(input.percentualNova > 0) || !(input.percentualNova < 1)) {
-    faltas.push('Informe "percentualNova" como fração 0 < p < 1 (ex. 0.3 = 30% na nova empresa).');
+  if (input.percentualNova == null || !Number.isFinite(input.percentualNova) || input.percentualNova < 0 || input.percentualNova > 1) {
+    faltas.push('Informe "percentualNova" como fração 0 ≤ p ≤ 1 (ex. 0.3 = 30% na nova empresa; 0 e 1 são válidos).');
   }
   if (!ANEXOS.includes(input.anexoMae as (typeof ANEXOS)[number])) {
     faltas.push('Informe "anexoMae" (I, II, III, IV ou V — Tabelas CNAE × Anexo ou Fator R).');

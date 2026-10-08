@@ -20,20 +20,30 @@ export const TEMA_KEY = 'tema'
 /** Banner de "modo visualização" dispensado por sessão. */
 export const BANNER_KEY = 'banner_dismissed'
 
-/** Alíquotas de referência padrão de IBS/CBS (%). */
+/**
+ * Alíquotas de referência padrão de IBS/CBS (%) — ESTIMATIVA, não fato.
+ *
+ * Espelho embarcado da tabela viva `public/base/parametros.json`
+ * (ver `src/domain/constants/parametros.ts`): o valor vigente é lido em
+ * runtime por `referencia-service.ts` (`obterAliquotasRefDinamica()`).
+ * Estes percentuais DEVEM ser confrontados com o ato vigente (LC 214/2025
+ * e regulamentação) antes de cada entrega fiscal — o valor histórico da
+ * SPEC era 17.70/8.80 (total 26.5%). Todo cálculo do sistema usa este ponto
+ * único (stores + relatórios), e a tela Calculadora permite editar por
+ * sessão; aqui fica o carimbo exibido na UI.
+ */
 export const REF_DEFAULT = { IBS: 19, CBS: 9 } as const
 
 /**
- * Proveniência das alíquotas de referência.
+ * Proveniência das alíquotas de referência (estimativa — confirmar o ato).
  *
- * Parâmetro legal móvel: estes percentuais DEVEM ser confrontados com o ato
- * vigente (LC 214/2025 e regulamentação) antes de cada entrega fiscal — o
- * valor histórico da SPEC era 17.70/8.80 (total 26.5%). Todo cálculo do
- * sistema usa este ponto único (stores + relatórios), e a tela Calculadora
- * permite editar por sessão; aqui fica o carimbo exibido na UI.
+ * `fonte` é o carimbo exibido na UI; `soma` (28) é `19 + 9` conferida contra
+ * a tabela viva (`validarParametrosRef` rejeita soma divergente). Quando a
+ * tabela não pôde ser lida, `referencia-service.ts` marca `fonte: 'fallback'`
+ * e o chamador exibe `BANNER_REF_FALLBACK`.
  */
 export const REF_FONTE = {
-  fonte: 'Parâmetro editável — confirmar contra o ato vigente (LC 214/2025 e regulamentação)',
+  fonte: 'Estimativa editável — confirmar contra o ato vigente (LC 214/2025 e regulamentação). Ver tabela public/base/parametros.json',
   soma: 28,
 } as const
 

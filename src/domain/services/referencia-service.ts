@@ -1,95 +1,88 @@
 /**
- * Serviço de alíquotas de referência dinâmicas.
+ * Serviço de alíquotas de referência — lê a TABELA `public/base/parametros.json`.
  *
- * Em vez de usar valores hardcoded do REF_DEFAULT, este serviço consulta
- * as tabelas auxiliares (cSt, cStClassTrib) do banco de dados para obter
- * os percentuais de redução vigentes. Quando o usuário edita uma
- * classificação no sistema, o cálculo é automaticamente refletido.
+ * Dinâmico de verdade: os percentuais vêm da tabela viva (editável sem
+ * rebuild), com espelho embarcado (`PARAMETROS_REF`) como fallback offline.
+ * Quando a tabela não pôde ser lida, o chamador DEVE exibir
+ * `BANNER_REF_FALLBACK` — a estimativa 19/9 nunca passa por valor confirmado.
  *
- * Fallback: se não houver dados no banco (ex.: primeira execução), usa
- * REF_DEFAULT para não quebrar o fluxo de importação.
+ * Fallback: usa o espelho embarcado para não quebrar o fluxo de importação.
  */
-import { db } from '@/infrastructure/db/schema'
 import { REF_DEFAULT } from '../constants'
+import {
+  PARAMETROS_REF,
+  carregarParametrosRef,
+  invalidarCacheParametros,
+} from '../constants/parametros'
 
 export interface AliquotasRefDinamica {
   refIBS: number
   refCBS: number
-  fonte: 'dinamica' | 'fallback'
+  /** `parametros` = tabela viva (ou espelho válido); `fallback` = estimativa — exibir banner. */
+  fonte: 'parametros' | 'fallback'
+  /** Ato declarado pela tabela (estimativa — confirmar antes de cada entrega). */
+  ato: string
+  vigenciaInicio: string | null
+  vigenciaFim: string | null
 }
 
 /**
- * Calcula as alíquotas de referência dinâmicas a partir das tabelas
- * auxiliares do banco de dados.
- *
- * Estratégia:
- * 1. Busca o primeiro registro da tabela `cStClassTrib` que tenha
- *    pRedIBS e pRedCBS não nulos (classificação padrão).
- * 2. Busca o registro da tabela `cSt` com o CST da regra geral ('000').
- * 3. Calcula as alíquotas efetivas: aliq = (1 - reducao/100).
- * 4. Multiplica por um fator de escala para manter a compatibilidade
- *    com o formato atual (ex.: se reducao=0%, aliq=28% -> 28).
- *    Na verdade, usamos as reduções diretamente: o cálculo de tributos
- *    já multiplica refIBS * (1 - redIBS/100), então refIBS deve ser
- *    a alíquota cheia (ex.: 28) e redIBS a redução percentual (ex.: 0).
- *    Portanto, buscamos a alíquota cheia baseando-nos no padrão da
- *    base oficial: IBS = 19% e CBS = 9% (soma 28% — C-011: NUNCA IBS 28% + CBS 9%).
- *    Mas como a base oficial pode ter reduções diferentes por NCM,
- *    usamos a redução padrão (regra geral = 0%) como referência.
+ * Banner obrigatório quando `fonte === 'fallback'`: a tabela de parâmetros
+ * não pôde ser lida e o cálculo usa a estimativa embarcada.
+ */
+export const BANNER_REF_FALLBACK =
+  'Alíquotas de referência (IBS 19% · CBS 9%) são ESTIMATIVA — tabela `parametros.json` indisponível. Confirmar contra o ato vigente (LC 214/2025 e regulamentação) antes de cada entrega fiscal.'
+
+/**
+ * Lê as alíquotas de referência da tabela viva `public/base/parametros.json`.
+ * Em falha, devolve o espelho embarcado (`REF_DEFAULT`, mesma estimativa
+ * 19/9) com `fonte: 'fallback'` — o chamador exibe `BANNER_REF_FALLBACK`.
  */
 export async function obterAliquotasRefDinamica(): Promise<AliquotasRefDinamica> {
   try {
-    // Busca a regra geral na tabela cStClassTrib (CST 000, cClassTrib 000001)
-    const regraGeral = await db.cstClassTrib.get('000|000001')
-
-    if (regraGeral && regraGeral.pRedIBS != null && regraGeral.pRedCBS != null) {
-      // A base oficial define o CST 000 como "tributação integral" (redução 0%).
-      // C-011: referência cheia IBS 19% + CBS 9% (soma 28). A tabela
-      // cStClassTrib armazena percentuais de REDUÇÃO, não a alíquota cheia —
-      // a cheia é parâmetro legal (REF_DEFAULT). `fonte:'dinamica'` significa
-      // apenas "regra geral confirmada na base"; o número continua vindo do
-      // parâmetro (confirmar contra o ato vigente antes de cada entrega).
-      return {
-        refIBS: REF_DEFAULT.IBS,
-        refCBS: REF_DEFAULT.CBS,
-        fonte: 'dinamica',
-      }
-    }
-
-    // Fallback: sem dados no banco
+    const { params, fonte } = await carregarParametrosRef()
     return {
-      refIBS: REF_DEFAULT.IBS,
-      refCBS: REF_DEFAULT.CBS,
-      fonte: 'fallback',
+      refIBS: params.refIBS,
+      refCBS: params.refCBS,
+      fonte,
+      ato: params.ato,
+      vigenciaInicio: params.vigenciaInicio,
+      vigenciaFim: params.vigenciaFim,
     }
   } catch {
-    // Em caso de erro (banco indisponível), usa fallback silenciosamente
+    // Em caso de erro (tabela ilegível), usa fallback silenciosamente
     return {
       refIBS: REF_DEFAULT.IBS,
       refCBS: REF_DEFAULT.CBS,
       fonte: 'fallback',
+      ato: PARAMETROS_REF.ato,
+      vigenciaInicio: PARAMETROS_REF.vigenciaInicio,
+      vigenciaFim: PARAMETROS_REF.vigenciaFim,
     }
   }
 }
 
 /**
  * Versão síncrona para uso em contextos onde não é possível await
- * (ex.: cálculos síncronos em componentes React). Usa sempre REF_DEFAULT.
- * Para obter valores dinâmicos, chamar obterAliquotasRefDinamica() antes.
+ * (ex.: cálculos síncronos em componentes React). Usa o espelho embarcado
+ * (`PARAMETROS_REF` === `REF_DEFAULT` 19/9, estimativa).
+ * Para ler a tabela viva, chamar obterAliquotasRefDinamica() antes.
  */
 export function obterAliquotasRefSync(): AliquotasRefDinamica {
   return {
     refIBS: REF_DEFAULT.IBS,
     refCBS: REF_DEFAULT.CBS,
     fonte: 'fallback',
+    ato: PARAMETROS_REF.ato,
+    vigenciaInicio: PARAMETROS_REF.vigenciaInicio,
+    vigenciaFim: PARAMETROS_REF.vigenciaFim,
   }
 }
 
 /**
- * Invalida o cache de alíquotas (chamar após editar tabelas auxiliares).
- * Como a versão dinâmica faz consulta direta ao IndexedDB, não há cache
- * para invalidar, mas a função existe para futuras otimizações.
+ * Invalida o cache de alíquotas (chamar após editar `parametros.json`
+ * ou as tabelas auxiliares).
  */
 export function invalidarCacheAliquotas(): void {
-  // No-op: sem cache por enquanto
+  invalidarCacheParametros()
 }

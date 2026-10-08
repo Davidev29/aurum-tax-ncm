@@ -44,7 +44,8 @@ export interface AnexoSimples {
 
 export const SUBLIMITE = 3_600_000;
 export const RBT12_MAX = 4_800_000;
-export const FATOR_R_LIMIAR = 0.28;
+/** Limiar do Fator R (fonte canonica: `@/domain/simples/nucleo`; re-export p/ compat). */
+export { FATOR_R_LIMIAR } from '@/domain/simples/nucleo';
 export const CBS_REF_PADRAO = 0.088;
 export const ISS_TETO = 0.05;
 

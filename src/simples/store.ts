@@ -24,6 +24,8 @@ import {
   type ResultadoConvencional,
   type ResultadoHibrido,
 } from './calculo';
+import { fatorCreditoDespesa } from '@/domain/simples/creditos';
+import { exigirRbtReceita } from '@/domain/simples/validacao';
 import { codigo7De } from '@/domain/services/cnae';
 import {
   ANO_REFERENCIA_PADRAO,
@@ -141,12 +143,9 @@ function normalizarDespesas(): DespesaSimples[] {
   ];
 }
 
+/** Fator de crédito por despesa (fonte única: `@/domain/simples/creditos`). */
 export function fatorDespesa(d: DespesaSimples): number {
-  if (/aluguel/i.test(d.rotulo)) return 0.3;
-  if (d.regra === 'integral') return 1;
-  if (d.regra === 'red30') return 0.7;
-  if (d.regra === 'red60') return 0.4;
-  return 0;
+  return fatorCreditoDespesa(d.rotulo, d.regra);
 }
 
 /** Normaliza `anexos` vindos do SQLite/JSON em lista limpa `['III','V']`.
@@ -302,7 +301,16 @@ export const useSimples = create<SimplesState>((set, get) => ({
 
   calcular: () => {
     const s = get();
-    if (!(s.rbt12 > 0) || !(s.receitaMes > 0)) {
+    // Guarda fail-closed (fonte: `@/domain/simples/validacao`): Infinity,
+    // <= 0 ou RBT12 > 4.8M geram mensagem explícita e NUNCA DAS 0 exibível
+    // (relatório escondido, resultados zerados).
+    try {
+      exigirRbtReceita(s.rbt12, s.receitaMes);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast(msg.startsWith('desenquadramento-simples')
+        ? 'RBT12 acima de R$ 4.800.000: empresa desenquadrada do Simples — revise os valores.'
+        : 'Informe RBT12 e receita do mês maiores que zero para calcular o DAS.', 'warn');
       set({ convencional: null, hibrido: null, debitosCBS: 0, creditosCBS: 0, relatorioVisivel: false });
       return;
     }

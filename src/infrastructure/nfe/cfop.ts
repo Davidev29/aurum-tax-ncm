@@ -118,7 +118,15 @@ const semAcento = (s: string | null | undefined): string =>
     .trim()
 
 const RE_NAO_VENDA =
-  /BONIF|DOAC|BRINDE|AMOSTRA|DEMONSTR|MOSTRU|MOSTRA|CONSERT|REPARO|COMODATO|TRANSFER|REMESSA|DEVOLU|RETORNO|GARANTIA|EXPOSI|ARMAZ|DEPOSITO|CONSIGNA|FEIRA|TROCA|SUBSTITUI/
+  /BONIF|DOAC|BRINDE|AMOSTRA|DEMONSTR|MOSTRU|MOSTRA|CONSERT|REPARO|COMODATO|TRANSFER|REMESSA|DEVOLU|RETORNO|GARANTIA|EXPOSI|ARMAZ|DEPOSITO|CONSIGNA|FEIRA|TROCA/
+
+/**
+ * Papel na substituição tributária (`SUBSTITUÍDO/SUBSTITUTO`) — **não** é
+ * troca de mercadoria. Só conta como não-venda quando não há `VENDA`
+ * explícita (ex.: "REMESSA PARA SUBSTITUIÇÃO"); com `VENDA` ("VENDA ...
+ * POR CONTR SUBSTITUIDO") é venda — ST é outro assunto.
+ */
+const RE_SUBSTITUI = /SUBSTITUI/
 
 const RE_IMOBILIZADO = /IMOBILIZADO|ATIVO IMOB|BEM DO ATIVO|USO OU CONSUMO|USO E CONSUMO|MATERIAL DE USO/
 
@@ -135,6 +143,10 @@ export function classificarNatOp(
   if (RE_EXPORT.test(n)) return 'nao-venda'
   if (RE_IMOBILIZADO.test(n)) return 'imobilizado'
   if (RE_NAO_VENDA.test(n)) return 'nao-venda'
+  // "CONTRIBUINTE SUBSTITUÍDO/SUBSTITUTO" é papel na ST: não anula VENDA
+  // explícita ("VENDA ... POR CONTR SUBSTITUIDO" é venda). Sem VENDA,
+  // substituição de mercadoria segue não-venda.
+  if (RE_SUBSTITUI.test(n) && !RE_VENDA.test(n)) return 'nao-venda'
   if (RE_VENDA.test(n)) return 'venda'
   return 'indefinida'
 }

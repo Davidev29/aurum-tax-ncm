@@ -41,7 +41,7 @@ import { classificarComIa, type ResultadoGateIa } from '@/application/classifica
 import { classificarComIaServicos, type ResultadoGateIaServicos } from '@/application/classificacao-ia-servicos'
 import { resolverClassificacoes, resolverClassificacoesNbs } from '@/infrastructure/base/classificacao-repo'
 import { montarCSV } from '@/infrastructure/exporters/relatorios'
-import { calcularConvencional, calcularHibrido, debitoCBS, fatorR, type ResultadoConvencional, type ResultadoHibrido, type RegraDebitoCBS } from '@/simples/calculo'
+import { calcularConvencional, calcularHibrido, debitoCBS, fatorR, FATOR_R_LIMIAR, type ResultadoConvencional, type ResultadoHibrido, type RegraDebitoCBS } from '@/simples/calculo'
 import { rotuloRegraCredito, rotuloRegraDebito } from '@/domain/services/percentual-chat';
 import { ANEXOS_SIMPLES, CBS_REF_PADRAO, type AnexoSimplesId } from '@/simples/tabelas'
 import {
@@ -3324,7 +3324,10 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
     `${pergunta} ${falasUser.slice(-2).join(' ')}`,
   )
   const USA_FATOR_R = (anexoId === 'III' || anexoId === 'V') && (!anexoFoiEscolhido || folhaCtx != null || pediuFatorR || anexoId === 'V')
-  const conv = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: receita as number })
+  // RBA do sublimite quando informada na pergunta ("RBA ..."); sem ela o
+  // motor usa a RBT12 (cenário 1 por padrão).
+  const rbaChat: number | undefined = slots.rba ?? undefined
+  const conv = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: receita as number, rba: rbaChat })
   const guiaChat = conv.dasGuia ?? conv.das
   const notaSubChat = conv.excedeSublimite
     ? ` (guia sem ${conv.tributosFora.join('/')}; ${fmtMoeda(conv.foraSublimite.total)} fora da guia)`
@@ -3377,14 +3380,14 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
     const pctFR = `${(fr.indice * 100).toFixed(2).replace('.', ',')}%`
     if (folhaCtx == null) {
       linhaFatorR = `\n• Fator R: não calculado (sem folha)${folhaAviso}.`
-    } else if (fr.indice >= 0.28) {
+    } else if (fr.indice >= FATOR_R_LIMIAR) {
       linhaFatorR = `\n• Fator R: ${pctFR} (folha ${fmtMoeda(folhaCtx)} / RBT12 ${fmtMoeda(rbt12 as number)}) — enquadrado (≥ 28%), sustenta o Anexo III. Monitore todo mês.`
     } else {
-      const folhaMinima = Math.round((Number(rbt12) || 0) * 0.28 * 100) / 100
+      const folhaMinima = Math.round((Number(rbt12) || 0) * FATOR_R_LIMIAR * 100) / 100
       const gap = Math.max(0, Math.round((folhaMinima - (Number(folhaCtx) || 0)) * 100) / 100)
       const gapMensal = Math.round((gap / 12) * 100) / 100
-      const dasIII = calcularConvencional({ anexoId: 'III', rbt12: rbt12 as number, receitaMes: receita as number })
-      const dasV = calcularConvencional({ anexoId: 'V', rbt12: rbt12 as number, receitaMes: receita as number })
+      const dasIII = calcularConvencional({ anexoId: 'III', rbt12: rbt12 as number, receitaMes: receita as number, rba: rbaChat })
+      const dasV = calcularConvencional({ anexoId: 'V', rbt12: rbt12 as number, receitaMes: receita as number, rba: rbaChat })
       const economiaMes = Math.round(((dasV.dasGuia ?? dasV.das) - (dasIII.dasGuia ?? dasIII.das)) * 100) / 100
       linhaFatorR = `\n• Fator R: ${pctFR} (folha ${fmtMoeda(folhaCtx)} / RBT12 ${fmtMoeda(rbt12 as number)}) — sugere Anexo ${fr.anexo}.`
       blocoFatorBaixo =
@@ -3429,8 +3432,8 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
   let blocoIntervalo = ''
   if (ivRec != null) {
     try {
-      const cMin = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: ivRec.min })
-      const cMax = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: ivRec.max })
+      const cMin = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: ivRec.min, rba: rbaChat })
+      const cMax = calcularConvencional({ anexoId: anexoId as AnexoSimplesId, rbt12: rbt12 as number, receitaMes: ivRec.max, rba: rbaChat })
       blocoIntervalo += `\n• Faixa informada: entre ${fmtMoeda(ivRec.min)} e ${fmtMoeda(ivRec.max)} — cálculo acima usa a média ${fmtMoeda(ivRec.media)} como referência (piso → DAS ${fmtMoeda(cMin.dasGuia ?? cMin.das)} · teto → DAS ${fmtMoeda(cMax.dasGuia ?? cMax.das)}).`
     } catch { /* cenário min/max é informativo — nunca quebra o DAS principal */ }
   }

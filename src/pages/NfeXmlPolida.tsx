@@ -25,7 +25,8 @@ import {
   topCstReforma,
   topNcm,
 } from '@/application/nfe-insights'
-import { apurarIbsCbs } from '@/infrastructure/nfe/apuracao'
+import { apurarIbsCbs, type ApuracaoIbsCbs } from '@/infrastructure/nfe/apuracao'
+import { classificarNatOp } from '@/infrastructure/nfe/cfop'
 import type { NotaXml } from '@/infrastructure/nfe/tipos'
 import { useSessao } from '@/store/sessao'
 import { useNfe } from '@/store/nfe'
@@ -39,6 +40,13 @@ import { SeloST, SeloSTNota } from '@/ui/cest'
 import { Btn, IconeBadge, Modal, Painel, Pill } from '@/ui/kit'
 
 type Aba = 'notas' | 'fornecedores' | 'produtos' | 'ncm' | 'insights'
+
+/** Linha compacta da natureza na tabela polida (texto cheio no tooltip). */
+function rotuloNaturezaPolida(natOp: string | null | undefined): string {
+  const base = String(natOp ?? '').trim() || 'sem natureza'
+  const classe = classificarNatOp(natOp)
+  return classe === 'nao-venda' || classe === 'imobilizado' ? `${base} · sem crédito` : base
+}
 
 const ABAS: { id: Aba; rotulo: string; icone: 'nota' | 'fornecedor' | 'caixa' | 'lupa' | 'grafico' }[] = [
   { id: 'notas', rotulo: 'Notas', icone: 'nota' },
@@ -221,6 +229,26 @@ function SemEmpresaPolida() {
   )
 }
 
+/* -------------------------------------------------- apuração única --- */
+
+/**
+ * Hero + Insights pediam `apurarIbsCbs(notas)` cada um — 2× o mesmo cálculo
+ * sobre o mesmo array. Cache por referência: o 2º uso reaproveita o memo do
+ * 1º (zustand entrega a mesma referência aos dois). `confrontoRegimes`,
+ * `evolucaoMensal` e `resumoDivergencias` têm um único uso (AbaInsights) e
+ * seguem com `useMemo` local.
+ */
+let cacheNotasAp: NotaXml[] | null = null
+let cacheAp: ApuracaoIbsCbs | null = null
+
+function apuracaoUnica(notas: NotaXml[]): ApuracaoIbsCbs {
+  if (cacheNotasAp === notas && cacheAp) return cacheAp
+  const ap = apurarIbsCbs(notas)
+  cacheNotasAp = notas
+  cacheAp = ap
+  return ap
+}
+
 /* --------------------------------------------------------------- hero --- */
 
 function HeroExecutivo() {
@@ -230,7 +258,7 @@ function HeroExecutivo() {
   const preparando = useConferenciaXml((s) => s.preparando)
   const filtros = useNfe((s) => s.filtros)
   const tot = useMemo(() => totaisNotas(notas), [notas])
-  const ap = useMemo(() => apurarIbsCbs(notas), [notas])
+  const ap = useMemo(() => apuracaoUnica(notas), [notas])
 
   const cobertura = ap.debitoEfetivoTotal > 0 ? Math.min(100, (ap.creditoEfetivoTotal / ap.debitoEfetivoTotal) * 100) : 0
   const falta = Math.max(0, ap.debitoEfetivoTotal - ap.creditoEfetivoTotal)
@@ -368,10 +396,21 @@ function ImportCompacta() {
   const processando = useNfe((s) => s.processando)
   const etapa = useNfe((s) => s.etapa)
   const resumo = useNfe((s) => s.ultimoResumo)
+  const limparResumo = useNfe((s) => s.limparResumo)
   const inputRef = useRef<HTMLInputElement>(null)
   const [sobre, setSobre] = useState(false)
   const [previa, setPrevia] = useState<{ nome: string; tam: string }[]>([])
   const reduzir = useMovimentoReduzido()
+
+  // Auto-dismiss: o resumo (acerto ou erro) fica ~3s e some com fade.
+  useEffect(() => {
+    if (!resumo || processando) return
+    const t = window.setTimeout(() => {
+      limparResumo()
+      setPrevia([])
+    }, 3000)
+    return () => window.clearTimeout(t)
+  }, [resumo, processando, limparResumo])
 
   const enviar = (files: FileList | File[] | null) => {
     if (!files || files.length === 0 || processando) return
@@ -440,19 +479,44 @@ function ImportCompacta() {
                 </span>
                 <span className="mt-1 block text-[11px] text-slate-500" aria-live="polite">{etapa ?? 'Processando…'}</span>
               </span>
-            ) : previa.length ? (
-              <span className="mt-1.5 flex flex-wrap gap-1.5">
-                {previa.map((p) => (
-                  <span key={p.nome} className="pill bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" title={`${p.nome} · ${p.tam}`}>
-                    {p.nome.length > 22 ? `${p.nome.slice(0, 20)}…` : p.nome} · {p.tam}
+            ) : (
+              <>
+                {previa.length && !resumo ? (
+                  <span className="mt-1.5 flex flex-wrap gap-1.5">
+                    {previa.map((p) => (
+                      <span key={p.nome} className="pill bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" title={`${p.nome} · ${p.tam}`}>
+                        {p.nome.length > 22 ? `${p.nome.slice(0, 20)}…` : p.nome} · {p.tam}
+                      </span>
+                    ))}
                   </span>
-                ))}
-              </span>
-            ) : resumo ? (
-              <span className="mt-1 block text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-                {resumo.novas} nova(s){resumo.duplicadas ? ` · ${resumo.duplicadas} duplicada(s)` : ''}{(resumo.redirecionadas ?? 0) > 0 ? ` · ${resumo.redirecionadas} outro cadastro` : ''}{(resumo.orfas ?? 0) > 0 ? ` · ${resumo.orfas} contribuinte novo` : (resumo.quarentena ? ` · ${resumo.quarentena} quarentena` : '')}
-              </span>
-            ) : null}
+                ) : null}
+                <AnimatePresence initial={false}>
+                  {resumo ? (
+                    <motion.span
+                      key={`${resumo.novas}-${resumo.duplicadas}-${resumo.erros.length}`}
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.3 }}
+                      role={resumo.erros.length ? 'alert' : 'status'}
+                      className={`mt-1 block text-[11px] font-semibold ${resumo.erros.length ? 'text-red-700 dark:text-red-300' : 'text-emerald-700 dark:text-emerald-400'}`}
+                    >
+                      {resumo.novas} nova(s){resumo.duplicadas ? ` · ${resumo.duplicadas} duplicada(s)` : ''}{(resumo.redirecionadas ?? 0) > 0 ? ` · ${resumo.redirecionadas} outro cadastro` : ''}{(resumo.orfas ?? 0) > 0 ? ` · ${resumo.orfas} contribuinte novo` : (resumo.quarentena ? ` · ${resumo.quarentena} quarentena` : '')}
+                      {resumo.erros.length ? (
+                        <span className="mt-1 block max-h-20 overflow-auto font-normal">
+                          {resumo.erros.slice(0, 3).map((e, i) => (
+                            <span key={`${e.arquivo}-${i}`} className="block break-words">
+                              ❌ <strong>{e.arquivo}</strong>: {e.motivo}
+                            </span>
+                          ))}
+                          {resumo.erros.length > 3 ? <span>… +{resumo.erros.length - 3} erro(s)</span> : null}
+                        </span>
+                      ) : null}
+                    </motion.span>
+                  ) : null}
+                </AnimatePresence>
+              </>
+            )}
           </span>
         </motion.div>
 
@@ -776,6 +840,12 @@ function AbaNotas() {
                     <td>
                       <div className="text-[13px] font-bold">Nº {n.numero || '—'} <span className="font-normal text-slate-400">s.{n.serie || '—'}</span></div>
                       <div className="font-mono text-[11px] text-slate-400">{String(n.dataEmissao || '').slice(0, 10)} · {n.direcao === 'entrada' ? 'Entrada' : n.direcao === 'saida' ? 'Saída' : 'Quarentena'}</div>
+                      <div
+                        className="mt-0.5 max-w-55 truncate text-[11px] text-slate-500 dark:text-slate-400"
+                        title={n.natOp ? `Natureza da operação: ${n.natOp}` : 'Sem natureza informada no XML'}
+                      >
+                        🏷️ {rotuloNaturezaPolida(n.natOp)}
+                      </div>
                       <SeloSTNota itens={n.itensAnalisados} />
                     </td>
                     <td className="max-w-[220px]">
@@ -812,6 +882,8 @@ function AbaNotas() {
 }
 
 function ModalNotaPolida({ nota, onFechar }: { nota: NotaXml; onFechar: () => void }) {
+  const classeNatPolida = classificarNatOp(nota.natOp)
+  const corNatPolida = classeNatPolida === 'venda' ? 'emerald' : classeNatPolida === 'indefinida' ? 'red' : 'amber'
   return (
     <Modal aberto onFechar={onFechar} titulo={`Nota ${nota.numero || '—'} · ${nota.emitNome}`} subtitulo={`${String(nota.dataEmissao || '').slice(0, 10)} · ${fmtMoeda(nota.valorTotal)} · IBS+CBS ${fmtMoeda(nota.totalTributos)}`}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -822,6 +894,21 @@ function ModalNotaPolida({ nota, onFechar }: { nota: NotaXml; onFechar: () => vo
         <Copiar texto={nota.chave} titulo="Clique para copiar a chave de acesso">
           <span className="text-[11px] text-slate-500">Chave {nota.chave.slice(0, 12)}…{nota.chave.slice(-4)}</span>
         </Copiar>
+      </div>
+      <div
+        className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--line)] bg-slate-50/70 px-3 py-2 dark:bg-slate-950/40"
+        title={nota.natOp ? `Natureza como veio na capa do XML: ${nota.natOp}` : 'XML sem natureza da operação informada'}
+      >
+        <span aria-hidden>🏷️</span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Natureza da operação · capa</div>
+          <div className="truncate text-xs font-black" title={nota.natOp || undefined}>
+            {nota.natOp || <span className="font-normal italic text-slate-400">sem natureza informada</span>}
+          </div>
+        </div>
+        <Pill cor={corNatPolida}>
+          {rotuloNaturezaPolida(nota.natOp)}
+        </Pill>
       </div>
       <div className="overflow-hidden rounded-xl border border-[var(--line)]">
         <table className="tbl tbl-compacta">
@@ -1081,7 +1168,7 @@ function BlocoBarras({
 function AbaInsights() {
   const notas = useNfe((s) => s.notas)
   const filtros = useNfe((s) => s.filtros)
-  const ap = useMemo(() => apurarIbsCbs(notas), [notas])
+  const ap = useMemo(() => apuracaoUnica(notas), [notas])
   const conf = useMemo(() => confrontoRegimes(notas), [notas])
   const evo = useMemo(() => evolucaoMensal(notas, 8), [notas])
   const div = useMemo(() => resumoDivergencias(notas), [notas])

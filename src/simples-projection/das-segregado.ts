@@ -35,16 +35,25 @@ export interface ResultadoSegregado {
 /**
  * Soma o DAS das parcelas usando a RBT12 TOTAL em cada tabela.
  * Parcela com receita zerada contribui com DAS 0 (faixa da tabela no RBT12).
+ * A RBA (sublimite) é repassada ao motor quando informada — sem ela, o motor
+ * usa a RBT12 total; o sublimite na projeção é só-alerta (ver `alertas`).
  */
-export function calcularDASegregado(rbt12Total: number, parcelas: ParcelaAnexo[]): ResultadoSegregado {
+export function calcularDASegregado(
+  rbt12Total: number,
+  parcelas: ParcelaAnexo[],
+  opts?: { rba?: number },
+): ResultadoSegregado {
   if (!Array.isArray(parcelas) || parcelas.length === 0) {
     throw new Error('parcelas vazias: informe ao menos { anexoId, receitaMes }.');
   }
+  const rbt = Math.max(0, Number(rbt12Total) || 0);
+  const rba = opts?.rba == null ? rbt : Math.max(0, Number(opts.rba) || 0);
   const det: DetalheParcelaAnexo[] = parcelas.map((p) => {
     const conv = calcularConvencional({
       anexoId: p.anexoId,
-      rbt12: Math.max(0, Number(rbt12Total) || 0),
+      rbt12: rbt,
       receitaMes: Math.max(0, Number(p.receitaMes) || 0),
+      rba,
     });
     const tab = ANEXOS_SIMPLES[p.anexoId].faixas.find((f) => f.faixa === conv.faixa);
     return {

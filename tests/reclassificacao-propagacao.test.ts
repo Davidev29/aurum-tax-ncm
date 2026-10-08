@@ -133,4 +133,13 @@ describe('propagarClassificacaoNcm', () => {
     const prop = await propagarClassificacaoNcm('123')
     expect(prop).toEqual({ produtos: 0, notas: 0, itens: 0 })
   })
+
+  it('regra geral carrega o link oficial da LC 214/2025', async () => {
+    const { LINK_LC214 } = await import('@/domain/constants')
+    const rg = await classificacaoRegraGeral(NCM)
+    expect(rg.cst).toBe('000')
+    expect(rg.cClassTrib).toBe('000001')
+    expect(rg.resumo.urlLegislacao).toBe(LINK_LC214)
+    expect(rg.referencia?.urlLegislacao).toBe(LINK_LC214)
+  })
 })

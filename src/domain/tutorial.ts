@@ -40,7 +40,7 @@ export const PASSOS_TOUR: PassoTour[] = [
       'Ajuste quantidade e valor unitário direto na lista.',
       'Confira o Resumo: base · IBS (R$) · CBS (R$) · total · carga efetiva.',
     ],
-    dica: 'As alíquotas de referência (padrão IBS 19% + CBS 9%) valem para todo o sistema. A redução é congelada no momento em que o item entra na cesta.',
+    dica: 'As alíquotas de referência (referência vigente — confirmar ato) valem para todo o sistema. A redução é congelada no momento em que o item entra na cesta.',
     acao: 'Abrir Calculadora',
   },
   {

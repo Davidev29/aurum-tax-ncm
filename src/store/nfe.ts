@@ -87,6 +87,8 @@ interface NfeState {
   abrirNota: (n: NotaXml) => void
   fecharNota: () => void
   setRef: (tributo: 'IBS' | 'CBS', valor: number) => void
+  /** Limpa o bloco de resumo da importação (auto-dismiss de 3s na UI). */
+  limparResumo: () => void
   vincularProdutos: () => Promise<void>
   excluir: (n: NotaXml) => Promise<void>
   /** Reaplica a vigente num item/nota aberta (pós-reclassificação manual). */
@@ -330,6 +332,7 @@ export const useNfe = create<NfeState>((set, get) => ({
 
   abrirNota: (n) => set({ notaAberta: n }),
   fecharNota: () => set({ notaAberta: null }),
+  limparResumo: () => set({ ultimoResumo: null }),
 
   setRef: (tributo, valor) => {
     const v = clamp(Number(valor) || 0, 0, 100)

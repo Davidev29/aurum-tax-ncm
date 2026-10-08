@@ -616,8 +616,8 @@ describe('snapshot pré-restore', () => {
     }
   }
 
-  it('handler cria cópia válida com 27 tabelas', async () => {
-    const { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } = await import('node:fs')
+  it('handler cria cópia válida com 27 tabelas (snapshot rotativo)', async () => {
+    const { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } = await import('node:fs')
     const { tmpdir } = await import('node:os')
     const { join } = await import('node:path')
     const userData = join(tmpdir(), `aurum-snap-userdata-${process.pid}-${Date.now()}`)
@@ -626,14 +626,16 @@ describe('snapshot pré-restore', () => {
     const handler = await registrarSnapshotEm(userData)
     const r = await handler(null)
     expect(r.ok).toBe(true)
-    const bak = join(userData, 'aurum.db.pre-restore.bak')
+    const baks = readdirSync(userData).filter((f) => /^aurum\.db\.pre-restore-.*\.bak$/.test(f))
+    expect(baks).toHaveLength(1)
+    const bak = join(userData, baks[0])
     expect(existsSync(bak)).toBe(true)
     expect(statSync(bak).size).toBeGreaterThan(0)
     expect(readFileSync(bak).subarray(0, 16).toString('utf8')).toBe('SQLite format 3\0')
     expect(await contarTabelas(bak)).toBe(27)
   })
 
-  it('segundo snapshot sobrescreve (ainda um único .bak)', async () => {
+  it('snapshots acumulam até 5 e os mais antigos são podados', async () => {
     const { copyFileSync, mkdirSync, readdirSync } = await import('node:fs')
     const { tmpdir } = await import('node:os')
     const { join } = await import('node:path')
@@ -641,10 +643,17 @@ describe('snapshot pré-restore', () => {
     mkdirSync(userData, { recursive: true })
     copyFileSync(process.env.AURUM_TEST_TEMPLATE as string, join(userData, 'aurum.db'))
     const handler = await registrarSnapshotEm(userData)
+    const lista = () => readdirSync(userData).filter((f) => /^aurum\.db\.pre-restore-.*\.bak$/.test(f)).sort()
     await handler(null)
-    const r2 = await handler(null)
-    expect(r2.ok).toBe(true)
-    expect(readdirSync(userData).filter((f) => f.endsWith('.pre-restore.bak'))).toHaveLength(1)
+    await handler(null)
+    // Nomes com timestamp: cada snapshot é um arquivo novo (sem sobrescrita).
+    expect(lista()).toHaveLength(2)
+    for (let i = 0; i < 5; i++) {
+      await new Promise((r) => setTimeout(r, 5))
+      const r2 = await handler(null)
+      expect(r2.ok).toBe(true)
+    }
+    expect(lista()).toHaveLength(5)
   })
 
   it('sem aurum.db devolve ok:false sem lançar', async () => {

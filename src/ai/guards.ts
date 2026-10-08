@@ -13,9 +13,27 @@ export const MENSAGEM_RECUSA_INJECTION =
   'Não sigo essa instrução. Trabalho só com dados oficiais e cálculo determinístico: informe CNPJ (14 dígitos), NCM/NBS, ou RBT12 + anexo + receita, que eu consulto a ferramenta correta.'
 
 const RE_CNPJ = /\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}|\b\d{14}\b/g
-const RE_CPF = /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/g
+/**
+ * CPF: SÓ o formato pontuado (`123.456.789-09`) + 11 dígitos crus com
+ * contexto explícito (`CPF 12345678909`). Onze dígitos avulsos sem contexto
+ * NÃO mascaram — seriam falsos positivos (protocolo, RBT12, NBS…).
+ */
+const RE_CPF = /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|(?:\bcpf\b[\s:]*\d{11}\b)/gi
 const RE_EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]{2,}/g
 const RE_FONE = /\(?\d{2}\)?\s?\d{4,5}-?\d{4}/g
+
+/** Conta quantas máscaras cada categoria aplicaria (auditoria C-008, sem mascarar). */
+export function contarMascaras(texto: unknown): { cnpj: number; cpf: number; email: number; fone: number } {
+  const s = String(texto ?? '')
+  const conta = (re: RegExp): number => {
+    re.lastIndex = 0
+    let n = 0
+    while (re.test(s)) n++
+    re.lastIndex = 0
+    return n
+  }
+  return { cnpj: conta(RE_CNPJ), cpf: conta(RE_CPF), email: conta(RE_EMAIL), fone: conta(RE_FONE) }
+}
 
 /** Remove PII de texto livre antes de enviar a grafo/MCP/IPC/log/modelo. */
 export function removerPII(texto: unknown): string {

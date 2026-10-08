@@ -55,12 +55,12 @@ function CampoMoeda({
   }, [valor]);
   return (
     <label className="block min-w-0">
-      <span className="field-label">{rotulo}</span>
+      <span className="field-label field-label--lg">{rotulo}</span>
       <Texto
         mono
         mask="moeda"
         inputMode="decimal"
-        className="field num-input !py-2 text-[13px]"
+        className="field num-input h-12 !py-2 text-base"
         placeholder={placeholder ?? 'R$ 0,00'}
         value={texto}
         onChange={(e) => {
@@ -69,7 +69,7 @@ function CampoMoeda({
         }}
         onBlur={() => setTexto((t) => (parseMoeda(t) > 0 ? `R$ ${parseMoeda(t).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : t))}
       />
-      {dica ? <span className="mt-0.5 block text-[11px] leading-snug text-slate-500 dark:text-slate-400" title={dica}>{dica}</span> : null}
+      {dica ? <span className="mt-1 block text-[13px] leading-snug text-slate-600 dark:text-slate-300" title={dica}>{dica}</span> : null}
     </label>
   );
 }
@@ -96,7 +96,7 @@ function DespesaValor({
       inputMode="decimal"
       aria-label="Valor da despesa em reais por mês"
       title="Valor mensal da despesa em R$ — base para o crédito de CBS"
-      className="field field-sm mono w-28 !py-1 text-right !text-[12px]"
+      className="field field-sm mono w-28 !py-1 text-right !text-[13px]"
       placeholder="R$ 0,00"
       value={texto}
       onChange={(e) => {
@@ -208,7 +208,7 @@ function SeletorRegraCredito({
             abrir();
           }
         }}
-        className="field field-sm select-glass flex w-[154px] items-center justify-between gap-1 !py-1 text-left text-[11px]"
+        className="field field-sm select-glass flex w-[154px] items-center justify-between gap-1 !py-1 text-left text-[13px]"
       >
         <span className="truncate">{atual.curto}</span>
         <svg
@@ -287,7 +287,7 @@ function Barra({ partes }: { partes: { rotulo: string; valor: number; classe: st
           <span key={p.rotulo} className={p.classe} style={{ width: `${total > 0 ? (p.valor / total) * 100 : 0}%`, ...(p.cor ? { backgroundColor: p.cor } : {}) }} title={`${p.rotulo}: ${fmtMoeda(p.valor)}`} />
         ))}
       </div>
-      <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[10px] text-slate-500 sm:flex sm:flex-wrap dark:text-slate-400">
+      <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[13px] text-slate-600 sm:flex sm:flex-wrap dark:text-slate-300">
         {partes.filter((p) => p.valor > 0).map((p) => (
           <span key={p.rotulo}><span aria-hidden="true" style={p.cor ? { color: p.cor } : undefined}>■</span> {p.rotulo}: {fmtMoeda(p.valor)}</span>
         ))}
@@ -299,10 +299,10 @@ function Barra({ partes }: { partes: { rotulo: string; valor: number; classe: st
 function Passo({ n, titulo, desc, feito }: { n: string; titulo: string; desc: string; feito?: boolean }) {
   return (
     <div className="flex items-center gap-2">
-      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-black ${feito ? 'bg-emerald-600 text-white' : 'calc-step-dot !h-5 !w-5 !text-[10px]'}`}>{feito ? '✓' : n}</span>
+      <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[13px] font-black ${feito ? 'bg-emerald-600 text-white' : 'calc-step-dot !h-7 !w-7 !text-[13px]'}`}>{feito ? '✓' : n}</span>
       <span className="min-w-0">
-        <span className="block truncate text-xs font-black tracking-tight">{titulo}</span>
-        <span className="block truncate text-[11px] text-slate-500" title={desc}>{desc}</span>
+        <span className="block truncate text-xl font-extrabold tracking-tight">{titulo}</span>
+        <span className="block truncate text-[13px] text-slate-600 dark:text-slate-300" title={desc}>{desc}</span>
       </span>
     </div>
   );
@@ -331,10 +331,10 @@ function Stepper({ etapa, onIr, podeIr3 }: { etapa: 1 | 2 | 3; onIr: (n: 1 | 2 |
               title={bloqueado ? 'Calcule para ver o resultado' : `Ir para ${it.rotulo}`}
               className={`btn-press flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1 py-0.5 text-left transition-all duration-200 ${bloqueado ? 'min-h-[44px] cursor-not-allowed opacity-50' : 'min-h-[44px] hover:bg-slate-100 dark:hover:bg-slate-800'}`}
             >
-              <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-black ${feito ? 'bg-emerald-600 text-white' : ativo ? 'bg-brand-700 text-white' : 'bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300'}`}>
+              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[13px] font-black ${feito ? 'bg-emerald-600 text-white' : ativo ? 'bg-brand-700 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
                 {feito ? '✓' : it.n}
               </span>
-              <span className={`truncate text-[11px] ${ativo ? 'font-black' : 'font-semibold text-slate-500'}`}>{it.rotulo}</span>
+              <span className={`truncate text-[13px] ${ativo ? 'font-black' : 'font-semibold text-slate-600 dark:text-slate-300'}`}>{it.rotulo}</span>
             </button>
             {i < itens.length - 1 ? <span className="h-px min-w-3 flex-1 bg-[var(--line)]" aria-hidden="true" /> : null}
           </li>
@@ -348,7 +348,7 @@ function SubCard({ titulo, children, aside }: { titulo: string; children: React.
   return (
     <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-500">{titulo}</h4>
+        <h4 className="text-xl font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200">{titulo}</h4>
         {aside}
       </div>
       {children}
@@ -365,7 +365,7 @@ class LimiteErroGrafico extends Component<{ children: ReactNode }, { falhou: boo
   render() {
     if (this.state.falhou) {
       return (
-        <p className="rounded-2xl border border-[var(--line)] bg-white px-4 py-6 text-center text-[11px] text-slate-400 dark:bg-slate-900">
+        <p className="rounded-2xl border border-[var(--line)] bg-white px-4 py-6 text-center text-[13px] text-slate-600 dark:bg-slate-900">
           Gráficos indisponíveis neste momento — os valores acima seguem válidos.
         </p>
       );
@@ -729,15 +729,15 @@ export function SimplesNacional() {
   const reparticaoVisiveis = reparticaoAberta ? reparticaoItens : reparticaoItens.slice(0, 4);
 
   return (
-    <div className="mx-auto w-full max-w-[1024px]">
+    <div className="simples-escopo mx-auto w-full max-w-[1400px]">
       <div className="min-w-0 space-y-3">
         <Entrada>
         <Painel className="overflow-hidden">
           <div className="flex items-center gap-2 border-b border-[var(--line)] p-3">
             <IconeBadge nome="calculadora" tom="brand" tamanho="sm" />
             <div className="min-w-0 flex-1">
-              <h2 className="truncate text-[13px] font-black tracking-tight">Simples Nacional <span className="ml-1 rounded-full bg-brand-100 px-1.5 py-px align-middle text-[10px] font-bold text-brand-700 dark:bg-aurum-500/15 dark:text-aurum-200">NOVO</span></h2>
-              <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+              <h2 className="truncate text-xl font-extrabold tracking-tight">Simples Nacional <span className="ml-1 rounded-full bg-brand-100 px-1.5 py-px align-middle text-[13px] font-bold text-brand-700 dark:bg-aurum-500/15 dark:text-aurum-200">NOVO</span></h2>
+              <p className="truncate text-[13px] text-slate-600 dark:text-slate-300">
                 LC 123/2006 + Reforma (CBS/IBS) · 2027–2028
               </p>
             </div>
@@ -751,7 +751,7 @@ export function SimplesNacional() {
                 type="button"
                 onClick={() => { if (s.modo !== m) { s.set({ modo: m }); setEtapa(1); } }}
                 aria-pressed={s.modo === m}
-                className={`btn btn-press flex-1 !py-1.5 text-xs transition-all duration-200 ${s.modo === m ? 'btn-primary' : 'btn-ghost'}`}
+                className={`btn btn-press h-12 flex-1 !py-1.5 text-sm font-bold transition-all duration-200 ${s.modo === m ? 'btn-primary' : 'btn-ghost'}`}
               >
                 {m === 'manual' ? 'Manual · Anexo' : 'Automático · CNPJ'}
               </button>
@@ -761,7 +761,7 @@ export function SimplesNacional() {
           <Stepper etapa={etapa} onIr={irPara} podeIr3={!!mostrando} />
 
           {etapa !== 3 ? (
-          <div className="space-y-3 p-4" key={`${s.modo}-${etapa}`}>
+          <div className="space-y-5 p-6 sm:p-8" key={`${s.modo}-${etapa}`}>
             {etapa === 1 ? (
             <>
             {/* PASSO 1 — VALORES BASE (sempre visível, antes do anexo) */}
@@ -777,12 +777,12 @@ export function SimplesNacional() {
               <SubCard
                 titulo="Sublimite estadual · R$ 3,6M"
                 aside={s.rbt12 > 0 ? (
-                  <span className={`rounded-full px-2 py-px text-[10px] font-bold ${estouradoPasso1 ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200' : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200'}`}>
+                  <span className={`rounded-full px-2 py-px text-[13px] font-bold ${estouradoPasso1 ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200' : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200'}`}>
                     {estouradoPasso1 ? 'acima do sublimite' : 'dentro do sublimite'}
                   </span>
-                ) : <span className="text-[10px] text-slate-400">RBT12 define</span>}
+                ) : <span className="text-[13px] text-slate-600">RBT12 define</span>}
               >
-                <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold">
+                <label className="flex cursor-pointer items-center gap-2 text-[13px] font-semibold">
                   <input type="checkbox" className="h-4 w-4 accent-brand-700" checked={s.usarRba} onChange={(e) => { s.set({ usarRba: e.target.checked }); s.tocarEntrada(); }} />
                   RBA do ano diferente do RBT12
                 </label>
@@ -791,7 +791,7 @@ export function SimplesNacional() {
                     <CampoMoeda rotulo="RBA — acumulada no ano" valor={s.rba} onValor={(v) => { s.set({ rba: v }); s.tocarEntrada(); }} dica="Só quando a receita do ano difere do RBT12" />
                   </div>
                 ) : null}
-                <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                <p className="mt-1.5 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
                   {estouradoPasso1
                     ? `RBT12 ${fmtMoeda(s.rbt12)}${s.usarRba ? ` · RBA ${fmtMoeda(rbaPasso1)}` : ''} acima de ${fmtMoeda(SUBLIMITE)}: ICMS/ISS/IBS saem da guia DAS e o híbrido é ativado sozinho.`
                     : `Abaixo de ${fmtMoeda(SUBLIMITE)}: tudo dentro da guia DAS.`}
@@ -800,10 +800,10 @@ export function SimplesNacional() {
               <SubCard
                 titulo="Folha · Fator R (opcional)"
                 aside={previsaoFR?.definido ? (
-                  <span className={`rounded-full px-2 py-px text-[10px] font-bold ${previsaoFR.anexo === 'III' ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200' : 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200'}`}>
+                  <span className={`rounded-full px-2 py-px text-[13px] font-bold ${previsaoFR.anexo === 'III' ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200' : 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200'}`}>
                     {previsaoFR.anexo} · {(previsaoFR.indice * 100).toFixed(2)}%
                   </span>
-                ) : <span className="text-[10px] text-slate-400">pode ficar em branco</span>}
+                ) : <span className="text-[13px] text-slate-600">pode ficar em branco</span>}
               >
                 <CampoMoeda
                   rotulo="Folha de salários 12m"
@@ -830,28 +830,28 @@ export function SimplesNacional() {
                 <Passo n="2" titulo={s.modo === 'manual' ? 'Anexo' : 'Atividade (CNPJ)'} desc="Individual no mesmo anexo ou segregado por anexo." feito={!!mostrando} />
                 {s.modo === 'manual' ? (
                   <div>
-                    <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                       {ANEXOS.map((a) => (
                         <button
                           key={a}
                           type="button"
                           onClick={() => aoEscolherAnexo(a)}
                           aria-pressed={s.anexoId === a && s.escolheuAnexo}
-                          className={`rounded-lg border px-2 py-2.5 text-left transition-all duration-200 btn-press min-h-[44px] ${
+                          className={`rounded-lg border px-2 py-2.5 text-left transition-all duration-200 btn-press min-h-[88px] ${
                             s.anexoId === a && s.escolheuAnexo
-                              ? 'border-brand-700 bg-brand-700 text-white shadow-pop scale-[1.02]'
-                              : 'border-[var(--line)] bg-white hover:border-aurum-500 hover:scale-[1.01] active:scale-[0.99] dark:bg-slate-900'
+                              ? 'simples-anexo-ativo simples-anexo-' + a
+                              : 'simples-anexo-' + a + ' border-[var(--line)] hover:scale-[1.01] active:scale-[0.99]'
                           }`}
                         >
-                          <span className={`block font-mono text-xs font-black ${s.anexoId === a && s.escolheuAnexo ? 'text-aurum-200' : 'text-brand-700 dark:text-aurum-200'}`}>{a}</span>
-                          <span className={`block truncate text-[10px] ${s.anexoId === a && s.escolheuAnexo ? 'text-white/80' : 'text-slate-500'}`}>
+                          <span className={`block font-mono text-sm font-black ${s.anexoId === a && s.escolheuAnexo ? 'text-white' : 'text-brand-700 dark:text-aurum-200'}`}>{a}</span>
+                          <span className={`block truncate text-[13px] ${s.anexoId === a && s.escolheuAnexo ? 'text-white/85' : 'text-slate-600 dark:text-slate-300'}`}>
                             {a === 'I' ? 'Comércio' : a === 'II' ? 'Indústria' : a === 'III' ? 'Serviços' : a === 'IV' ? 'S/ CPP' : 'Fator R'}
                           </span>
                         </button>
                       ))}
                     </div>
                     {s.escolheuAnexo ? (
-                      <p className="mt-1 animate-fade-up truncate text-[11px] text-emerald-600">{ANEXO_LABEL[s.anexoId]} ✓</p>
+                      <p className="mt-1 animate-fade-up truncate text-[13px] text-emerald-600">{ANEXO_LABEL[s.anexoId]} ✓</p>
                     ) : null}
                   </div>
                 ) : (
@@ -859,21 +859,21 @@ export function SimplesNacional() {
                     <div className="flex flex-row items-end gap-2">
                       <div className="min-w-0 flex-1">
                         <span className="field-label">CNPJ</span>
-                        <Texto mono mask="cnpj" placeholder="00.000.000/0000-00" value={s.cnpj} onChange={(e) => s.set({ cnpj: e.target.value })} className="!h-[38px]" />
+                        <Texto mono mask="cnpj" placeholder="00.000.000/0000-00" value={s.cnpj} onChange={(e) => s.set({ cnpj: e.target.value })} className="h-12 text-base" />
                       </div>
                       <div className="shrink-0 pb-px">
-                        <Btn variante="primary" carregando={s.buscandoCnpj} onClick={() => void s.buscarPorCnpj()} className="!h-[38px] whitespace-nowrap px-4">
+                        <Btn variante="primary" carregando={s.buscandoCnpj} onClick={() => void s.buscarPorCnpj()} className="h-12 whitespace-nowrap px-4">
                           {s.buscandoCnpj ? 'Buscando…' : 'Buscar'}
                         </Btn>
                       </div>
                     </div>
                     {s.empresaNome ? (
-                      <div className="animate-fade-up truncate text-xs">
-                        <strong>{s.empresaNome}</strong> <span className="font-mono text-slate-500">{fmtCnpj(s.cnpj)}</span>{' '}
+                      <div className="animate-fade-up truncate text-[13px]">
+                        <strong>{s.empresaNome}</strong> <span className="font-mono text-slate-600">{fmtCnpj(s.cnpj)}</span>{' '}
                         {s.opcaoSimples == null ? null : s.opcaoSimples ? (
-                          <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[10px] font-bold text-emerald-800">Simples optante</span>
+                          <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[13px] font-bold text-emerald-800">Simples optante</span>
                         ) : (
-                          <span className="rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-bold text-amber-800">Não optante</span>
+                          <span className="rounded-full bg-amber-100 px-1.5 py-px text-[13px] font-bold text-amber-800">Não optante</span>
                         )}
                       </div>
                     ) : null}
@@ -883,7 +883,7 @@ export function SimplesNacional() {
                       <div ref={listaRef as React.RefObject<HTMLDivElement>} className="animate-fade-up scroll-mt-24 space-y-1.5">
                         <div className="flex items-center justify-between gap-2">
                           <span className="field-label">Qual atividade usar? · {s.opcoes.length}</span>
-                          <span className="hidden text-[10px] text-slate-400 sm:block">Toque para focar e liberar os cálculos</span>
+                          <span className="hidden text-[13px] text-slate-600 sm:block">Toque para focar e liberar os cálculos</span>
                         </div>
                         <div className="max-h-56 space-y-1.5 overflow-y-auto pr-0.5">
                           {s.opcoes.map((o) => {
@@ -897,25 +897,25 @@ export function SimplesNacional() {
                               aria-pressed={s.cnaeEscolhido === o.cnae7}
                               className="btn-press flex w-full items-start gap-2 rounded-lg border border-[var(--line)] bg-white p-2 text-left transition-all duration-200 hover:border-aurum-500 dark:bg-slate-900"
                             >
-                              <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 border-slate-300 text-transparent">
-                                <span className="text-[9px]">✓</span>
+                              <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 border-slate-300 text-transparent">
+                                <span className="text-[13px]">✓</span>
                               </span>
                               <span className="min-w-0 flex-1">
                                 <span className="flex flex-wrap items-center gap-1">
-                                  <span className="font-mono text-[11px] font-black">{o.codigoFormatado}</span>
-                                  {o.principal ? <span className="rounded-full bg-brand-100 px-1.5 py-px text-[10px] font-bold text-brand-700">principal</span> : null}
+                                  <span className="font-mono text-[13px] font-black">{o.codigoFormatado}</span>
+                                  {o.principal ? <span className="rounded-full bg-brand-100 px-1.5 py-px text-[13px] font-bold text-brand-700">principal</span> : null}
                                   {anexosNorm.length ? (
-                                    <span className="rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">{rotuloAnexoSimples(anexosNorm)}</span>
+                                    <span className="rounded-full bg-slate-100 px-1.5 py-px text-[13px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">{rotuloAnexoSimples(anexosNorm)}</span>
                                   ) : (
-                                    <span className="rounded-full bg-red-100 px-1.5 py-px text-[10px] font-bold text-red-700">s/ anexo</span>
+                                    <span className="rounded-full bg-red-100 px-1.5 py-px text-[13px] font-bold text-red-700">s/ anexo</span>
                                   )}
                                   {ehDuplo ? (
-                                    <span className="rounded-full bg-sky-100 px-1.5 py-px text-[10px] font-bold text-sky-800 dark:bg-sky-950/50 dark:text-sky-200">III × V</span>
+                                    <span className="rounded-full bg-sky-100 px-1.5 py-px text-[13px] font-bold text-sky-800 dark:bg-sky-950/50 dark:text-sky-200">III × V</span>
                                   ) : o.exigeFatorR ? (
-                                    <span className="rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-bold text-amber-800">Fator R</span>
+                                    <span className="rounded-full bg-amber-100 px-1.5 py-px text-[13px] font-bold text-amber-800">Fator R</span>
                                   ) : null}
                                 </span>
-                                <span className="mt-0.5 block truncate text-[11px] text-slate-600 dark:text-slate-300" title={o.descricao}>{o.descricao}</span>
+                                <span className="mt-0.5 block truncate text-[13px] text-slate-600 dark:text-slate-300" title={o.descricao}>{o.descricao}</span>
                               </span>
                             </button>
                             );
@@ -928,31 +928,31 @@ export function SimplesNacional() {
                     {mostrarCnaeFocado ? (
                       <div className="animate-pop-in space-y-2" key={cnaeAtivo!.cnae7}>
                         <div className="flex items-start gap-2 rounded-xl border border-brand-700/70 bg-brand-50/60 p-2.5 shadow-card dark:bg-brand-950/25">
-                          <span className="grid h-5 w-5 shrink-0 animate-pop-in place-items-center rounded-full bg-brand-700 text-[10px] font-black text-white">✓</span>
+                          <span className="grid h-5 w-5 shrink-0 animate-pop-in place-items-center rounded-full bg-brand-700 text-[13px] font-black text-white">✓</span>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-1">
-                              <span className="font-mono text-[11px] font-black">{cnaeAtivo!.codigoFormatado}</span>
-                              {cnaeAtivo!.principal ? <span className="rounded-full bg-brand-100 px-1.5 py-px text-[10px] font-bold text-brand-700">principal</span> : null}
+                              <span className="font-mono text-[13px] font-black">{cnaeAtivo!.codigoFormatado}</span>
+                              {cnaeAtivo!.principal ? <span className="rounded-full bg-brand-100 px-1.5 py-px text-[13px] font-bold text-brand-700">principal</span> : null}
                               {(() => {
                                 const anexosFoco = normalizarListaAnexosSimples(cnaeAtivo!.anexos);
                                 return anexosFoco.length ? (
-                                <span className="rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">{rotuloAnexoSimples(anexosFoco)}</span>
+                                <span className="rounded-full bg-slate-100 px-1.5 py-px text-[13px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">{rotuloAnexoSimples(anexosFoco)}</span>
                               ) : (
-                                <span className="rounded-full bg-red-100 px-1.5 py-px text-[10px] font-bold text-red-700">s/ anexo</span>
+                                <span className="rounded-full bg-red-100 px-1.5 py-px text-[13px] font-bold text-red-700">s/ anexo</span>
                                 );
                               })()}
-                              <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[10px] font-bold text-emerald-800">em simulação</span>
+                              <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[13px] font-bold text-emerald-800">em simulação</span>
                             </div>
-                            <p className="mt-0.5 truncate text-[11px] text-slate-600 dark:text-slate-300" title={cnaeAtivo!.descricao}>{cnaeAtivo!.descricao}</p>
+                            <p className="mt-0.5 truncate text-[13px] text-slate-600 dark:text-slate-300" title={cnaeAtivo!.descricao}>{cnaeAtivo!.descricao}</p>
                             {s.opcoes.length > 1 ? (
-                              <p className="mt-0.5 text-[10px] text-slate-400">+ {s.opcoes.length - 1} oculta{s.opcoes.length - 1 === 1 ? '' : 's'}</p>
+                              <p className="mt-0.5 text-[13px] text-slate-600">+ {s.opcoes.length - 1} oculta{s.opcoes.length - 1 === 1 ? '' : 's'}</p>
                             ) : null}
                           </div>
                         </div>
                         {/* NBS informativos — sempre colapsados para enxugar */}
                         {cnaeAtivo!.estadoNbs === 'bens→NCM' ? (
                           <div
-                            className="rounded-xl border border-sky-300 bg-sky-50 px-2.5 py-1.5 text-[11px] text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200"
+                            className="rounded-xl border border-sky-300 bg-sky-50 px-2.5 py-1.5 text-[13px] text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200"
                             role="note"
                           >
                             <p className="font-bold">Sem NBS — atividade de bens (ver NCM)</p>
@@ -963,7 +963,7 @@ export function SimplesNacional() {
                             </div>
                           </div>
                         ) : cnaeAtivo!.estadoNbs === 'mapeado' && cnaeAtivo!.nbsLista.length ? (
-                          <details className="rounded-xl border border-slate-200 bg-slate-50/60 px-2.5 py-1.5 text-[11px] text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300">
+                          <details className="rounded-xl border border-slate-200 bg-slate-50/60 px-2.5 py-1.5 text-[13px] text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300">
                             <summary className="cursor-pointer font-bold">
                               NBS: {cnaeAtivo!.nbsLista.length} ({cnaeAtivo!.nbsComBeneficio} c/ benefício) — informativo
                             </summary>
@@ -977,11 +977,11 @@ export function SimplesNacional() {
                             ) : null}
                             <ul className="mt-1 max-h-32 space-y-1 overflow-y-auto pr-1">
                               {cnaeAtivo!.nbsLista.map((v) => (
-                                <li key={v.nbs} className="flex items-center gap-1.5 text-[10px]">
+                                <li key={v.nbs} className="flex items-center gap-1.5 text-[13px]">
                                   <span className="font-mono font-bold text-brand-700 dark:text-aurum-200">{v.nbsFormatado}</span>
                                   <span className="min-w-0 flex-1 truncate" title={v.descricao ?? ''}>{v.descricao ?? '—'}</span>
                                   {v.temBeneficio ? (
-                                    <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">benefício</span>
+                                    <span className="rounded-full bg-emerald-100 px-1.5 py-px text-[13px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">benefício</span>
                                   ) : null}
                                 </li>
                               ))}
@@ -989,7 +989,7 @@ export function SimplesNacional() {
                           </details>
                         ) : cnaeAtivo!.estadoNbs === 'sem-mapeamento-NBS' ? (
                           <p
-                            className="rounded-xl border border-slate-200 bg-slate-50/60 px-2.5 py-1.5 text-[10px] text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400"
+                            className="rounded-xl border border-slate-200 bg-slate-50/60 px-2.5 py-1.5 text-[13px] text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300"
                             role="note"
                           >
                             Regra do Simples acima · ref. {cnaeAtivo!.anoReferencia}.
@@ -1028,7 +1028,7 @@ export function SimplesNacional() {
                 <SubCard
                   titulo="Segregação de receita"
                   aside={s.segAtivo ? (
-                    <span className="rounded-full bg-sky-100 px-2 py-px text-[10px] font-bold text-sky-900 dark:bg-sky-950/50 dark:text-sky-200">
+                    <span className="rounded-full bg-sky-100 px-2 py-px text-[13px] font-bold text-sky-900 dark:bg-sky-950/50 dark:text-sky-200">
                       {s.segParcelas.filter((p) => p.valor > 0).length} parcela(s)
                       {segResultado?.temST ? ` · ST ${segResultado.tributosST.join('+')}` : ''}
                     </span>
@@ -1048,7 +1048,7 @@ export function SimplesNacional() {
                     </button>
                   ) : (
                     <div className="animate-fade-up space-y-2">
-                      <p className="text-[10px] leading-relaxed text-slate-500">
+                      <p className="text-[13px] leading-relaxed text-slate-600">
                         Informe o valor de cada parcela — no <strong>mesmo anexo</strong> ou em <strong>outro</strong>.
                         Cada linha usa a <strong>RBT12 total</strong> ({fmtMoeda(s.rbt12)}) na tabela do seu anexo;
                         marque <strong>ST</strong> quando o ICMS/ISS da parcela já foi recolhido por substituição.
@@ -1062,9 +1062,9 @@ export function SimplesNacional() {
                         return (
                         <div key={p.id} className="rounded-xl border border-[var(--line)] bg-white p-2 dark:bg-slate-900">
                           <div className="mb-1.5 flex items-center gap-2">
-                            <span className="text-[11px] font-black tracking-wide">Atividade {i + 1}</span>
+                            <span className="text-[13px] font-black tracking-wide">Atividade {i + 1}</span>
                             {p.anexoId === 'V' ? (
-                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200" title="Anexo V: o Fator R decide (folha ÷ RBT12 ≥ 28% → III)">Fator R</span>
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[13px] font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200" title="Anexo V: o Fator R decide (folha ÷ RBT12 ≥ 28% → III)">Fator R</span>
                             ) : null}
                           </div>
                           <div className="flex items-end gap-2">
@@ -1097,12 +1097,12 @@ export function SimplesNacional() {
                               title={s.segParcelas.length <= 1 ? 'Mínimo 1 parcela' : 'Remover parcela'}
                               aria-label={s.segParcelas.length <= 1 ? 'Mínimo 1 parcela' : `Remover parcela ${i + 1}`}
                               onClick={() => { s.set({ segParcelas: s.segParcelas.filter((x) => x.id !== p.id) }); s.tocarEntrada(); }}
-                              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-[var(--line)] text-slate-500 transition hover:border-red-500 hover:text-red-500 disabled:opacity-30 dark:text-slate-300"
+                              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-[var(--line)] text-slate-600 transition hover:border-red-500 hover:text-red-500 disabled:opacity-30 dark:text-slate-300"
                             >
                               ✕
                             </button>
                           </div>
-                          <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-300" title={`${rotuloST}: o ${rotuloST === 'ST ICMS' ? 'ICMS' : 'ISS'} desta parcela sai da guia (já recolhido pelo substituto)`}>
+                          <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-[13px] font-bold text-slate-600 dark:text-slate-300" title={`${rotuloST}: o ${rotuloST === 'ST ICMS' ? 'ICMS' : 'ISS'} desta parcela sai da guia (já recolhido pelo substituto)`}>
                             <input
                               type="checkbox"
                               className="h-4 w-4 shrink-0 accent-amber-600"
@@ -1117,7 +1117,7 @@ export function SimplesNacional() {
                         </div>
                         );
                       })}
-                      <div className={`rounded-xl px-2.5 py-1.5 font-mono text-[11px] tabular-nums ${segExcesso ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'}`}>
+                      <div className={`rounded-xl px-2.5 py-1.5 font-mono text-[13px] tabular-nums ${segExcesso ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'}`}>
                         Segregado {fmtMoeda(segSoma)} de {fmtMoeda(s.receitaMes)}
                         {segExcesso
                           ? ` · ultrapassa ${fmtMoeda(segSoma - s.receitaMes)} — reduza`
@@ -1128,19 +1128,19 @@ export function SimplesNacional() {
                       {segTemFatorR ? (
                         <div className="rounded-xl border border-[var(--line)] bg-slate-50/60 p-2.5 dark:bg-slate-950/40">
                           <div className="mb-1.5 flex items-center justify-between gap-2">
-                            <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Fator R (III × V)</span>
+                            <span className="text-[13px] font-black uppercase tracking-wider text-slate-600">Fator R (III × V)</span>
                             {previsaoFR?.definido ? (
-                              <span className={`rounded-full px-2 py-px text-[10px] font-bold ${previsaoFR.anexo === 'III' ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200' : 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200'}`}>
+                              <span className={`rounded-full px-2 py-px text-[13px] font-bold ${previsaoFR.anexo === 'III' ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200' : 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200'}`}>
                                 {previsaoFR.anexo} · {(previsaoFR.indice * 100).toFixed(2)}%
                               </span>
-                            ) : <span className="text-[10px] text-slate-400">anexo V provisório</span>}
+                            ) : <span className="text-[13px] text-slate-600">anexo V provisório</span>}
                           </div>
-                          <div className="flex items-center justify-between gap-2 text-[12px]">
-                            <span className="shrink-0 text-slate-500">Folha 12m (etapa 1)</span>
+                          <div className="flex items-center justify-between gap-2 text-[13px]">
+                            <span className="shrink-0 text-slate-600">Folha 12m (etapa 1)</span>
                             <span className="font-mono font-semibold">{s.folha12 > 0 ? fmtMoeda(s.folha12) : 'não informada'}</span>
                           </div>
                           {s.folha12 > 0 ? null : (
-                            <p className="mt-1 text-[10px] leading-relaxed text-slate-400">Sem folha, o V fica provisório — volte à etapa 1 se quiser informar.</p>
+                            <p className="mt-1 text-[13px] leading-relaxed text-slate-600">Sem folha, o V fica provisório — volte à etapa 1 se quiser informar.</p>
                           )}
                         </div>
                       ) : null}
@@ -1150,7 +1150,7 @@ export function SimplesNacional() {
                             + Parcela
                           </Btn>
                         ) : null}
-                        <button type="button" onClick={() => { s.set({ segAtivo: false, segParcelas: [] }); s.tocarEntrada(); }} className="text-[11px] font-bold text-red-600 hover:underline">
+                        <button type="button" onClick={() => { s.set({ segAtivo: false, segParcelas: [] }); s.tocarEntrada(); }} className="text-[13px] font-bold text-red-600 hover:underline">
                           Remover segregação
                         </button>
                       </div>
@@ -1158,12 +1158,12 @@ export function SimplesNacional() {
                   )}
                 </SubCard>
                 <details className="rounded-xl border border-dashed border-[var(--line)] px-3 py-2">
-                  <summary className="cursor-pointer text-xs font-bold">
+                  <summary className="cursor-pointer text-[13px] font-bold">
                     Avançado — sublimite e regime híbrido
-                    {s.compararHibrido || estouradoPasso1 ? <span className="ml-1 rounded-full bg-brand-100 px-1.5 py-px text-[10px] text-brand-700">ativo</span> : null}
+                    {s.compararHibrido || estouradoPasso1 ? <span className="ml-1 rounded-full bg-brand-100 px-1.5 py-px text-[13px] text-brand-700">ativo</span> : null}
                   </summary>
                   <div className="mt-2 space-y-2">
-                    <p className={`rounded-xl px-2.5 py-1.5 text-[11px] leading-relaxed ${estouradoPasso1 ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-slate-50 text-slate-500 dark:bg-slate-950/40 dark:text-slate-400'}`}>
+                    <p className={`rounded-xl px-2.5 py-1.5 text-[13px] leading-relaxed ${estouradoPasso1 ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-slate-50 text-slate-600 dark:bg-slate-950/40 dark:text-slate-300'}`}>
                       {estouradoPasso1
                         ? `Sublimite estourado na etapa 1 (RBT12 ${fmtMoeda(s.rbt12)}${s.usarRba ? ` · RBA ${fmtMoeda(rbaPasso1)}` : ''} > ${fmtMoeda(SUBLIMITE)}). Para ajustar, volte à etapa 1 — aqui se informa só a alíquota de fora.`
                         : `Dentro do sublimite (${fmtMoeda(SUBLIMITE)}). Para informar RBA, volte à etapa 1.`}
@@ -1175,12 +1175,12 @@ export function SimplesNacional() {
                           <div>
                             <span className="field-label">ICMS fora da guia (%)</span>
                             <Texto
-                              type="number" step="0.01" min={0} max={30} mono className="field num-input !py-2 text-[13px]"
+                              type="number" step="0.01" min={0} max={30} mono className="field num-input h-12 text-base"
                               value={s.aliqRefICMS != null ? String((s.aliqRefICMS * 100).toFixed(2)) : previaConv ? String((previaConv.aliquotasFora.icms * 100).toFixed(2)) : ''}
                               placeholder={previaConv ? `Auto ${(previaConv.aliquotasFora.icms * 100).toFixed(2)}%` : 'Ex.: 18,00'}
                               onChange={(e) => { const t = e.target.value.replace(',', '.'); const v = t === '' ? null : Number(t) / 100; s.set({ aliqRefICMS: v == null || !(v >= 0) ? null : v }); s.tocarEntrada(); }}
                             />
-                            <span className="mt-0.5 block text-[10px] text-slate-400">
+                            <span className="mt-0.5 block text-[13px] text-slate-600">
                               {s.aliqRefICMS != null ? 'Manual — vale a alíquota informada.' : `Automático 5ª faixa (${previaConv ? (previaConv.aliquotasFora.icms * 100).toFixed(2) : '—'}%).`} <button type="button" className="font-bold underline" onClick={() => { s.set({ aliqRefICMS: null }); s.tocarEntrada(); }}>restaurar auto</button>
                             </span>
                           </div>
@@ -1189,22 +1189,22 @@ export function SimplesNacional() {
                           <div>
                             <span className="field-label">ISS fora da guia (%)</span>
                             <Texto
-                              type="number" step="0.01" min={0} max={30} mono className="field num-input !py-2 text-[13px]"
+                              type="number" step="0.01" min={0} max={30} mono className="field num-input h-12 text-base"
                               value={s.aliqRefISS != null ? String((s.aliqRefISS * 100).toFixed(2)) : previaConv ? String((previaConv.aliquotasFora.iss * 100).toFixed(2)) : ''}
                               placeholder={previaConv ? `Auto ${(previaConv.aliquotasFora.iss * 100).toFixed(2)}%` : 'Ex.: 5,00'}
                               onChange={(e) => { const t = e.target.value.replace(',', '.'); const v = t === '' ? null : Number(t) / 100; s.set({ aliqRefISS: v == null || !(v >= 0) ? null : v }); s.tocarEntrada(); }}
                             />
-                            <span className="mt-0.5 block text-[10px] text-slate-400">
+                            <span className="mt-0.5 block text-[13px] text-slate-600">
                               {s.aliqRefISS != null ? 'Manual — vale a alíquota informada.' : `Automático 5ª faixa (${previaConv ? (previaConv.aliquotasFora.iss * 100).toFixed(2) : '—'}%).`} <button type="button" className="font-bold underline" onClick={() => { s.set({ aliqRefISS: null }); s.tocarEntrada(); }}>restaurar auto</button>
                             </span>
                           </div>
                         ) : null}
-                        <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                        <p className="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
                           O fora = receita do mês × referência. A guia DAS não muda — só o bloco “fora da guia” e a carga total.
                         </p>
                       </div>
                     ) : null}
-                    <label className="flex cursor-pointer items-center gap-2 text-xs font-bold">
+                    <label className="flex cursor-pointer items-center gap-2 text-[13px] font-bold">
                       <input
                         type="checkbox"
                         className="h-4 w-4 accent-brand-700"
@@ -1218,26 +1218,26 @@ export function SimplesNacional() {
                         <div>
                           <span className="field-label">CBS referência (%)</span>
                           <Texto
-                            type="number" step="0.01" min={0} max={30} mono className="field num-input !py-2 text-[13px]"
+                            type="number" step="0.01" min={0} max={30} mono className="field num-input h-12 text-base"
                             value={String((s.cbsRef * 100).toFixed(2))}
                             onChange={(e) => { const v = Number(e.target.value.replace(',', '.')) || 0; s.set({ cbsRef: v / 100 }); s.tocarEntrada(); }}
                           />
-                          <span className="mt-0.5 block text-[10px] text-slate-400">Padrão 8,80%</span>
+                          <span className="mt-0.5 block text-[13px] text-slate-600">Padrão 8,80%</span>
                         </div>
                         <div className="space-y-1.5">
                           <span className="field-label">Despesas (crédito CBS)</span>
-                          <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                          <p className="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
                             <strong>Valor (R$/mês):</strong> quanto a empresa gasta no mês com o item — é a base do crédito.
                             O crédito de cada linha = valor × CBS {(s.cbsRef * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}% × fator da regra.
                           </p>
-                          <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                          <p className="text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
                             <strong>Regra de crédito:</strong> quanto da alíquota vira crédito — Integral 100%, Red. 30% (70%),
                             Red. 60% (40%), Zero / S/ crédito (0%). Ex.: aluguel usa 30% da alíquota por padrão.
                           </p>
-                          <div className="hidden overflow-x-auto rounded-lg border border-[var(--line)] sm:block">
-                            <table className="tbl tbl-compacta w-full min-w-[504px]">
+                          <div className="hidden overflow-x-auto rounded-2xl border-2 border-[var(--line)] sm:block">
+                            <table className="tbl tbl-compacta simples-tabela w-full min-w-[504px]">
                               <thead>
-                                <tr className="border-b border-[var(--line)] text-left text-[10px] uppercase tracking-wide text-slate-400">
+                                <tr className="border-b border-[var(--line)] text-left text-[13px] uppercase tracking-wide text-slate-600">
                                   <th className="px-2 py-1 font-bold" title="Item da despesa e crédito gerado abaixo do nome">Despesa · crédito</th>
                                   <th className="w-[154px] px-2 py-1 text-right font-bold" title="Valor mensal da despesa em R$ — base para o crédito de CBS">Valor (R$/mês)</th>
                                   <th className="w-[154px] px-2 py-1 font-bold" title="Regra: quanto da alíquota CBS vira crédito — Integral 100%, Red. 30% 70%, Red. 60% 40%, Zero/Sem crédito 0%">Regra de crédito</th>
@@ -1250,8 +1250,8 @@ export function SimplesNacional() {
                                   return (
                                     <tr key={dd.id} className="border-t border-[var(--line)] first:border-0">
                                       <td className="max-w-[168px] px-2">
-                                        <span className="block truncate text-[11px] font-semibold" title={dd.rotulo}>{dd.rotulo}</span>
-                                        <span className={`font-mono text-[10px] ${cred > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300'}`} title={`Crédito = valor × CBS × fator da regra (${dd.regra})`}>{fmtMoeda(cred)} crédito</span>
+                                        <span className="block truncate text-[13px] font-semibold" title={dd.rotulo}>{dd.rotulo}</span>
+                                        <span className={`font-mono text-[13px] ${cred > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-300'}`} title={`Crédito = valor × CBS × fator da regra (${dd.regra})`}>{fmtMoeda(cred)} crédito</span>
                                       </td>
                                       <td className="w-[154px] px-2 text-right">
                                         <DespesaValor valor={dd.valor} onValor={(v) => editarDespesa(dd.id, { valor: v })} />
@@ -1263,12 +1263,20 @@ export function SimplesNacional() {
                                         />
                                       </td>
                                       <td className="w-8 text-center">
-                                        <button type="button" className="text-slate-300 transition hover:text-red-500" title="Remover" onClick={() => s.setDespesas(s.despesas.filter((x) => x.id !== dd.id))}>✕</button>
+                                        <button type="button" className="text-slate-500 transition hover:text-red-500 dark:text-slate-300" title="Remover" onClick={() => s.setDespesas(s.despesas.filter((x) => x.id !== dd.id))}>✕</button>
                                       </td>
                                     </tr>
                                   );
                                 })}
                               </tbody>
+                              <tfoot>
+                                <tr className="border-t-2 border-[var(--line)]">
+                                  <td className="px-2 font-bold">Total</td>
+                                  <td className="w-[154px] px-2 text-right font-mono font-black tabular-nums">{fmtMoeda(s.despesas.reduce((a, d) => a + d.valor, 0))}</td>
+                                  <td className="w-[154px] px-2 font-mono text-[13px] font-black tabular-nums text-emerald-700 dark:text-emerald-300">{fmtMoeda(s.despesas.reduce((a, d) => a + creditoDaDespesa(d, s.cbsRef), 0))} crédito</td>
+                                  <td className="w-8" />
+                                </tr>
+                              </tfoot>
                             </table>
                           </div>
                           <div className="space-y-2 sm:hidden">
@@ -1278,10 +1286,10 @@ export function SimplesNacional() {
                                 <div key={dd.id} className="rounded-xl border border-[var(--line)] p-2.5">
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0">
-                                      <p className="truncate text-[12px] font-semibold" title={dd.rotulo}>{dd.rotulo}</p>
-                                      <p className={`font-mono text-[10px] ${credMobile > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>{fmtMoeda(credMobile)} crédito</p>
+                                      <p className="truncate text-[13px] font-semibold" title={dd.rotulo}>{dd.rotulo}</p>
+                                      <p className={`font-mono text-[13px] ${credMobile > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600'}`}>{fmtMoeda(credMobile)} crédito</p>
                                     </div>
-                                    <button type="button" aria-label={`Remover ${dd.rotulo}`} title="Remover" onClick={() => s.setDespesas(s.despesas.filter((x) => x.id !== dd.id))} className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-slate-500 transition hover:text-red-500 dark:text-slate-300">✕</button>
+                                    <button type="button" aria-label={`Remover ${dd.rotulo}`} title="Remover" onClick={() => s.setDespesas(s.despesas.filter((x) => x.id !== dd.id))} className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-slate-600 transition hover:text-red-500 dark:text-slate-300">✕</button>
                                   </div>
                                   <div className="mt-2 flex items-center justify-between gap-2">
                                     <DespesaValor valor={dd.valor} onValor={(v) => editarDespesa(dd.id, { valor: v })} />
@@ -1309,7 +1317,7 @@ export function SimplesNacional() {
                 </div>
                 </>
                 ) : (
-                  <p className="rounded-xl border border-dashed border-[var(--line)] bg-slate-50/50 px-3 py-2.5 text-center text-[11px] text-slate-400 dark:bg-slate-950/30">
+                  <p className="rounded-xl border border-dashed border-[var(--line)] bg-slate-50/50 px-3 py-2.5 text-center text-[13px] text-slate-600 dark:bg-slate-950/30">
                     {s.modo === 'manual'
                       ? '↑ Escolha um Anexo acima para liberar segregação e cálculo.'
                       : s.opcoes.length === 0
@@ -1320,7 +1328,7 @@ export function SimplesNacional() {
               </section>
               </Secao>
             ) : (
-              <p className="rounded-xl border border-dashed border-[var(--line)] bg-slate-50/50 px-3 py-2.5 text-center text-[11px] text-slate-400 dark:bg-slate-950/30">
+              <p className="rounded-xl border border-dashed border-[var(--line)] bg-slate-50/50 px-3 py-2.5 text-center text-[13px] text-slate-600 dark:bg-slate-950/30">
                 ↑ Informe RBT12 e receita do mês acima para liberar o anexo.
               </p>
             )}
@@ -1340,69 +1348,69 @@ export function SimplesNacional() {
               <div className="flex items-center gap-2 border-b border-[var(--line)] px-3 py-2.5">
                 <span className="grid h-7 w-7 animate-pulse-soft place-items-center rounded-lg bg-gradient-to-br from-brand-700 to-brand-600 text-white">✨</span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-black">Aurum AI calculando…</div>
-                  <div className="truncate text-[10px] text-slate-500">Cruzando RBT12, faixa e repartição…</div>
+                  <div className="truncate text-[13px] font-black">Aurum AI calculando…</div>
+                  <div className="truncate text-[13px] text-slate-600">Cruzando RBT12, faixa e repartição…</div>
                 </div>
               </div>
               <div className="space-y-2 p-3">
-                <div className="skeleton h-7 w-2/3" />
-                <div className="skeleton h-3 w-full" />
-                <div className="skeleton h-12 w-full" />
+                <div className="skeleton h-10 w-2/3" />
+                <div className="skeleton h-10 w-full" />
+                <div className="skeleton h-10 w-full" />
               </div>
             </div>
           ) : mostrando ? (
             <div className="animate-slide-in space-y-3" key={`${s.convencional!.anexoId}-${convExib!.das}-${segResultado?.deducaoST ?? 0}-${segResultado?.das ?? 0}`}>
               {/* MEMÓRIA lado a lado (mesma altura): base | desmembramentos + fechamento */}
-              <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-2">
+              <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[1fr_1fr]">
               <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white dark:bg-slate-900">
                 <div className="border-b border-[var(--line)] px-4 py-3">
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-[12px] font-black tracking-tight">Memória de cálculo</h3>
+                    <h3 className="text-xl font-extrabold tracking-tight">Memória de cálculo</h3>
                     <span className="flex shrink-0 items-center gap-1.5">
-                      <span className="rounded-full bg-brand-100 px-2 py-px text-[10px] font-bold text-brand-700 dark:bg-aurum-500/15 dark:text-aurum-200">
+                      <span className="rounded-full bg-brand-100 px-2 py-px text-[13px] font-bold text-brand-700 dark:bg-aurum-500/15 dark:text-aurum-200">
                         {segResultado ? `Segregado ${segResultado.anexos.join(' + ')}` : ANEXO_LABEL[convBase!.anexoId]}
                       </span>
                       <button
                         type="button"
                         onClick={() => irPara(1)}
                         title="Voltar e ajustar os dados (o resultado é mantido até recalcular)"
-                        className="btn-press rounded-full border border-[var(--line)] px-2 py-px text-[10px] font-bold text-slate-500 transition-all hover:border-brand-700 hover:text-brand-700 dark:text-slate-300"
+                        className="btn-press rounded-full border border-[var(--line)] px-2 py-px text-[13px] font-bold text-slate-600 transition-all hover:border-brand-700 hover:text-brand-700 dark:text-slate-300"
                       >
                         ‹ Editar
                       </button>
                     </span>
                   </div>
                   {s.modo === 'cnpj' && s.empresaNome ? (
-                    <p className="mt-1.5 truncate text-[11px] text-slate-500" title={`${s.empresaNome} · ${fmtCnpj(s.cnpj)}${s.cnaeEscolhido && cnaeAtivo ? ` · ${cnaeAtivo.codigoFormatado}` : ''}`}>
+                    <p className="mt-1.5 truncate text-[13px] text-slate-600" title={`${s.empresaNome} · ${fmtCnpj(s.cnpj)}${s.cnaeEscolhido && cnaeAtivo ? ` · ${cnaeAtivo.codigoFormatado}` : ''}`}>
                       <strong className="text-slate-700 dark:text-slate-200">{s.empresaNome}</strong>
                       {' · '}{fmtCnpj(s.cnpj)}
                       {s.cnaeEscolhido && cnaeAtivo ? ` · CNAE ${cnaeAtivo.codigoFormatado}` : ''}
                     </p>
                   ) : null}
                 </div>
-                <dl className="space-y-2.5 px-4 py-4 text-[12px] leading-relaxed">
+                <dl className="space-y-2.5 px-4 py-4 text-[13px] leading-relaxed">
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="shrink-0 text-slate-500">Receita 12 meses</dt>
+                    <dt className="shrink-0 text-slate-600">Receita 12 meses</dt>
                     <dd className="font-mono font-black">{fmtMoeda(s.rbt12)}</dd>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="shrink-0 text-slate-500">Receita do mês</dt>
+                    <dt className="shrink-0 text-slate-600">Receita do mês</dt>
                     <dd className="font-mono font-black">{fmtMoeda(s.receitaMes)}</dd>
                   </div>
                   {precisaFolha ? (
                     <div className="flex items-center justify-between gap-3">
-                      <dt className="shrink-0 text-slate-500">Folha 12m</dt>
+                      <dt className="shrink-0 text-slate-600">Folha 12m</dt>
                       <dd className="font-mono font-semibold">{s.folha12 > 0 ? fmtMoeda(s.folha12) : '—'}</dd>
                     </div>
                   ) : null}
                   <div className="flex items-center justify-between gap-3">
-                    <dt className="shrink-0 text-slate-500">Alíquota aplicada</dt>
+                    <dt className="shrink-0 text-slate-600">Alíquota aplicada</dt>
                     <dd className="font-mono font-bold text-brand-700 dark:text-aurum-200" title={segResultado ? 'Média ponderada = DAS total ÷ receita total (cada parcela tem a sua abaixo)' : undefined}>
                       {segResultado ? `${fmtCarga(segResultado.aliquotaMedia * 100)} · média ponderada` : fmtCarga(convBase!.aliquotaEfetiva * 100)}
                     </dd>
                   </div>
                   <div className="flex items-start justify-between gap-3 border-t border-[var(--line)] pt-2.5">
-                    <dt className="shrink-0 text-slate-500">Anexos</dt>
+                    <dt className="shrink-0 text-slate-600">Anexos</dt>
                     <dd className="text-right font-bold">
                       {segResultado
                         ? segResultado.anexos.map((a) => `Anexo ${a}`).join(' + ')
@@ -1413,35 +1421,35 @@ export function SimplesNacional() {
               </div>
               <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white dark:bg-slate-900">
                 <div className="border-b border-[var(--line)] px-4 py-3">
-                  <h3 className="text-[12px] font-black tracking-tight">Desmembramentos e fechamento</h3>
+                  <h3 className="text-xl font-extrabold tracking-tight">Desmembramentos e fechamento</h3>
                 </div>
                 {segResultado ? (
                   <div className="px-4 py-3">
-                    <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Desmembramentos no faturamento mensal</p>
+                    <p className="mb-2 text-[13px] font-bold uppercase tracking-wider text-slate-600">Desmembramentos no faturamento mensal</p>
                     <div className="space-y-2">
                       {segResultado.parcelas.map((d, idx) => (
                         <div key={`${d.anexoId}-${idx}`} style={segResultado ? { animationDelay: `${Math.min(idx, 6) * 90}ms` } : undefined} className="animate-fade-up rounded-xl bg-slate-50/70 px-3 py-2 dark:bg-slate-950/40">
-                          <div className="flex items-center justify-between gap-2 text-[12px]">
+                          <div className="flex items-center justify-between gap-2 text-[13px]">
                             <strong>
                               {d.anexoCalculado !== d.escolhido
                                 ? `Anexo ${d.escolhido} → ${d.anexoCalculado}`
                                 : d.resto ? `Restante · Anexo ${d.anexoId}` : `Anexo ${d.anexoId}`}
-                              {d.anexoCalculado !== d.escolhido ? <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200" title="Fator R ≥ 28%: Anexo V tributado como III">Fator R</span> : null}
-                              {d.st && d.deducaoST > 0 ? <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">ST {d.tributoST}</span> : null}
-                              {d.st && d.deducaoST <= 0 ? <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-300" title={d.excedeSublimite && d.tributosFora.includes(d.tributoST ?? '') ? 'ST marcada, mas o tributo já está fora da guia pelo sublimite — nada a deduzir' : 'ST marcada, mas o tributo é zerado nesta faixa — nada a deduzir'}>ST sem dedução</span> : null}
+                              {d.anexoCalculado !== d.escolhido ? <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-px text-[13px] font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200" title="Fator R ≥ 28%: Anexo V tributado como III">Fator R</span> : null}
+                              {d.st && d.deducaoST > 0 ? <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-px text-[13px] font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">ST {d.tributoST}</span> : null}
+                              {d.st && d.deducaoST <= 0 ? <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-px text-[13px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300" title={d.excedeSublimite && d.tributosFora.includes(d.tributoST ?? '') ? 'ST marcada, mas o tributo já está fora da guia pelo sublimite — nada a deduzir' : 'ST marcada, mas o tributo é zerado nesta faixa — nada a deduzir'}>ST sem dedução</span> : null}
                             </strong>
                             <span className="font-mono">
-                              {d.st && d.deducaoST > 0 ? <span className="mr-1.5 text-slate-400 line-through" title="Guia da parcela antes da ST">{fmtMoeda(d.dasBrutoGuia)}</span> : null}
+                              {d.st && d.deducaoST > 0 ? <span className="mr-1.5 text-slate-600 line-through" title="Guia da parcela antes da ST">{fmtMoeda(d.dasBrutoGuia)}</span> : null}
                               <strong className="font-black">{fmtMoeda(d.dasGuia)}</strong>
                             </span>
                           </div>
-                          <div className="mt-0.5 flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] text-slate-500">
+                          <div className="mt-0.5 flex flex-wrap items-center justify-between gap-2 font-mono text-[13px] text-slate-600">
                             <span>Receita {fmtMoeda(d.receitaMes)}</span>
                             <span>{d.faixa}ª faixa · {fmtCarga(d.aliquotaEfetiva * 100)}</span>
                           </div>
                         </div>
                       ))}
-                      <p className="pt-0.5 text-[10px] leading-relaxed text-slate-400">
+                      <p className="pt-0.5 text-[13px] leading-relaxed text-slate-600">
                         Cada parcela usa a RBT12 total ({fmtMoeda(segResultado.rbt12)}) na sua tabela; o DAS é a soma.
                       </p>
                     </div>
@@ -1449,23 +1457,23 @@ export function SimplesNacional() {
                 ) : null}
                 {/* FECHAMENTO — a conta em 3 linhas: bruto, ST, a pagar */}
                 <div className="border-t border-[var(--line)] px-4 py-3">
-                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Fechamento</p>
+                  <p className="mb-2 text-[13px] font-bold uppercase tracking-wider text-slate-600">Fechamento</p>
                   {segResultado ? (
-                    <div className="space-y-1 text-[12px]">
+                    <div className="space-y-1 text-[13px]">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="shrink-0 text-slate-500">1 · Guia bruta (sem ST)</span>
+                        <span className="shrink-0 text-slate-600">1 · Guia bruta (sem ST)</span>
                         <span className="font-mono font-semibold">{fmtMoeda(segResultado.dasBrutoGuia)}</span>
                       </div>
                       {segResultado.tributosST.map((t) => (
                         <div key={t} className="flex items-center justify-between gap-3" title={infoSTPorTributo[t] ?? t}>
-                          <span className="shrink-0 text-slate-500">2 · − ST {t}</span>
+                          <span className="shrink-0 text-slate-600">2 · − ST {t}</span>
                           <span className="font-mono font-semibold text-amber-700">− {fmtMoeda(deducaoSTPorTributo[t] ?? 0)}</span>
                         </div>
                       ))}
                       {!segResultado.temST && segResultado.parcelas.some((d) => d.st) ? (
                         <div className="flex items-center justify-between gap-3" title="ST marcada, mas o tributo é zerado nesta faixa — nada a deduzir">
-                          <span className="shrink-0 text-slate-500">2 · − ST</span>
-                          <span className="font-mono font-semibold text-slate-400">R$ 0,00 (sem dedução)</span>
+                          <span className="shrink-0 text-slate-600">2 · − ST</span>
+                          <span className="font-mono font-semibold text-slate-600">R$ 0,00 (sem dedução)</span>
                         </div>
                       ) : null}
                       <div className="flex items-center justify-between gap-3 border-t border-[var(--line)] pt-1.5">
@@ -1474,13 +1482,13 @@ export function SimplesNacional() {
                       </div>
                       {segResultado.excedeSublimite ? (
                         <div className="flex items-center justify-between gap-3">
-                          <span className="shrink-0 text-slate-500">+ fora sublimite</span>
+                          <span className="shrink-0 text-slate-600">+ fora sublimite</span>
                           <span className="font-mono font-semibold">{fmtMoeda(segResultado.foraSublimite.total)}</span>
                         </div>
                       ) : null}
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between gap-3 text-[12px]">
+                    <div className="flex items-center justify-between gap-3 text-[13px]">
                       <span className="font-black">{convBase?.excedeSublimite ? 'Guia DAS a pagar' : 'DAS a pagar'}</span>
                       <span className="font-mono font-black">{fmtMoeda(convBase?.dasGuia ?? convBase?.das ?? 0)}</span>
                     </div>
@@ -1488,32 +1496,37 @@ export function SimplesNacional() {
                 </div>
               </div>
               </div>
-              <div className="calc-hero overflow-hidden rounded-2xl">
-                <div className="px-4 pb-4 pt-4">
+              <div className="calc-hero simples-hero overflow-hidden rounded-2xl lg:sticky lg:top-4">
+                <div className="px-4 pb-4 pt-4" role="status" aria-live="polite">
                   <div className="flex items-center justify-between gap-2">
                     <span className="calc-hero-rotulo truncate">DAS · {segResultado ? `Segregado ${segResultado.anexos.join(' + ')}` : `${ANEXO_LABEL[convBase!.anexoId]} · ${convBase!.faixa}ª faixa`}{stResumo ? ` · ST ${stResumo.tributo}` : ''}</span>
-                    <span className="shrink-0 rounded-full bg-white/15 px-1.5 py-px font-mono text-[10px] font-bold text-white">
-                      {convBase!.cenario === 1 ? 's/ sublimite' : `cen. ${convBase!.cenario}`}
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <span className="rounded-full bg-white/15 px-2 py-0.5 text-[13px] font-bold text-white">
+                        {s.modo === 'manual' ? 'Manual' : 'CNPJ'} · Anexo {convBase!.anexoId}
+                      </span>
+                      <span className="shrink-0 rounded-full bg-white/15 px-1.5 py-px font-mono text-[13px] font-bold text-white">
+                        {convBase!.cenario === 1 ? 's/ sublimite' : `cen. ${convBase!.cenario}`}
+                      </span>
                     </span>
                   </div>
-                  <NumeroAnimado valor={dasExib} formatar={(n) => `${convExib!.excedeSublimite ? 'Guia DAS' : 'DAS'}: ${fmtMoeda(n)}`} className="calc-hero-valor mt-0.5 block truncate text-2xl tabular-nums leading-tight text-white" />
+                  <NumeroAnimado valor={dasExib} formatar={(n) => `${convExib!.excedeSublimite ? 'Guia DAS' : 'DAS'}: ${fmtMoeda(n)}`} className="calc-hero-valor mt-0.5 block truncate font-mono text-3xl font-black tabular-nums leading-tight text-white sm:text-4xl" />
                   {convExib!.excedeSublimite ? (
-                    <div className="mt-0.5 text-[10px] leading-relaxed text-white/75">
+                    <div className="mt-0.5 text-[13px] leading-relaxed text-white/75">
                       Guia sem {convExib!.tributosFora.join(' + ')} · fora {fmtMoeda(convExib!.foraSublimite.total)} → carga {fmtMoeda(cargaTotalExib)}
                     </div>
                   ) : null}
                   {s.segAtivo && segResultado ? (
-                    <div className="mt-0.5 text-[10px] leading-relaxed text-white/75">
+                    <div className="mt-0.5 text-[13px] leading-relaxed text-white/75">
                       Bruto {fmtMoeda(segResultado.dasBrutoGuia)} − diferença {fmtMoeda(segResultado.dasBrutoGuia - dasExib)}
                       {stResumo ? ` (ST ${stResumo.tributo})` : ''} = Final
                     </div>
                   ) : null}
                   {s.segAtivo && segResultado && s.convencional && Math.abs(dasBruto - segResultado.dasBrutoGuia) > 0.005 ? (
-                    <div className="mt-0.5 text-[10px] leading-relaxed text-white/60">
+                    <div className="mt-0.5 text-[13px] leading-relaxed text-white/60">
                       Sem segregar ({ANEXO_LABEL[s.convencional.anexoId]}): {fmtMoeda(dasBruto)} — referência
                     </div>
                   ) : null}
-                  <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] text-white/75">
+                  <div className="mt-0.5 flex items-center justify-between gap-2 text-[13px] text-white/75">
                     <span className="truncate">CBS {fmtMoeda(convBase!.cbsDentroDAS)}</span>
                     <span className="shrink-0 rounded-full bg-aurum-400/25 px-1.5 py-px font-mono font-bold text-aurum-200">
                       {fmtCarga(convBase!.aliquotaEfetiva * 100)}
@@ -1537,10 +1550,10 @@ export function SimplesNacional() {
                     const dedST = deducaoSTPorTributo[t as 'ICMS' | 'ISS'] ?? 0;
                     const ehST = dedST > 0;
                     return (
-                      <div key={t} className="flex items-center justify-between gap-2 text-[11px]">
-                        <span className="text-slate-500">
+                      <div key={t} className="flex items-center justify-between gap-2 text-[13px]">
+                        <span className="text-slate-600">
                           {t}
-                          {ehST ? <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">ST</span> : null}
+                          {ehST ? <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-px text-[13px] font-bold text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">ST</span> : null}
                         </span>
                         {ehST ? (
                           <span className="text-right font-mono">
@@ -1554,22 +1567,22 @@ export function SimplesNacional() {
                     );
                   })}
                   {reparticaoItens.length > 4 ? (
-                    <button type="button" onClick={() => setReparticaoAberta((v) => !v)} className="text-[11px] font-bold text-brand-700 dark:text-aurum-200">
+                    <button type="button" onClick={() => setReparticaoAberta((v) => !v)} className="text-[13px] font-bold text-brand-700 dark:text-aurum-200">
                       {reparticaoAberta ? '▾ Recolher' : `▸ Ver todos os ${reparticaoItens.length} tributos`}
                     </button>
                   ) : null}
                   {convBase!.excedenteISS > 0 ? (
-                    <p className="rounded-lg bg-amber-50 px-2 py-1 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                    <p className="rounded-lg bg-amber-50 px-2 py-1 text-[13px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                       ISS travado em 5% (excedente redistribuído).
                     </p>
                   ) : null}
                   {convBase!.cenario !== 1 ? (
-                    <p className="rounded-lg bg-sky-50 px-2 py-1 text-[10px] text-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
+                    <p className="rounded-lg bg-sky-50 px-2 py-1 text-[13px] text-sky-800 dark:bg-sky-950/40 dark:text-sky-200">
                       Sublimite cen. {convBase!.cenario} · guia {fmtMoeda(dasExib)} + fora {fmtMoeda(convBase!.foraSublimite.total)} = carga {fmtMoeda(cargaTotalExib)}.
                     </p>
                   ) : null}
                   {convExib!.excedeSublimite ? (
-                    <div className="space-y-1 rounded-lg bg-amber-50 px-2 py-1.5 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                    <div className="space-y-1 rounded-lg bg-amber-50 px-2 py-1.5 text-[13px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                       <p className="font-bold">Fora da guia (sublimite){convExib!.usouReferencia.icms || convExib!.usouReferencia.iss ? ' · referência manual' : ' · automático 5ª faixa'}</p>
                       {convExib!.foraSublimite.icms > 0 ? <div className="flex justify-between"><span>ICMS {(convExib!.aliquotasFora.icms * 100).toFixed(2)}%</span><strong className="font-mono">{fmtMoeda(convExib!.foraSublimite.icms)}</strong></div> : null}
                       {convExib!.foraSublimite.iss > 0 ? <div className="flex justify-between"><span>ISS {(convExib!.aliquotasFora.iss * 100).toFixed(2)}%</span><strong className="font-mono">{fmtMoeda(convExib!.foraSublimite.iss)}</strong></div> : null}
@@ -1578,11 +1591,11 @@ export function SimplesNacional() {
                     </div>
                   ) : null}
                   {fr && precisaFolha ? (
-                    <p className={`rounded-lg px-2 py-1 text-[10px] ${fr.anexo === 'III' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'}`}>
+                    <p className={`rounded-lg px-2 py-1 text-[13px] ${fr.anexo === 'III' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'}`}>
                       Fator R {(fr.indice * 100).toFixed(2)}% → {fr.anexo === 'III' ? 'III (≥ 28%)' : 'V (< 28%)'}.
                     </p>
                   ) : precisaFolha ? (
-                    <p className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <p className="rounded-lg bg-slate-100 px-2 py-1 text-[13px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       Sem folha — provisório no V. Informe a folha p/ o Fator R.
                     </p>
                   ) : null}
@@ -1622,20 +1635,20 @@ export function SimplesNacional() {
               {s.compararHibrido && hibExib ? (
                 <Painel>
                   <div className="border-b border-[var(--line)] px-3 py-2">
-                    <h3 className="text-[11px] font-black text-slate-500">⚖ Convencional × Híbrido{segResultado ? ' (seg.)' : ''}{convExib!.excedeSublimite ? ' · guia' : ''}</h3>
+                    <h3 className="text-[13px] font-black text-slate-600">⚖ Convencional × Híbrido{segResultado ? ' (seg.)' : ''}{convExib!.excedeSublimite ? ' · guia' : ''}</h3>
                   </div>
-                  <div className="space-y-1.5 p-3 text-[11px]">
-                    <div className="flex justify-between"><span className="text-slate-500">Guia conv.{stResumo ? ' (c/ ST)' : ''}</span><strong className="font-mono">{fmtMoeda(dasExib)}</strong></div>
-                    <div className="flex justify-between"><span className="text-slate-500">DAS reduzido (guia s/ CBS)</span><strong className="font-mono">{fmtMoeda(hibExib.dasReduzido)}</strong></div>
-                    <div className="flex justify-between"><span className="text-slate-500">CBS fora</span><strong className="font-mono">{fmtMoeda(hibExib.cbsFora)}</strong></div>
+                  <div className="space-y-1.5 p-3 text-[13px]">
+                    <div className="flex justify-between"><span className="text-slate-600">Guia conv.{stResumo ? ' (c/ ST)' : ''}</span><strong className="font-mono">{fmtMoeda(dasExib)}</strong></div>
+                    <div className="flex justify-between"><span className="text-slate-600">DAS reduzido (guia s/ CBS)</span><strong className="font-mono">{fmtMoeda(hibExib.dasReduzido)}</strong></div>
+                    <div className="flex justify-between"><span className="text-slate-600">CBS fora</span><strong className="font-mono">{fmtMoeda(hibExib.cbsFora)}</strong></div>
                     <div className="flex justify-between border-t border-[var(--line)] pt-1.5"><span className="font-bold">Total híbrido (guia)</span><strong className="font-mono">{fmtMoeda(hibExib.total)}</strong></div>
                     {convExib!.excedeSublimite ? (
                       <>
-                        <div className="flex justify-between"><span className="text-slate-500">+ fora sublimite ({convExib!.tributosFora.join('+')})</span><strong className="font-mono">{fmtMoeda(convExib!.foraSublimite.total)}</strong></div>
+                        <div className="flex justify-between"><span className="text-slate-600">+ fora sublimite ({convExib!.tributosFora.join('+')})</span><strong className="font-mono">{fmtMoeda(convExib!.foraSublimite.total)}</strong></div>
                         <div className="flex justify-between"><span className="font-bold">Carga híbrida total</span><strong className="font-mono">{fmtMoeda(hibExib.cargaTotal)}</strong></div>
                       </>
                     ) : null}
-                    <div className={`rounded-xl px-2.5 py-1.5 text-center text-[11px] font-bold ${
+                    <div className={`rounded-xl px-2.5 py-1.5 text-center text-[13px] font-bold ${
                       hibExib.melhor === 'hibrido' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200'
                       : hibExib.melhor === 'convencional' ? 'bg-sky-100 text-sky-800 dark:bg-sky-950/50 dark:text-sky-200'
                       : 'bg-slate-100 text-slate-600'}`}>
@@ -1669,7 +1682,7 @@ export function SimplesNacional() {
                   </Btn>
                 ) : null}
               </div>
-              <p className="px-1 text-[10px] leading-relaxed text-slate-400">
+              <p className="px-1 text-[13px] leading-relaxed text-slate-600">
                 Planilhas 2027–2028 · confirme com o contador.
               </p>
             </div>

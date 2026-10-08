@@ -12,23 +12,14 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArcElement,
-  BarElement,
-  CategoryScale,
-  Chart as ChartJS,
-  Filler,
-  Legend,
-  LinearScale,
-  LineElement,
-  PointElement,
-  Tooltip,
   type ChartOptions,
   type TooltipItem,
 } from 'chart.js'
+import { ChartJS, garantirChartsRegistrados } from '@/ui/chart-registry'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
 import type { GraficoChat, TipoGraficoChat } from '@/application/aurum-ai-graficos'
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, LinearScale, LineElement, PointElement, Tooltip, Legend)
+garantirChartsRegistrados()
 
 /** Sombra elegante sob barras/fatias/pontos (relevo 3D). Registrado 1×. */
 const PLUGIN_SOMBRA = {

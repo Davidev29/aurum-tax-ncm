@@ -46,7 +46,7 @@ const opcoesComuns = {
   // `@prisma/client` fica externo: motores nativos (`.node`) não podem ser
   // bundlados nem carregados de dentro do asar (ver `asarUnpack` no
   // package.json) — o main os carrega de `node_modules` no runtime.
-  external: ['electron', 'electron-updater', '@xenova/transformers', 'vectra', '@ladybugdb/core', '@prisma/client', '.prisma/*'],
+  external: ['electron', 'electron-updater', '@xenova/transformers', 'vectra', '@ladybugdb/core', '@prisma/client', '.prisma/client/*', './ia/grafo-service.cjs', './grafo-service.cjs'],
 }
 
 async function compilar() {

@@ -42,6 +42,7 @@ const aurum: AurumBridge = {
   db: {
     op: (req: DbOp) => ipcRenderer.invoke('db:op', req),
     snapshotBanco: () => ipcRenderer.invoke('db:snapshot'),
+    transacao: (ops: DbOp[]) => ipcRenderer.invoke('db:transaction', ops),
   },
 
   /** Lê um arquivo do diretório base como texto UTF-8. */

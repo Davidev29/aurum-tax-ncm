@@ -4,9 +4,13 @@
  * - **Backup** exporta as 27 stores + emitente num único JSON
  *   (`backup_aurum_tax_YYYY-MM-DD.json`).
  * - **Restauração** valida TUDO antes de apagar qualquer coisa (falha de
- *   validação = zero escrita); depois limpa as stores e regrava somente os
- *   arrays não vazios. `audit_log` é append-only: nunca sofre clear — só
- *   acrescenta.
+ *   validação = zero escrita, inclusive o emitente separado); depois reescreve
+ *   em TRANSAÇÃO ÚNICA (`transacionar`: clears + lotes fatiados em 500 +
+ *   emitente — tudo ou nada; sem clears concorrentes). `audit_log` é
+ *   append-only: nunca sofre clear — só acrescenta. Backup parcial
+ *   (`parcial: true`) bloqueia sem confirmação explícita.
+ * - **Backup** exporta com manifesto `{ tabela: count | 'erro:<motivo>' }`:
+ *   falha de leitura vira `[]` contabilizado (nunca silenciado).
  * - A store `classificacaoProduto` (tabelas CFF por DFe) é opcional no backup:
  *   backups antigos restauram sem ela; como é dado oficial ressincronizável,
  *   a ausência só oculta os selos de DFe até o próximo sync/importação.
@@ -14,6 +18,8 @@
 import { db } from '@/infrastructure/db/schema'
 import { bridge } from '@/infrastructure/bridge'
 import { validarRegistro } from '@/infrastructure/db/validacao'
+import type { DbOp } from '@/infrastructure/db/db-protocolo'
+import { executarOp, resolverDriver, type Registro } from '@/infrastructure/db/motor'
 import { META_KEYS, type StoreName } from '@/domain/constants'
 import type { Emitente } from '@/domain/entities'
 
@@ -47,6 +53,9 @@ const LOJA_BACKUP: StoreName[] = [
   'grafometa',
 ]
 
+/** Manifesto do backup: por tabela, a quantidade exportada ou `erro:<motivo>`. */
+export type ManifestoBackup = Record<string, number | string>
+
 export interface Backup {
   exportadoEm: string
   ncm: unknown[]
@@ -79,6 +88,17 @@ export interface Backup {
   lcNbs?: unknown[]
   classificacoesConsolidadas?: unknown[]
   grafometa?: unknown[]
+  /**
+   * Manifesto de cobertura: `{ tabela: count | 'erro:<motivo>' }`. Tabela
+   * que falhou na leitura exporta `[]` e registra o erro aqui — nenhuma
+   * falha de leitura é silenciada.
+   */
+  manifesto?: ManifestoBackup
+  /**
+   * `true` quando alguma tabela falhou na leitura (backup incompleto). O
+   * restore bloqueia sem confirmação explícita (`{ confirmarParcial: true }`).
+   */
+  parcial?: boolean
 }
 
 /**
@@ -88,38 +108,52 @@ export interface Backup {
 export const META_SENSIVEL_PREFIXOS = ['aurum_kek_', 'aurum_artefato_'] as const
 
 export async function montarBackup(): Promise<Backup> {
+  // Leitura por tabela com manifesto: falha de leitura vira `[]` + entrada
+  // `erro:<motivo>` no manifesto (contabilizada, nunca silenciada) e marca
+  // o backup como parcial.
+  const manifesto: ManifestoBackup = {}
+  const ler = async (nome: string, promessa: Promise<unknown[]>): Promise<unknown[]> => {
+    try {
+      const linhas = await promessa
+      manifesto[nome] = linhas.length
+      return linhas
+    } catch (e) {
+      manifesto[nome] = `erro:${e instanceof Error ? e.message : String(e)}`
+      return []
+    }
+  }
   const [ncm, cst, cstClassTrib, referencia, nbs, cest, auditLog, ncmNomenclatura, empresas, produtos, cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, anexos, produtosDfe, iaFeedback] =
     await Promise.all([
-      db.ncm.toArray(),
-      db.cst.toArray(),
-      db.cstClassTrib.toArray(),
-      db.table('referencia').toArray().catch(() => []),
-      db.table('nbs').toArray().catch(() => []),
-      db.table('cest').toArray().catch(() => []),
-      db.table('audit_log').toArray().catch(() => []),
-      db.ncmNomenclatura.toArray(),
-      db.empresas.toArray(),
-      db.produtos.toArray(),
-      db.cfop.toArray(),
-      db.cstIcms.toArray(),
-      db.cstPisCofins.toArray(),
-      db.nfeNotas.toArray(),
-      db.reclassificacoesManuais.toArray().catch(() => []),
-      db.classificacaoProduto.toArray().catch(() => []),
-      db.table('anexos').toArray().catch(() => []),
-      db.table('produtosDfe').toArray().catch(() => []),
-      db.table('ia_feedback').toArray().catch(() => []),
+      ler('ncm', db.ncm.toArray() as Promise<unknown[]>),
+      ler('cst', db.cst.toArray() as Promise<unknown[]>),
+      ler('cstClassTrib', db.cstClassTrib.toArray() as Promise<unknown[]>),
+      ler('referencia', db.table('referencia').toArray() as Promise<unknown[]>),
+      ler('nbs', db.table('nbs').toArray() as Promise<unknown[]>),
+      ler('cest', db.table('cest').toArray() as Promise<unknown[]>),
+      ler('audit_log', db.table('audit_log').toArray() as Promise<unknown[]>),
+      ler('ncmNomenclatura', db.ncmNomenclatura.toArray() as Promise<unknown[]>),
+      ler('empresas', db.empresas.toArray() as Promise<unknown[]>),
+      ler('produtos', db.produtos.toArray() as Promise<unknown[]>),
+      ler('cfop', db.cfop.toArray() as Promise<unknown[]>),
+      ler('cstIcms', db.cstIcms.toArray() as Promise<unknown[]>),
+      ler('cstPisCofins', db.cstPisCofins.toArray() as Promise<unknown[]>),
+      ler('nfeNotas', db.nfeNotas.toArray() as Promise<unknown[]>),
+      ler('reclassificacoesManuais', db.reclassificacoesManuais.toArray() as Promise<unknown[]>),
+      ler('classificacaoProduto', db.classificacaoProduto.toArray() as Promise<unknown[]>),
+      ler('anexos', db.table('anexos').toArray() as Promise<unknown[]>),
+      ler('produtosDfe', db.table('produtosDfe').toArray() as Promise<unknown[]>),
+      ler('ia_feedback', db.table('ia_feedback').toArray() as Promise<unknown[]>),
     ])
   const [metaBruta, cnae, consultasCnpj, conversasEmitente, cnaeNbs, lcNbs, classificacoesConsolidadas, grafometa] =
     await Promise.all([
-      db.meta.toArray().catch(() => []),
-      db.cnae.toArray().catch(() => []),
-      db.consultasCnpj.toArray().catch(() => []),
-      db.conversasEmitente.toArray().catch(() => []),
-      db.cnaeNbs.toArray().catch(() => []),
-      db.lcNbs.toArray().catch(() => []),
-      db.classificacoesConsolidadas.toArray().catch(() => []),
-      db.grafometa.toArray().catch(() => []),
+      ler('meta', db.meta.toArray() as Promise<unknown[]>),
+      ler('cnae', db.cnae.toArray() as Promise<unknown[]>),
+      ler('consultasCnpj', db.consultasCnpj.toArray() as Promise<unknown[]>),
+      ler('conversasEmitente', db.conversasEmitente.toArray() as Promise<unknown[]>),
+      ler('cnaeNbs', db.cnaeNbs.toArray() as Promise<unknown[]>),
+      ler('lcNbs', db.lcNbs.toArray() as Promise<unknown[]>),
+      ler('classificacoesConsolidadas', db.classificacoesConsolidadas.toArray() as Promise<unknown[]>),
+      ler('grafometa', db.grafometa.toArray() as Promise<unknown[]>),
     ])
   // Chaves sensíveis (KEK/resumos) ficam fora do backup por construção.
   const meta = (metaBruta as Array<{ chave?: unknown }>).filter((r) => {
@@ -127,6 +161,7 @@ export async function montarBackup(): Promise<Backup> {
     return typeof chave !== 'string' || !META_SENSIVEL_PREFIXOS.some((p) => chave.startsWith(p))
   })
   const metaEmitente = await db.meta.get(META_KEYS.EMITENTE)
+  const parcial = Object.values(manifesto).some((v) => typeof v === 'string')
   return {
     exportadoEm: new Date().toISOString(),
     ncm,
@@ -157,11 +192,28 @@ export async function montarBackup(): Promise<Backup> {
     lcNbs,
     classificacoesConsolidadas,
     grafometa,
+    manifesto,
+    parcial,
   }
 }
 
-/** Grava um backup previamente exportado (importação do arquivo). */
-export async function restaurarBackup(b: Backup): Promise<void> {
+/**
+ * Grava um backup previamente exportado (importação do arquivo).
+ *
+ * Backups parciais (`parcial: true` — alguma tabela falhou na leitura)
+ * são BLOQUEADOS sem confirmação explícita: restaurar um backup furado por
+ * cima da base atual apagaria dados sem volta. Passe
+ * `{ confirmarParcial: true }` após confirmar com o usuário.
+ */
+export async function restaurarBackup(b: Backup, opts?: { confirmarParcial?: boolean }): Promise<void> {
+  if (b.parcial && !opts?.confirmarParcial) {
+    const tabelas = Object.entries(b.manifesto ?? {})
+      .filter(([, v]) => typeof v === 'string')
+      .map(([t]) => t)
+    throw new Error(
+      `Backup parcial${tabelas.length ? ` (falhou a leitura de: ${tabelas.join(', ')})` : ''}: a restauração apagaria a base atual com dados incompletos. Confirme explicitamente para prosseguir.`,
+    )
+  }
   // 1) Valida TUDO antes de apagar qualquer coisa: falha aqui = zero escrita
   // (antes, um registro inválido no meio do arquivo deixava o banco
   // meio-apagado). Backups antigos sem as novas chaves passam (arrays vazios).
@@ -198,53 +250,86 @@ export async function restaurarBackup(b: Backup): Promise<void> {
     if (!Array.isArray(itens) || !itens.length) continue
     for (const item of itens) validarRegistro(store, item)
   }
+  // O emitente separado também é validado antes de apagar (antes, um
+  // emitente inválido falhava no `put` final com o banco já reescrito).
+  if (b.emitente !== null && b.emitente !== undefined) {
+    validarRegistro('meta', { chave: META_KEYS.EMITENTE, valor: b.emitente, atualizadoEm: new Date().toISOString() })
+  }
 
   // Snapshot pré-restore (best-effort): kill -9 no meio da reescrita deixaria
   // tabelas meio-restauradas sem ponto de retorno; o resultado é ignorado de
   // propósito — falha do snapshot NUNCA bloqueia o restore.
   await bridge?.db?.snapshotBanco?.()?.catch(() => null)
 
+  // 2) Reescrita em TRANSAÇÃO ÚNICA (tudo ou nada): os 26 clears + todos os
+  // lotes + emitente vão num `transacionar(ops)` — sem o `Promise.all` de
+  // clears concorrentes de antes (concorrência de escritas sob WAL gerava
+  // `SQLITE_BUSY` intermitente). `audit_log` é append-only: nunca sofre
+  // clear — só acrescenta. Lotes fatiados em 500 (teto do canal IPC por op).
+  const TAM_LOTE = 500
+  const ops: DbOp[] = []
   // audit_log é append-only: nunca sofre clear — só acrescenta.
   const lojasLimpaveis = LOJA_BACKUP.filter((s) => s !== 'audit_log')
-  await Promise.all(lojasLimpaveis.map((s) => db.table(s).clear()))
-
-  const gravar = async (store: StoreName, itens: unknown[] | undefined) => {
-    if (Array.isArray(itens) && itens.length) {
-      await db.table(store).bulkPut(itens as never[])
+  for (const s of lojasLimpaveis) ops.push({ op: 'limpar', tabela: s })
+  const enfileirar = (store: StoreName, itens: unknown[] | undefined) => {
+    if (!Array.isArray(itens) || !itens.length) return
+    const registros = itens as Registro[]
+    for (let i = 0; i < registros.length; i += TAM_LOTE) {
+      ops.push({ op: 'lote', tabela: store, registros: registros.slice(i, i + TAM_LOTE), modo: 'upsert' })
     }
   }
 
-  await gravar('ncm', b.ncm)
-  await gravar('cst', b.cst)
-  await gravar('cstClassTrib', b.cstClassTrib)
-  await gravar('referencia', b.referencia)
-  await gravar('nbs', b.nbs)
-  await gravar('cest', b.cest)
-  await gravar('ncmNomenclatura', b.nomenclatura)
-  await gravar('empresas', b.empresas)
-  await gravar('produtos', b.produtos)
-  await gravar('cfop', b.cfop)
-  await gravar('cstIcms', b.cstIcms)
-  await gravar('cstPisCofins', b.cstPisCofins)
-  await gravar('nfeNotas', b.nfeNotas)
-  await gravar('reclassificacoesManuais', b.reclassificacoesManuais)
-  await gravar('classificacaoProduto', b.classificacaoProduto)
-  await gravar('anexos', b.anexos)
-  await gravar('produtosDfe', b.produtosDfe)
-  await gravar('ia_feedback', b.iaFeedback)
-  await gravar('audit_log', b.auditLog)
-  await gravar('meta', b.meta)
-  await gravar('cnae', b.cnae)
-  await gravar('consultasCnpj', b.consultasCnpj)
-  await gravar('conversasEmitente', b.conversasEmitente)
-  await gravar('cnaeNbs', b.cnaeNbs)
-  await gravar('lcNbs', b.lcNbs)
-  await gravar('classificacoesConsolidadas', b.classificacoesConsolidadas)
-  await gravar('grafometa', b.grafometa)
+  enfileirar('ncm', b.ncm)
+  enfileirar('cst', b.cst)
+  enfileirar('cstClassTrib', b.cstClassTrib)
+  enfileirar('referencia', b.referencia)
+  enfileirar('nbs', b.nbs)
+  enfileirar('cest', b.cest)
+  enfileirar('ncmNomenclatura', b.nomenclatura)
+  enfileirar('empresas', b.empresas)
+  enfileirar('produtos', b.produtos)
+  enfileirar('cfop', b.cfop)
+  enfileirar('cstIcms', b.cstIcms)
+  enfileirar('cstPisCofins', b.cstPisCofins)
+  enfileirar('nfeNotas', b.nfeNotas)
+  enfileirar('reclassificacoesManuais', b.reclassificacoesManuais)
+  enfileirar('classificacaoProduto', b.classificacaoProduto)
+  enfileirar('anexos', b.anexos)
+  enfileirar('produtosDfe', b.produtosDfe)
+  enfileirar('ia_feedback', b.iaFeedback)
+  enfileirar('audit_log', b.auditLog)
+  enfileirar('meta', b.meta)
+  enfileirar('cnae', b.cnae)
+  enfileirar('consultasCnpj', b.consultasCnpj)
+  enfileirar('conversasEmitente', b.conversasEmitente)
+  enfileirar('cnaeNbs', b.cnaeNbs)
+  enfileirar('lcNbs', b.lcNbs)
+  enfileirar('classificacoesConsolidadas', b.classificacoesConsolidadas)
+  enfileirar('grafometa', b.grafometa)
 
   if (b.emitente) {
-    await db.meta.put({ chave: META_KEYS.EMITENTE, valor: b.emitente, atualizadoEm: new Date().toISOString() })
+    ops.push({
+      op: 'upsert',
+      tabela: 'meta',
+      registro: { chave: META_KEYS.EMITENTE, valor: b.emitente, atualizadoEm: new Date().toISOString() },
+    })
   }
+
+  const driver = resolverDriver()
+  if (typeof driver.transacionar === 'function') {
+    try {
+      await driver.transacionar(ops)
+      return
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      // Só o main antigo (sem canal transacional) cai no sequencial abaixo;
+      // falha real propaga (a transação já garantiu tudo-ou-nada).
+      if (!/sem-transacao/.test(msg)) throw e
+    }
+  }
+  // Fallback sequencial documentado (driver sem transação real — mesma ordem
+  // da transação; falha propaga e o snapshot prévio permite recuperação).
+  for (const op of ops) await executarOp(driver, op)
 }
 
 /** Valida estrutura mínima antes de restaurar. */

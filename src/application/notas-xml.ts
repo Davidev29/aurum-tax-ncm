@@ -457,9 +457,19 @@ export async function listarNotas(empresaId: number, filtros: FiltrosNfe): Promi
   return notas.filter((n) => {
     if (forn && !`${n.emitNome} ${n.emitCnpj}`.toLowerCase().includes(forn)) return false
     if (!texto && !cfop && !cstIcms && !cct && !cstRef && !red) return true
+    // Busca textual também na capa da nota (natureza da operação, número,
+    // chave, emitente) — antes só casava com item (descrição/código/NCM) e a
+    // natureza ficava inencontrável pelo filtro.
+    const textoCapa = `${n.natOp} ${n.numero} ${n.chave} ${n.emitNome} ${n.emitCnpj}`.toLowerCase()
+    const itens = n.itensAnalisados ?? []
+    if (!itens.length) {
+      if (cfop || cstIcms || cct || cstRef || red) return false
+      if (!texto) return true
+      return textoCapa.includes(texto)
+    }
     // Linhas parciais podem ter `itensAnalisados` nulo ou itens sem
     // classificação (nunca derruba o filtro — só não casa).
-    return (n.itensAnalisados ?? []).some((it) => {
+    return itens.some((it) => {
       if (!it || typeof it !== 'object') return false
       if (cfop && it.cfop !== cfop) return false
       if (cstIcms && String(it.cstIcms ?? '').trim().toUpperCase() !== cstIcms) return false
@@ -469,6 +479,7 @@ export async function listarNotas(empresaId: number, filtros: FiltrosNfe): Promi
       if (cstRef && ![it.cstIbsCbs, it.classificacao?.cst].some((v) => String(v ?? '').trim().toUpperCase() === cstRef)) return false
       if (red && it.anexo !== red) return false
       if (!texto) return true
+      if (textoCapa.includes(texto)) return true
       return `${it.descricao} ${it.codProd} ${it.ncm}`.toLowerCase().includes(texto)
     })
   })

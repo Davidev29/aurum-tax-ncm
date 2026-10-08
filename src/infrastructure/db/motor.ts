@@ -13,8 +13,10 @@
  * `anyOf().toArray()`, `between().toArray()`, índice composto
  * `'[empresaId+chave]'`, `.and(fn)`, `.reverse().sortBy(campo)`,
  * `orderBy().reverse().limit().toArray()`, `db.table(nome)`, `db.delete()`,
- * `db.open()/close()/isOpen()`, `db.transaction(...)` (execução direta —
- * cada statement SQLite já é atômico; o chamador mantém fallback).
+ * `db.open()/close()/isOpen()`, `db.transaction(...)` (coleta de ops +
+ * lote atômico via `db:transaction` no Electron; execução direta sequencial
+ * — fallback documentado — fora dele) e `transacionar(ops)` (primitiva
+ * atômica usada por `excluirEmpresa`/`restaurarBackup`).
  */
 import {
   STORE_META,
@@ -48,6 +50,120 @@ export interface Driver {
   removerOnde(tabela: string, where: OpWhere): Promise<number>
   apagarTudo(tabelas: string[]): Promise<void>
   fechar?(): Promise<void>
+  /**
+   * Lote heterogêneo ATÔMICO (várias tabelas/ops em uma transação; um
+   * resultado por op). Ausente = driver sem suporte — o chamador usa o
+   * fallback sequencial documentado. Prisma usa `BEGIN IMMEDIATE`/`COMMIT`
+   * (ver `driver-prisma.ts`), memória usa snapshot+rollback, IPC delega ao
+   * canal `db:transaction` do main.
+   */
+  transacionar?(ops: DbOp[]): Promise<unknown[]>
+}
+
+/**
+ * Executa UMA op do protocolo contra qualquer driver (replay sequencial —
+ * fallback documentado quando `transacionar` está ausente ou o canal IPC
+ * transacional não existe no main antigo).
+ */
+export async function executarOp(driver: Driver, op: DbOp): Promise<unknown> {
+  switch (op.op) {
+    case 'buscar':
+      return driver.buscar(op.tabela as string, op.where ?? null)
+    case 'contar':
+      return driver.contar(op.tabela as string, op.where ?? null)
+    case 'porChave':
+      return driver.porChave(op.tabela as string, op.chave as string | number)
+    case 'inserir':
+      return driver.inserir(op.tabela as string, (op.registro ?? {}) as Registro)
+    case 'upsert':
+      return driver.upsert(op.tabela as string, (op.registro ?? {}) as Registro)
+    case 'lote':
+      await driver.lote(op.tabela as string, (op.registros ?? []) as Registro[], op.modo ?? 'upsert')
+      return null
+    case 'atualizar':
+      return driver.atualizar(op.tabela as string, op.chave as string | number, (op.patch ?? {}) as Registro)
+    case 'remover':
+      await driver.remover(op.tabela as string, op.chave as string | number)
+      return null
+    case 'limpar':
+      await driver.limpar(op.tabela as string)
+      return null
+    case 'removerOnde': {
+      if (op.where === null || op.where === undefined) {
+        throw new Error(`validacao:${String(op.tabela)}:where-obrigatorio`)
+      }
+      return driver.removerOnde(op.tabela as string, op.where)
+    }
+    case 'apagarTudo':
+      await driver.apagarTudo((op.tabelas ?? []) as string[])
+      return null
+    default:
+      throw new Error(`validacao:transacao:op-desconhecida:${String((op as DbOp).op)}`)
+  }
+}
+
+/* --------------------------------------- coletor transacional --- */
+
+/**
+ * Coletor de ops para o `db.transaction()` estilo Dexie no Electron.
+ *
+ * O callback não declara ops antecipadamente — então, com driver IPC, os
+ * métodos do `DriverIpc` empilham as ops aqui em vez de enviá-las na hora;
+ * ao final, o lote vai em UMA transação atômica (`db:transaction`). Fora de
+ * coleta, o comportamento é o envio direto de sempre. Sem suporte a
+ * aninhamento (transação dentro de transação usa o coletor externo).
+ */
+let coletorOps: DbOp[] | null = null
+
+/** Há uma coleta de transação em curso (só o `DriverIpc` consulta). */
+export function coletorTransacaoAtivo(): boolean {
+  return coletorOps !== null
+}
+
+export function iniciarColetaTransacao(): void {
+  coletorOps = []
+}
+
+export function encerrarColetaTransacao(): DbOp[] {
+  const ops = coletorOps ?? []
+  coletorOps = null
+  return ops
+}
+
+export function abortarColetaTransacao(): void {
+  coletorOps = null
+}
+
+/**
+ * Retorno fictício durante a coleta: a op ainda NÃO executou (o valor real
+ * só existe após o commit). Leituras devolvem vazio; escritas ecoam a chave
+ * informada (ou `0` quando o id seria gerado). Callbacks que dependem de ids
+ * gerados ou de leituras intermediárias não são atomicamente transacionáveis
+ * — os chamadores atuais (`excluirEmpresa`, restore) só usam remoções e
+ * escritas com chave conhecida.
+ */
+function resultadoColeta(op: DbOp): Registro | Registro[] | number | string | null {
+  switch (op.op) {
+    case 'buscar':
+      return []
+    case 'contar':
+    case 'atualizar':
+    case 'removerOnde':
+      return 0
+    case 'porChave':
+    case 'lote':
+    case 'remover':
+    case 'limpar':
+    case 'apagarTudo':
+      return null
+    case 'inserir':
+    case 'upsert': {
+      const tabela = op.tabela ?? ''
+      const meta = STORE_META[tabela]
+      const v = meta ? (op.registro ?? {})[meta.pk] : undefined
+      return typeof v === 'string' || typeof v === 'number' ? v : 0
+    }
+  }
 }
 
 function metaDe(tabela: string) {
@@ -199,12 +315,49 @@ export class DriverMemoria implements Driver {
   async apagarTudo(tabelas: string[]): Promise<void> {
     for (const t of tabelas) this.mapa(t).clear()
   }
+
+  /**
+   * Transação atômica com rollback: fotografa as tabelas tocadas (e o
+   * contador de auto-incremento); qualquer falha restaura tudo.
+   */
+  async transacionar(ops: DbOp[]): Promise<unknown[]> {
+    const tocadas = new Set<string>()
+    for (const op of ops) {
+      if (op.op === 'apagarTudo') {
+        for (const t of op.tabelas ?? []) tocadas.add(t)
+      } else if (op.tabela) {
+        tocadas.add(op.tabela)
+      }
+    }
+    for (const t of tocadas) metaDe(t)
+    const foto = new Map<string, Map<string | number, Registro>>()
+    for (const t of tocadas) {
+      const m = this.tabelas.get(t)
+      foto.set(t, new Map([...(m ?? new Map()).entries()].map(([k, v]) => [k, { ...v }] as const)))
+    }
+    const fotoSeq = new Map(this.seq)
+    const saida: unknown[] = []
+    try {
+      for (const op of ops) saida.push(await executarOp(this, op))
+    } catch (e) {
+      for (const [t, m] of foto) this.tabelas.set(t, m)
+      this.seq = fotoSeq
+      throw e
+    }
+    return saida
+  }
 }
 
 /* ----------------------------------------------------------- IPC --- */
 
 export interface PonteDb {
   op(requisicao: DbOp): Promise<Registro | Registro[] | number | string | null>
+  /**
+   * Lote atômico no main (canal `db:transaction` → `prisma.$transaction`).
+   * Opcional: builds antigos expõem só `op` — nesse caso `transacionar`
+   * lança `ipc:sem-transacao` e o chamador usa o replay sequencial.
+   */
+  transacao?(ops: DbOp[]): Promise<unknown[]>
 }
 
 function ponteDb(): PonteDb | null {
@@ -222,7 +375,25 @@ export class DriverIpc implements Driver {
   constructor(private ponte: PonteDb) {}
 
   private async chamar(op: DbOp): Promise<never | unknown> {
+    // Em coleta transacional (`db.transaction` no Electron): empilha a op e
+    // devolve um stub — nada é enviado antes do commit em lote.
+    if (coletorTransacaoAtivo() && coletorOps) {
+      coletorOps.push(op)
+      return resultadoColeta(op)
+    }
     return this.ponte.op(op)
+  }
+
+  /**
+   * Delega o lote ao main (`db:transaction`, atômico de verdade). Sem o
+   * canal (main/preload antigo), lança `ipc:sem-transacao` — o chamador faz
+   * o replay sequencial via `executarOp` (fallback documentado).
+   */
+  async transacionar(ops: DbOp[]): Promise<unknown[]> {
+    const fn = this.ponte.transacao
+    if (typeof fn !== 'function') throw new Error('ipc:sem-transacao')
+    const r = await fn.call(this.ponte, ops)
+    return Array.isArray(r) ? r : []
   }
 
   async buscar(tabela: string, where: OpWhere | null): Promise<Registro[]> {

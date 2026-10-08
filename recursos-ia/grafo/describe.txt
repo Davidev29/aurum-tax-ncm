@@ -1,6 +1,6 @@
 # Grafo fiscal Aurum Tax NCM — describe() KGLite (Phase 10-04)
 # Espelho textual de scripts/grafo/schema.cypher p/ agentes dev (curadoria, offline).
-# Gerado em: 2026-10-08T21:35:11.052036+00:00 · versao: grafo-v1 · modo: full
+# Gerado em: 2026-10-08T23:56:04.071563+00:00 · versao: grafo-v1 · modo: full
 # Contadores: 20648 nodos · 30195 arestas · score 1.0
 
 ## Nos (PRIMARY KEY = codigo/nome/numero/termo)

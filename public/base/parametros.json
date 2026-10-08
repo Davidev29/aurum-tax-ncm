@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "tipo": "parametros-referencia",
+  "vigenciaInicio": "2027-01-01",
+  "vigenciaFim": null,
+  "ato": "LC 214/2025 — alíquotas de referência (estimativa; confirmar ato vigente antes de cada entrega)",
+  "refIBS": 19,
+  "refCBS": 9,
+  "soma": 28,
+  "fonteUrl": "https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp214.htm",
+  "shaFonte": null,
+  "nota": "EDITÁVEL: confrontar com o ato vigente (LC 214/2025 e regulamentação) antes de cada entrega fiscal. Valores de referência (estimativa) — não são fato escriturável."
+}

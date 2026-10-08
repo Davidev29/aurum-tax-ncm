@@ -1,0 +1,29 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    // O package.json raiz não tem `"type": "module"` (o app é CJS no
+    // Electron), então `verbatimModuleSyntax` herdado proibiria `import`
+    // ESM nos .ts — o esbuild transpila ESM→CJS no bundle, logo o
+    // typecheck aqui só precisa de `esModuleInterop` para os
+    // default-imports (`import path from 'node:path'`).
+    "verbatimModuleSyntax": false,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": false,
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "types": ["node"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": [
+    "electron",
+    "src/infrastructure/bridge.ts",
+    "src/infrastructure/db/db-protocolo.ts",
+    "src/infrastructure/db/validacao.ts",
+    "src/infrastructure/db/driver-prisma.ts",
+    "src/infrastructure/db/prisma-no.ts"
+  ],
+  "exclude": ["electron/dist", "node_modules"]
+}

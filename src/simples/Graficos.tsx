@@ -9,21 +9,15 @@
  */
 import { useMemo } from 'react';
 import {
-  ArcElement,
-  BarElement,
-  CategoryScale,
-  Chart as ChartJS,
-  Legend,
-  LinearScale,
-  Tooltip,
   type ChartOptions,
 } from 'chart.js';
+import { garantirChartsRegistrados } from '@/ui/chart-registry';
 import { Bar, Doughnut } from 'react-chartjs-2';
 import { fmtMoeda } from '@/domain/services/format';
 import type { Reparticao } from './calculo';
 import type { TributoSimples } from './tabelas';
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Legend, Tooltip);
+garantirChartsRegistrados();
 
 export interface GraficosDASProps {
   final: Reparticao;
@@ -103,7 +97,7 @@ export function GraficosDAS({ final, bruta, dasBruto, dasFinal, temST }: Grafico
         legend: {
           display: true,
           position: 'bottom' as const,
-          labels: { boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 10 } },
+          labels: { boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 12 } },
         },
         tooltip: {
           padding: 10,
@@ -161,7 +155,7 @@ export function GraficosDAS({ final, bruta, dasBruto, dasFinal, temST }: Grafico
         legend: {
           display: true,
           position: 'bottom' as const,
-          labels: { boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 10 } },
+          labels: { boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 12 } },
         },
         tooltip: {
           padding: 10,
@@ -172,12 +166,12 @@ export function GraficosDAS({ final, bruta, dasBruto, dasFinal, temST }: Grafico
         },
       },
       scales: {
-        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
         y: {
           beginAtZero: true,
           grace: '12%',
           grid: { color: 'rgba(100,116,139,0.16)' },
-          ticks: { font: { size: 10 }, maxTicksLimit: 5 },
+          ticks: { font: { size: 12 }, maxTicksLimit: 5 },
         },
       },
     }),
@@ -187,23 +181,23 @@ export function GraficosDAS({ final, bruta, dasBruto, dasFinal, temST }: Grafico
 
   return (
     <div className={`grid grid-cols-1 gap-3 ${temST ? 'md:grid-cols-2' : ''}`}>
-      <figure className="rounded-2xl border border-[var(--line)] bg-white p-4 dark:bg-slate-900">
-        <figcaption className="mb-1 text-[11px] font-bold uppercase tracking-widest text-slate-500">
+      <figure className="rounded-2xl border border-[var(--line)] bg-white p-6 dark:bg-slate-900 min-h-[320px]">
+        <figcaption className="mb-1 text-[13px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">
           Para onde vai o DAS
         </figcaption>
-        <div className="mb-2 font-mono text-[11px] tabular-nums text-slate-400">
+        <div className="mb-2 font-mono text-[13px] tabular-nums text-slate-600 dark:text-slate-300">
           Guia {fmtMoeda(dasFinal)}
         </div>
-        <div className="h-56">
+        <div className="h-[280px]">
           <Doughnut data={dadosDoughnut} options={opcoesDoughnut} />
         </div>
       </figure>
       {temST ? (
-      <figure className="rounded-2xl border border-[var(--line)] bg-white p-4 dark:bg-slate-900">
-        <figcaption className="mb-1 text-[11px] font-bold uppercase tracking-widest text-slate-500">
+      <figure className="rounded-2xl border border-[var(--line)] bg-white p-6 dark:bg-slate-900 min-h-[320px]">
+        <figcaption className="mb-1 text-[13px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">
           Bruto × guia por tributo
         </figcaption>
-        <div className="mb-2 font-mono text-[11px] tabular-nums text-slate-400">
+        <div className="mb-2 font-mono text-[13px] tabular-nums text-slate-600 dark:text-slate-300">
           {temST ? (
             <>
               Bruto {fmtMoeda(dasBruto)} × Guia {fmtMoeda(dasFinal)}
@@ -212,7 +206,7 @@ export function GraficosDAS({ final, bruta, dasBruto, dasFinal, temST }: Grafico
             <>Guia {fmtMoeda(dasFinal)}</>
           )}
         </div>
-        <div className="h-56">
+        <div className="h-[280px]">
           <Bar data={dadosBarra} options={opcoesBarra} />
         </div>
       </figure>

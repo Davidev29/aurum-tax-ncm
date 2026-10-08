@@ -8,16 +8,20 @@
  *
  * Segurança do canal (defesa em profundidade, além do Prisma parametrizado):
  * - `tabela` restrita à allowlist (`STORES_SQLITE`);
- * - `op` restrita às 11 operações conhecidas;
+ * - `op` restrita às 11 operações conhecidas (+ `db:transaction` para lotes
+ *   atômicos, com as mesmas validações por op);
  * - `where` validado por forma (campo no alfabeto, listas ≤ 500 itens);
  * - registros validados por `validarRegistro()` (domínio) + Prisma (tipos);
- * - tetos: 2000 registros/lote, 4 MB por operação;
+ * - tetos: 2000 registros/lote, 4 MB por operação, 500 ops/transação;
  * - caminho do banco FIXO (userData) — nenhum input do renderer vira path.
+ *
+ * Snapshots pré-restore são ROTATIVOS (`aurum.db.pre-restore-<ISO>.bak`,
+ * retendo os 5 mais novos) — nunca um nome fixo sobrescrito.
  *
  * Compilado pelo esbuild junto ao `main.ts` (`@prisma/client` externo).
  */
 import type { App, IpcMain } from 'electron'
-import { closeSync, copyFileSync, existsSync, openSync, readSync, renameSync, statSync } from 'node:fs'
+import { closeSync, copyFileSync, existsSync, openSync, readSync, readdirSync, renameSync, statSync, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import type { DbOp, OpWhere } from '../../src/infrastructure/db/db-protocolo'
 import { STORES_SQLITE, validarChave, validarRegistro } from '../../src/infrastructure/db/validacao'
@@ -40,6 +44,10 @@ const OPS_VALIDAS = new Set([
 
 const TETO_LOTE = 2000
 const TETO_BYTES = 4 * 1024 * 1024
+/** Teto de ops por transação (restore fatiado em 500 fica em ~60 ops). */
+const TETO_TRANSACAO_OPS = 500
+/** Snapshots pré-restore retidos (rotativos — os mais novos vencem). */
+const RETENCAO_SNAPSHOTS = 5
 
 /** Caminho fixo do banco: `<userData>/aurum.db` (preservado nos updates). */
 export function caminhoBanco(app: App): string {
@@ -47,11 +55,41 @@ export function caminhoBanco(app: App): string {
 }
 
 /**
- * Caminho fixo do snapshot pré-restore: `<userData>/aurum.db.pre-restore.bak`
- * (nome FIXO, sobrescrito a cada restore — sem acumulação).
+ * Caminho de UM snapshot pré-restore rotativo:
+ * `<userData>/aurum.db.pre-restore-<ISO>.bak` (ISO sem `:`/`.` — inválidos no
+ * Windows; ordenável lexicograficamente = cronológico). Cada restore gera um
+ * arquivo novo; `podarSnapshots` retém os 5 mais novos.
  */
-export function caminhoSnapshot(caminhoBanco: string): string {
-  return `${caminhoBanco}.pre-restore.bak`
+export function caminhoSnapshot(caminhoBanco: string, quando: Date = new Date()): string {
+  const iso = quando.toISOString().replace(/[:.]/g, '-')
+  return `${caminhoBanco}.pre-restore-${iso}.bak`
+}
+
+/**
+ * Poda best-effort: mantém só os `reter` snapshots mais novos. Nunca lança —
+ * falha de poda não bloqueia o restore. O `.bak` legado de nome fixo
+ * (`aurum.db.pre-restore.bak`) NÃO casa o prefixo e é preservado.
+ */
+export function podarSnapshots(caminhoBanco: string, reter: number = RETENCAO_SNAPSHOTS): void {
+  try {
+    const dir = path.dirname(caminhoBanco)
+    const base = path.basename(caminhoBanco)
+    const prefixo = `${base}.pre-restore-`
+    const candidatos = readdirSync(dir)
+      .filter((f) => f.startsWith(prefixo) && f.endsWith('.bak'))
+      .sort()
+    while (candidatos.length > reter) {
+      const antigo = candidatos.shift()
+      if (!antigo) break
+      try {
+        unlinkSync(path.join(dir, antigo))
+      } catch {
+        /* best-effort por arquivo */
+      }
+    }
+  } catch {
+    /* best-effort: poda nunca bloqueia o restore */
+  }
 }
 
 /**
@@ -227,8 +265,9 @@ function validarRequisicao(req: DbOp): void {
 /** Registra o canal `db:op`. Chamado por `registrarIpc()` no `main.ts`. */
 export function registrarIpcDb(ipcMain: IpcMain, app: App): void {
   const driver = new DriverPrisma(caminhoBanco(app))
-  // Snapshot pré-restore: cópia best-effort do banco antes dos clears.
-  // Nunca lança — falha vira `{ ok: false }` e o restore prossegue.
+  // Snapshot pré-restore ROTATIVO: cópia best-effort com timestamp + poda
+  // (retém os 5 mais novos). Nunca lança — falha vira `{ ok: false }` e o
+  // restore prossegue.
   ipcMain.handle('db:snapshot', async () => {
     try {
       const origem = caminhoBanco(app)
@@ -241,7 +280,8 @@ export function registrarIpcDb(ipcMain: IpcMain, app: App): void {
       } catch {
         /* checkpoint best-effort: segue para a cópia mesmo assim */
       }
-      const caminho = copiarBanco(origem, 'pre-restore.bak')
+      const sufixo = `pre-restore-${new Date().toISOString().replace(/[:.]/g, '-')}.bak`
+      const caminho = copiarBanco(origem, sufixo)
       if (!caminho || !existsSync(caminho)) return { ok: false, erro: 'copia-falhou' }
       const stat = statSync(caminho)
       if (stat.size <= 0) return { ok: false, erro: 'copia-vazia' }
@@ -258,10 +298,22 @@ export function registrarIpcDb(ipcMain: IpcMain, app: App): void {
           /* best-effort */
         }
       }
+      podarSnapshots(origem)
       return { ok: true, caminho }
     } catch (erro) {
       return { ok: false, erro: erro instanceof Error ? erro.message : String(erro) }
     }
+  })
+  // Lote atômico (`driver.transacionar` no renderer): valida CADA op com as
+  // mesmas regras do `db:op` e executa tudo numa transação SQLite real
+  // (`BEGIN IMMEDIATE`…`COMMIT` com `ROLLBACK` em falha — tudo ou nada).
+  ipcMain.handle('db:transaction', async (_evento, ops: unknown) => {
+    if (!Array.isArray(ops) || ops.length === 0 || ops.length > TETO_TRANSACAO_OPS) {
+      throw new Error('db:transacao-invalida')
+    }
+    const lote = ops as DbOp[]
+    for (const req of lote) validarRequisicao(req)
+    return driver.transacionar(lote)
   })
   ipcMain.handle('db:op', async (_evento, req: DbOp) => {
     validarRequisicao(req)

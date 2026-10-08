@@ -12,9 +12,10 @@
  */
 import {
   ANEXOS_SIMPLES,
-  FATOR_R_LIMIAR,
   type AnexoSimplesId,
 } from './tabelas';
+import { detalharFatorR } from '@/domain/simples/nucleo';
+import { fatorCreditoDespesa as fatorCreditoDespesaNucleo, totalCreditos } from '@/domain/simples/creditos';
 import {
   calcularConvencional,
   calcularHibrido,
@@ -230,42 +231,22 @@ export interface ReportAnalitico {
 
 /* --------------------------------- helpers -------------------------------- */
 
+/**
+ * Detalhamento do Fator R (matemática única em `@/domain/simples/nucleo`;
+ * aqui só adiciona o `formulaId` do relatório). Re-export mantido p/ compat.
+ */
 export function calcularFatorRDetalhado(folha12: number, rbt12: number): FatorRDetalhado {
-  const folha = Number(folha12) || 0;
-  const rbt = Number(rbt12) || 0;
-  const dadosSuficientes = rbt > 0 && folha > 0;
-  const valor = rbt > 0 ? folha / rbt : 0;
-  const folhaMinima = round2(FATOR_R_LIMIAR * rbt);
-  const gap = dadosSuficientes ? Math.max(0, round2(folhaMinima - folha)) : 0;
-  return {
-    folha12: round2(folha),
-    rbt12: round2(rbt),
-    valor: dadosSuficientes ? valor : 0,
-    threshold: FATOR_R_LIMIAR,
-    enquadrado: dadosSuficientes && valor >= FATOR_R_LIMIAR,
-    dadosSuficientes,
-    folhaMinimaIII: folhaMinima,
-    gapFolha: gap,
-    gapMensalProlabore: gap > 0 ? round2(gap / 12) : 0,
-    formulaId: FORMULA_FATOR_R,
-  };
+  const d = detalharFatorR(folha12, rbt12);
+  return { ...d, formulaId: FORMULA_FATOR_R };
 }
 
-/** Paridade com `store.ts:fatorDespesa` (aluguel = 30% da alíquota). */
+/** Fator de crédito por despesa (fonte única: `@/domain/simples/creditos`). Re-export p/ compat. */
 export function fatorCreditoDespesa(rotulo: string, regra: RegraCreditoCBS): number {
-  if (/aluguel/i.test(rotulo ?? '')) return 0.3;
-  if (regra === 'integral') return 1;
-  if (regra === 'red30') return 0.7;
-  if (regra === 'red60') return 0.4;
-  return 0;
+  return fatorCreditoDespesaNucleo(rotulo, regra);
 }
 
 export function totalCreditosDespesas(despesas: DespesaAnalitica[], cbsRef: number): number {
-  const total = (despesas ?? []).reduce(
-    (acc, d) => acc + (Number(d.valor) || 0) * (Number(cbsRef) || 0) * fatorCreditoDespesa(d.rotulo, d.regra),
-    0,
-  );
-  return round2(total);
+  return totalCreditos(despesas ?? [], cbsRef);
 }
 
 function fnv1a(str: string): string {

@@ -664,6 +664,12 @@ export interface ResultadoCalculo {
   vIBS: number
   vCBS: number
   total: number
+  /**
+   * Alias explícito de `total`: cobre exclusivamente IBS + CBS.
+   * O Imposto Seletivo NÃO é calculado (ver `observacaoIS`) — o nome puro
+   * `total` é mantido por compatibilidade com telas/relatórios existentes.
+   */
+  totalIBS_CBS?: number
   carga: number
 }
 

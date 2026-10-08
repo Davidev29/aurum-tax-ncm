@@ -13,17 +13,9 @@
  */
 import { useMemo, useState } from 'react';
 import {
-  BarElement,
-  CategoryScale,
-  Chart as ChartJS,
-  Filler,
-  Legend,
-  LinearScale,
-  LineElement,
-  PointElement,
-  Tooltip,
   type ChartOptions,
 } from 'chart.js';
+import { garantirChartsRegistrados } from '@/ui/chart-registry';
 import { Bar, Line } from 'react-chartjs-2';
 import { AnimatePresence, motion } from 'framer-motion';
 import { fmtCarga, fmtMoeda } from '@/domain/services/format';
@@ -31,7 +23,7 @@ import type { RelatorioProjecao } from './types';
 import { calcularCustoProLabore } from './pro-labore';
 import { NumeroAnimado } from './NumeroAnimado';
 
-ChartJS.register(BarElement, CategoryScale, Filler, Legend, LinearScale, LineElement, PointElement, Tooltip);
+garantirChartsRegistrados();
 
 function rotuloMes(mes: string): string {
   const [a, m] = mes.split('-');
@@ -43,12 +35,12 @@ const OPCAO_BASE: ChartOptions<'line'> = {
   maintainAspectRatio: false,
   animation: { duration: 450, easing: 'easeInOutQuart' },
   plugins: {
-    legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 10 } } },
+    legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 12 } } },
     tooltip: { padding: 10, cornerRadius: 10 },
   },
   scales: {
-    x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 45 } },
-    y: { beginAtZero: true, grace: '12%', grid: { color: 'rgba(100,116,139,0.16)' }, ticks: { font: { size: 10 }, maxTicksLimit: 5 } },
+    x: { grid: { display: false }, ticks: { font: { size: 11 }, maxRotation: 45, minRotation: 45 } },
+    y: { beginAtZero: true, grace: '12%', grid: { color: 'rgba(100,116,139,0.16)' }, ticks: { font: { size: 12 }, maxTicksLimit: 5 } },
   },
 };
 
@@ -116,12 +108,12 @@ export function GraficoRBT12({ relatorio }: { relatorio: RelatorioProjecao }) {
     [relatorio],
   );
   return (
-    <figure className="rounded-2xl border border-[var(--line)] bg-white p-3 dark:bg-slate-900">
+    <figure className="rounded-2xl border border-[var(--line)] bg-white p-6 dark:bg-slate-900 min-h-[320px]">
       <figcaption className="mb-2">
-        <div className="text-xs font-black">RBT12 acumulada — mãe × nova × unificado</div>
-        <div className="text-[10px] text-slate-500">Janela deslizante [t-12, t-1] · nova usa média × 12 até 12 meses</div>
+        <div className="text-[13px] font-black">RBT12 acumulada — mãe × nova × unificado</div>
+        <div className="text-[13px] text-slate-600 dark:text-slate-300">Janela deslizante [t-12, t-1] · nova usa média × 12 até 12 meses</div>
       </figcaption>
-      <div className="h-64">
+      <div className="h-[280px]">
         <Line data={dados} options={opcoes} />
       </div>
     </figure>
@@ -168,7 +160,7 @@ export function GraficoImpostoEmpilhado({ relatorio }: { relatorio: RelatorioPro
       maintainAspectRatio: false,
       animation: { duration: 450, easing: 'easeInOutQuart' },
       plugins: {
-        legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 10 } } },
+        legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 12 } } },
         tooltip: {
           padding: 10,
           cornerRadius: 10,
@@ -184,19 +176,19 @@ export function GraficoImpostoEmpilhado({ relatorio }: { relatorio: RelatorioPro
         },
       },
       scales: {
-        x: { stacked: true, grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 45 } },
-        y: { stacked: false, beginAtZero: true, grace: '12%', grid: { color: 'rgba(100,116,139,0.16)' }, ticks: { font: { size: 10 }, maxTicksLimit: 5 } },
+        x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 }, maxRotation: 45, minRotation: 45 } },
+        y: { stacked: false, beginAtZero: true, grace: '12%', grid: { color: 'rgba(100,116,139,0.16)' }, ticks: { font: { size: 12 }, maxTicksLimit: 5 } },
       },
     }),
     [relatorio],
   );
   return (
-    <figure className="rounded-2xl border border-[var(--line)] bg-white p-3 dark:bg-slate-900">
+    <figure className="rounded-2xl border border-[var(--line)] bg-white p-6 dark:bg-slate-900 min-h-[320px]">
       <figcaption className="mb-2">
-        <div className="text-xs font-black">Imposto por empresa — barras empilhadas</div>
-        <div className="text-[10px] text-slate-500">Mãe + nova (empilhado) vs. unificado (linha)</div>
+        <div className="text-[13px] font-black">Imposto por empresa — barras empilhadas</div>
+        <div className="text-[13px] text-slate-600 dark:text-slate-300">Mãe + nova (empilhado) vs. unificado (linha)</div>
       </figcaption>
-      <div className="h-64">
+      <div className="h-[280px]">
         <Bar data={dados} options={opcoes} />
       </div>
     </figure>
@@ -224,12 +216,12 @@ export function GraficoEconomiaArea({ relatorio }: { relatorio: RelatorioProjeca
     [relatorio],
   );
   return (
-    <figure className="rounded-2xl border border-[var(--line)] bg-white p-3 dark:bg-slate-900">
+    <figure className="rounded-2xl border border-[var(--line)] bg-white p-6 dark:bg-slate-900 min-h-[320px]">
       <figcaption className="mb-2">
-        <div className="text-xs font-black">Economia acumulada líquida (após custos)</div>
-        <div className="text-[10px] text-slate-500">Cruza o zero no payback · área verde = ganho real</div>
+        <div className="text-[13px] font-black">Economia acumulada líquida (após custos)</div>
+        <div className="text-[13px] text-slate-600 dark:text-slate-300">Cruza o zero no payback · área verde = ganho real</div>
       </figcaption>
-      <div className="h-64">
+      <div className="h-[280px]">
         <Line data={dados} options={OPCAO_BASE} />
       </div>
     </figure>
@@ -240,8 +232,8 @@ export function GraficoEconomiaArea({ relatorio }: { relatorio: RelatorioProjeca
 export function TimelinePayback({ relatorio }: { relatorio: RelatorioProjecao }) {
   const { mesVirada, mes } = relatorio.payback;
   return (
-    <div className="rounded-2xl border border-[var(--line)] bg-white p-3 dark:bg-slate-900" role="list" aria-label="Linha do tempo do retorno">
-      <div className="mb-2 text-xs font-black">Timeline — mês a mês até o retorno</div>
+    <div className="rounded-2xl border border-[var(--line)] bg-white p-6 dark:bg-slate-900 min-h-[320px]" role="list" aria-label="Linha do tempo do retorno">
+      <div className="mb-2 text-[13px] font-black">Timeline — mês a mês até o retorno</div>
       <ol className="flex items-center gap-1 overflow-x-auto pb-1">
         {relatorio.serieMensal.map((l) => {
           const ehVirada = mesVirada != null && l.mes === mesVirada;
@@ -252,7 +244,7 @@ export function TimelinePayback({ relatorio }: { relatorio: RelatorioProjecao })
               <motion.span
                 layout
                 transition={{ duration: 0.35, ease: 'easeInOut' }}
-                className={`grid h-9 w-9 place-items-center rounded-full border text-[10px] font-black tabular-nums ${
+                className={`grid h-11 w-11 place-items-center rounded-full border text-[13px] font-black tabular-nums ${
                   ehPayback
                     ? 'animate-pulse border-emerald-500 bg-emerald-500 text-white shadow-[0_0_18px_rgba(5,150,105,0.65)]'
                     : ehVirada
@@ -264,11 +256,11 @@ export function TimelinePayback({ relatorio }: { relatorio: RelatorioProjecao })
               >
                 {rotuloMes(l.mes)}
               </motion.span>
-              <span className={`font-mono text-[9px] tabular-nums ${positiva ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}>
+              <span className={`font-mono text-[13px] tabular-nums ${positiva ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}>
                 {positiva ? '▲' : '▼'} {fmtMoeda(Math.abs(l.economiaMes)).replace('R$', '').trim()}
               </span>
-              {ehPayback ? <span className="rounded-full bg-emerald-600 px-1.5 py-0.5 text-[8px] font-black uppercase text-white">payback</span> : null}
-              {ehVirada && !ehPayback ? <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[8px] font-black uppercase text-emerald-900">virada</span> : null}
+              {ehPayback ? <span className="rounded-full bg-emerald-600 px-1.5 py-0.5 text-[12px] font-black uppercase text-white">payback</span> : null}
+              {ehVirada && !ehPayback ? <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[12px] font-black uppercase text-emerald-900">virada</span> : null}
             </li>
           );
         })}
@@ -282,13 +274,13 @@ export function TabelaMensal({ relatorio }: { relatorio: RelatorioProjecao }) {
   const [mesDetalhe, setMesDetalhe] = useState<string | null>(null);
   const linha = relatorio.serieMensal.find((l) => l.mes === mesDetalhe) ?? null;
   return (
-    <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white dark:bg-slate-900">
+    <div className="overflow-hidden rounded-2xl border-2 border-[var(--line)] bg-white dark:bg-slate-900">
       <div className="px-3 py-2">
-        <div className="text-xs font-black">Memória de cálculo — mês a mês</div>
-        <div className="text-[10px] text-slate-500">Passe o mouse ou toque para ver o detalhamento · verde = economia, vermelho = custo extra</div>
+        <div className="text-[13px] font-black">Memória de cálculo — mês a mês</div>
+        <div className="text-[13px] text-slate-600 dark:text-slate-300">Passe o mouse ou toque para ver o detalhamento · verde = economia, vermelho = custo extra</div>
       </div>
       <div className="overflow-x-auto border-t border-[var(--line)]">
-        <table className="tbl tbl-compacta w-full min-w-[760px]">
+        <table className="tbl tbl-compacta simples-tabela w-full min-w-[760px]">
           <thead>
             <tr>
               <th scope="col">Mês</th>
@@ -315,7 +307,7 @@ export function TabelaMensal({ relatorio }: { relatorio: RelatorioProjecao }) {
                 >
                   <td className="font-sans font-bold">
                     {rotuloMes(l.mes)}
-                    {ehPayback ? <span className="ml-1 rounded-full bg-emerald-600 px-1.5 py-0.5 align-middle text-[8px] font-black uppercase text-white">✦ payback</span> : null}
+                    {ehPayback ? <span className="ml-1 rounded-full bg-emerald-600 px-1.5 py-0.5 align-middle text-[12px] font-black uppercase text-white">✦ payback</span> : null}
                   </td>
                   <td className="num text-right">{fmtMoeda(l.rbt12Mae)}</td>
                   <td className="num text-right">{fmtMoeda(l.rbt12Nova)}</td>
@@ -343,7 +335,7 @@ export function TabelaMensal({ relatorio }: { relatorio: RelatorioProjecao }) {
             transition={{ duration: 0.35, ease: 'easeInOut' }}
             className="overflow-hidden border-t border-[var(--line)] bg-slate-50/70 dark:bg-slate-950/40"
           >
-            <div className="px-3 py-2 font-mono text-[11px] leading-relaxed tabular-nums">
+            <div className="px-3 py-2 font-mono text-[13px] leading-relaxed tabular-nums">
               <strong>{linha.mes}</strong> · receita mãe {fmtMoeda(linha.receitaMae)} (faixa {linha.faixaMae}ª, efetiva {fmtCarga(linha.aliquotaEfetivaMae * 100)}, DAS {fmtMoeda(linha.dasMae)})
               {' '} + nova {fmtMoeda(linha.receitaNova)} (faixa {linha.faixaNova}ª, efetiva {fmtCarga(linha.aliquotaEfetivaNova * 100)}, DAS {fmtMoeda(linha.dasNova)})
               {' '} vs. unificado {fmtMoeda(linha.dasUnificadoReferencia)} (faixa {linha.faixaRef}ª)
@@ -377,13 +369,13 @@ export function VereditoHero({ relatorio }: { relatorio: RelatorioProjecao }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="text-sm font-black tracking-tight">{titulo}</div>
-          <div className="mt-0.5 text-xs opacity-80">
+          <div className="mt-0.5 text-[13px] opacity-80">
             {relatorio.payback.mesVirada ? <>Virada no {rotuloMes(relatorio.payback.mesVirada)} ({relatorio.payback.mesesAteVirada}º mês) · </> : <>Sem virada mensal · </>}
             {relatorio.payback.mes ? <>payback em {rotuloMes(relatorio.payback.mes)} ({relatorio.payback.mesesAtePayback}º mês)</> : <>sem payback no horizonte</>}
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[9px] font-bold uppercase tracking-widest opacity-70">Economia líquida total</div>
+          <div className="text-[13px] font-bold uppercase tracking-widest opacity-70">Economia líquida total</div>
           <NumeroAnimado
             valor={relatorio.economiaTotal}
             formatar={(n) => fmtMoeda(n)}
@@ -450,7 +442,7 @@ function MiniGraficoEmpresa({ relatorio, lado, corBarra, corLinha }: { relatorio
       maintainAspectRatio: false,
       animation: { duration: 450, easing: 'easeInOutQuart' },
       plugins: {
-        legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 10 } } },
+        legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 12 } } },
         tooltip: {
           padding: 10,
           cornerRadius: 10,
@@ -466,16 +458,16 @@ function MiniGraficoEmpresa({ relatorio, lado, corBarra, corLinha }: { relatorio
         },
       },
       scales: {
-        x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 45 } },
-        y: { beginAtZero: true, grace: '12%', grid: { color: 'rgba(100,116,139,0.16)' }, ticks: { font: { size: 10 }, maxTicksLimit: 4 } },
-        y1: { beginAtZero: true, grace: '12%', position: 'right' as const, grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 4 } },
+        x: { grid: { display: false }, ticks: { font: { size: 11 }, maxRotation: 45, minRotation: 45 } },
+        y: { beginAtZero: true, grace: '12%', grid: { color: 'rgba(100,116,139,0.16)' }, ticks: { font: { size: 12 }, maxTicksLimit: 4 } },
+        y1: { beginAtZero: true, grace: '12%', position: 'right' as const, grid: { display: false }, ticks: { font: { size: 12 }, maxTicksLimit: 4 } },
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [relatorio, lado],
   );
   return (
-    <div className="h-44">
+    <div className="h-[280px]">
       <Bar data={dados} options={opcoes} />
     </div>
   );
@@ -500,12 +492,12 @@ function CartaoEmpresa({ relatorio, lado }: { relatorio: RelatorioProjecao; lado
   return (
     <article className={`rounded-2xl border bg-white p-3 dark:bg-slate-900 ${ehMae ? 'border-[#2b3f63]/30' : 'border-[#be9433]/40'}`}>
       <header className="mb-2 flex flex-wrap items-center gap-2">
-        <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-black text-white ${ehMae ? 'bg-[#2b3f63]' : 'bg-[#be9433]'}`}>
+        <span className={`grid h-11 w-11 place-items-center rounded-full text-[13px] font-black text-white ${ehMae ? 'bg-[#2b3f63]' : 'bg-[#be9433]'}`}>
           {ehMae ? 'M' : 'N'}
         </span>
         <div>
-          <div className="text-xs font-black">{titulo} · Anexo {anexo}</div>
-          <div className="font-mono text-[10px] tabular-nums text-slate-500">
+          <div className="text-[13px] font-black">{titulo} · Anexo {anexo}</div>
+          <div className="font-mono text-[13px] tabular-nums text-slate-600 dark:text-slate-300">
             RBT12 {fmtMoeda(rbt12Ini)} → {fmtMoeda(rbt12Fim)}{' '}
             <span className={delta >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}>
               ({delta >= 0 ? '▲' : '▼'} {fmtMoeda(Math.abs(delta))})
@@ -515,11 +507,11 @@ function CartaoEmpresa({ relatorio, lado }: { relatorio: RelatorioProjecao; lado
         </div>
         <div className="ml-auto flex gap-2 text-right">
           <div>
-            <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Receita período</div>
+            <div className="text-[13px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300">Receita período</div>
             <NumeroAnimado valor={receitaTotal} formatar={(n) => fmtMoeda(n)} className="block font-mono text-sm font-black tabular-nums" />
           </div>
           <div>
-            <div className="text-[9px] font-bold uppercase tracking-widest text-slate-400">DAS período</div>
+            <div className="text-[13px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300">DAS período</div>
             <NumeroAnimado valor={dasTotal} formatar={(n) => fmtMoeda(n)} className="block font-mono text-sm font-black tabular-nums" />
           </div>
         </div>
@@ -529,7 +521,7 @@ function CartaoEmpresa({ relatorio, lado }: { relatorio: RelatorioProjecao; lado
         type="button"
         onClick={() => setExpandida((v) => !v)}
         aria-expanded={expandida}
-        className="mt-2 w-full rounded-xl border border-[var(--line)] px-3 py-1.5 text-[11px] font-bold text-slate-500 transition-all duration-300 hover:border-brand-700 hover:text-brand-700"
+        className="mt-2 min-h-[44px] w-full rounded-xl border border-[var(--line)] px-3 py-1.5 text-[13px] font-bold text-slate-600 transition-all duration-300 hover:border-brand-700 hover:text-brand-700 dark:text-slate-300"
       >
         {expandida ? '▾ Ocultar mês a mês' : '▸ Ver mês a mês da ' + (ehMae ? 'mãe' : 'nova')}
       </button>
@@ -544,7 +536,7 @@ function CartaoEmpresa({ relatorio, lado }: { relatorio: RelatorioProjecao; lado
             className="overflow-hidden"
           >
             <div className="overflow-x-auto pt-2">
-              <table className="tbl tbl-compacta w-full min-w-[520px]">
+              <table className="tbl tbl-compacta simples-tabela w-full min-w-[520px]">
                 <thead>
                   <tr>
                     <th scope="col">Mês</th>
@@ -564,7 +556,7 @@ function CartaoEmpresa({ relatorio, lado }: { relatorio: RelatorioProjecao; lado
                         <td className="font-sans font-bold">
                           {rotuloMes(l.mes)}
                           {mudou ? (
-                            <span className={`ml-1 rounded-full px-1.5 py-0.5 align-middle text-[8px] font-black uppercase ${l.faixa > anterior ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200' : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200'}`} title={`Faixa ${anterior}ª → ${l.faixa}ª`}>
+                            <span className={`ml-1 rounded-full px-1.5 py-0.5 align-middle text-[12px] font-black uppercase ${l.faixa > anterior ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200' : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200'}`} title={`Faixa ${anterior}ª → ${l.faixa}ª`}>
                               {l.faixa > anterior ? '▲ faixa' : '▼ faixa'}
                             </span>
                           ) : null}
@@ -590,7 +582,7 @@ function CartaoEmpresa({ relatorio, lado }: { relatorio: RelatorioProjecao; lado
 export function PaineisEmpresas({ relatorio }: { relatorio: RelatorioProjecao }) {
   return (
     <section aria-label="Projeção por empresa">
-      <div className="mb-2 text-xs font-black">Projeção por empresa — como a RBT12 se comporta mês a mês</div>
+      <div className="mb-2 text-[13px] font-black">Projeção por empresa — como a RBT12 se comporta mês a mês</div>
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <CartaoEmpresa relatorio={relatorio} lado="mae" />
         <CartaoEmpresa relatorio={relatorio} lado="nova" />
@@ -657,21 +649,21 @@ export function PainelCargaFiscal({ relatorio }: { relatorio: RelatorioProjecao 
   ];
 
   return (
-    <section aria-label="Carga fiscal do período" className="space-y-2 rounded-2xl border border-[var(--line)] bg-white p-3 dark:bg-slate-900">
+    <section aria-label="Carga fiscal do período" className="space-y-2 rounded-2xl border border-[var(--line)] bg-white p-6 dark:bg-slate-900 min-h-[320px]">
       <div>
-        <div className="text-xs font-black">Carga fiscal do período — anual ({n} meses)</div>
-        <div className="text-[10px] text-slate-500">Quanto de imposto vai pagar a mais ou a menos, e quanto de folha/encargos cada empresa carrega</div>
+        <div className="text-[13px] font-black">Carga fiscal do período — anual ({n} meses)</div>
+        <div className="text-[13px] text-slate-600 dark:text-slate-300">Quanto de imposto vai pagar a mais ou a menos, e quanto de folha/encargos cada empresa carrega</div>
       </div>
       <div className="grid grid-cols-2 gap-1.5 xl:grid-cols-4">
         {cards.map((c) => (
           <div key={c.rotulo} className={`rounded-xl border px-3 py-2 ${c.bom ? 'border-emerald-600/40 bg-emerald-50 dark:bg-emerald-950/30' : c.ruim ? 'border-red-600/40 bg-red-50 dark:bg-red-950/30' : 'border-[var(--line)]'}`}>
-            <span className="block text-[9px] font-bold uppercase tracking-widest text-slate-400">{c.rotulo}</span>
+            <span className="block text-[13px] font-bold uppercase tracking-widest text-slate-600 dark:text-slate-300">{c.rotulo}</span>
             <NumeroAnimado valor={c.valor} formatar={(v) => fmtMoeda(v)} className={`block font-mono text-[15px] font-black tabular-nums ${c.bom ? 'text-emerald-700 dark:text-emerald-300' : c.ruim ? 'text-red-600 dark:text-red-300' : ''}`} />
           </div>
         ))}
       </div>
       <div className="overflow-x-auto">
-        <table className="tbl tbl-compacta w-full min-w-[640px]">
+        <table className="tbl tbl-compacta simples-tabela w-full min-w-[640px]">
           <thead>
             <tr>
               <th scope="col">Empresa</th>
@@ -701,7 +693,7 @@ export function PainelCargaFiscal({ relatorio }: { relatorio: RelatorioProjecao 
           </tbody>
         </table>
       </div>
-      <p className="px-1 text-[10px] leading-relaxed text-slate-400">
+      <p className="px-1 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
         INSS 11% com teto do RGPS · IRPF pela tabela mensal 2026 (Leis 15.191 e 15.270/2025) sobre o pró-labore adicional · Anexos III/V já embutem o CPP no DAS — só o IV tem CPP patronal por fora.
       </p>
     </section>
@@ -756,7 +748,7 @@ export function GraficoReducaoMensal({ relatorio }: { relatorio: RelatorioProjec
       maintainAspectRatio: false,
       animation: { duration: 500, easing: 'easeInOutQuart' },
       plugins: {
-        legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 10 }, usePointStyle: true } },
+        legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12, boxHeight: 12, padding: 10, font: { size: 12 }, usePointStyle: true } },
         tooltip: {
           padding: 10,
           cornerRadius: 10,
@@ -772,23 +764,23 @@ export function GraficoReducaoMensal({ relatorio }: { relatorio: RelatorioProjec
         },
       },
       scales: {
-        x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 45 } },
-        y: { grace: '15%', grid: { color: 'rgba(100,116,139,0.16)' }, ticks: { font: { size: 10 }, maxTicksLimit: 5 } },
+        x: { grid: { display: false }, ticks: { font: { size: 11 }, maxRotation: 45, minRotation: 45 } },
+        y: { grace: '15%', grid: { color: 'rgba(100,116,139,0.16)' }, ticks: { font: { size: 12 }, maxTicksLimit: 5 } },
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [relatorio],
   );
   return (
-    <figure className="rounded-2xl border border-[var(--line)] bg-white p-3 dark:bg-slate-900">
+    <figure className="rounded-2xl border border-[var(--line)] bg-white p-6 dark:bg-slate-900 min-h-[320px]">
       <figcaption className="mb-2">
-        <div className="text-xs font-black">Redução mensal — quando começa a fazer sentido</div>
-        <div className="text-[10px] text-slate-500">
+        <div className="text-[13px] font-black">Redução mensal — quando começa a fazer sentido</div>
+        <div className="text-[13px] text-slate-600 dark:text-slate-300">
           Verde = paga menos que hoje · estrela dourada = virada · losango verde = payback
           {mesVirada ? ` · a partir de ${rotuloMes(mesVirada)}` : ' · sem virada no horizonte'}
         </div>
       </figcaption>
-      <div className="h-64">
+      <div className="h-[280px]">
         <Bar data={dados} options={opcoes} />
       </div>
     </figure>

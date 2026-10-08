@@ -7,8 +7,9 @@
  *     (ver `electron/preload.ts` e `src/infrastructure/bridge.ts`);
  *   - montar o menu nativo, com atalhos de teclado e ações de tema/exportação.
  *
- * Este arquivo é compilado pelo esbuild (`electron/esbuild.mjs`), não pelo
- * `tsc` do projeto — o `tsconfig.json` raiz não inclui a pasta `electron/`.
+ * Este arquivo é compilado pelo esbuild (`electron/esbuild.mjs`) e verificado
+ * pelo `tsc -p tsconfig.electron.json` (`npm run typecheck` cobre `src` e
+ * `electron/`).
  */
 
 import {
@@ -25,8 +26,20 @@ import { existsSync, promises as fsp } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { autoUpdater } from 'electron-updater'
-import { grafoConsultar, registrarUso } from './ia/grafo-service.cjs'
+import type * as TipoGrafo from './ia/grafo-service.cjs'
 import { caminhoBanco, copiarBanco, prepararBanco, registrarIpcDb } from './main/db'
+
+/**
+ * Grafo fiscal (Phase 10-02): carregado com `require` preguiçoso porque o
+ * `grafo-service.cjs` é COPIADO para `electron/dist/` (nunca bundlado —
+ * ver `electron/esbuild.mjs`). Um `import` estático faria o esbuild ou
+ * embutir o serviço no `main.js` (duplicação) ou emitir um `require` para
+ * `./ia/grafo-service.cjs`, caminho que não existe em `dist/`.
+ */
+function servicoGrafo(): typeof TipoGrafo {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./grafo-service.cjs') as typeof TipoGrafo
+}
 
 /** URL do servidor Vite, definida pelo script `dev:electron` (cross-env). */
 const URL_DEV = process.env.VITE_DEV_SERVER_URL ?? ''
@@ -434,7 +447,7 @@ function registrarIpc(): void {
         const texto = String(a.texto ?? a.consulta ?? '')
         // Fail-closed: texto vazio nunca consulta (o renderer cai no lexical).
         if (!texto.trim()) return { ok: false, fallback: 'lexical', erro: 'texto vazio' }
-        return await grafoConsultar(
+        return await servicoGrafo().grafoConsultar(
           {
             texto: String(a.texto ?? a.consulta ?? ''),
             k: Number(a.k) > 0 ? Number(a.k) : 5,
@@ -458,7 +471,7 @@ function registrarIpc(): void {
     'ia:grafo-uso',
     async (_evento, args?: { tipo?: string; termo?: string | null; codigo?: string | null; emitente?: string | null; peso?: number }) => {
       try {
-        return await registrarUso(args ?? {}, { app })
+        return await servicoGrafo().registrarUso(args ?? {}, { app })
       } catch (erro) {
         return { ok: false, erro: mensagemDeErro(erro) }
       }

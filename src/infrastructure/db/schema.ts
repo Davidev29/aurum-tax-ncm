@@ -47,7 +47,16 @@ import type {
 } from '@/domain/entities'
 import type { NotaXml } from '../nfe/tipos'
 import { TODAS_STORES } from './db-protocolo'
-import { Colecao, Tabela, resolverDriver } from './motor'
+import {
+  abortarColetaTransacao,
+  Colecao,
+  DriverIpc,
+  encerrarColetaTransacao,
+  executarOp,
+  iniciarColetaTransacao,
+  resolverDriver,
+  Tabela,
+} from './motor'
 import type { ModoLote } from './db-protocolo'
 
 /** Versão do schema SQLite (banco novo — sem cadeia de migração Dexie). */
@@ -203,10 +212,42 @@ class BancoLocal {
 
   /**
    * Bloco transacional (paridade `db.transaction()` do Dexie).
-   * Cada statement SQLite já é atômico; aqui a função executa direto.
-   * O único chamador (`excluirEmpresa`) já tem fallback sem transação.
+   *
+   * - **Electron (driver IPC):** as operações do callback são coletadas e
+   *   enviadas em lote atômico ao main (`db:transaction` → `prisma.$transaction`
+   *   em `electron/main/db.ts`). Leituras dentro do callback devolvem vazio e
+   *   ids gerados não são visíveis antes do commit (ver `resultadoColeta` em
+   *   `motor.ts`) — os chamadores usam só remoções/escritas com chave conhecida.
+   * - **Main antigo sem `db:transaction`:** replay sequencial op a op pelo
+   *   canal clássico (`db:op`), com erros propagados (nada silenciado).
+   * - **Fora do Electron (Node/Prisma, memória, testes):** fallback sequencial
+   *   documentado — executa o callback direto; cada statement SQLite já é
+   *   atômico. Quem precisa de atomicidade multi-op fora do IPC usa a
+   *   primitiva `driver.transacionar(ops)` diretamente (ex.: `excluirEmpresa`,
+   *   `restaurarBackup`).
    */
   async transaction(_modo: string, _tabelas: unknown[], fn: () => Promise<void> | void): Promise<void> {
+    const d = resolverDriver()
+    if (d instanceof DriverIpc && typeof d.transacionar === 'function') {
+      iniciarColetaTransacao()
+      try {
+        await fn()
+      } catch (e) {
+        abortarColetaTransacao()
+        throw e
+      }
+      const ops = encerrarColetaTransacao()
+      if (!ops.length) return
+      try {
+        await d.transacionar(ops)
+        return
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        if (!/sem-transacao/.test(msg)) throw e
+        for (const op of ops) await executarOp(d, op)
+        return
+      }
+    }
     await fn()
   }
 

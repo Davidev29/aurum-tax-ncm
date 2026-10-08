@@ -27,7 +27,7 @@ import { ehResumo } from '../sped/tipos'
 import type { ResultadoItem, ResultadoResumo, ResultadoSped } from '../sped/tipos'
 import { creditoDaNota, creditoIbsCbsDaNota } from '../nfe/credito'
 import { apurarIbsCbs } from '../nfe/apuracao'
-import { resumirNaturezas } from '../nfe/cfop'
+import { classificarNatOp, resumirNaturezas } from '../nfe/cfop'
 import { REGIME_LABELS, regimeDoEmitente } from '../nfe/regime'
 import type { CreditoFornecedor, CreditoLoja, DisponibilidadeCredito, InsightNfe, NotaXml, OpcoesRelatorioNfe, VerificacaoRagNfe } from '../nfe/tipos'
 import { OPCOES_RELATORIO_CHEIO } from '../nfe/tipos'
@@ -1176,8 +1176,15 @@ const fmtDataBr = (iso: string): string =>
 
 /** CSV das notas (tudo entreaspado, padrão SPED da v1). */
 export function csvNfe(notas: NotaXml[]): string {
+  const ROTULO_NAT_CSV: Record<ReturnType<typeof classificarNatOp>, string> = {
+    venda: 'Venda',
+    'nao-venda': 'Diferente de venda',
+    imobilizado: 'Imobilizado/uso',
+    indefinida: 'A classificar',
+  }
   const head = [
     'Chave', 'Número', 'Série', 'Modelo', 'Emissão', 'Direção',
+    'Natureza Operação', 'Classificação Natureza',
     'Emitente', 'CNPJ Emitente', 'Regime Emitente', 'Destinatário', 'Itens', 'Valor Total',
     'ICMS Destacado', 'Itens c/ Crédito', 'Fontes Crédito',
     'IBS Destacado XML', 'CBS Destacada XML', 'Crédito IBS/CBS XML',
@@ -1190,6 +1197,7 @@ export function csvNfe(notas: NotaXml[]): string {
     return [
       n.chave, n.numero, n.serie, n.modelo, fmtDataBr(n.dataEmissao),
       ROTULO_DIRECAO[n.direcao] ?? n.direcao,
+      n.natOp || '—', ROTULO_NAT_CSV[classificarNatOp(n.natOp)],
       n.emitNome, n.emitCnpj,
       regime === 'desconhecido' ? '—' : REGIME_LABELS[regime],
       n.destNome || '—', n.itensAnalisados.length,

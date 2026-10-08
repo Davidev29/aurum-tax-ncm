@@ -17,35 +17,32 @@ import {
   ANEXOS_SIMPLES,
   ISS_TETO,
   SUBLIMITE,
-  RBT12_MAX,
-  FATOR_R_LIMIAR,
   type AnexoSimples,
   type AnexoSimplesId,
   type FaixaSimples,
   type TributoSimples,
 } from './tabelas';
+import {
+  FATOR_R_LIMIAR,
+  aliquotaEfetiva as aliquotaEfetivaNucleo,
+  faixaDoRBT12 as faixaDoRBT12Nucleo,
+  fatorR as fatorRNucleo,
+  round2 as round2Nucleo,
+} from '@/domain/simples/nucleo';
+import { exigirRbtReceita } from '@/domain/simples/validacao';
 
-export const round2 = (v: number): number => Math.round((Number(v) || 0) * 100) / 100;
-
-/** Localiza a faixa pelo RBT12. Retorna null se fora do Simples (> 4.8M ou <= 0). */
-export function faixaDoRBT12(anexo: AnexoSimples, rbt12: number): FaixaSimples | null {
-  if (!Number.isFinite(rbt12) || rbt12 <= 0) return null;
-  for (const f of anexo.faixas) {
-    if (rbt12 > f.limInf && rbt12 <= f.limSup) return f;
-    // 1ª faixa inclui 0 (exclusive) — limInf 0
-    if (f.faixa === 1 && rbt12 > 0 && rbt12 <= f.limSup) return f;
-  }
-  return null;
-}
+/** Arredondamento canonico (fonte: `@/domain/simples/nucleo`). */
+export const round2 = round2Nucleo;
+/** Faixa pelo RBT12 (fonte: `@/domain/simples/nucleo`). */
+export const faixaDoRBT12 = faixaDoRBT12Nucleo;
+/** Aliquota efetiva (fonte: `@/domain/simples/nucleo`). */
+export const aliquotaEfetiva = aliquotaEfetivaNucleo;
+/** Fator R (fonte: `@/domain/simples/nucleo`). */
+export const fatorR = fatorRNucleo;
+export { FATOR_R_LIMIAR };
 
 export function faixaDoRBT12PorAnexo(anexoId: AnexoSimplesId, rbt12: number): FaixaSimples | null {
   return faixaDoRBT12(ANEXOS_SIMPLES[anexoId], rbt12);
-}
-
-/** (RBT12 * nominal - deduzir) / RBT12. RBT12<=0 => 0 (IFERROR das planilhas). */
-export function aliquotaEfetiva(rbt12: number, faixa: FaixaSimples): number {
-  if (!faixa || !(rbt12 > 0)) return 0;
-  return (rbt12 * faixa.aliquotaNominal - faixa.parcelaDeduzir) / rbt12;
 }
 
 export function faixa5(anexo: AnexoSimples): FaixaSimples {
@@ -73,12 +70,26 @@ export type Reparticao = Record<TributoSimples, number>;
 
 const ZERADA: Reparticao = { IRPJ: 0, CSLL: 0, CBS: 0, IBS: 0, CPP: 0, ICMS: 0, IPI: 0, ISS: 0 };
 
-/** DAS * %faixa por tributo. */
+/**
+ * DAS * %faixa por tributo, com ajuste de residuo de centavos: a soma das
+ * parcelas arredondadas pode divergir do DAS em ±1 centavo; a maior parcela
+ * absorve a diferenca para a reparticao fechar exatamente no DAS.
+ */
 export function repartirDAS(das: number, faixa: FaixaSimples): Reparticao {
   const out = { ...ZERADA };
-  (Object.keys(out) as TributoSimples[]).forEach((t) => {
+  const chaves = Object.keys(out) as TributoSimples[];
+  chaves.forEach((t) => {
     out[t] = round2(das * (faixa.reparticao[t] ?? 0));
   });
+  const soma = chaves.reduce((a, t) => a + out[t], 0);
+  const residuo = round2(das - soma);
+  if (residuo !== 0) {
+    let maior: TributoSimples | null = null;
+    for (const t of chaves) {
+      if (maior == null || out[t] > out[maior]) maior = t;
+    }
+    if (maior != null) out[maior] = round2(out[maior] + residuo);
+  }
   return out;
 }
 
@@ -123,12 +134,6 @@ export function aplicarTravaISS(
     acrescimos,
     cbsFinal: cbsEfetivaBase + acrescimos.CBS,
   };
-}
-
-/** Fator R: folha12 / rbt12 >= 28% => III senão V. */
-export function fatorR(folha12: number, rbt12: number): { indice: number; anexo: 'III' | 'V' } {
-  const indice = rbt12 > 0 ? (Number(folha12) || 0) / rbt12 : 0;
-  return { indice, anexo: indice >= FATOR_R_LIMIAR ? 'III' : 'V' };
 }
 
 export type CenarioSublimite = 1 | 2 | 3 | 4;
@@ -470,7 +475,11 @@ export function calcularConvencional(e: EntradaConvencional): ResultadoConvencio
     // ICMS/IBS/ISS do sublimite saem da guia DAS.
     const aICMS = aliq5sub * (pctICMS || f5.reparticao.ICMS || 0);
     const aIBS = aliq5sub * (pctIBS || f5.reparticao.IBS || 0);
-    const issB = issBrutaBase;
+    // ISS do sublimite pela 5ª faixa quando a faixa corrente é a 6ª (a 6ª não
+    // tem %ISS próprio) — mesma regra dos cenários 2/4.
+    const issB = faixa.faixa === 6
+      ? aliq5rbt * (f5.reparticao.ISS ?? 0)
+      : issBrutaBase;
     const trava = aplicarTravaISS(anexo, issB, cbsBase);
     const usaRefICMS = refICMS != null && tributosFora.includes('ICMS');
     const usaRefISS = refISS != null && tributosFora.includes('ISS');
@@ -606,11 +615,9 @@ export function calcularConvencionalEstrito(e: EntradaConvencional): ResultadoCo
   if (!e || !(e.anexoId in ANEXOS_SIMPLES)) {
     throw new Error(`anexo-invalido: "${String((e as { anexoId?: unknown } | null)?.anexoId ?? '')}" (esperado I, II, III, IV ou V)`);
   }
-  const rbt12 = Number(e.rbt12);
-  const receita = Number(e.receitaMes);
-  if (!Number.isFinite(rbt12) || rbt12 <= 0) throw new Error('rbt12-ausente-ou-invalido: informe RBT12 > 0');
-  if (!Number.isFinite(receita) || receita <= 0) throw new Error('receita-ausente-ou-invalida: informe receitaMes > 0');
-  if (rbt12 > RBT12_MAX) throw new Error('desenquadramento-simples: RBT12 acima de R$ 4.800.000 — não projetar');
+  // Guarda única (fonte: `@/domain/simples/validacao`): Infinity/NaN/<=0 e
+  // RBT12 > 4.8M lançam erro tipado em vez de devolver DAS zero exibível.
+  exigirRbtReceita(e.rbt12, e.receitaMes);
   const r = calcularConvencional(e);
   if (r.faixa === 0 || r.das <= 0) throw new Error('calculo-sem-base: faixa/DAS zerados para os inputs');
   return r;

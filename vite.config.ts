@@ -20,14 +20,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    chunkSizeWarningLimit: 4096,
+    chunkSizeWarningLimit: 1500,
     // BUILD completa anti-reversão: minify agressivo + sem sourcemap.
     // A ofuscação pesada (stringArray) roda em `scripts/ofuscar-build.cjs`
     // sobre os chunks gerados — aqui o Vite já entrega tudo minificado.
     minify: 'esbuild',
     sourcemap: false,
     cssMinify: true,
-    reportCompressedSize: false,
+    reportCompressedSize: true,
     // Sem `manualChunks`: o rolldown (Vite 8) faz o próprio agrupamento e já
     // separa corretamente os imports dinâmicos (pdfmake, xlsx e Chart.js).
   },

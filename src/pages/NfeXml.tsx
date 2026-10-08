@@ -7,29 +7,18 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { BarraAnimada, Entrada, Expansivel, Item, Lista, Secao } from '@/ui/motion'
-import {
-  ArcElement,
-  BarElement,
-  CategoryScale,
-  Chart as ChartJS,
-  Filler,
-  Legend,
-  LinearScale,
-  LineElement,
-  PointElement,
-  Tooltip,
-} from 'chart.js'
+import { garantirChartsRegistrados } from '@/ui/chart-registry'
 import { Bar, Doughnut, Line } from 'react-chartjs-2'
-import { EMITENTE_PADRAO } from '@/domain/entities'
+import { EMITENTE_PADRAO, type NomenclaturaNcm } from '@/domain/entities'
 import { rotuloAnexoOficial } from '@/domain/constants/tributarios'
-import { fmtCarga, fmtCnpj, fmtMoeda, fmtNcm, fmtNum } from '@/domain/services/format'
+import { fmtCarga, fmtCnpj, fmtMoeda, fmtNcm, fmtNum, norm } from '@/domain/services/format'
 import { totaisNotas } from '@/application/notas-xml'
 import {
+  bucketProntidaoItem,
   confrontoRegimes,
   distribuicaoPorAnexo,
   evolucaoMensal,
   indicadoresXml,
-  resumoDivergencias,
   topCfop,
   topCstReforma,
   topNcm,
@@ -39,6 +28,7 @@ import { exportarNfeCSV, exportarNfePDF } from '@/infrastructure/exporters/relat
 import { ModalRelatorioNfe, type EscolhaRelatorio } from './ModalRelatorioNfe'
 import { registrarExportador } from '@/infrastructure/pdf/menu-exportacao'
 import { creditoDaNota, creditoIbsCbsDaNota, creditoIbsCbsDoItem, divergenciaXmlSistema } from '@/infrastructure/nfe/credito'
+import { classificarNatOp } from '@/infrastructure/nfe/cfop'
 import { REGIME_LABELS, regimeDoEmitente, transfereCreditoIbsCbs } from '@/infrastructure/nfe/regime'
 import type { DirecaoNota, FiltrosNfe, NotaXml, ResultadoItemNfe } from '@/infrastructure/nfe/tipos'
 import { useSessao } from '@/store/sessao'
@@ -46,6 +36,7 @@ import { useNfe } from '@/store/nfe'
 import { BannerContribuintesNovos } from './NfePendentes'
 import { BlocoNaturezas } from './NfeNatureza'
 import { ModalItemNfeDetalhe, Olho } from '@/ui/detalhes'
+import { ModalEscolhaTributacao } from '@/modais/escolha-tributacao'
 import { ModalConferenciaXml } from './NfeConferenciaProdutos'
 import { useConferenciaXml } from '@/store/conferencia-xml'
 import { SeloST, SeloSTNota } from '@/ui/cest'
@@ -55,7 +46,7 @@ import { CartaoStat } from '@/ui/cartoes'
 import { Btn, IconeBadge, Modal, Painel, Pill, Texto, useAcaoTatil } from '@/ui/kit'
 import { EscudoAurum } from '@/ui/Marca'
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, Filler, LinearScale, LineElement, PointElement, Tooltip, Legend)
+garantirChartsRegistrados()
 
 const COR_DIRECAO: Record<DirecaoNota, 'brand' | 'emerald' | 'amber'> = {
   entrada: 'brand',
@@ -66,6 +57,24 @@ const ROTULO_DIRECAO: Record<DirecaoNota, string> = {
   entrada: '⤵ Entrada',
   saida: '⤴ Saída',
   quarentena: '⚠ Quarentena',
+}
+
+/**
+ * Natureza da operação (capa do XML) → classificação para conferência.
+ * `venda` gera crédito/débito normal; `nao-venda` e `imobilizado` não geram
+ * crédito; `indefinida` = texto fora do dicionário, exige conferência manual.
+ */
+const ROTULO_NAT: Record<ReturnType<typeof classificarNatOp>, string> = {
+  venda: 'Venda',
+  'nao-venda': 'Diferente de venda',
+  imobilizado: 'Imobilizado/uso',
+  indefinida: 'A classificar',
+}
+const COR_NAT: Record<ReturnType<typeof classificarNatOp>, 'emerald' | 'amber' | 'slate' | 'red'> = {
+  venda: 'emerald',
+  'nao-venda': 'amber',
+  imobilizado: 'slate',
+  indefinida: 'red',
 }
 
 const MESES = [
@@ -291,6 +300,13 @@ function BannerXml() {
 
 function ResumoImportacao() {
   const resumo = useNfe((s) => s.ultimoResumo)
+  const limparResumo = useNfe((s) => s.limparResumo)
+  // Auto-dismiss: aparece, fica ~3s visível e sai com fade (AnimatePresence).
+  useEffect(() => {
+    if (!resumo) return
+    const t = window.setTimeout(() => limparResumo(), 3000)
+    return () => window.clearTimeout(t)
+  }, [resumo, limparResumo])
   return (
     <AnimatePresence initial={false}>
       {resumo ? (
@@ -300,12 +316,22 @@ function ResumoImportacao() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -8, scale: 0.99 }}
           transition={{ duration: 0.3, ease: [0.22, 0.9, 0.3, 1] }}
-          className={`rounded-2xl border p-4 text-xs leading-relaxed ${
+          role={resumo.erros.length ? 'alert' : 'status'}
+          className={`relative rounded-2xl border p-4 pr-10 text-xs leading-relaxed ${
             resumo.erros.length
               ? 'border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/30'
               : 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30'
           }`}
         >
+          <button
+            type="button"
+            onClick={() => limparResumo()}
+            aria-label="Fechar aviso de importação"
+            title="Fechar"
+            className="absolute right-2 top-2 rounded-lg px-2 py-1 text-slate-400 hover:bg-slate-200/60 hover:text-slate-600 dark:hover:bg-slate-800"
+          >
+            ✕
+          </button>
       <div className="font-bold">
         📥 {resumo.novas} nota(s) importada(s)
         {resumo.duplicadas ? ` · ${resumo.duplicadas} duplicada(s) ignorada(s)` : ''}
@@ -1578,11 +1604,11 @@ function Filtros() {
         {/* Linha 2 — produto em destaque + Reforma */}
         <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-12">
           <label className="block lg:col-span-9">
-            <span className="field-label">Produto · código · NCM</span>
+            <span className="field-label">Produto · código · NCM · natureza · nota</span>
             <Texto
               value={filtros.texto}
               onChange={(e) => setFiltros({ texto: e.target.value })}
-              placeholder="Ex.: queijo, SKU-001, 0201…"
+              placeholder="Ex.: queijo, SKU-001, 0201, remessa, venda, 907675…"
             />
           </label>
           <div className="flex items-end lg:col-span-3">
@@ -1741,19 +1767,21 @@ function TabelaNotas({ notas, onVerDanfe }: { notas: NotaXml[]; onVerDanfe: (n: 
       <div className="max-h-[360px] overflow-auto scroll-elegante">
         <table className="tbl tbl-notas tbl-compacta w-full table-fixed">
           <colgroup>
-            <col className="w-[13%]" />
-            <col className="w-[11%]" />
-            <col className="w-[30%]" />
-            <col className="w-[13%]" />
-            <col className="w-[12%]" />
-            <col className="w-[12%]" />
+            <col className="w-[10%]" />
             <col className="w-[9%]" />
+            <col className="w-[20%]" />
+            <col className="w-[16%]" />
+            <col className="w-[10%]" />
+            <col className="w-[11%]" />
+            <col className="w-[12%]" />
+            <col className="w-[12%]" />
           </colgroup>
           <thead>
             <tr>
               <th>Número</th>
               <th>Emissão</th>
               <th>Emitente</th>
+              <th>Natureza da operação</th>
               <th>Direção</th>
               <th className="th-r">Valor</th>
               <th className="th-r">IBS + CBS</th>
@@ -1763,6 +1791,7 @@ function TabelaNotas({ notas, onVerDanfe }: { notas: NotaXml[]; onVerDanfe: (n: 
           <tbody>
             {exibidas.map((n) => {
               const regime = regimeDoEmitente(n.emitCrt, n.itensAnalisados)
+              const classeNat = classificarNatOp(n.natOp)
               return (
               <motion.tr
                 key={n.id ?? n.chave}
@@ -1783,6 +1812,17 @@ function TabelaNotas({ notas, onVerDanfe }: { notas: NotaXml[]; onVerDanfe: (n: 
                     ) : null}
                     <span className="shrink-0 text-[10px] text-slate-400">{n.itensAnalisados.length} item(ns)</span>
                     <SeloSTNota itens={n.itensAnalisados} />
+                  </span>
+                </td>
+                <td
+                  className="min-w-0"
+                  title={n.natOp ? `Natureza da operação: ${n.natOp} · classificação: ${ROTULO_NAT[classeNat]}` : 'XML sem natureza da operação informada — confira a classificação'}
+                >
+                  <span className="block truncate text-[11px]">
+                    {n.natOp || <span className="text-slate-400">— sem natureza —</span>}
+                  </span>
+                  <span className="mt-0.5 inline-block">
+                    <Pill cor={COR_NAT[classeNat]}>{ROTULO_NAT[classeNat]}</Pill>
                   </span>
                 </td>
                 <td><Pill cor={COR_DIRECAO[n.direcao]}>{ROTULO_DIRECAO[n.direcao]}</Pill></td>
@@ -1921,6 +1961,26 @@ function ModalDetalheNfe({ onVerDanfe }: { onVerDanfe: (n: NotaXml) => void }) {
     >
       {nota ? (
         <div className="min-w-0 space-y-4">
+          {(() => {
+            const classeNat = classificarNatOp(nota.natOp)
+            return (
+              <div
+                className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5 dark:border-slate-700 dark:bg-slate-950/40"
+                title={nota.natOp ? `Natureza como veio na capa do XML: ${nota.natOp}` : 'XML sem natureza da operação informada — confira a classificação antes de aproveitar crédito'}
+              >
+                <span aria-hidden className="text-base">🏷️</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Natureza da operação · capa do XML
+                  </div>
+                  <div className="truncate text-xs font-black" title={nota.natOp || undefined}>
+                    {nota.natOp || <span className="font-normal text-slate-400">— sem natureza informada —</span>}
+                  </div>
+                </div>
+                <Pill cor={COR_NAT[classeNat]}>{ROTULO_NAT[classeNat]}</Pill>
+              </div>
+            )
+          })()}
           <div className="grid min-w-0 grid-cols-2 gap-2 text-xs md:grid-cols-4">
             <Info rotulo="Chave" valor={nota.chave} mono />
             <Info rotulo="Série / Modelo" valor={`${nota.serie || '—'} / ${nota.modelo}`} />
@@ -2392,6 +2452,208 @@ const fmtCompactoNfe = (v: number): string =>
  * Gráficos elegantes do módulo XML: rosca entradas × saídas (valor),
  * evolução mensal de IBS+CBS (linha) e top fornecedores por crédito (barras).
  */
+/* --------------------------------------- drill-down dos gráficos --- */
+
+/**
+ * Detalhe perfurável dos gráficos: clicar numa fatia, barra, ponto ou linha
+ * abre o modal com as notas (ou itens) que compõem aquele pedaço — com
+ * 👁 (detalhe) e 🧾 (DANFE) por linha, sem sair da tela.
+ */
+interface ItemDrillGrafico {
+  nota: NotaXml
+  item: ResultadoItemNfe
+}
+
+interface DrillGrafico {
+  titulo: string
+  subtitulo: string
+  modo: 'notas' | 'itens'
+  notas: NotaXml[]
+  itens: ItemDrillGrafico[]
+}
+
+/** Notas de um mês (`AAAA-MM`), opcionalmente de uma direção. */
+function notasDoMes(notas: NotaXml[], mes: string, direcao?: DirecaoNota): NotaXml[] {
+  return (notas ?? []).filter(
+    (n) => String(n?.dataEmissao ?? '').slice(0, 7) === mes && (!direcao || n?.direcao === direcao),
+  )
+}
+
+/** Itens que casam com o predicado (guarda nota + item para o detalhe). */
+function itensDoFiltro(
+  notas: NotaXml[],
+  pred: (n: NotaXml, it: ResultadoItemNfe) => boolean,
+): ItemDrillGrafico[] {
+  const lista: ItemDrillGrafico[] = []
+  for (const n of notas ?? []) {
+    for (const it of n?.itensAnalisados ?? []) {
+      if (pred(n, it)) lista.push({ nota: n, item: it })
+    }
+  }
+  return lista
+}
+
+/** Drill de notas com subtítulo automático (qtd + base + IBS+CBS). */
+function drillDeNotas(titulo: string, lista: NotaXml[]): DrillGrafico {
+  const base = lista.reduce((s, n) => s + (Number(n?.valorTotal) || 0), 0)
+  const trib = lista.reduce((s, n) => s + (Number(n?.totalTributos) || 0), 0)
+  return {
+    titulo,
+    subtitulo: `${lista.length} nota(s) · base ${fmtMoeda(base)} · IBS+CBS ${fmtMoeda(trib)}`,
+    modo: 'notas',
+    notas: lista,
+    itens: [],
+  }
+}
+
+/** Drill de itens com subtítulo automático (qtd + base + IBS+CBS). */
+function drillDeItens(titulo: string, lista: ItemDrillGrafico[]): DrillGrafico {
+  const base = lista.reduce((s, r) => s + (Number(r.item?.vlTotal) || 0), 0)
+  const trib = lista.reduce((s, r) => s + (Number(r.item?.totalTributos) || 0), 0)
+  return {
+    titulo,
+    subtitulo: `${lista.length} item(ns) · base ${fmtMoeda(base)} · IBS+CBS ${fmtMoeda(trib)}`,
+    modo: 'itens',
+    notas: [],
+    itens: lista,
+  }
+}
+
+/** Cursor de clique nos gráficos (só onde há elemento sob o mouse). */
+function cursorDrill(event: { native?: unknown }, elements: { length?: number } | null | undefined): void {
+  const target = (event?.native as { target?: unknown } | undefined)?.target as
+    | { style?: { cursor: string } }
+    | undefined
+  if (target?.style) target.style.cursor = (elements?.length ?? 0) > 0 ? 'pointer' : 'default'
+}
+
+const LIMITE_DRILL = 100
+
+/** Modal do drill-down: tabela de notas ou itens com 👁 e 🧾 por linha. */
+function ModalDrillGrafico({ drill, onFechar }: { drill: DrillGrafico; onFechar: () => void }) {
+  const abrirNota = useNfe((s) => s.abrirNota)
+  const [danfe, setDanfe] = useState<NotaXml | null>(null)
+  const visiveisNotas = drill.notas.slice(0, LIMITE_DRILL)
+  const visiveisItens = drill.itens.slice(0, LIMITE_DRILL)
+  const total = drill.modo === 'notas' ? drill.notas.length : drill.itens.length
+  const visiveis = drill.modo === 'notas' ? visiveisNotas.length : visiveisItens.length
+  return (
+    <>
+      <Modal
+        aberto
+        onFechar={onFechar}
+        titulo={drill.titulo}
+        subtitulo={drill.subtitulo}
+        largura="max-w-4xl"
+        rodape={<Btn tam="sm" onClick={onFechar}>✕ Fechar</Btn>}
+      >
+        {drill.modo === 'notas' ? (
+          !drill.notas.length ? (
+            <p className="p-6 text-center text-xs text-slate-500">Nenhuma nota neste recorte do filtro atual.</p>
+          ) : (
+            <div className="max-h-[50vh] overflow-auto">
+              <table className="tbl w-full">
+                <thead>
+                  <tr>
+                    <th>Número</th>
+                    <th>Emitente</th>
+                    <th>Emissão</th>
+                    <th className="th-r">Valor</th>
+                    <th className="th-r">IBS+CBS</th>
+                    <th className="th-r">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visiveisNotas.map((n) => (
+                    <tr key={n.id ?? n.chave} className="cursor-pointer hover:bg-brand-50/50 dark:hover:bg-brand-950/20" onClick={() => abrirNota(n)} title={`Abrir nota ${n.numero || ''} · ${n.emitNome}`}>
+                      <td className="font-mono font-bold">{n.numero || n.chave.slice(-8)}</td>
+                      <td className="min-w-0 max-w-52 truncate" title={`${n.emitNome} · ${fmtCnpj(n.emitCnpj)}`}>{n.emitNome}</td>
+                      <td className="whitespace-nowrap font-mono text-[11px]">{fmtData(n.dataEmissao)}</td>
+                      <td className="whitespace-nowrap text-right font-mono">{fmtMoeda(n.valorTotal)}</td>
+                      <td className="whitespace-nowrap text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmtMoeda(n.totalTributos)}</td>
+                      <td className="text-right">
+                        <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Olho titulo="Ver itens e todos os tributos" onClick={() => abrirNota(n)} />
+                          <button
+                            type="button"
+                            className="rounded-md px-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            title="Visualizar nota (DANFE)"
+                            onClick={() => setDanfe(n)}
+                          >
+                            🧾
+                          </button>
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : !drill.itens.length ? (
+          <p className="p-6 text-center text-xs text-slate-500">Nenhum item neste recorte do filtro atual.</p>
+        ) : (
+          <div className="max-h-[50vh] overflow-auto">
+            <table className="tbl w-full">
+              <thead>
+                <tr>
+                  <th>Produto / NCM</th>
+                  <th>CFOP</th>
+                  <th>Nota</th>
+                  <th>Pela legislação</th>
+                  <th className="th-r">Valor</th>
+                  <th className="th-r">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visiveisItens.map((r, i) => {
+                  const it = r.item
+                  const cstSis = String(it.classificacao?.cst ?? '').trim() || '—'
+                  const cctSis = String(it.classificacao?.cClassTrib ?? '').trim() || '—'
+                  return (
+                    <tr key={`${r.nota.chave}-${it.numItem}-${i}`} className="cursor-pointer hover:bg-brand-50/50 dark:hover:bg-brand-950/20" onClick={() => abrirNota(r.nota)} title={`Abrir nota ${r.nota.numero || ''} · ${r.nota.emitNome}`}>
+                      <td className="min-w-0" title={`${it.descricao} · NCM ${fmtNcm(it.ncm)}`}>
+                        <span className="block truncate text-xs">{it.descricao}</span>
+                        <span className="block truncate font-mono text-[10px] text-slate-400">{fmtNcm(it.ncm)}</span>
+                      </td>
+                      <td className="whitespace-nowrap font-mono text-[11px]">{it.cfop || '—'}</td>
+                      <td className="whitespace-nowrap font-mono text-[11px]" title={`${r.nota.emitNome} · ${fmtData(r.nota.dataEmissao)}`}>
+                        {r.nota.numero || r.nota.chave.slice(-8)}
+                        <span className="block max-w-28 truncate font-sans font-normal text-slate-400">{r.nota.emitNome}</span>
+                      </td>
+                      <td className="whitespace-nowrap font-mono text-[11px]" title={`IBS ${fmtMoeda(it.ibs)} + CBS ${fmtMoeda(it.cbs)}`}>
+                        {cstSis} · {cctSis}
+                      </td>
+                      <td className="whitespace-nowrap text-right font-mono text-xs">{fmtMoeda(it.vlTotal)}</td>
+                      <td className="text-right">
+                        <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Olho titulo="Ver nota e todos os tributos" onClick={() => abrirNota(r.nota)} />
+                          <button
+                            type="button"
+                            className="rounded-md px-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            title="Visualizar nota (DANFE)"
+                            onClick={() => setDanfe(r.nota)}
+                          >
+                            🧾
+                          </button>
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-2 text-[11px] text-slate-400">
+          Mostrando {visiveis} de {total} · clique na linha (ou no 👁) para abrir o detalhe · 🧾 abre a DANFE.
+        </p>
+      </Modal>
+      {danfe ? <DanfeModal nota={danfe} onFechar={() => setDanfe(null)} /> : null}
+    </>
+  )
+}
+
 function GraficosNfe({ notas }: { notas: NotaXml[] }) {
   const ranking = useNfe((s) => s.ranking)
   const dados = useMemo(() => {
@@ -2410,6 +2672,7 @@ function GraficosNfe({ notas }: { notas: NotaXml[] }) {
     const top = [...ranking].slice(0, 6)
     return { baseEntradas, baseSaidas, meses, top }
   }, [notas, ranking])
+  const [drill, setDrill] = useState<DrillGrafico | null>(null)
 
   if (!notas.length) return null
   const totalBases = dados.baseEntradas + dados.baseSaidas
@@ -2422,7 +2685,7 @@ function GraficosNfe({ notas }: { notas: NotaXml[] }) {
             <IconeBadge nome="rosca" tom="brand" />
             Entradas × Saídas
           </h3>
-          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Base (valor das notas) no filtro</p>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Base (valor das notas) no filtro · clique numa fatia para detalhar</p>
         </div>
         <div className="relative h-64 p-4">
           {totalBases > 0 ? (
@@ -2444,6 +2707,18 @@ function GraficosNfe({ notas }: { notas: NotaXml[] }) {
                   responsive: true,
                   maintainAspectRatio: false,
                   cutout: '68%',
+                  onHover: cursorDrill,
+                  onClick: (_ev, els) => {
+                    const ix = els?.[0]?.index
+                    if (ix == null) return
+                    const dir = ix === 0 ? 'entrada' : 'saida'
+                    setDrill(
+                      drillDeNotas(
+                        ix === 0 ? 'Entradas · base no filtro' : 'Saídas · base no filtro',
+                        notas.filter((n) => n.direcao === dir),
+                      ),
+                    )
+                  },
                   plugins: {
                     legend: {
                       position: 'bottom',
@@ -2483,7 +2758,7 @@ function GraficosNfe({ notas }: { notas: NotaXml[] }) {
             <IconeBadge nome="grafico" tom="emerald" />
             IBS + CBS por mês
           </h3>
-          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Estimativa (últimos 6 meses do filtro)</p>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Estimativa (últimos 6 meses do filtro) · clique num ponto para detalhar</p>
         </div>
         <div className="h-64 p-4">
           {dados.meses.length ? (
@@ -2506,6 +2781,19 @@ function GraficosNfe({ notas }: { notas: NotaXml[] }) {
               options={{
                 responsive: true,
                 maintainAspectRatio: false,
+                onHover: cursorDrill,
+                onClick: (_ev, els) => {
+                  const ix = els?.[0]?.index
+                  if (ix == null) return
+                  const [mes] = dados.meses[ix] ?? []
+                  if (!mes) return
+                  setDrill(
+                    drillDeNotas(
+                      `Notas de ${mes.slice(5, 7)}/${mes.slice(0, 4)}`,
+                      notasDoMes(notas, mes),
+                    ),
+                  )
+                },
                 plugins: {
                   legend: { display: false },
                   tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => ` ${fmtMoeda(Number(ctx.raw))}` } },
@@ -2532,7 +2820,7 @@ function GraficosNfe({ notas }: { notas: NotaXml[] }) {
             <IconeBadge nome="trofeu" tom="amber" />
             Crédito por fornecedor
           </h3>
-          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Top 6 · IBS + CBS estimados</p>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Top 6 · IBS + CBS estimados · clique numa barra para detalhar</p>
         </div>
         <div className="h-64 p-4">
           {dados.top.length ? (
@@ -2552,6 +2840,19 @@ function GraficosNfe({ notas }: { notas: NotaXml[] }) {
                 responsive: true,
                 maintainAspectRatio: false,
                 indexAxis: 'y',
+                onHover: cursorDrill,
+                onClick: (_ev, els) => {
+                  const ix = els?.[0]?.index
+                  if (ix == null) return
+                  const r = dados.top[ix]
+                  if (!r) return
+                  setDrill(
+                    drillDeNotas(
+                      `Notas de ${r.nome}`,
+                      notas.filter((n) => n.emitCnpj === r.cnpj),
+                    ),
+                  )
+                },
                 plugins: {
                   legend: { display: false },
                   tooltip: {
@@ -2580,6 +2881,7 @@ function GraficosNfe({ notas }: { notas: NotaXml[] }) {
           )}
         </div>
       </Painel>
+      {drill ? <ModalDrillGrafico drill={drill} onFechar={() => setDrill(null)} /> : null}
     </div>
   )
 }
@@ -2633,6 +2935,7 @@ function IndicadoresXml({ notas }: { notas: NotaXml[] }) {
  */
 function ComparativoMensal({ notas }: { notas: NotaXml[] }) {
   const [modo, setModo] = useState<'barras' | 'linha' | 'tabela'>('barras')
+  const [drill, setDrill] = useState<DrillGrafico | null>(null)
   const evo = useMemo(() => evolucaoMensal(notas), [notas])
   if (!notas.length || !evo.length) return null
   const labels = evo.map((p) => p.rotulo)
@@ -2645,7 +2948,7 @@ function ComparativoMensal({ notas }: { notas: NotaXml[] }) {
             Entradas × Saídas por mês
           </h3>
           <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
-            Base (barras) e IBS+CBS (linha) · últimos {evo.length} mese(s) do filtro
+            Base (barras) e IBS+CBS (linha) · últimos {evo.length} mese(s) do filtro · clique para detalhar
           </p>
         </div>
         <div className="flex gap-1 rounded-lg bg-slate-100 p-1 text-[11px] font-bold dark:bg-slate-800">
@@ -2677,7 +2980,7 @@ function ComparativoMensal({ notas }: { notas: NotaXml[] }) {
               </thead>
               <tbody>
                 {evo.map((p) => (
-                  <tr key={p.mes}>
+                  <tr key={p.mes} className="cursor-pointer hover:bg-brand-50/50 dark:hover:bg-brand-950/20" onClick={() => setDrill(drillDeNotas(`Notas de ${p.rotulo}`, notasDoMes(notas, p.mes)))} title={`Detalhar ${p.rotulo}`}>
                     <td className="font-mono font-bold">{p.rotulo}</td>
                     <td className="text-right font-mono">{fmtMoeda(p.baseEntradas)}</td>
                     <td className="text-right font-mono">{fmtMoeda(p.baseSaidas)}</td>
@@ -2702,6 +3005,20 @@ function ComparativoMensal({ notas }: { notas: NotaXml[] }) {
               }}
               options={{
                 responsive: true, maintainAspectRatio: false,
+                onHover: cursorDrill,
+                onClick: (_ev, els) => {
+                  const el = els?.[0]
+                  if (!el) return
+                  const p = evo[el.index]
+                  if (!p) return
+                  const dir = el.datasetIndex === 0 ? 'entrada' : el.datasetIndex === 1 ? 'saida' : undefined
+                  setDrill(
+                    drillDeNotas(
+                      dir === 'entrada' ? `Entradas de ${p.rotulo}` : dir === 'saida' ? `Saídas de ${p.rotulo}` : `IBS+CBS de ${p.rotulo}`,
+                      notasDoMes(notas, p.mes, dir),
+                    ),
+                  )
+                },
                 plugins: { legend: { position: 'bottom', labels: { font: { size: 10, weight: 'bold' as const }, boxWidth: 10, boxHeight: 10, padding: 10, color: '#64748b' } }, tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtMoeda(Number(ctx.raw))}` } } },
                 scales: {
                   x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false }, border: { display: false } },
@@ -2722,6 +3039,20 @@ function ComparativoMensal({ notas }: { notas: NotaXml[] }) {
               }}
               options={{
                 responsive: true, maintainAspectRatio: false,
+                onHover: cursorDrill,
+                onClick: (_ev, els) => {
+                  const el = els?.[0]
+                  if (!el) return
+                  const p = evo[el.index]
+                  if (!p) return
+                  const dir = el.datasetIndex === 0 ? 'entrada' : 'saida'
+                  setDrill(
+                    drillDeNotas(
+                      dir === 'entrada' ? `Entradas de ${p.rotulo}` : `Saídas de ${p.rotulo}`,
+                      notasDoMes(notas, p.mes, dir),
+                    ),
+                  )
+                },
                 plugins: { legend: { position: 'bottom', labels: { font: { size: 10, weight: 'bold' as const }, boxWidth: 10, boxHeight: 10, padding: 10, color: '#64748b' } }, tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtMoeda(Number(ctx.raw))}`, afterLabel: (ctx) => { const p = evo[ctx.dataIndex]; return p ? ` IBS+CBS ${fmtMoeda((ctx.datasetIndex === 0 ? p.tribEntradas : p.tribSaidas))} · ${p.qtdEntradas + p.qtdSaidas} nota(s)` : '' } } } },
                 scales: {
                   x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false }, border: { display: false } },
@@ -2732,6 +3063,7 @@ function ComparativoMensal({ notas }: { notas: NotaXml[] }) {
           </div>
         )}
       </div>
+      {drill ? <ModalDrillGrafico drill={drill} onFechar={() => setDrill(null)} /> : null}
     </Painel>
   )
 }
@@ -2743,6 +3075,7 @@ function ComparativoMensal({ notas }: { notas: NotaXml[] }) {
 function RegimeAntigoVsNovo({ notas }: { notas: NotaXml[] }) {
   const evo = useMemo(() => evolucaoMensal(notas), [notas])
   const conf = useMemo(() => confrontoRegimes(notas), [notas])
+  const [drill, setDrill] = useState<DrillGrafico | null>(null)
   if (!notas.length || !evo.length) return null
   const variacao = conf.variacaoPct
   return (
@@ -2757,7 +3090,7 @@ function RegimeAntigoVsNovo({ notas }: { notas: NotaXml[] }) {
           <strong className={conf.delta >= 0 ? 'text-red-600' : 'text-emerald-600'}>
             {conf.delta >= 0 ? '+' : ''}{fmtMoeda(conf.delta)}
             {variacao != null ? ` (${variacao >= 0 ? '+' : ''}${variacao.toFixed(1).replace('.', ',')}%)` : ''}
-          </strong>
+          </strong>{' '}· clique numa barra para detalhar
         </p>
       </div>
       <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[1fr_240px]">
@@ -2772,6 +3105,14 @@ function RegimeAntigoVsNovo({ notas }: { notas: NotaXml[] }) {
             }}
             options={{
               responsive: true, maintainAspectRatio: false,
+              onHover: cursorDrill,
+              onClick: (_ev, els) => {
+                const ix = els?.[0]?.index
+                if (ix == null) return
+                const p = evo[ix]
+                if (!p) return
+                setDrill(drillDeNotas(`Antigo × novo · ${p.rotulo}`, notasDoMes(notas, p.mes)))
+              },
               plugins: { legend: { position: 'bottom', labels: { font: { size: 10, weight: 'bold' as const }, boxWidth: 10, boxHeight: 10, padding: 10, color: '#64748b' } }, tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtMoeda(Number(ctx.raw))}` } } },
               scales: {
                 x: { ticks: { font: { size: 9 }, color: '#94a3b8' }, grid: { display: false }, border: { display: false } },
@@ -2797,6 +3138,7 @@ function RegimeAntigoVsNovo({ notas }: { notas: NotaXml[] }) {
           </p>
         </div>
       </div>
+      {drill ? <ModalDrillGrafico drill={drill} onFechar={() => setDrill(null)} /> : null}
     </Painel>
   )
 }
@@ -2822,6 +3164,7 @@ function DistribuicaoReforma({ notas }: { notas: NotaXml[] }) {
   const anexo = useMemo(() => distribuicaoPorAnexo(notas), [notas])
   const csts = useMemo(() => topCstReforma(notas), [notas])
   const cfops = useMemo(() => topCfop(notas), [notas])
+  const [drill, setDrill] = useState<DrillGrafico | null>(null)
   if (!notas.length) return null
   const totalAnexo = anexo.reduce((s, l) => s + l.trib, 0)
   const CORES = ['#10b981', '#8b5cf6', '#f59e0b', '#3b82f6', '#94a3b8', '#06b6d4']
@@ -2833,7 +3176,7 @@ function DistribuicaoReforma({ notas }: { notas: NotaXml[] }) {
             <IconeBadge nome="rosca" tom="emerald" />
             Por benefício
           </h3>
-          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">IBS+CBS por anexo</p>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">IBS+CBS por anexo · clique numa fatia para detalhar</p>
         </div>
         <div className="relative h-64 p-4">
           {totalAnexo > 0 ? (
@@ -2848,6 +3191,19 @@ function DistribuicaoReforma({ notas }: { notas: NotaXml[] }) {
                 }}
                 options={{
                   responsive: true, maintainAspectRatio: false, cutout: '68%',
+                  onHover: cursorDrill,
+                  onClick: (_ev, els) => {
+                    const ix = els?.[0]?.index
+                    if (ix == null) return
+                    const l = anexo[ix]
+                    if (!l) return
+                    setDrill(
+                      drillDeItens(
+                        `Benefício · ${ROTULO_ANEXO[l.anexo] ?? rotuloAnexoOficial(l.anexo)}`,
+                        itensDoFiltro(notas, (_n, it) => (String(it?.anexo ?? 'isento') || 'isento') === l.anexo),
+                      ),
+                    )
+                  },
                   plugins: {
                     legend: { position: 'bottom', labels: { font: { size: 10, weight: 'bold' as const }, boxWidth: 10, boxHeight: 10, borderRadius: 3, useBorderRadius: true, padding: 12, color: '#64748b' } },
                     tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => { const v = Number(ctx.raw) || 0; const pct = totalAnexo > 0 ? ((v / totalAnexo) * 100).toFixed(1).replace('.', ',') : '0,0'; return ` ${fmtMoeda(v)} (${pct}%)` }, afterLabel: (ctx) => { const l = anexo[ctx.dataIndex]; return l ? ` ${l.itens} item(ns) · base ${fmtCompactoNfe(l.base)}` : '' } } },
@@ -2871,7 +3227,7 @@ function DistribuicaoReforma({ notas }: { notas: NotaXml[] }) {
             <IconeBadge nome="trofeu" tom="brand" />
             Por CST da Reforma
           </h3>
-          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Top {csts.length || 6} · IBS+CBS</p>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Top {csts.length || 6} · IBS+CBS · clique numa barra para detalhar</p>
         </div>
         <div className="h-64 p-4">
           {csts.length ? (
@@ -2879,6 +3235,25 @@ function DistribuicaoReforma({ notas }: { notas: NotaXml[] }) {
               data={{ labels: csts.map((c) => c.rotulo), datasets: [{ data: csts.map((c) => c.trib), backgroundColor: '#3a5dff', borderRadius: 7, borderSkipped: false, maxBarThickness: 22 }] }}
               options={{
                 responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                onHover: cursorDrill,
+                onClick: (_ev, els) => {
+                  const ix = els?.[0]?.index
+                  if (ix == null) return
+                  const c = csts[ix]
+                  if (!c) return
+                  const [cst, cct] = c.chave.split('·')
+                  setDrill(
+                    drillDeItens(
+                      `CST ${cst} · ${cct}`,
+                      itensDoFiltro(
+                        notas,
+                        (_n, it) =>
+                          (String(it?.classificacao?.cst ?? '—') || '—') === cst &&
+                          (String(it?.classificacao?.cClassTrib ?? '—') || '—') === cct,
+                      ),
+                    ),
+                  )
+                },
                 plugins: { legend: { display: false }, tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => ` ${fmtMoeda(Number(ctx.raw))}`, afterLabel: (ctx) => { const c = csts[ctx.dataIndex]; return c ? ` ${c.sub} · ${c.qtd} item(ns)` : '' } } } },
                 scales: {
                   x: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 4, callback: (v) => fmtCompactoNfe(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
@@ -2898,7 +3273,7 @@ function DistribuicaoReforma({ notas }: { notas: NotaXml[] }) {
             <IconeBadge nome="caixa" tom="amber" />
             Por CFOP
           </h3>
-          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Top {cfops.length || 6} · valor da operação</p>
+          <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">Top {cfops.length || 6} · valor da operação · clique numa barra para detalhar</p>
         </div>
         <div className="h-64 p-4">
           {cfops.length ? (
@@ -2906,6 +3281,19 @@ function DistribuicaoReforma({ notas }: { notas: NotaXml[] }) {
               data={{ labels: cfops.map((c) => c.rotulo.replace('CFOP ', '')), datasets: [{ data: cfops.map((c) => c.base), backgroundColor: '#f59e0b', borderRadius: 7, borderSkipped: false, maxBarThickness: 22 }] }}
               options={{
                 responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                onHover: cursorDrill,
+                onClick: (_ev, els) => {
+                  const ix = els?.[0]?.index
+                  if (ix == null) return
+                  const c = cfops[ix]
+                  if (!c) return
+                  setDrill(
+                    drillDeItens(
+                      `CFOP ${c.chave}`,
+                      itensDoFiltro(notas, (_n, it) => (String(it?.cfop ?? '').trim() || '—') === c.chave),
+                    ),
+                  )
+                },
                 plugins: { legend: { display: false }, tooltip: { ...TOOLTIP_ESCURO_NFE, callbacks: { label: (ctx) => ` ${fmtMoeda(Number(ctx.raw))}`, afterLabel: (ctx) => { const c = cfops[ctx.dataIndex]; return c ? ` ${c.qtd} item(ns) · IBS+CBS ${fmtMoeda(c.trib)}` : '' } } } },
                 scales: {
                   x: { ticks: { font: { size: 9 }, color: '#94a3b8', maxTicksLimit: 4, callback: (v) => fmtCompactoNfe(Number(v)) }, grid: { color: 'rgba(148,163,184,0.14)' }, border: { display: false } },
@@ -2918,6 +3306,7 @@ function DistribuicaoReforma({ notas }: { notas: NotaXml[] }) {
           )}
         </div>
       </Painel>
+      {drill ? <ModalDrillGrafico drill={drill} onFechar={() => setDrill(null)} /> : null}
     </div>
   )
 }
@@ -2928,6 +3317,7 @@ function DistribuicaoReforma({ notas }: { notas: NotaXml[] }) {
  */
 function TopNcmCfop({ notas }: { notas: NotaXml[] }) {
   const linhas = useMemo(() => topNcm(notas, 8), [notas])
+  const [drill, setDrill] = useState<DrillGrafico | null>(null)
   if (!notas.length) return null
   const max = linhas.reduce((m, l) => Math.max(m, l.base), 0)
   return (
@@ -2938,14 +3328,38 @@ function TopNcmCfop({ notas }: { notas: NotaXml[] }) {
           Top NCMs por valor
         </h3>
         <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
-          Onde está concentrada a base · top {linhas.length || 8} do filtro
+          Onde está concentrada a base · top {linhas.length || 8} do filtro · clique numa linha para detalhar
         </p>
       </div>
       <div className="grid grid-cols-1 gap-2 p-4 md:grid-cols-2">
         {!linhas.length ? (
           <p className="py-4 text-center text-[11px] text-slate-500 md:col-span-2">Sem itens no filtro.</p>
         ) : linhas.map((l, i) => (
-          <div key={l.chave} className="rounded-lg border border-transparent p-2 transition-all hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-950/40" title={`${l.sub ?? ''} · IBS+CBS ${fmtMoeda(l.trib)}`}>
+          <div
+            key={l.chave}
+            role="button"
+            tabIndex={0}
+            onClick={() =>
+              setDrill(
+                drillDeItens(
+                  `NCM ${fmtNcm(l.rotulo)}`,
+                  itensDoFiltro(notas, (_n, it) => (String(it?.ncm ?? '').replace(/\D/g, '') || '—') === l.chave),
+                ),
+              )
+            }
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                setDrill(
+                  drillDeItens(
+                    `NCM ${fmtNcm(l.rotulo)}`,
+                    itensDoFiltro(notas, (_n, it) => (String(it?.ncm ?? '').replace(/\D/g, '') || '—') === l.chave),
+                  ),
+                )
+              }
+            }}
+            className="cursor-pointer rounded-lg border border-transparent p-2 transition-all hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-950/40"
+            title={`${l.sub ?? ''} · IBS+CBS ${fmtMoeda(l.trib)} · clique para detalhar`}
+          >
             <div className="flex items-baseline justify-between gap-2 text-[11px]">
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-slate-100 font-mono text-[10px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-400">{i + 1}</span>
@@ -2967,6 +3381,7 @@ function TopNcmCfop({ notas }: { notas: NotaXml[] }) {
           </div>
         ))}
       </div>
+      {drill ? <ModalDrillGrafico drill={drill} onFechar={() => setDrill(null)} /> : null}
     </Painel>
   )
 }
@@ -2974,11 +3389,38 @@ function TopNcmCfop({ notas }: { notas: NotaXml[] }) {
 /**
  * Qualidade dos XMLs: quanto já traz o grupo IBSCBS, taxa de conferência
  * com a legislação e quantas leituras diferem — termômetro da prontidão para 2026.
+ *
+ * Item com tributação escolhida por você (manual) conta como validado e vai
+ * para "Conferem ✓": você comparou No XML × legislação e decidiu — nada
+ * resta "a comparar". A divergência factual XML × sistema continua registrada
+ * no detalhe da nota (selo ⇄). Ao escolher, o store recarrega e a apuração
+ * assistida recalcula sozinha com a tributação escolhida (inclusive crédito).
  */
 function QualidadeXml({ notas }: { notas: NotaXml[] }) {
-  const q = useMemo(() => resumoDivergencias(notas), [notas])
+  const abrirNota = useNfe((s) => s.abrirNota)
+  const [aba, setAba] = useState<AbaProntidao | null>(null)
+  const itens = useMemo<ItemProntidao[]>(() => {
+    const lista: ItemProntidao[] = []
+    for (const n of notas ?? []) {
+      for (const it of n?.itensAnalisados ?? []) {
+        const b = bucketProntidaoItem(it)
+        lista.push({ nota: n, item: it, temXml: b.temXml, manual: b.manual, bucket: b.bucket })
+      }
+    }
+    return lista
+  }, [notas])
   if (!notas.length) return null
-  const pctXml = q.totalItens > 0 ? (q.comXml / q.totalItens) * 100 : 0
+  const contas = {
+    totalItens: itens.length,
+    comXml: itens.filter((i) => i.temXml).length,
+    conferem: itens.filter((i) => i.bucket === 'conferem').length,
+    divergentes: itens.filter((i) => i.bucket === 'divergentes').length,
+    semXml: itens.filter((i) => i.bucket === 'semXml').length,
+    manuais: itens.filter((i) => i.manual).length,
+  }
+  const pctXml = contas.totalItens > 0 ? (contas.comXml / contas.totalItens) * 100 : 0
+  const taxa = contas.comXml > 0 ? (contas.conferem / contas.comXml) * 100 : null
+  const alternar = (destino: AbaProntidao) => setAba((a) => (a === destino ? null : destino))
   return (
     <Painel className="overflow-hidden p-0">
       <div className="border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-emerald-950/30 dark:to-slate-900">
@@ -2987,35 +3429,308 @@ function QualidadeXml({ notas }: { notas: NotaXml[] }) {
           Prontidão dos XMLs para a Reforma
         </h3>
         <p className="mt-0.5 pl-9 text-[11px] text-slate-500 dark:text-slate-400">
-          {q.comXml} de {q.totalItens} item(ns) com grupo IBSCBS ·{' '}
-          {q.taxaConferencia != null ? `${q.taxaConferencia.toFixed(1).replace('.', ',')}% conferem com a legislação` : 'nenhum XML com IBS/CBS ainda'}
+          {contas.comXml} de {contas.totalItens} item(ns) com grupo IBSCBS ·{' '}
+          {taxa != null ? `${taxa.toFixed(1).replace('.', ',')}% conferem com a legislação` : 'nenhum XML com IBS/CBS ainda'}
+          {contas.manuais > 0 ? ` (inclui ${contas.manuais} validado(s) por você)` : ''}
+          {' '}· clique num bloco para ver os produtos.
         </p>
       </div>
       <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-4">
-        <div className="rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-950/40">
-          <div className="font-mono text-xl font-black">{q.totalItens}</div>
-          <div className="text-[10px] font-bold uppercase text-slate-500">Itens</div>
-        </div>
-        <div className="rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-950/40">
-          <div className="font-mono text-xl font-black text-brand-700 dark:text-aurum-200">{pctXml.toFixed(0)}%</div>
-          <div className="text-[10px] font-bold uppercase text-slate-500">Com IBSCBS</div>
-        </div>
-        <div className="rounded-xl bg-emerald-50 p-3 text-center dark:bg-emerald-950/30">
-          <div className="font-mono text-xl font-black text-emerald-700 dark:text-emerald-300">{q.conferem}</div>
-          <div className="text-[10px] font-bold uppercase text-emerald-600">Conferem ✓</div>
-        </div>
-        <div className={`rounded-xl p-3 text-center ${q.divergentes ? 'bg-brand-50 dark:bg-brand-950/30' : 'bg-slate-50 dark:bg-slate-950/40'}`}>
-          <div className={`font-mono text-xl font-black ${q.divergentes ? 'text-brand-700 dark:text-aurum-200' : ''}`}>{q.divergentes}</div>
-          <div className="text-[10px] font-bold uppercase text-slate-500">A comparar ⇄</div>
-        </div>
+        <BlocoProntidao
+          valor={String(contas.totalItens)}
+          rotulo="Itens"
+          titulo="Ver todos os itens do filtro com a tributação de cada um"
+          ativo={aba === 'todos'}
+          onClick={() => alternar('todos')}
+        />
+        <BlocoProntidao
+          valor={`${pctXml.toFixed(0)}%`}
+          rotulo="Com IBSCBS"
+          titulo="Ver os itens que já trazem o grupo IBSCBS no XML"
+          tom="brand"
+          ativo={aba === 'comXml'}
+          onClick={() => alternar('comXml')}
+        />
+        <BlocoProntidao
+          valor={String(contas.conferem)}
+          rotulo="Conferem ✓"
+          titulo="Ver os produtos cuja tributação confere — inclui os validados por você"
+          tom="emerald"
+          ativo={aba === 'conferem'}
+          onClick={() => alternar('conferem')}
+        />
+        <BlocoProntidao
+          valor={String(contas.divergentes)}
+          rotulo="A comparar ⇄"
+          titulo="Ver os produtos com leitura diferente da nota e ainda sem sua escolha"
+          tom={contas.divergentes ? 'brand' : undefined}
+          ativo={aba === 'divergentes'}
+          onClick={() => alternar('divergentes')}
+        />
       </div>
-      {q.divergentes > 0 ? (
+      <Expansivel aberto={aba !== null}>
+        {aba !== null ? (
+          <DetalheProntidao
+            itens={itens}
+            contas={contas}
+            aba={aba}
+            onTrocarAba={setAba}
+            onAbrirNota={abrirNota}
+          />
+        ) : null}
+      </Expansivel>
+      {contas.divergentes > 0 && aba === null ? (
         <p className="px-5 pb-4 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
           Abra a nota e confira as colunas <strong>No XML × Pela legislação</strong> — geralmente é o CST/cClassTrib
           do emitente diferente da base oficial ou valores calculados com outra alíquota-base de referência.
+          Escolhendo a tributação, o item vai para <strong>Conferem ✓</strong> e a apuração recalcula (inclusive crédito).
         </p>
       ) : null}
     </Painel>
+  )
+}
+
+/** Linha da prontidão: item + divergência + escolha do usuário. */
+interface ItemProntidao {
+  nota: NotaXml
+  item: ResultadoItemNfe
+  temXml: boolean
+  manual: boolean
+  bucket: 'conferem' | 'divergentes' | 'semXml'
+}
+
+/** Bloco KPI clicável da prontidão (botão com estado ativo). */
+function BlocoProntidao({
+  valor, rotulo, titulo, tom, ativo, onClick,
+}: {
+  valor: string
+  rotulo: string
+  titulo: string
+  tom?: 'brand' | 'emerald'
+  ativo: boolean
+  onClick: () => void
+}) {
+  const fundo =
+    tom === 'emerald'
+      ? 'bg-emerald-50 dark:bg-emerald-950/30'
+      : tom === 'brand'
+        ? 'bg-brand-50 dark:bg-brand-950/30'
+        : 'bg-slate-50 dark:bg-slate-950/40'
+  const numero =
+    tom === 'emerald'
+      ? 'text-emerald-700 dark:text-emerald-300'
+      : tom === 'brand'
+        ? 'text-brand-700 dark:text-aurum-200'
+        : ''
+  const etiqueta =
+    tom === 'emerald' ? 'text-emerald-600' : tom === 'brand' ? 'text-brand-700 dark:text-aurum-200' : 'text-slate-500'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={ativo}
+      title={`${titulo} (clique para ${ativo ? 'fechar' : 'abrir'})`}
+      className={`rounded-xl p-3 text-center transition-all hover:shadow-card focus-visible:outline-2 focus-visible:outline-brand-500 ${fundo} ${ativo ? 'ring-2 ring-brand-500 ring-offset-1 dark:ring-aurum-400' : ''}`}
+    >
+      <div className={`font-mono text-xl font-black ${numero}`}>{valor}</div>
+      <div className={`text-[10px] font-bold uppercase ${etiqueta}`}>
+        {ativo ? '▾ ' : '▸ '}{rotulo}
+      </div>
+    </button>
+  )
+}
+
+type AbaProntidao = 'todos' | 'comXml' | 'conferem' | 'divergentes' | 'semXml'
+
+/** Itens do bucket com a tributação No XML × Pela legislação + atalho ao detalhe. */
+function DetalheProntidao({
+  itens, contas, aba, onTrocarAba, onAbrirNota,
+}: {
+  itens: ItemProntidao[]
+  contas: { totalItens: number; comXml: number; conferem: number; divergentes: number; semXml: number }
+  aba: AbaProntidao
+  onTrocarAba: (a: AbaProntidao) => void
+  onAbrirNota: (n: NotaXml) => void
+}) {
+  // A comparar ⇄ mistura regra única (só conferir emitente × regra oficial)
+  // com NCM ambíguo (>1 tributação — aí sim há o que escolher). Por padrão a
+  // aba mostra só os que têm escolha; o alternador revela o restante.
+  const [soMulti, setSoMulti] = useState(true)
+  const [escolha, setEscolha] = useState<{
+    ncm: string
+    nomenclatura: NomenclaturaNcm | null
+    vigente: { cst: string; cClassTrib: string } | null
+  } | null>(null)
+  const filtrados = useMemo(() => {
+    if (aba === 'todos') return itens
+    if (aba === 'comXml') return itens.filter((i) => i.temXml)
+    if (aba === 'divergentes' && soMulti)
+      return itens.filter((i) => i.bucket === 'divergentes' && Number(i.item.opcoesClassificacao ?? 0) > 1)
+    return itens.filter((i) => i.bucket === aba)
+  }, [itens, aba, soMulti])
+  const qtdMulti = useMemo(
+    () => itens.filter((i) => i.bucket === 'divergentes' && Number(i.item.opcoesClassificacao ?? 0) > 1).length,
+    [itens],
+  )
+  const abas: { id: AbaProntidao; rotulo: string; qtd: number }[] = [
+    { id: 'todos', rotulo: 'Todos', qtd: contas.totalItens },
+    { id: 'comXml', rotulo: 'Com IBSCBS', qtd: contas.comXml },
+    { id: 'conferem', rotulo: 'Conferem ✓', qtd: contas.conferem },
+    { id: 'divergentes', rotulo: 'A comparar ⇄', qtd: contas.divergentes },
+    { id: 'semXml', rotulo: 'Sem grupo', qtd: contas.semXml },
+  ]
+  const LIMITE = 100
+  const visiveis = filtrados.slice(0, LIMITE)
+  return (
+    <div className="border-t border-slate-100 px-4 py-3 dark:border-slate-800">
+      <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Filtrar produtos por tributação">
+        {abas.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={aba === t.id}
+            onClick={() => onTrocarAba(t.id)}
+            title={`Selecionar tributação: ${t.rotulo}`}
+            className={`rounded-full px-2.5 py-1 font-mono text-[11px] font-bold transition-colors ${
+              aba === t.id
+                ? 'bg-brand-600 text-white shadow-pop'
+                : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            {t.rotulo} · {t.qtd}
+          </button>
+        ))}
+      </div>
+      {aba === 'divergentes' ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSoMulti((v) => !v)}
+            aria-pressed={soMulti}
+            title={soMulti ? 'Mostrando só NCMs com mais de uma tributação — clique para ver todas as divergências' : 'Mostrando todas as divergências — clique para ver só as que têm tributação a escolher'}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors ${
+              soMulti
+                ? 'bg-brand-600 text-white shadow-pop'
+                : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            {soMulti ? '☑' : '☐'} 🔀 Só com mais de uma tributação · {qtdMulti}
+          </button>
+          <span className="text-[11px] text-slate-400">
+            {soMulti
+              ? 'Regra única não tem o que escolher — é só conferir emitente × regra oficial.'
+              : `Todas as ${contas.divergentes} pendências (regra única inclusa — sem escolha sua).`}
+          </span>
+        </div>
+      ) : null}
+      {!filtrados.length ? (
+        <p className="py-4 text-center text-[11px] text-slate-500">
+          {aba === 'divergentes' && soMulti
+            ? 'Nenhuma divergência com mais de uma tributação — todos os NCMs aqui têm regra única. Desmarque o filtro acima para ver tudo, ou confira o detalhe da nota.'
+            : 'Nenhum produto nesta tributação no filtro atual.'}
+        </p>
+      ) : (
+        <>
+          <div className="mt-2 max-h-72 overflow-auto rounded-xl border border-slate-200/80 dark:border-slate-700/60">
+            <table className="tbl w-full">
+              <thead>
+                <tr>
+                  <th>Nota</th>
+                  <th>Produto / NCM</th>
+                  <th>No XML</th>
+                  <th>Pela legislação</th>
+                  <th className="th-r">Valor</th>
+                  <th className="th-r">👁</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visiveis.map((r, i) => {
+                  const it = r.item
+                  const cstXml = String(it.cstIbsCbs ?? '').trim() || '—'
+                  const cctXml = String(it.cClassTribIbsCbs ?? '').trim() || '—'
+                  const cstSis = String(it.classificacao?.cst ?? '').trim() || '—'
+                  const cctSis = String(it.classificacao?.cClassTrib ?? '').trim() || '—'
+                  const qtdOpcoes = Number(it.opcoesClassificacao ?? 0)
+                  const multi = qtdOpcoes > 1
+                  const manual = it.manual || it.classificacao?.manual != null
+                  const ncmDigitos = norm(it.ncm)
+                  const podeEscolher = multi && ncmDigitos.length === 8
+                  return (
+                    <tr key={`${r.nota.chave}-${it.numItem}-${i}`} className="cursor-pointer hover:bg-brand-50/50 dark:hover:bg-brand-950/20" onClick={() => onAbrirNota(r.nota)} title={`Abrir nota ${r.nota.numero || ''} · ${r.nota.emitNome}`}>
+                      <td className="whitespace-nowrap font-mono text-[11px] font-bold">
+                        {r.nota.numero || r.nota.chave.slice(-8)}
+                        <span className="block max-w-28 truncate font-sans font-normal text-slate-400" title={r.nota.emitNome}>{r.nota.emitNome}</span>
+                      </td>
+                      <td className="min-w-0" title={`${it.descricao} · CFOP ${it.cfop || '—'}`}>
+                        <span className="block truncate text-xs">{it.descricao}</span>
+                        <span className="block truncate font-mono text-[10px] text-slate-400">{fmtNcm(it.ncm)} · CFOP {it.cfop || '—'}</span>
+                        {multi ? (
+                          <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                            <span className="rounded-full bg-brand-100 px-1.5 py-0.5 text-[10px] font-bold text-brand-700 dark:bg-brand-950/50 dark:text-aurum-200" title={`${qtdOpcoes} enquadramentos oficiais para este NCM — confira qual se aplica à operação`}>
+                              🔀 {qtdOpcoes} tributações
+                            </span>
+                            {podeEscolher ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setEscolha({
+                                    ncm: it.ncm,
+                                    nomenclatura: it.nomenclatura ?? null,
+                                    vigente: it.classificacao
+                                      ? { cst: it.classificacao.cst, cClassTrib: it.classificacao.cClassTrib }
+                                      : null,
+                                  })
+                                }}
+                                title={`Escolher a tributação do NCM ${fmtNcm(it.ncm)} para a análise (vale em todas as telas)`}
+                                className="rounded-full bg-brand-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-pop hover:bg-brand-700"
+                              >
+                                Escolher
+                              </button>
+                            ) : null}
+                            {manual ? (
+                              <span className="rounded bg-amber-100 px-1 py-0.5 font-mono text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300" title="Você já escolheu a tributação deste NCM — responsabilidade sua">
+                                👤 sua escolha
+                              </span>
+                            ) : null}
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="whitespace-nowrap font-mono text-[11px]" title={`IBS ${fmtMoeda(it.vIbsItem)} + CBS ${fmtMoeda(it.vCbsItem)}`}>
+                        {r.temXml ? `${cstXml} · ${cctXml}` : <span className="text-slate-400">sem grupo</span>}
+                      </td>
+                      <td className="whitespace-nowrap font-mono text-[11px]" title={`IBS ${fmtMoeda(it.ibs)} + CBS ${fmtMoeda(it.cbs)}`}>
+                        {cstSis} · {cctSis}
+                      </td>
+                      <td className="whitespace-nowrap text-right font-mono text-xs">{fmtMoeda(it.vlTotal)}</td>
+                      <td className="text-right">
+                        <Olho titulo={`Ver nota ${r.nota.numero || ''} e todos os tributos`} onClick={() => onAbrirNota(r.nota)} />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-1.5 text-[11px] text-slate-400">
+            Mostrando {visiveis.length} de {filtrados.length} produto(s)
+            {filtrados.length > LIMITE ? ` — refine o período ou a busca para ver o restante` : ''}
+            {' '}· clique na linha (ou no 👁) para abrir a nota e conferir <strong>No XML × Pela legislação</strong>.
+          </p>
+        </>
+      )}
+      {escolha ? (
+        <ModalEscolhaTributacao
+          aberto
+          ncm={escolha.ncm}
+          nomenclatura={escolha.nomenclatura}
+          vigente={escolha.vigente}
+          onFechar={() => setEscolha(null)}
+          onSalvo={() => undefined}
+        />
+      ) : null}
+    </div>
   )
 }
 

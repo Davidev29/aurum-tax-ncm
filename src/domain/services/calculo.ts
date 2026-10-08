@@ -101,6 +101,8 @@ export function calcularTributos(
       vIBS: 0,
       vCBS: 0,
       total: 0,
+      /** Alias explícito: o `total` puro é só IBS+CBS (IS não calculado — ver `observacaoIS`). */
+      totalIBS_CBS: 0,
       carga: 0,
     }
   }
@@ -127,6 +129,8 @@ export function calcularTributos(
     vIBS,
     vCBS,
     total,
+    /** Alias explícito: o `total` puro é só IBS+CBS (IS não calculado — ver `observacaoIS`). */
+    totalIBS_CBS: total,
     carga: base > 0 ? (total / base) * 100 : 0,
   }
 }
@@ -415,8 +419,9 @@ export function observacaoTipoAliquota(tipo: unknown): Observacao | null {
 /**
  * Lista consolidada de observações de um item classificado, na ordem de
  * criticidade: extinção do NCM → revogação do enquadramento → diferimento →
- * tipo de alíquota (uniforme/fixa substitui a fundamentação por faixa, cujo
- * artigo seria o do regime padrão).
+ * Imposto Seletivo (só aviso — IS não calculado) → cesta básica (selo
+ * 200/200003, Anexo I/art. 125) → tipo de alíquota (uniforme/fixa substitui
+ * a fundamentação por faixa, cujo artigo seria o do regime padrão).
  *
  * BLINDAGEM — fundamentação por faixa de redução (`observacoesLegais`) só é
  * emitida para a regra geral (fallback honesto, sem enquadramento). Com
@@ -446,6 +451,10 @@ export function observacoesFiscais(
   const her = observacaoHerancaFamilia(cl.heranca)
   if (her) obs.push(her)
   obs.push(...observacoesDiferimento(cl))
+  const avisoIS = observacaoIS(codigo)
+  if (avisoIS) obs.push(avisoIS)
+  const cesta = observacaoCestaBasica(cl)
+  if (cesta) obs.push(cesta)
   const tipo = observacaoTipoAliquota(cl.cstClassTribDetalhes?.tipoAliquota)
   if (tipo) {
     obs.push(tipo)
@@ -477,6 +486,42 @@ export function avisoInNatura(ncm: string): Observacao | null {
     cor: 'emerald',
     link: `${LINK_LC214}#art137`,
     rotuloLink: 'Consultar Art. 137 da LC 214/2025',
+  }
+}
+
+/**
+ * Capítulos NCM candidatos ao Imposto Seletivo (fase 1 — só aviso).
+ *
+ * O IS incide sobre produção/comercialização/importação de bens prejudiciais
+ * à saúde e ao meio ambiente (LC 214/2025, arts. 402+). Lista CURADA de
+ * capítulos onde o IS pode aparecer — capítulo candidato NÃO prova incidência:
+ * 22 (bebidas), 24 (fumo/tabaco), 87 (veículos automóveis), 88 (aeronaves),
+ * 89 (embarcações), 93 (armas e munições).
+ *
+ * Fase 1: o sistema NÃO calcula o IS — emite só o aviso para o usuário
+ * conferir a lei. `total`/`totalIBS_CBS` cobrem exclusivamente IBS+CBS.
+ */
+export const CAPITULOS_CANDIDATOS_IS: ReadonlySet<string> = new Set([
+  '22', '24', '87', '88', '89', '93',
+])
+
+/** Aviso "capítulo candidato ao Imposto Seletivo" — IS não calculado. */
+export function observacaoIS(ncm: string): Observacao | null {
+  const cod = norm(ncm)
+  if (cod.length !== 8) return null
+  const cap = cod.slice(0, 2)
+  if (!CAPITULOS_CANDIDATOS_IS.has(cap)) return null
+  const nome = CAPITULOS_NCM[cap] ?? ''
+  return {
+    titulo: `Imposto Seletivo — capítulo ${cap} candidato (IS não calculado)`,
+    texto:
+      `Este NCM pertence ao Capítulo ${cap}${nome ? ` — ${nome}` : ''}, candidato ao Imposto Seletivo ` +
+      'sobre bens prejudiciais à saúde e ao meio ambiente (LC 214/2025, arts. 402+). ' +
+      'IS não calculado — conferir LC214 e a regulamentação antes de escriturar: ' +
+      'o total exibido cobre exclusivamente IBS + CBS.',
+    cor: 'slate',
+    link: `${LINK_LC214}#art402`,
+    rotuloLink: 'Consultar Imposto Seletivo na LC 214/2025',
   }
 }
 
@@ -656,6 +701,37 @@ export function observacoesDiferimento(cl: Classificacao | null | undefined): Ob
 }
 
 /* ------------------------------------- opção de diferimento (Anexo IX) -- */
+
+/**
+ * É item da **Cesta Básica Nacional de Alimentos** (Anexo I, art. 125)?
+ *
+ * Fonte EXCLUSIVAMENTE oficial: vínculo `CST 200 × cClassTrib 200003`
+ * ("Vendas de produtos destinados à alimentação humana relacionados no
+ * Anexo I ... observado o art. 125"), com redução 100/100 (alíquota zero).
+ * Nome do alimento ou capítulo sozinho NUNCA decide — só o vínculo.
+ */
+export function ehCestaBasica(cl: Classificacao | null | undefined): boolean {
+  if (!cl) return false
+  return String(cl.cst ?? '').trim() === '200' && String(cl.cClassTrib ?? '').trim() === '200003'
+}
+
+/**
+ * Selo da cesta básica — emitido quando há vínculo oficial 200/200003.
+ *
+ * Título fixo: "Cesta básica nacional — Anexo I / art. 125 (alíquota zero)".
+ */
+export function observacaoCestaBasica(cl: Classificacao | null | undefined): Observacao | null {
+  if (!ehCestaBasica(cl)) return null
+  return {
+    titulo: 'Cesta básica nacional — Anexo I / art. 125 (alíquota zero)',
+    texto:
+      'Produto da Cesta Básica Nacional de Alimentos (Anexo I da LC 214/2025, art. 125): ' +
+      'alíquota zero de IBS e CBS (redução de 100%). Vínculo oficial 200/200003 da base — sem cálculo adicional.',
+    cor: 'emerald',
+    link: `${LINK_LC214}#art125`,
+    rotuloLink: 'Consultar art. 125 e Anexo I da LC 214/2025',
+  }
+}
 
 /**
  * Classificação VIRTUAL da hipótese de diferimento para um item do Anexo IX

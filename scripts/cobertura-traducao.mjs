@@ -35,7 +35,7 @@ function lerJson(caminho) {
 }
 
 function normalizar(s) {
-  return String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
 const STOP = new Set(

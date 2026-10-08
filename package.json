@@ -26,18 +26,17 @@
     "ofuscar:check": "node scripts/ofuscar-build.cjs --check",
     "verificar": "node scripts/verificar-build.mjs",
     "verificar:pre": "node scripts/verificar-build.mjs --pre",
-    "predev": "node scripts/kill-port.mjs 5173 && npm run base && npm run build:electron",
+    "predev": "node scripts/kill-port.mjs 5173 && npm run base",
     "dev": "concurrently -k -s first \"npm:dev:renderer\" \"npm:dev:electron\"",
-    "prestart": "npm run build",
     "dev:renderer": "vite --host 127.0.0.1 --port 5173",
     "dev:electron": "npm run build:electron && wait-on -t 60000 tcp:127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
     "dev:web": "vite",
-    "db:generate": "cross-env DATABASE_URL=\"file:./prisma/dev.db\" prisma generate && node scripts/gerar-schema-sql.mjs",
+    "db:generate": "node scripts/prisma-generate.cjs && node scripts/gerar-schema-sql.mjs",
     "db:push": "cross-env DATABASE_URL=\"file:./prisma/dev.db\" prisma db push --accept-data-loss --skip-generate",
     "prebuild:electron": "npm run db:generate",
     "build:electron": "node electron/esbuild.mjs",
-    "build": "npm run base:completa && tsc --noEmit && vite build && npm run build:electron && node scripts/ofuscar-build.cjs && node scripts/verificar-build.mjs",
-    "typecheck": "tsc --noEmit",
+    "build": "npm run db:generate && npm run base:completa && npm run typecheck && vite build && npm run build:electron && node scripts/ofuscar-build.cjs && node scripts/verificar-build.mjs",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "electron .",
@@ -90,7 +89,7 @@
         "provider": "github",
         "owner": "Davidev29",
         "repo": "aurum-tax-ncm",
-        "private": true,
+        "private": false,
         "releaseType": "release"
       }
     ],
@@ -144,10 +143,6 @@
       {
         "from": "public/base/grafo/MANIFEST.grafo.json",
         "to": "recursos-ia/grafo/MANIFEST.grafo.json"
-      },
-      {
-        "from": "public/base/grafo/vetores.json",
-        "to": "recursos-ia/grafo/vetores.json"
       },
       {
         "from": "recursos-ia/embedding/vetores-ncm.json",
@@ -235,6 +230,7 @@
         }
       ],
       "category": "public.app-category.business",
+      "icon": "build/icon.icns",
       "identity": null,
       "darkModeSupport": true
     },
@@ -242,6 +238,7 @@
       "target": [
         "AppImage"
       ],
+      "icon": "build/icon.png",
       "category": "Office"
     }
   }

@@ -3427,3 +3427,70 @@
 @media (prefers-reduced-motion: reduce) {
   .tour-cursor { will-change: auto; }
 }
+
+/* --- Simples Nacional: nova interface (escopo .simples-escopo) ---------------
+   Tokens exclusivos da NOVA INTERFACE do Simples. Ouro nunca como texto no
+   claro: aparece só em borda/sombra/anel (e texto claro sobre marinho). */
+.simples-hero {
+  background: linear-gradient(135deg, #101c2e 0%, #2b3f63 60%, #3e587e 100%);
+  border: 2px solid rgb(190 148 51 / 0.65);
+  box-shadow:
+    inset 0 1px 0 rgb(234 215 158 / 0.22),
+    0 16px 40px -18px rgb(22 35 58 / 0.7),
+    0 0 28px -8px rgb(190 148 51 / 0.45);
+  color: #f7f3e8;
+}
+/* Cartões de anexo: matiz própria por anexo (fundo claro); o texto continua
+   herdado (nunca ouro no claro). O estado ativo é marinho + anel ouro. */
+.simples-escopo .simples-anexo-I { background: rgb(2 132 199 / 0.08); border-color: rgb(2 132 199 / 0.4); }
+.simples-escopo .simples-anexo-II { background: rgb(124 58 237 / 0.08); border-color: rgb(124 58 237 / 0.4); }
+.simples-escopo .simples-anexo-III { background: rgb(5 150 105 / 0.08); border-color: rgb(5 150 105 / 0.4); }
+.simples-escopo .simples-anexo-IV { background: rgb(217 119 6 / 0.1); border-color: rgb(217 119 6 / 0.45); }
+.simples-escopo .simples-anexo-V { background: rgb(225 29 72 / 0.07); border-color: rgb(225 29 72 / 0.38); }
+.dark .simples-escopo .simples-anexo-I { background: rgb(2 132 199 / 0.14); }
+.dark .simples-escopo .simples-anexo-II { background: rgb(124 58 237 / 0.14); }
+.dark .simples-escopo .simples-anexo-III { background: rgb(5 150 105 / 0.14); }
+.dark .simples-escopo .simples-anexo-IV { background: rgb(217 119 6 / 0.16); }
+.dark .simples-escopo .simples-anexo-V { background: rgb(225 29 72 / 0.14); }
+.simples-escopo .simples-anexo-ativo {
+  background: linear-gradient(135deg, #16233a, #2b3f63 65%, #3e587e);
+  border-color: rgb(210 169 78 / 0.8);
+  box-shadow:
+    0 0 0 4px rgb(190 148 51 / 0.35),
+    0 10px 24px -12px rgb(22 35 58 / 0.6);
+}
+/* Foco visível reforçado (anel ouro, 4px) — só dentro do escopo. */
+.simples-escopo :focus-visible {
+  outline: 2px solid var(--color-aurum-600);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgb(190 148 51 / 0.25);
+}
+.dark .simples-escopo :focus-visible {
+  outline-color: var(--color-aurum-300);
+  box-shadow: 0 0 0 4px rgb(210 169 78 / 0.3);
+}
+/* Rótulos do Simples em 13px+ (regra: nenhum texto funcional < 13px). */
+.simples-escopo .field-label {
+  font-size: 0.8125rem;
+}
+.field-label--lg {
+  font-size: 0.875rem;
+  letter-spacing: 0.04em;
+}
+/* Placeholder com contraste dentro do escopo. */
+.simples-escopo .field::placeholder {
+  color: #64748b;
+}
+.dark .simples-escopo .field::placeholder {
+  color: #a9b4c9;
+}
+/* Tabela do Simples: zebra + hover + tfoot total (thead sticky vem de .tbl). */
+.simples-tabela tbody tr:nth-child(even) {
+  background: color-mix(in oklab, var(--color-brand-600) 4%, transparent);
+}
+.dark .simples-tabela tbody tr:nth-child(even) {
+  background: rgb(190 148 51 / 0.06);
+}
+.simples-tabela tfoot td {
+  background: color-mix(in oklab, var(--color-aurum-500) 8%, transparent);
+}
