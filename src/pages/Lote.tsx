@@ -905,6 +905,7 @@ function PainelAnaliseIA({
           {a.opcoes.map((op) => {
             const selecionada = op.indice === indiceEscolhido
             const ehSugerida = op.indice === sugerida
+            const ehFallback = item.classificacoes[op.indice]?.integralFallback === true
             return (
               <div
                 key={op.indice}
@@ -918,22 +919,32 @@ function PainelAnaliseIA({
                     escolher(indiceOriginal, op.indice)
                   }
                 }}
-                className={`lote-opcao${selecionada ? ' is-selecionada' : ''}${ehSugerida ? ' is-sugerida' : ''}`}
-                aria-label={`Opção ${op.indice + 1}: CST ${op.cst}, cClassTrib ${op.cClassTrib}${ehSugerida ? ' (resultado automático)' : ''}`}
+                className={`lote-opcao${selecionada ? ' is-selecionada' : ''}${ehSugerida ? ' is-sugerida' : ''}${ehFallback ? ' lote-opcao--fallback' : ''}`}
+                aria-label={`Opção ${op.indice + 1}: CST ${op.cst}, cClassTrib ${op.cClassTrib}${ehSugerida ? ' (resultado automático)' : ''}${ehFallback ? ' (tributação integral de segurança)' : ''}`}
+                title={ehFallback ? 'Não se encaixa nessa qualificação? Aplique a tributação integral — confira se seu produto realmente atende a essa família de NCM.' : undefined}
               >
                 <span className="lote-opcao-topo">
                   <span className="lote-opcao-radio" aria-hidden="true">{selecionada ? '●' : '○'}</span>
                   <span className="font-mono text-[11px] font-black">
                     Opção {op.indice + 1} · {op.cst} · {op.cClassTrib}
                   </span>
-                  {ehSugerida ? (
+                  {ehFallback ? (
+                    <span className="lote-opcao-selo lote-opcao-selo--fallback" title="Não se encaixa nessa qualificação? Aplique a tributação integral — última opção de segurança.">
+                      🛡 integral · segurança
+                    </span>
+                  ) : ehSugerida ? (
                     <span className="lote-opcao-selo" title="Resultado automático pela aderência do nome — confira a base legal antes de salvar.">
                       ✨ sugestão automática
                     </span>
                   ) : null}
-                  {selecionada && !ehSugerida ? (
+                  {selecionada && !ehSugerida && !ehFallback ? (
                     <span className="lote-opcao-selo lote-opcao-selo--sua" title="Você trocou o resultado automático — a decisão final é sua e fica registrada.">
                       sua escolha
+                    </span>
+                  ) : null}
+                  {selecionada && ehFallback ? (
+                    <span className="lote-opcao-selo lote-opcao-selo--sua" title="Você escolheu a tributação integral de segurança — vale só para este produto (SKU + empresa + NCM).">
+                      sua escolha · integral
                     </span>
                   ) : null}
                 </span>
@@ -1007,12 +1018,12 @@ function ModalLoteDetalhe({ item, indiceOriginal, onFechar }: { item: ItemLote |
                   className="field field-sm field-mono max-w-full"
                   value={indiceEscolhido}
                   onChange={(e) => escolher(indiceOriginal, Number(e.target.value))}
-                  aria-label="Escolher entre as tributações oficiais"
+                  aria-label="Escolher entre as tributações (inclui integral de segurança)"
                 >
                   {item.classificacoes.map((op, j) => (
                     <option key={`${op.id}-${j}`} value={j}>
-                      {j === a.maisProvavelIndice ? '✨ ' : ''}Opção {j + 1}: {op.cst} · {op.cClassTrib} —{' '}
-                      {(op.resumo?.descricaoCClassTrib || op.baseLegal || '').slice(0, 60)}
+                      {op.integralFallback ? '🛡 ' : j === a.maisProvavelIndice ? '✨ ' : ''}Opção {j + 1}: {op.cst} · {op.cClassTrib} —{' '}
+                      {op.integralFallback ? 'Tributação integral (segurança)' : (op.resumo?.descricaoCClassTrib || op.baseLegal || '').slice(0, 60)}
                     </option>
                   ))}
                 </select>
@@ -1150,11 +1161,13 @@ function celulaLote(
       </div>
     )
   }
+  const temFallback = item.classificacoes.some((op) => op.integralFallback)
+  const totalOficiais = item.classificacoes.filter((op) => !op.integralFallback).length || item.classificacoes.length
   return (
     <div className="lote-celula min-w-[210px]">
       <div className="mb-1 flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">
-        <span title={a?.porqueMultiplas ?? `${item.classificacoes.length} vínculos oficiais distintos para este NCM.`}>
-          ⚠ {item.classificacoes.length} opções
+        <span title={a?.porqueMultiplas ?? `${totalOficiais} vínculos oficiais distintos para este NCM.`}>
+          ⚠ {totalOficiais} opções{temFallback ? ' + integral' : ''}
         </span>
         {a ? (
           <span className="lote-sugere" title={`O sistema sugere a Opção ${a.maisProvavelIndice + 1} pelo nome — já pré-selecionada. ${a.resumo}`}>
@@ -1166,15 +1179,20 @@ function celulaLote(
         className="field field-sm field-mono lote-select w-full"
         value={indiceEscolhido}
         onChange={(e) => escolher(indice, Number(e.target.value))}
-        aria-label={`Escolher entre as ${item.classificacoes.length} tributações oficiais`}
+        aria-label={`Escolher entre as ${item.classificacoes.length} tributações (inclui integral de segurança)`}
       >
         {item.classificacoes.map((op, j) => (
           <option key={`${op.id}-${j}`} value={j}>
-            {j === a?.maisProvavelIndice ? '✨ ' : ''}{op.cst} · {op.cClassTrib} —{' '}
-            {(op.resumo?.descricaoCClassTrib || op.baseLegal || '').slice(0, 60)}
+            {op.integralFallback ? '🛡 ' : j === a?.maisProvavelIndice ? '✨ ' : ''}{op.cst} · {op.cClassTrib} —{' '}
+            {op.integralFallback ? 'Tributação integral (segurança)' : (op.resumo?.descricaoCClassTrib || op.baseLegal || '').slice(0, 60)}
           </option>
         ))}
       </select>
+      {temFallback ? (
+        <div className="mt-1 text-[10px] leading-snug text-slate-500" title="Mesmo com regra prevista na Reforma, o produto pode não atender à qualificação. Confira se seu produto realmente atende a essa família de NCM.">
+          🛡 Não se encaixa? Última opção = integral.
+        </div>
+      ) : null}
     </div>
   )
 }

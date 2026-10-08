@@ -1664,8 +1664,10 @@ async function montarRespostaNcm(
   const blocoAlternativas = extra.alternativas?.length
     ? `\n**Outras possibilidades:**\n${extra.alternativas.map((a) => `• NCM ${fmtNcm(a.codigo)} — ${descricaoLimpa(a.descricao).slice(0, 90)}`).join('\n')}`
     : ''
+  const oficiaisMsg = resolvido.lista.filter((c) => !c.integralFallback).length || resolvido.lista.length
+  const temFallbackMsg = resolvido.lista.some((c) => c.integralFallback)
   const multiAviso = !resolvido.regraGeral && resolvido.lista.length > 1 && !extra.alternativas?.length
-    ? `\nEste NCM tem ${resolvido.lista.length} enquadramentos oficiais — diga "só tem esse?" para ver todos.`
+    ? `\nEste NCM tem ${oficiaisMsg} enquadramentos oficiais${temFallbackMsg ? ' + tributação integral de segurança (última opção)' : ''} — diga "só tem esse?" para ver todos.`
     : ''
   // Phase 10-05: citação do caminho do grafo (só com proveniência + cypher).
   const blocoGrafo = gate.grafoCypher && gate.caminhoGrafo?.length && gate.provenienciaGrafo?.length
@@ -1733,10 +1735,13 @@ async function responderOpcoesNcm(
   const nome = assunto ? ` para "${assunto}"` : ''
   const linhas = r.lista.map((cl, i) => {
     const red = `${cl.resumo?.percentualReducaoIBS ?? 0}% IBS / ${cl.resumo?.percentualReducaoCBS ?? 0}% CBS`
-    return `${i + 1}. CST ${cl.cst} · cClassTrib ${cl.cClassTrib} — red. ${red}`
+    const seloFallback = cl.integralFallback ? ' — tributação integral de segurança' : ''
+    return `${i + 1}. CST ${cl.cst} · cClassTrib ${cl.cClassTrib} — red. ${red}${seloFallback}`
   }).join('\n')
+  const oficiais = r.lista.filter((c) => !c.integralFallback).length || r.lista.length
+  const temFallback = r.lista.some((c) => c.integralFallback)
   const vereditoQtd = r.lista.length > 1
-    ? `Não — o NCM ${fmtNcm(codigo)}${nome} tem **${r.lista.length} enquadramentos oficiais**:`
+    ? `Não — o NCM ${fmtNcm(codigo)}${nome} tem **${oficiais} enquadramentos oficiais${temFallback ? ' + tributação integral de segurança' : ''}**:`
     : `Sim — o NCM ${fmtNcm(codigo)}${nome} tem **1 enquadramento oficial**:`
   const outros = (candidatos ?? []).filter((c) => norm(c.codigo) !== norm(codigo)).slice(0, 4)
   const blocoOutros = outros.length

@@ -141,7 +141,11 @@ export async function analisarItensNfe(
           ? [{ titulo: 'NCM inválido', texto: `Original "${ncmOriginal}" não tem 8 dígitos. Tributação integral aplicada como estimativa — corrija o cadastro.`, cor: 'red' as const }]
           : []),
         ...(lista.length > 1
-          ? [{ titulo: 'Múltiplas classificações', texto: `Este NCM tem ${lista.length} enquadramentos oficiais. Foi usada a 1ª opção como estimativa — escolha a correta na Consulta/Lote.`, cor: 'amber' as const }]
+          ? (() => {
+            const oficiais = lista.filter((x) => !x.integralFallback).length || lista.length
+            const temFallback = lista.some((x) => x.integralFallback)
+            return [{ titulo: 'Múltiplas classificações', texto: `Este NCM tem ${oficiais} enquadramentos oficiais${temFallback ? ' + tributação integral de segurança (última opção)' : ''}. Foi usada a 1ª opção como estimativa — escolha a correta na Consulta/Lote. Não se encaixa nessa qualificação? Aplique a tributação integral.`, cor: 'amber' as const }]
+          })()
           : []),
         ...observacoesFiscais(cod, classificacao, cacheNomen.get(cod) ?? null),
       ],

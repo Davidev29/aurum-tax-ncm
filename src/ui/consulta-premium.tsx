@@ -20,6 +20,7 @@ import { nomeCapitulo } from '@/domain/constants/capitulos'
 import { Campo, Secao, SecaoInformacoesAdicionais } from './detalhes'
 import { SeletorTributacao, useOpcaoTributacao } from './diferimento-opcoes'
 import {
+  AvisoIntegralFallback,
   AvisoManual,
   AvisoNcmExtinto,
   AvisoVigenciaCct,
@@ -394,6 +395,7 @@ export function ModalDetalheFiscal({
       <div className="space-y-4 text-xs">
         <SeletorTributacao cl={cl} opcao={opcao} onChange={setOpcao} />
         {!ehNbs && nomenclatura?.dataFim ? <AvisoNcmExtinto nomenclatura={nomenclatura} /> : null}
+        {visivel.integralFallback ? <AvisoIntegralFallback cl={visivel} /> : null}
         {visivel.manual ? (
           <AvisoManual
             compact
@@ -407,6 +409,7 @@ export function ModalDetalheFiscal({
           <Pill cor={visivel.regraGeral ? 'amber' : 'brand'}>
             {visivel.regraGeral ? '⚠ Regra geral' : '✓ Enquadramento oficial'}
           </Pill>
+          {visivel.integralFallback ? <Pill cor="slate">🛡 Integral · última opção</Pill> : null}
           {opcao === 'diferimento' ? <Pill cor="brand">⏳ Com diferimento</Pill> : null}
           {visivel.manual ? <Pill cor="amber">👤 Manual</Pill> : null}
           {visivel.revogado ? <Pill cor="red">⛔ Revogado</Pill> : null}

@@ -18,7 +18,7 @@ import {
   calcularTributos,
   observacoesDiferimento,
 } from '@/domain/services/calculo'
-import { chipCondicao, observacaoExtincaoNcm, observacaoVigenciaCct } from '@/domain/services/classificacao'
+import { chipCondicao, observacaoExtincaoNcm, observacaoIntegralFallback, observacaoVigenciaCct } from '@/domain/services/classificacao'
 import { fmtMoeda, parseMoeda } from '@/domain/services/format'
 import { useCalculadora } from '@/store/calculadora'
 import { Pill, Texto, type CorPill } from './kit'
@@ -92,6 +92,19 @@ export function AvisoVigenciaCct({
   cct: Pick<import('@/domain/entities').TabelaCstClassTrib, 'cClassTrib' | 'inicioVigencia' | 'fimVigencia'> | null | undefined
 }) {
   const obs = observacaoVigenciaCct(cct)
+  if (!obs) return null
+  return <ListaObservacoes itens={[obs]} />
+}
+
+/**
+ * Legenda do fallback integral multi-opção (cor `slate`, distinta).
+ *
+ * Exibida ACIMA do cartão de tributação integral anexado como última opção
+ * de um NCM com 2+ enquadramentos oficiais: "Não se encaixa nessa
+ * qualificação? Aplique a tributação integral".
+ */
+export function AvisoIntegralFallback({ cl }: { cl: Pick<Classificacao, 'integralFallback'> | null | undefined }) {
+  const obs = observacaoIntegralFallback(cl)
   if (!obs) return null
   return <ListaObservacoes itens={[obs]} />
 }

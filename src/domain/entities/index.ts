@@ -620,6 +620,15 @@ export interface Classificacao {
   detalheNbs?: { lc: string; descricaoNbs: string; descricaoLc: string } | null
   manual?: ReclassificacaoManual | null
   /**
+   * `true` quando esta classificação é a tributação integral anexada como
+   * ÚLTIMA opção de um NCM com 2+ enquadramentos oficiais (fallback de
+   * segurança). Não é regra geral pura (NCM sem vínculo) nem vínculo oficial:
+   * vale quando o produto não atende a nenhuma qualificação com benefício
+   * (propósito, descrição, destinação…). A UI sinaliza com legenda e cor
+   * próprias (`observacaoIntegralFallback`).
+   */
+  integralFallback?: boolean | null
+  /**
    * Herança por família (NCM sem vínculo exato, enquadramento herdado dos
    * irmãos da mesma subposição/posição/capítulo). Ausente = exata/manual/
    * regra geral pura.

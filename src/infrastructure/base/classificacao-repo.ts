@@ -311,6 +311,8 @@ export async function resolverClassificacoes(
   heranca?: HerancaFamilia | null
   /** Hipótese qualificada quando há lastro parcial (sem herança automática). */
   hipoteseFamilia?: HipoteseFamilia | null
+  /** `true` quando a lista termina com a tributação integral de segurança. */
+  temIntegralFallback?: boolean
 }> {
   const c = norm(codigo)
   const nomenclatura = await buscarNomenclatura(c)
@@ -367,7 +369,25 @@ export async function resolverClassificacoes(
   const lista = vivos.map((v, i) =>
     montarClassificacao(v, nomenclatura ? { ...ctxs[i], nomenclatura } : ctxs[i]),
   )
-  return { vinculos, lista, nomenclatura, regraGeral: false, manual: false, extinto: false, revogado: null, heranca: null, hipoteseFamilia: null }
+  // Fallback integral multi-opção: NCM com 2+ enquadramentos oficiais ganha a
+  // tributação integral (000/000001) como ÚLTIMA opção — o produto pode não
+  // atender a nenhuma qualificação com benefício (propósito, descrição,
+  // destinação…). Além das regras existentes, nunca no lugar delas; a 1ª
+  // opção (estimativa Lote/XML/SPED) continua sendo a oficial determinística.
+  // Manual/extinto/revogado/herança (lista unitária) nunca anexam.
+  // Se os oficiais JÁ contêm a integral (000/000001 com benefício zero),
+  // nada a anexar (evita duplicata).
+  if (lista.length > 1 && !lista.some((x) => x.cst === '000' && x.cClassTrib === '000001')) {
+    try {
+      const fallback = await classificacaoRegraGeral(c, nomenclatura)
+      fallback.integralFallback = true
+      fallback.id = `INTEGRAL|${fallback.codigo}`
+      lista.push(fallback)
+    } catch {
+      /* fallback é segurança — nunca quebra o veredito oficial */
+    }
+  }
+  return { vinculos, lista, nomenclatura, regraGeral: false, manual: false, extinto: false, revogado: null, heranca: null, hipoteseFamilia: null, temIntegralFallback: lista.some((x) => x.integralFallback) }
 }
 
 /* -------------------------------- herança por família (LC 214/2025) ------- */

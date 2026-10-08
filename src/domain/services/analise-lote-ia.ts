@@ -188,6 +188,20 @@ function comentarOpcao(
   const dif = diferimentoDe(c)
   const rotDif = rotuloDiferimento(dif)
 
+  // Fallback integral multi-opção: última opção de segurança, nunca sugerida
+  // como provável pelo nome — vale quando o produto não atende a nenhuma
+  // qualificação com benefício.
+  if (c.integralFallback) {
+    return {
+      comentario:
+        `Opção ${indice + 1}: CST ${c.cst || '—'} · cClassTrib ${c.cClassTrib || '—'} — ${descricao}. ` +
+        `Opção de segurança (tributação integral, alíquota cheia, sem redução): ` +
+        `use quando o produto NÃO atender a nenhuma qualificação com benefício ` +
+        `(propósito, descrição, destinação ou composição). Base: ${baseLegal}.`,
+      redIBS, redCBS, anexo, anexoRotulo,
+    }
+  }
+
   const partes: string[] = []
   partes.push(`Opção ${indice + 1}: CST ${c.cst || '—'} · cClassTrib ${c.cClassTrib || '—'} — ${descricao}.`)
   partes.push(`Redução ${fmtRed(redIBS)} IBS / ${fmtRed(redCBS)} CBS${anexo ? ` · ${anexoRotulo} (anexo oficial “${anexo}”)` : ' · sem anexo oficial na base'}.`)
@@ -226,7 +240,10 @@ function fmtRed(v: number): string {
  * de alíquota, diferimento). Nada de artigo inferido por faixa.
  */
 function explicarMultiplas(opcoes: Classificacao[]): string {
-  const linhas = opcoes.map((c, i) => {
+  const oficiais = opcoes.filter((c) => !c.integralFallback)
+  const temFallback = opcoes.some((c) => c.integralFallback)
+  const base = oficiais.length ? oficiais : opcoes
+  const linhas = base.map((c, i) => {
     const redIBS = Number(c.resumo?.percentualReducaoIBS ?? 0) || 0
     const redCBS = Number(c.resumo?.percentualReducaoCBS ?? 0) || 0
     const anexo = String(c.resumo?.anexo ?? c.referencia?.anexo ?? '').trim()
@@ -234,12 +251,12 @@ function explicarMultiplas(opcoes: Classificacao[]): string {
   })
   const diffs: string[] = []
   const u = (xs: unknown[]) => [...new Set(xs.map((x) => String(x ?? '—')))]
-  const csts = u(opcoes.map((c) => c.cst))
-  const ccts = u(opcoes.map((c) => c.cClassTrib))
-  const reds = u(opcoes.map((c) => `${Number(c.resumo?.percentualReducaoIBS ?? 0) || 0}/${Number(c.resumo?.percentualReducaoCBS ?? 0) || 0}`))
-  const anexos = u(opcoes.map((c) => String(c.resumo?.anexo ?? c.referencia?.anexo ?? '—').trim() || '—'))
-  const tipos = u(opcoes.map((c) => String(c.cstClassTribDetalhes?.tipoAliquota ?? '—')))
-  const difs = u(opcoes.map((c) => diferimentoDe(c) ?? 'sem-diferimento'))
+  const csts = u(base.map((c) => c.cst))
+  const ccts = u(base.map((c) => c.cClassTrib))
+  const reds = u(base.map((c) => `${Number(c.resumo?.percentualReducaoIBS ?? 0) || 0}/${Number(c.resumo?.percentualReducaoCBS ?? 0) || 0}`))
+  const anexos = u(base.map((c) => String(c.resumo?.anexo ?? c.referencia?.anexo ?? '—').trim() || '—'))
+  const tipos = u(base.map((c) => String(c.cstClassTribDetalhes?.tipoAliquota ?? '—')))
+  const difs = u(base.map((c) => diferimentoDe(c) ?? 'sem-diferimento'))
   if (csts.length > 1) diffs.push(`CSTs distintos (${csts.join(' × ')})`)
   if (ccts.length > 1) diffs.push(`${ccts.length} cClassTribs distintos`)
   if (reds.length > 1) diffs.push(`reduções distintas de IBS/CBS (${reds.join(' × ')})`)
@@ -251,10 +268,13 @@ function explicarMultiplas(opcoes: Classificacao[]): string {
     : 'Os enquadramentos diferem no detalhamento oficial (descrição/base legal) — confira cada base.'
 
   return (
-    `Este NCM possui ${opcoes.length} vínculos oficiais distintos na base da Reforma (CST × cClassTrib) — ` +
-    `por isso há ${opcoes.length} tributações possíveis, uma por enquadramento previsto para operações/produtos diferentes sob o mesmo NCM: ` +
+    `Este NCM possui ${base.length} vínculos oficiais distintos na base da Reforma (CST × cClassTrib) — ` +
+    `por isso há ${base.length} tributações possíveis, uma por enquadramento previsto para operações/produtos diferentes sob o mesmo NCM: ` +
     `${linhas.join('; ')}. ${diffTxt} ` +
-    `Todas as opções vêm da base oficial do sistema; o nome da planilha só ajuda a ordenar.`
+    `Todas as opções vêm da base oficial do sistema; o nome da planilha só ajuda a ordenar.` +
+    (temFallback
+      ? ` Além delas, há a última opção de segurança (tributação integral 000/000001): use quando o produto NÃO atender a nenhuma qualificação com benefício — confira se seu produto realmente atende a essa família de NCM.`
+      : '')
   )
 }
 
@@ -390,14 +410,20 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
   }
 
   // ---- 1 ou N vínculos oficiais: nome ordena, base decide ----
+  // O fallback integral (última opção de segurança) nunca é sugerido como
+  // provável pelo nome: ele só vale quando o produto NÃO atende às
+  // qualificações com benefício. Por isso o desempate ignora o fallback.
   const { originais, expandidos } = tokensDoNome(nomeSeguro)
   const pontuadas = classificacoes.map((c, i) => {
-    const { score, termos } = pontuarOpcaoPeloNome(expandidos, originais, c)
+    const { score, termos } = c.integralFallback
+      ? { score: -1, termos: [] as string[] }
+      : pontuarOpcaoPeloNome(expandidos, originais, c)
     return { c, i, score, termos }
   })
   const ordenadas = [...pontuadas].sort((a, b) => b.score - a.score || a.i - b.i)
-  const topo = ordenadas[0]
-  const segunda = ordenadas[1]
+  const topoOficial = ordenadas.find((o) => !o.c.integralFallback) ?? ordenadas[0]
+  const topo = topoOficial
+  const segunda = ordenadas.find((o) => o !== topo && !o.c.integralFallback)
   const gap = topo && segunda ? topo.score - segunda.score : topo ? topo.score : 0
 
   const opcoes: OpcaoAnalisada[] = pontuadas.map(({ c, i, score, termos }) => {
@@ -441,36 +467,41 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
 
   // ---- múltiplas ----
   const sugerida = topo?.i ?? 0
+  const temFallback = classificacoes.some((c) => c.integralFallback)
+  const totalOficiais = classificacoes.filter((c) => !c.integralFallback).length || classificacoes.length
+  const sufixoFallback = temFallback
+    ? ` Se o produto não atender a nenhuma qualificação com benefício (propósito, descrição ou destinação), use a última opção (tributação integral).`
+    : ''
   let confianca: number
   let resumo: string
   let orientacao: string
   if (!originais.length) {
     confianca = 0.35
     resumo =
-      `O NCM ${ncm} tem ${classificacoes.length} tributações oficiais possíveis e a linha veio sem nome para confrontar — ` +
-      `a busca manteve a ordem oficial (CST/cClassTrib crescente) como sugestão inicial. Abra cada opção e escolha pela operação real.`
-    orientacao = 'Sem nome, sem desempate: leia cada base legal abaixo e escolha a que descreve a sua operação. A decisão final é sua.'
+      `O NCM ${ncm} tem ${totalOficiais} tributações oficiais possíveis e a linha veio sem nome para confrontar — ` +
+      `a busca manteve a ordem oficial (CST/cClassTrib crescente) como sugestão inicial. Abra cada opção e escolha pela operação real.${sufixoFallback}`
+    orientacao = 'Sem nome, sem desempate: leia cada base legal abaixo e escolha a que descreve a sua operação. A decisão final é sua.' + sufixoFallback
   } else if (gap >= 10) {
     confianca = 0.85
     const top = opcoes[sugerida]
     resumo =
-      `O NCM ${ncm} tem ${classificacoes.length} tributações oficiais possíveis. ` +
+      `O NCM ${ncm} tem ${totalOficiais} tributações oficiais possíveis. ` +
       `Pelo nome (“${nomeSeguro.slice(0, 60)}”), a mais provável é a Opção ${sugerida + 1} (CST ${top.cst}/${top.cClassTrib}) — ` +
-      `${top.termosCasados.length} termo(s) casaram (${top.termosCasados.join(', ')}), contra ${segunda?.score ? `${Math.round((segunda.score) / 10)} termo(s) na segunda colocada` : 'nenhum termo nas demais'}. Já deixei ela pré-selecionada, mas confira a base legal antes de salvar.`
-    orientacao = `Sugestão automática: Opção ${sugerida + 1} (maior aderência ao nome). Se a sua operação for outra, troque — a escolha final é sua e fica registrada na linha.`
+      `${top.termosCasados.length} termo(s) casaram (${top.termosCasados.join(', ')}), contra ${segunda?.score ? `${Math.round((segunda.score) / 10)} termo(s) na segunda colocada` : 'nenhum termo nas demais'}. Já deixei ela pré-selecionada, mas confira a base legal antes de salvar.${sufixoFallback}`
+    orientacao = `Sugestão automática: Opção ${sugerida + 1} (maior aderência ao nome). Se a sua operação for outra, troque — a escolha final é sua e fica registrada na linha.${sufixoFallback}`
   } else if (gap > 0) {
     confianca = 0.6
     const top = opcoes[sugerida]
     resumo =
-      `O NCM ${ncm} tem ${classificacoes.length} tributações oficiais possíveis e o nome (“${nomeSeguro.slice(0, 60)}”) dá vantagem pequena à Opção ${sugerida + 1} ` +
-      `(CST ${top.cst}/${top.cClassTrib} — ${top.termosCasados.join(', ') || 'aderência parcial'}). Vale conferir as demais antes de salvar.`
-    orientacao = `Sugestão fraca: Opção ${sugerida + 1} à frente por pouco. Compare as bases legais abaixo — em caso de dúvida, prevalece a operação real, não o nome.`
+      `O NCM ${ncm} tem ${totalOficiais} tributações oficiais possíveis e o nome (“${nomeSeguro.slice(0, 60)}”) dá vantagem pequena à Opção ${sugerida + 1} ` +
+      `(CST ${top.cst}/${top.cClassTrib} — ${top.termosCasados.join(', ') || 'aderência parcial'}). Vale conferir as demais antes de salvar.${sufixoFallback}`
+    orientacao = `Sugestão fraca: Opção ${sugerida + 1} à frente por pouco. Compare as bases legais abaixo — em caso de dúvida, prevalece a operação real, não o nome.${sufixoFallback}`
   } else {
     confianca = 0.35
     resumo =
-      `O NCM ${ncm} tem ${classificacoes.length} tributações oficiais possíveis e o nome (“${nomeSeguro.slice(0, 60)}”) não desempatou ` +
-      `(empate ou nenhum termo no texto oficial). Mantive a ordem oficial como ponto de partida — a escolha precisa da sua conferência.`
-    orientacao = `Empate técnico: o sistema não chutou — manteve a ordem oficial. Leia cada comentário (redução, anexo, base legal) e escolha pela operação real.`
+      `O NCM ${ncm} tem ${totalOficiais} tributações oficiais possíveis e o nome (“${nomeSeguro.slice(0, 60)}”) não desempatou ` +
+      `(empate ou nenhum termo no texto oficial). Mantive a ordem oficial como ponto de partida — a escolha precisa da sua conferência.${sufixoFallback}`
+    orientacao = `Empate técnico: o sistema não chutou — manteve a ordem oficial. Leia cada comentário (redução, anexo, base legal) e escolha pela operação real.${sufixoFallback}`
   }
 
   const alertas: string[] = []

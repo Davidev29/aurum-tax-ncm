@@ -259,6 +259,29 @@ export function observacaoHerancaFamilia(
   }
 }
 
+/**
+ * Observação do fallback integral multi-opção (cor `slate`, distinta do âmbar
+ * de "N classificações" e do âmbar de regra geral pura).
+ *
+ * Exibida ACIMA do cartão de tributação integral anexado como última opção
+ * de um NCM com 2+ enquadramentos oficiais. Retorna `null` quando a
+ * classificação não é fallback.
+ */
+export function observacaoIntegralFallback(
+  cl: Pick<Classificacao, 'integralFallback'> | null | undefined,
+): import('../entities').Observacao | null {
+  if (!cl?.integralFallback) return null
+  return {
+    titulo: '🛡 Não se encaixa nessa qualificação? Aplique a tributação integral',
+    texto:
+      'Mesmo com regra prevista na Reforma, o produto pode não atender à qualificação ' +
+      '(propósito, descrição, destinação, composição ou adquirente). ' +
+      'Confira se seu produto realmente atende a essa família de NCM antes de usar um benefício: ' +
+      'na dúvida, escriture pela tributação integral abaixo (CST 000/cClassTrib 000001, alíquota cheia, sem redução).',
+    cor: 'slate',
+  }
+}
+
 /** Objeto sintético usado quando o NCM não tem 8 dígitos (SPEC R2.9). */
 export function classificacaoNcmInvalido(ncm: string): Classificacao {
   const cod = norm(ncm)

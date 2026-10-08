@@ -19,7 +19,7 @@ import { Btn } from './kit'
 import { IconeAurumPremium, SeloAurumAI } from './aurum-ai'
 import { BotaoDetalhePremium, ModalDetalheFiscal } from './consulta-premium'
 import { BotaoVerLegislacao, type BloqueioSistema } from './cartoes'
-import { PillAnexos } from './cartoes'
+import { AvisoIntegralFallback, PillAnexos } from './cartoes'
 import { SeletorTributacao, useOpcaoTributacao } from './diferimento-opcoes'
 
 /* ------------------------------------------------- cartão enxuto (1 por vez) -- */
@@ -77,6 +77,12 @@ export function CartaoEnxuto({
         </div>
       ) : null}
       <FaixaTributaria redIBS={redIBS} redCBS={redCBS} anexo={anexo} baseLegal={baseLegal} />
+
+      {visivel.integralFallback ? (
+        <div className="mt-3">
+          <AvisoIntegralFallback cl={visivel} />
+        </div>
+      ) : null}
 
       <SeletorTributacao cl={cl} opcao={opcao} onChange={setOpcao} />
 

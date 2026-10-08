@@ -115,7 +115,11 @@ export async function analisarItens(
           ? [{ titulo: 'NCM inválido', texto: `Original "${ncmOriginal}" não tem 8 dígitos. Tributação integral aplicada como estimativa.`, cor: 'red' as const }]
           : []),
         ...(lista.length > 1
-          ? [{ titulo: 'Múltiplas classificações', texto: `Este NCM tem ${lista.length} enquadramentos. Usada a 1ª opção como estimativa — escolha a correta.`, cor: 'amber' as const }]
+          ? (() => {
+            const oficiais = lista.filter((x) => !x.integralFallback).length || lista.length
+            const temFallback = lista.some((x) => x.integralFallback)
+            return [{ titulo: 'Múltiplas classificações', texto: `Este NCM tem ${oficiais} enquadramentos${temFallback ? ' + tributação integral de segurança (última opção)' : ''}. Usada a 1ª opção como estimativa — escolha a correta. Não se encaixa nessa qualificação? Aplique a tributação integral.`, cor: 'amber' as const }]
+          })()
           : []),
         ...observacoesFiscais(cod, classificacao, cacheNomen.get(cod) ?? null),
       ],

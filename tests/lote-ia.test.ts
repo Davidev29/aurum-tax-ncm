@@ -56,11 +56,15 @@ describe('lote com IA assistida', () => {
     ].join('\r\n')
     const r = await processarArquivoLote(arquivo('lote.csv', csv))
     const it = r.itens[0]
-    expect(it.classificacoes).toHaveLength(2)
+    // 2 oficiais + integral de segurança (última opção).
+    expect(it.classificacoes).toHaveLength(3)
+    expect(it.classificacoes.at(-1)?.integralFallback).toBe(true)
+    expect(it.classificacoes.at(-1)).toMatchObject({ cst: '000', cClassTrib: '000001' })
     expect(it.analiseIA?.situacao).toBe('multipla')
     expect(it.analiseIA?.maisProvavelIndice).toBe(1)
-    // Escolha assistida: a escolhida já é a sugerida.
+    // Escolha assistida: a escolhida já é a sugerida (nunca o fallback).
     expect(it.escolhida?.cClassTrib).toBe('200038')
+    expect(it.escolhida?.integralFallback).not.toBe(true)
     expect(r.assistidas).toBe(1)
   })
 

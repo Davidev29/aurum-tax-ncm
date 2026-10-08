@@ -453,6 +453,7 @@ export function ModalProdutoManual({
                     <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
                       {opcoes.map((cl, i) => {
                         const sel = escolhida === cl
+                        const ehFallback = cl.integralFallback === true
                         const rIBS = Number(cl.resumo.percentualReducaoIBS ?? 0)
                         const rCBS = Number(cl.resumo.percentualReducaoCBS ?? 0)
                         const url = cl.resumo.urlLegislacao ?? cl.referencia?.urlLegislacao ?? null
@@ -470,10 +471,15 @@ export function ModalProdutoManual({
                               }
                             }}
                             aria-pressed={sel}
+                            title={ehFallback ? 'Não se encaixa nessa qualificação? Aplique a tributação integral — confira se seu produto realmente atende a essa família de NCM.' : undefined}
                             className={`block w-full cursor-pointer rounded-xl border-2 p-3 text-left transition ${
                               sel
-                                ? 'border-brand-500 bg-brand-50/70 shadow-card dark:border-aurum-500 dark:bg-brand-900/30'
-                                : 'border-[var(--line)] bg-white hover:border-brand-300 dark:bg-slate-900'
+                                ? ehFallback
+                                  ? 'border-slate-500 bg-slate-100 shadow-card dark:border-slate-400 dark:bg-slate-800'
+                                  : 'border-brand-500 bg-brand-50/70 shadow-card dark:border-aurum-500 dark:bg-brand-900/30'
+                                : ehFallback
+                                  ? 'border-dashed border-slate-400 bg-slate-50 hover:border-slate-500 dark:bg-slate-900'
+                                  : 'border-[var(--line)] bg-white hover:border-brand-300 dark:bg-slate-900'
                             }`}
                           >
                             <div className="flex items-center gap-2">
@@ -487,10 +493,21 @@ export function ModalProdutoManual({
                               <span className="font-mono text-xs font-black">
                                 Opção {i + 1} · CST {cl.cst} · {cl.cClassTrib}
                               </span>
+                              {ehFallback ? (
+                                <span className="pill ml-auto bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                                  🛡 Integral · segurança
+                                </span>
+                              ) : (
                               <span className="pill ml-auto bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                                 −{fmtPct(rIBS)} / −{fmtPct(rCBS)}
                               </span>
+                              )}
                             </div>
+                            {ehFallback ? (
+                              <div className="mt-1.5 rounded-lg border border-slate-300 bg-slate-100 p-1.5 text-[11px] leading-snug text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                🛡 Não se encaixa nessa qualificação? Aplique a tributação integral — vale quando o produto não atender (propósito, descrição ou destinação).
+                              </div>
+                            ) : null}
                             <div className="mt-1.5 line-clamp-2 text-xs font-medium leading-snug">
                               {cl.resumo.descricaoCClassTrib || cl.baseLegal || '—'}
                             </div>
