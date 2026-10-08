@@ -15,7 +15,7 @@
  * calcularSimples (com memória), calcularContaBasica + responderTempo
  * (básico PT-BR: hora/data e soma/subtração/multiplicação/divisão/
  * porcentagem/resto, com follow-up "e mais 5?"), simularComparativo, explicarConceito,
- * consultarClientes + consultarDadosXml (Dexie local: cliente ↔ XML,
+ * consultarClientes + consultarDadosXml (SQLite local: cliente ↔ XML,
  * fornecedor-crédito, produto débito/crédito, diferidos, reduções, filtros),
  * gerarRelatorioDados (PDF customizado dos DADOS no padrão do sistema),
  * gerarGrafico (MODIFICADOR visual: pizza/barras/linha/tabela 3D sobre
@@ -4245,7 +4245,7 @@ export async function responderChat(pergunta: string, historico: MensagemHistori
 
 /**
  * Fluxo simples (fine-tuning v5): rotina com recursos nativos — nenhuma
- * consulta a RAG/Dexie de dados, nenhum contexto pesado, nenhuma escrita de
+ * consulta a RAG/SQLite de dados, nenhum contexto pesado, nenhuma escrita de
  * negócio. Custa 1 leitura de perfil (para o vocativo e os padrões) + 1
  * escrita em lote do aprendizado de turno. Nome declarado e pergunta sobre
  * a memória passam aqui (perfil puro).

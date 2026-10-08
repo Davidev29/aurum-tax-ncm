@@ -280,7 +280,7 @@ describe('garantirSementes', () => {
     cstPisCofins: [{ codigo: '01', descricao: 'Operação com alíquota básica' }],
   }
 
-  it('popula só as tabelas vazias e não duplica na segunda chamada', async () => {
+  it('popula as tabelas vazias e não duplica na segunda chamada', async () => {
     await garantirSementes(sementes)
     expect(await db.cfop.count()).toBe(1)
     expect(await db.cstIcms.count()).toBe(1)
@@ -292,11 +292,20 @@ describe('garantirSementes', () => {
     expect(await db.cstPisCofins.count()).toBe(1)
   })
 
-  it('respeita o que o usuário já cadastrou', async () => {
+  it('complementa os códigos faltantes sem mexer no que o usuário já cadastrou', async () => {
     await db.cfop.put({ codigo: '6101', descricao: 'Minha' })
     await garantirSementes(sementes)
-    expect(await db.cfop.count()).toBe(1)
-    expect(await db.cfop.get('6101')).toBeDefined()
+    // 6101 do usuário mantido + 5101 da semente acrescido ("o que tiver não entra").
+    expect(await db.cfop.count()).toBe(2)
+    expect((await db.cfop.get('6101'))?.descricao).toBe('Minha')
+    expect(await db.cfop.get('5101')).toBeDefined()
     expect(await db.cstIcms.count()).toBe(1)
+  })
+
+  it('não sobrescreve a descrição editada pelo usuário no mesmo código', async () => {
+    await db.cfop.put({ codigo: '5101', descricao: 'Editada por mim' })
+    await garantirSementes(sementes)
+    expect(await db.cfop.count()).toBe(1)
+    expect((await db.cfop.get('5101'))?.descricao).toBe('Editada por mim')
   })
 })

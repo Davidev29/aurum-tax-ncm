@@ -19,16 +19,3 @@ export function salvarRTB12(cnpj: string, periodo: string, historico: MesReceita
     /* armazenamento indisponível — segue sem persistir */
   }
 }
-
-export function carregarRTB12(cnpj: string, periodo: string): MesReceita[] | null {
-  try {
-    if (typeof localStorage === 'undefined') return null;
-    const raw = localStorage.getItem(chave(cnpj, periodo));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { historico?: MesReceita[] };
-    if (!Array.isArray(parsed.historico)) return null;
-    return parsed.historico.filter((r) => r && typeof r.mes === 'string' && Number.isFinite(Number(r.receita)));
-  } catch {
-    return null;
-  }
-}

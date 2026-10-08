@@ -38,10 +38,15 @@ import { buscarReclassificacaoManual, classificacaoManual } from './reclassifica
 
 /** Resolve o join 3NF de um vínculo (CST + cClassTrib + referência). */
 async function contextoDe(vinculo: VinculoNcm | VinculoNbs): Promise<ContextoClassificacao> {
+  // Linhas parciais de usuário podem ter cst/cClassTrib nulos (SQLite
+  // permite; o Dexie guardava `undefined`): nunca consulta com chave nula.
+  const cst = vinculo.cst ?? ''
+  const cct = vinculo.cClassTrib ?? ''
+  const chave = cst && cct ? `${cst}|${cct}` : ''
   const [cstDetalhes, cstClassTribDetalhes, referencia] = await Promise.all([
-    db.cst.get(vinculo.cst),
-    db.cstClassTrib.get(`${vinculo.cst}|${vinculo.cClassTrib}`),
-    db.referencia.get(`${vinculo.cst}|${vinculo.cClassTrib}`),
+    cst ? db.cst.get(cst).catch(() => null) : null,
+    chave ? db.cstClassTrib.get(chave).catch(() => null) : null,
+    chave ? db.referencia.get(chave).catch(() => null) : null,
   ])
   return { cstDetalhes: cstDetalhes ?? null, cstClassTribDetalhes: cstClassTribDetalhes ?? null, referencia: referencia ?? null }
 }
@@ -74,7 +79,7 @@ export async function buscarClassificacoesDoNcm(codigo: unknown): Promise<Classi
   return r.lista
 }
 
-/** R2.2 — `null` para código vazio; `undefined` viria do Dexie, então normalizamos. */
+/** R2.2 — `null` para código vazio; `undefined` viria do SQLite, então normalizamos. */
 export async function buscarNomenclatura(codigo: unknown): Promise<NomenclaturaNcm | null> {
   const c = norm(codigo)
   if (!c) return null
@@ -343,8 +348,9 @@ export async function resolverClassificacoes(
   }
   // Ordem determinística (CST, cClassTrib): a "1ª opção" (lista[0]) usada
   // como estimativa por Lote/XML/SPED/revalidação é a mesma em todas as
-  // telas, independente da ordem de importação da base.
-  vivos.sort((a, b) => a.cst.localeCompare(b.cst) || a.cClassTrib.localeCompare(b.cClassTrib))
+  // telas, independente da ordem de importação da base. `String()` porque
+  // linhas parciais de usuário podem ter campos nulos.
+  vivos.sort((a, b) => String(a.cst ?? '').localeCompare(String(b.cst ?? '')) || String(a.cClassTrib ?? '').localeCompare(String(b.cClassTrib ?? '')))
   if (!vivos.length) {
     // Sem vínculo exato: tenta herança por família antes da regra geral.
     // (Só 15,9% dos NCMs vigentes têm vínculo exato — sem este passo,
@@ -770,7 +776,7 @@ export async function resolverClassificacoesNbs(
     }
     vivos = mantidos
   }
-  vivos.sort((a, b) => a.cst.localeCompare(b.cst) || a.cClassTrib.localeCompare(b.cClassTrib))
+  vivos.sort((a, b) => String(a.cst ?? '').localeCompare(String(b.cst ?? '')) || String(a.cClassTrib ?? '').localeCompare(String(b.cClassTrib ?? '')))
   if (!vivos.length) {
     const rg = await classificacaoRegraGeralNbs(c)
     if (revogado) rg.revogado = revogado

@@ -2,7 +2,7 @@
  * Aurum AI — fluxos simples (fine-tuning v5).
  *
  * Mapa das rotinas que o sistema resolve com recursos NATIVOS (templates
- * determinísticos + perfil em cache), sem RAG, sem Dexie de dados e sem
+ * determinísticos + perfil em cache), sem RAG, sem SQLite de dados e sem
  * releituras: saudação, conversa leve, capacidades, ajuda, navegação,
  * status, conceito, legislação, genérico + barreira de escopo.
  *
@@ -54,7 +54,7 @@ function ultimaRespostaAssistente(historico: HistoricoMsg[] = []): string | null
 }
 
 /**
- * `true` quando o turno EXIGE o caminho completo (com contexto, RAG e Dexie).
+ * `true` quando o turno EXIGE o caminho completo (com contexto, RAG e SQLite).
  *
  * O orquestrador calcula a intenção REFINADA (pura, com contexto memoizado,
  * sem I/O) e decide:

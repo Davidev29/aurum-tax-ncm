@@ -44,7 +44,7 @@
 | Sinal | Valor real (árvore de trabalho) |
 |---|---|
 | 🖥️ Views no menu | **10** — Calculadora · Simples Nacional · Consulta NCM · Serviços (NBS) · Consulta de CNAEs · Classificação em lote · Notas Fiscais (XML) · Produtos · Tabelas auxiliares · Legislação |
-| 🧪 Testes | **152 arquivos** · **1.697 casos** — `npx vitest run` → **1.696 passando, 1 instável** (`servicos-topup`: seed rápido de banco legado; `grafo-ipc` com flake ocasional de latência p50) |
+| 🧪 Testes | **154 arquivos** · **1.740 casos** — `npm test` → **tudo passando** · `npm run typecheck` limpo |
 | ✅ Tipos | `npm run typecheck` (`tsc --noEmit`) — **limpo** |
 | 📦 Instaladores locais | `release/` com `Setup 1.0.0` + `Portátil 1.0.0` (ignorado no git, gerado por `npm run dist:win`) |
 | 🗄️ Base embutida | `public/base/` versionada: `reforma.json` 1,6 MB · `nomenclatura.json` 2,9 MB · `classificacoes-consolidadas.json` 1,7 MB · `cnae-nbs.json` 1,3 MB · grafo `grafo.lbug` 6,4 MB · `vetores.json` 12,5 MB |
@@ -58,7 +58,8 @@
 | 💬 **Chat dedicado** | View de chat com Fator R explicativo, intenção contínua, híbrido sob demanda | **Sem view de chat.** Restaram o motor de ferramentas (`aurum-ai-registro-ferramentas.ts`), RAG lexical e componentes (`ui/aurum-ai.tsx`, `chat-markdown.tsx`, `grafico-chat.tsx`) usados em relatórios/insights embutidos — mas **não há mais tela de conversa** no menu |
 | 🕸️ **Grafo fiscal** | `via:grafo` com worker + LLM | **Mantido e simplificado.** `electron/ia/grafo-service.cjs` chamado direto (sem worker), rota IPC única `ia:grafo` com fail-closed para lexical. `20.559` nodos / `30.107` arestas continuam gerados por `npm run base` |
 | 🧾 **Simples — projeção dividida** | Modal reativo simples (slider + tabela mensal) | **Evoluído para v2 com segregação.** Novos arquivos: `baseline.ts`, `das-segregado.ts`, `simular-segregacao.ts`, `SimuladorSegregacao.tsx`, `ControleSplit.tsx`, `NumeroAnimado.tsx`, `persistencia.ts`, `pro-labore.ts` + 2 novas suítes (`segregacao`, `store-sync`). Wizard em 5 etapas com RBT12 deslizante, split 0–100%, veredito, payback e alertas |
-| 🔢 **Contagem de testes** | 152 suítes / 1.621 casos, tudo passando | **152 suítes / 1.697 casos**, 1 instável (ver painel). Número antigo desatualizado |
+| 🔢 **Contagem de testes** | 152 suítes / 1.621 casos, tudo passando | **154 suítes / 1.740 casos**, tudo passando (ver painel). Número antigo desatualizado |
+| 🗄️ **Banco local** | Dexie 4 (IndexedDB `aurum_tax_ncm_v1`, 14 versões) no renderer | **SQLite via Prisma 6** (`aurum.db` em `%APPDATA%`, Prisma no processo main + IPC `db:op`/`db:snapshot`, validação de domínio em toda escrita). 27 tabelas, seed transacional por lote, snapshot pré-restore, `integrity_check` + quarentena no boot, portão de base completa com autocura. Sem migração de dados (banco novo). Scripts: `npm run db:generate` (após editar `prisma/schema.prisma`), `npm run db:push` (dev) |
 | 📄 **Licença** | Badge MIT | Código-fonte sob **MIT** (`LICENSE`), mas `package.json` declara `license: UNLICENSED` + `private: true`. Na prática: **uso interno / sem publicação no npm** |
 
 ### ◆ Arquitetura em uma figura
@@ -75,7 +76,7 @@ flowchart LR
         G[Grafo fiscal local] --> F[Fallback lexical]
     end
     subgraph INF["▲ Infraestrutura"]
-        D[(Dexie / IndexedDB)] --- B[Base embutida versionada]
+        D[(SQLite + Prisma no main)] --- B[Base embutida versionada]
         X[fast-xml-parser] --- E[pdfmake / SheetJS]
     end
     UI --> DOM --> INF
@@ -98,7 +99,7 @@ flowchart LR
 | 📚 **Tabelas auxiliares** | 8 listas editáveis via `AUX_META`: CST IBS/CBS, cClassTrib, NCM vigente, vínculo NCM×Classificação, CFOP, CST ICMS, CST PIS/COFINS (+ CNAE). Criar/editar/excluir com validação |
 | ⚖️ **Legislação** | LC 214/2025 + Decreto 12.955/2026 + Res. CGIBS 6/2026 + RICMS-CE + portais, leitura in-app via `ModalLegislacao`, deep-link `#art128` etc. |
 | 🖨️ **Emitente timbrado** | Razão social, CNPJ, logo, cor, rodapé — cabeçalho de todos os PDFs + modal de preview |
-| 🔄 **Atualização e bases** | GitHub Releases (Configurações → Atualização). Bases embutidas renovadas a cada release. Complementos online: Siscomex + CFF + BrasilAPI (com fallback manual). Backup/restauração JSON idempotente |
+| 🔄 **Atualização e bases** | GitHub Releases (Configurações → Atualização, com snapshot pré-update do banco). Bases embutidas renovadas a cada release. Complementos online: Siscomex + CFF + BrasilAPI (com fallback manual). Backup/restauração JSON das 27 stores (KEK e resumos fora por construção), idempotente, com validação prévia e snapshot pré-restore |
 | 🌙 **UX** | Tema claro/escuro, responsivo, sidebar recolhível (desktop) / drawer (móvel), transições em carrossel com respeito a `prefers-reduced-motion`, toasts 3,4 s, skeleton/count-up, aceite local no primeiro uso, fundo global animado |
 
 > ⚠️ **SPED Fiscal — nota de honestidade (mantida):** o motor existe (`src/infrastructure/sped/`: EFD ICMS/IPI C100/C170/C190 + Contribuições, detecção com rejeição explicada, modo resumo C190, análise de saídas, testes), mas **não há tela “SPED” no menu**. A importação com UI é a de **XML de NF-e**. Referência legada em `docs/SPEC-LOGICA-NEGOCIO.md`.
@@ -143,6 +144,7 @@ npm test
 npm run dist        # build completo + instalador da plataforma atual
 npm run dist:win    # NSIS (.exe) + Portable
 npm run dist:mac    # DMG + ZIP (x64 + arm64)
+npm run dist:linux  # AppImage
 ```
 
 Artefatos em `./release/` (ignorado no git):
@@ -152,7 +154,7 @@ Artefatos em `./release/` (ignorado no git):
 | `AurumTaxNCM-Setup-<versão>-win-x64.exe` | Instalador NSIS (PT-BR, por usuário, atalho + desinstalador) |
 | `AurumTaxNCM-Portatil-<versão>-win-x64.exe` | Versão portátil (sem instalar) |
 
-O instalador leva **só o app**: interface + base tributária embutida + índice lexical + grafo fiscal. Modelo LLM **não** é mais empacotado. `.planning/`, `docs/`, `tests/`, `scripts/` ficam de fora por regra explícita no `build.files`. Dados do usuário (XMLs, IndexedDB) vivem em `%APPDATA%` e sobrevivem a atualizações.
+O instalador leva **só o app**: interface + base tributária embutida + índice lexical + grafo fiscal. Modelo LLM **não** é mais empacotado. `.planning/`, `docs/`, `tests/`, `scripts/` ficam de fora por regra explícita no `build.files`. Dados do usuário (XMLs, SQLite `aurum.db`) vivem em `%APPDATA%` e sobrevivem a atualizações.
 
 ---
 
@@ -324,7 +326,7 @@ aurum-tax-ncm/
 │   │                    #  CEST, hierarquia fiscal, vocabulários, preditivo…
 │   ├── application/     # casos de uso (produtos, empresas, lote, backup, CFF/Siscomex,
 │   │                    #  NFe insights/relatório/apuração, Simples, reclassificação…)
-│   ├── infrastructure/  # Dexie/IndexedDB, base, parsers (lote/SPED/NFe),
+│   ├── infrastructure/  # SQLite/Prisma, base, parsers (lote/SPED/NFe),
 │   │                    #  CFOP/curadoria, PDF/CSV, CFF/Siscomex/BrasilAPI, bridge IPC
 │   ├── store/           # Zustand (ui com 10 ViewId, sessão, calculadora, consulta,
 │   │                    #  lote, nfe, produtos, base, ia, dialogo, fundo, novidades…)
@@ -344,15 +346,15 @@ aurum-tax-ncm/
 └── release/             # instaladores gerados (ignorado no git)
 ```
 
-Arquitetura: **React + Clean Architecture** — `domain` (regras puras) → `application` (casos de uso) → `infrastructure` (Dexie, parsers, PDF) → `pages/ui` (apresentação). Paridade com a v1 documentada em [`docs/SPEC-LOGICA-NEGOCIO.md`](./docs/SPEC-LOGICA-NEGOCIO.md). `src/simples/` segue **isolado de propósito** (matemática própria das planilhas, sem importar o motor IBS/CBS); `src/simples-projection/` é **aditivo** (nunca toca `simples/`).
+Arquitetura: **React + Clean Architecture** — `domain` (regras puras) → `application` (casos de uso) → `infrastructure` (SQLite/Prisma, parsers, PDF) → `pages/ui` (apresentação). Paridade com a v1 documentada em [`docs/SPEC-LOGICA-NEGOCIO.md`](./docs/SPEC-LOGICA-NEGOCIO.md). `src/simples/` segue **isolado de propósito** (matemática própria das planilhas, sem importar o motor IBS/CBS); `src/simples-projection/` é **aditivo** (nunca toca `simples/`).
 
 ### Stack (atual, sem LLM em runtime)
 
 - **Desktop:** Electron 44 + electron-builder (NSIS PT-BR, DMG, AppImage)
 - **Front:** React 19, Vite 8 (`base: './'` p/ file://), TailwindCSS 4, Zustand 5, Framer Motion, Chart.js
-- **Dados:** Dexie 4 (IndexedDB `aurum_tax_ncm_v1`), XLSX (SheetJS), pdfmake, fast-xml-parser
+- **Dados:** SQLite via Prisma 6 (`aurum.db` em userData, IPC no Electron), XLSX (SheetJS), pdfmake, fast-xml-parser
 - **Busca local:** índice lexical próprio + grafo fiscal (FTS BM25 + HNSW + 2-hops + PageRank, fallback bit-idêntico)
-- **Qualidade:** TypeScript strict, Vitest + jsdom + fake-indexeddb, esbuild, ofuscação + verificação de build
+- **Qualidade:** TypeScript strict, Vitest + SQLite/Prisma (banco por arquivo), esbuild, ofuscação + verificação de build
 
 ### Dados / base tributária
 
@@ -381,7 +383,7 @@ Coloque os arquivos em `bases-fonte/` com os nomes exatos e rode `npm run base` 
 Não para o uso diário. Só legislação externa, sync Siscomex/CFF/BrasilAPI e verificação de atualização usam rede — tudo com fallback offline/manual.
 
 **Meus dados saem da máquina?**
-Não. Todo o processamento é local (IndexedDB no Electron/navegador). Não há backend. O motor SPED roda localmente; a importação com UI hoje é a de **XML de NF-e**.
+Não. Todo o processamento é local (SQLite no processo main do Electron). Não há backend. O motor SPED roda localmente; a importação com UI hoje é a de **XML de NF-e**.
 
 **A IA funciona sem internet / sem baixar modelo?**
 Sim — e sem modelo: a classificação atual é **determinística e local** (léxico + resolvedor + grafo). Nada é baixado, nada sai da máquina. O índice é reconstruído por hash do `MANIFEST.json` quando a base muda.
@@ -393,7 +395,7 @@ Na Consulta você vê os N cards; no Lote você escolhe no select. No XML o sist
 Sim: `npm run dev:web` ou sirva `dist/` após `npm run build`. O Electron adiciona janela nativa, menu e instalador.
 
 **Onde ficam meus XMLs e meu banco?**
-XMLs em `%APPDATA%/Aurum Tax NCM/xml/<cnpj>/<chave>.xml`; banco (empresas, produtos, auxiliares) no IndexedDB local. Nada se perde ao atualizar.
+XMLs em `%APPDATA%/Aurum Tax NCM/xml/<cnpj>/<chave>.xml`; banco (empresas, produtos, auxiliares) no SQLite local (`aurum.db`). Nada se perde ao atualizar.
 
 **Como recebo tabelas novas?**
 Junto com a atualização do programa (**Configurações → Atualização**). Como complemento, o app sincroniza a tabela Siscomex e as tabelas CFF quando há internet (alguns endpoints CFF exigem certificado ICP-Brasil — baixe o JSON no portal e importe manualmente).

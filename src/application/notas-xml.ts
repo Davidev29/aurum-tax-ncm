@@ -28,7 +28,7 @@ import type { NotaXmlBruta } from '@/infrastructure/nfe/tipos'
  * perfil dele (`listarNotas` filtra por `empresaId`), e o cadastro futuro do
  * contribuinte adota as notas automaticamente.
  *
- * `0` nunca colide com `++id` do Dexie (começa em 1).
+ * `0` nunca colide com `++id` do SQLite (começa em 1).
  */
 export const EMPRESA_ORFA_ID = 0
 
@@ -421,7 +421,11 @@ export async function listarNotas(empresaId: number, filtros: FiltrosNfe): Promi
     const { inicio, fim } = filtros
     col = col.and((n) => noPeriodo(n.dataEmissao, inicio, fim))
   }
-  const notas = await col.reverse().sortBy('dataEmissao')
+  // Ordenadas por emissão DESC (mais recentes primeiro): `sortBy` do motor é
+  // terminal ascendente, então ordena em JS aqui (D1 da auditoria SQLite).
+  const notas = (await col.toArray()).sort((a, b) =>
+    String(a.dataEmissao ?? '').localeCompare(String(b.dataEmissao ?? '')),
+  ).reverse()
 
   const texto = filtros.texto.trim().toLowerCase()
   const forn = filtros.fornecedor.trim().toLowerCase()
@@ -435,13 +439,16 @@ export async function listarNotas(empresaId: number, filtros: FiltrosNfe): Promi
   return notas.filter((n) => {
     if (forn && !`${n.emitNome} ${n.emitCnpj}`.toLowerCase().includes(forn)) return false
     if (!texto && !cfop && !cstIcms && !cct && !cstRef && !red) return true
-    return n.itensAnalisados.some((it) => {
+    // Linhas parciais podem ter `itensAnalisados` nulo ou itens sem
+    // classificação (nunca derruba o filtro — só não casa).
+    return (n.itensAnalisados ?? []).some((it) => {
+      if (!it || typeof it !== 'object') return false
       if (cfop && it.cfop !== cfop) return false
       if (cstIcms && String(it.cstIcms ?? '').trim().toUpperCase() !== cstIcms) return false
       // Reforma: a tabela exibe o CST/cClassTrib destacado no XML primeiro e
       // o do sistema como fallback — o filtro casa com qualquer um dos dois.
-      if (cct && ![it.cClassTribIbsCbs, it.classificacao.cClassTrib].some((v) => String(v ?? '').includes(cct))) return false
-      if (cstRef && ![it.cstIbsCbs, it.classificacao.cst].some((v) => String(v ?? '').trim().toUpperCase() === cstRef)) return false
+      if (cct && ![it.cClassTribIbsCbs, it.classificacao?.cClassTrib].some((v) => String(v ?? '').includes(cct))) return false
+      if (cstRef && ![it.cstIbsCbs, it.classificacao?.cst].some((v) => String(v ?? '').trim().toUpperCase() === cstRef)) return false
       if (red && it.anexo !== red) return false
       if (!texto) return true
       return `${it.descricao} ${it.codProd} ${it.ncm}`.toLowerCase().includes(texto)

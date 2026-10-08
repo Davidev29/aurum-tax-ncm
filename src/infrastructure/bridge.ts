@@ -139,6 +139,19 @@ export interface VerificacaoAtualizacao {
   notas?: string | null
 }
 
+/**
+ * Ponte do banco SQLite (canal `db:op` → Prisma no processo main).
+ * Opcional: só existe no Electron com o canal registrado. Fora dele o motor
+ * usa Prisma direto (Node/testes) ou memória (navegador puro).
+ */
+export interface DbPonte {
+  op(
+    req: import('@/infrastructure/db/db-protocolo').DbOp,
+  ): Promise<import('@/infrastructure/db/motor').Registro | Array<import('@/infrastructure/db/motor').Registro> | number | string | null>
+  /** Snapshot pré-restore (`db:snapshot`): cópia best-effort, nunca lança. */
+  snapshotBanco?(): Promise<{ ok: boolean; caminho?: string; erro?: string }>
+}
+
 /** Eventos do auto-updater repassados pelo processo principal. */
 export type EventoAtualizacao =
   | { tipo: 'verificando' }
@@ -151,6 +164,11 @@ export type EventoAtualizacao =
 export interface AurumBridge {
   versao: string
   plataforma: string
+  /**
+   * Banco SQLite via processo main (canal `db:op`). Ausente fora do
+   * Electron — ver `motor.ts` (fallback Prisma direto / memória).
+   */
+  db?: DbPonte
   lerArquivo(caminho: string): Promise<string>
   lerArquivoBase64(caminho: string): Promise<string>
   escolherArquivo(filtros: { nome: string; extensoes: string[] }[]): Promise<BridgeEscolha | null>

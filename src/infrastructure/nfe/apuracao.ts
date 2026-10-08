@@ -216,7 +216,7 @@ export function apurarIbsCbs(notas: EntradaApuracao[]): ApuracaoIbsCbs {
           }
         }
         if (vIbs + vCbs + sIbs + sCbs <= 0.005 && ibs + cbs > 0.005) {
-          // Itens sem valores discriminados (stubs/legado): o total da nota
+          // Itens sem valores discriminados (sem detalhamento): o total da nota
           // segue o efeito dominante para não perder o débito.
           if (temSem && !temVenda) {
             sIbs = ibs
@@ -311,7 +311,7 @@ export function apurarIbsCbs(notas: EntradaApuracao[]): ApuracaoIbsCbs {
             baseEfetiva = cent(n.valorTotal)
           }
         } else if (infoIbs + infoCbs + semIbs + semCbs + imobIbs + imobCbs <= 0.005 && ibs + cbs > 0.005) {
-          // Itens sem valores discriminados (stubs/legado): o total da nota
+          // Itens sem valores discriminados (sem detalhamento): o total da nota
           // segue o efeito dominante para não perder os valores.
           if (temSem && !temGera && !temImob) {
             semIbs = ibs

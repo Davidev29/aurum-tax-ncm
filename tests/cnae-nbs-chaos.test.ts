@@ -17,7 +17,6 @@
  * nenhuma dependência de rede. NBS sem vínculo oficial cai na regra geral
  * (`semLastro: true`, redução 0 — nunca redução inventada).
  */
-import 'fake-indexeddb/auto'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -441,22 +440,23 @@ describe('chaos-09 — preserva (regressão zero)', () => {
     ).not.toBe('cnae')
   })
 
-  it('caso 18 — rollback v13→v14: migração aditiva, stores antigas intactas', async () => {
-    expect(DB_VERSION).toBe(14)
+  it('caso 18 — schema único SQLite: stores Phase 9 intactas, sem cadeia Dexie', async () => {
+    expect(DB_VERSION).toBe(1)
     expect(STORES.CNAE_NBS).toBe('cnaeNbs')
     expect(STORES.LC_NBS).toBe('lcNbs')
     expect(STORES.CLASS_CONSOLIDADA).toBe('classificacoesConsolidadas')
     expect(STORES.GRAFOMETA).toBe('grafometa')
-    // Stores v13 (Phase 9) seguem povoadas junto da v14 — nenhum `clear()`.
+    // Stores Phase 9 seguem povoadas junto das demais — nenhum `clear()` destrutivo.
     expect(await db.cnae.count()).toBeGreaterThan(0)
     expect(await db.cnaeNbs.count()).toBeGreaterThan(0)
     expect(await db.classificacoesConsolidadas.count()).toBeGreaterThan(0)
     const schema = readFileSync(
-      path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'infrastructure', 'db', 'schema.ts'),
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'prisma', 'schema.prisma'),
       'utf8',
     )
-    expect(schema).toContain('this.version(13)')
-    expect(schema).toContain('this.version(DB_VERSION)')
+    expect(schema).toContain('model CnaeNbsLink')
+    expect(schema).toContain('model GrafoMeta')
+    expect(schema).not.toContain('this.version(')
   })
 
   it('caso 19 — base ausente degrada gracioso: nunca lança, vira `cnae-desconhecido` honesto', async () => {

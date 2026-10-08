@@ -9,7 +9,7 @@
  * O modal "NCMs analisados" marca a referência preferida da busca com selo +
  * linha cintilante em espectro (`LinhaPreferidaAurumAI`).
  */
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
 import { fmtNbs, fmtNcm, fmtPct, norm } from '@/domain/services/format'
 import { Modal, Pill } from './kit'
@@ -622,18 +622,4 @@ export function ModalSimulacaoIA({
       {nota ? <p className="text-[11px] text-slate-500 dark:text-slate-400">{nota}</p> : null}
     </Modal>
   )
-}
-
-/* -------------------------------------------------- estado local dos modais -- */
-
-export type ModalConsultaPremium = 'ncms' | 'raciocinio' | 'auditoria' | 'fiscal' | 'simulacao' | null
-
-export function useModalPremium() {
-  const [qual, setQual] = useState<ModalConsultaPremium>(null)
-  return {
-    qual,
-    abrir: (m: Exclude<ModalConsultaPremium, null>) => setQual(m),
-    fechar: () => setQual(null),
-    aberto: (m: Exclude<ModalConsultaPremium, null>) => qual === m,
-  }
 }

@@ -6,7 +6,6 @@
  *   do sistema, ganha sugestão preditiva (top-3) a título INFORMATIVO;
  * - nunca inventa código; nunca é decisão final (`apenasInformativo: true`).
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { importarBase } from '@/infrastructure/base/base-service'

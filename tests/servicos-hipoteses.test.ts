@@ -6,7 +6,6 @@
  * O matcher encontra esses benefícios pelo texto do CNAE — como hipótese
  * a verificar, nunca como vínculo inventado.
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { importarBase } from '@/infrastructure/base/base-service'

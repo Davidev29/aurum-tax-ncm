@@ -2,7 +2,7 @@
  * Aurum AI — camada de DADOS (clientes ↔ XML, vice-versa).
  *
  * A IA antes só conhecia NCM/NBS/CNPJ-BrasilAPI. Este módulo dá a ela
- * leitura real do banco local (Dexie), sempre READ-ONLY:
+ * leitura real do banco local (SQLite), sempre READ-ONLY:
  * - `extrairFiltrosDados` (puro): entende a pergunta em PT livre e extrai
  *   cliente, fornecedor, produto, NCM, CFOP, CST, cClassTrib, redução, anexo,
  *   direção (compra/venda), período e flags (diferido, só-Simples).

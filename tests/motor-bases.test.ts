@@ -5,7 +5,6 @@
  * classificação: importa referência CFF + vínculos + nomenclatura e resolve
  * um NCM pelo motor único, com os mesmos joins da produção.
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { importarBase } from '@/infrastructure/base/base-service'
 import { anexosDoNcm, anexosNegadosPara, anexosParaNcms, locaisOperacao, regrasCreditoPresumido } from '@/infrastructure/base/info-adicional'

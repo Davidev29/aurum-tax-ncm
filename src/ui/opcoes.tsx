@@ -3,7 +3,7 @@
  * atalho “＋” para cadastrar um registro novo sem sair da tela.
  *
  * A lista é lida do cache do `useAuxiliares` e carregada sob demanda —
- * nenhum componente precisa conhecer a store Dexie por trás (Clean Code).
+ * nenhum componente precisa conhecer a store SQLite por trás (Clean Code).
  */
 import { useEffect } from 'react'
 import { AUX_META, type TipoAux } from '@/application/aux-meta'

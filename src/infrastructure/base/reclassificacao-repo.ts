@@ -70,8 +70,11 @@ export async function validarCombinacaoFiscal(
   cst: string,
   cClassTrib: string,
 ): Promise<string | null> {
-  const c = String(cst).trim()
-  const cc = String(cClassTrib).trim()
+  // Forma canônica com zeros à esquerda (o usuário digita `5`/`123`; a base
+  // usa `005`/`000123` — mesma normalização do `idCstCct` dos auxiliares).
+  if (!String(cst).trim() || !String(cClassTrib).trim()) return 'Escolha a CST e a cClassTrib.'
+  const c = String(cst).replace(/\D/g, '').padStart(3, '0')
+  const cc = String(cClassTrib).replace(/\D/g, '').padStart(6, '0')
   if (!c || !cc) return 'Escolha a CST e a cClassTrib.'
   try {
     const [cstRow, cctRow] = await Promise.all([
@@ -99,8 +102,8 @@ export async function salvarReclassificacaoManual(
   const anterior = await buscarReclassificacaoManual(ncm)
   const manual: ReclassificacaoManual = {
     ncm,
-    cst: e.cst.trim(),
-    cClassTrib: e.cClassTrib.trim(),
+    cst: String(e.cst).replace(/\D/g, '').padStart(3, '0'),
+    cClassTrib: String(e.cClassTrib).replace(/\D/g, '').padStart(6, '0'),
     descricao: e.descricao.trim(),
     fonteDescricao: e.fonteDescricao.trim(),
     fonteUrl: e.fonteUrl.trim(),

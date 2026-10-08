@@ -159,7 +159,7 @@ export type FonteLinkCnaeNbs = 'por_codigo' | 'triangulacao'
  * template consolidado, não no link.
  */
 export interface CnaeNbsLink {
-  /** Chave `++id` (auto-incremento, Dexie). */
+  /** Chave `++id` (auto-incremento). */
   id?: number
   /** CNAE 7 dígitos (`0161001`); índice de busca. */
   cnae7: string
@@ -178,7 +178,7 @@ export interface CnaeNbsLink {
  * `''` — nunca participam de join, só de auditoria/descrição).
  */
 export interface LcNbsRelation {
-  /** Chave `++id` (auto-incremento, Dexie). */
+  /** Chave `++id` (auto-incremento). */
   id?: number
   /** LC 116 (`01.01`); índice de busca. */
   lc: string

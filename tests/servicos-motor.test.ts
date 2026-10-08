@@ -1,7 +1,6 @@
 /**
  * Phase 7 — motor NBS + determinístico + GATE Aurum AI de serviços.
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { importarBase } from '@/infrastructure/base/base-service'

@@ -1,0 +1,481 @@
+// Prisma schema — Aurum Tax NCM (SQLite).
+//
+// Fonte de verdade do banco local. Substitui o Dexie/IndexedDB (v14):
+// banco novo, sem migração de dados legados (decisão do projeto).
+// A validação de escrita acontece em duas camadas:
+//   1) Prisma (tipos, NOT NULL, @unique, @id, @default) — fail-closed;
+//   2) `src/infrastructure/db/validacao.ts` (regras de domínio: CNPJ/DV,
+//      NCM 8 dígitos, NBS 9, CEST 7, enums) — chamada em todo put/bulkPut.
+//
+// Diretrizes do schema:
+// - chaves primárias espelham os keyPaths do Dexie (mesma semântica);
+// - listas/objetos aninhados viram Json (SQLite/Turso-safe);
+// - índices cobrem exatamente os campos usados nos `where()` do código.
+
+generator client {
+  provider = "prisma-client-js"
+  // Motores para todos os alvos do electron-builder: o build é feito no
+  // Windows mas empacota também mac (x64+arm64). Sem isto, `dist:mac`
+  // levaria só o `.node` do Windows e o Prisma falharia no macOS.
+  binaryTargets = ["native", "windows", "darwin", "darwin-arm64"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Vínculo NCM × CST × cClassTrib da Reforma (store `ncm`, keyPath `id`).
+// Colunas descritivas são nuláveis: a tela Auxiliares grava parciais
+// (só `codigo`+`cClassTrib`+`descricao` no cadastro rápido) — paridade com o
+// Dexie, que persistia os campos ausentes como `undefined`.
+model VinculoNcm {
+  id              String  @id
+  codigo          String
+  codigoFormatado String?
+  cst             String?
+  cClassTrib      String?
+  baseLegal       String?
+  reducao         Float?
+  aliquotaIBS     Float?
+  aliquotaCBS     Float?
+  descricao       String?
+  documentos      String?
+
+  @@index([codigo])
+  @@index([cst])
+  @@index([cClassTrib])
+}
+
+// Vínculo NBS 9 dígitos (store `nbs`, keyPath `id`).
+model VinculoNbs {
+  id          String  @id
+  codigo      String
+  cst         String?
+  cClassTrib  String?
+  baseLegal   String?
+  reducao     Float?
+  aliquotaIBS Float?
+  aliquotaCBS Float?
+  descricao   String?
+  documentos  String?
+
+  @@index([codigo])
+  @@index([cClassTrib])
+}
+
+// Tabela auxiliar CST IBS/CBS (store `cst`, keyPath `codigo`).
+// Indicadores com @default(false): o formulário manda checkbox como
+// booleano, mas registros antigos/parciais podem omitir.
+model TabelaCst {
+  codigo                  String  @id
+  descricao               String?
+  indIBSCBS               Boolean @default(false)
+  indIBSCBSMono           Boolean @default(false)
+  indReducao              Boolean @default(false)
+  indDiferimento          Boolean @default(false)
+  indTransferenciaCredito Boolean @default(false)
+  docs                    Json?
+}
+
+// Tabela auxiliar cClassTrib (store `cstClassTrib`, keyPath `id` = `cst|cClassTrib`).
+model TabelaCstClassTrib {
+  id             String  @id
+  cst            String
+  cClassTrib     String
+  nome           String
+  descricao      String?
+  lcRedacao      String?
+  lcRef          String?
+  tipoAliquota   String?
+  pRedIBS        Float?
+  pRedCBS        Float?
+  indRedutorBC   Float?
+  indTribRegular Float?
+  indCredPres    Float?
+  indMono        Float?
+  indMonoReten   Float?
+  indMonoRet     Float?
+  indMonoDif     Float?
+  creditoPara    String?
+  inicioVigencia String?
+  fimVigencia    String?
+  atualizadoEm   String?
+
+  @@index([cst])
+  @@index([cClassTrib])
+}
+
+// Referência oficial CST × cClassTrib (store `referencia`, keyPath `id`).
+model ReferenciaCClassTrib {
+  id                         String  @id
+  cst                        String
+  cstDescricao               String
+  cClassTrib                 String
+  descricao                  String
+  pRedIBS                    Float
+  pRedCBS                    Float
+  tipoAliquota               String?
+  anexo                      String?
+  urlLegislacao              String?
+  exigeTributacao            Boolean
+  reducaoBC                  Boolean
+  reducaoAliquota            Boolean
+  transferenciaCredito       Boolean
+  diferimento                Boolean
+  monofasica                 Boolean
+  creditoPresumidoZFM        Boolean
+  ajusteCompetencia          Boolean
+  tributacaoRegular          Boolean
+  creditoPresumido           Boolean
+  estornoCredito             Boolean
+  monoNormal                 Boolean
+  monoRetencao               Boolean
+  monoRetida                 Boolean
+  monoDiferimentoCombustivel Boolean
+  simplesReceitaBruta        String?
+  regimeContribuicaoSocial   String?
+  impostoBensServicos        String?
+  docs                       Json
+
+  @@index([cst])
+  @@index([cClassTrib])
+}
+
+// Nomenclatura NCM/SH vigente (store `ncmNomenclatura`, keyPath `codigo`).
+// `codigoOriginal`/`descricao` são nuláveis: o formulário da tela
+// Auxiliares nem sempre os envia (paridade com o Dexie).
+model NomenclaturaNcm {
+  codigo         String  @id
+  codigoOriginal String?
+  descricao      String?
+  dataInicio     String?
+  dataFim        String?
+  ato            String?
+  atoFim         String?
+}
+
+// Empresas do usuário (store `empresas`, `++id`).
+model Empresa {
+  id               Int     @id @default(autoincrement())
+  razaoSocial      String
+  cnpj             String
+  fantasia         String
+  criadoEm         String
+  ie               String?
+  im               String?
+  regimeTributario String?
+  endereco         String?
+  cidade           String?
+  uf               String?
+  cep              String?
+  telefone         String?
+  email            String?
+
+  @@index([cnpj])
+  @@index([razaoSocial])
+}
+
+// Produtos do usuário (store `produtos`, `++id`).
+model Produto {
+  id                    Int      @id @default(autoincrement())
+  empresaId             Int?
+  codigo                String
+  nome                  String
+  ncm                   String
+  cfop                  String
+  cstIcms               String
+  pis                   String
+  cofins                String
+  quantidade            Float
+  valorUnitario         Float
+  cstReforma            String
+  cClassTrib            String
+  regraGeral            Boolean
+  classificacaoManual   Boolean?
+  classificacaoSnapshot Json
+  baseLegal             String?
+  criadoEm              String
+  atualizadoEm          String
+
+  @@index([empresaId])
+  @@index([ncm])
+}
+
+// Registro genérico da store `meta` (keyPath `chave`).
+model Meta {
+  chave        String  @id
+  valor        Json?
+  data         String?
+  arquivo      String?
+  total        Int?
+  quando       String?
+  atualizadoEm String?
+}
+
+// Tabelas auxiliares CFOP / CST-ICMS / CST-PIS-COFINS (keyPath `codigo`).
+model Cfop {
+  codigo    String  @id
+  descricao String?
+  tipo      String?
+}
+
+model CstIcms {
+  codigo    String  @id
+  descricao String?
+  tipo      String?
+}
+
+model CstPisCofins {
+  codigo    String  @id
+  descricao String?
+  tipo      String?
+}
+
+// Notas fiscais importadas de XML (store `nfeNotas`, `++id`).
+// Itens + análise embutidos como Json; colunas indexadas espelham os filtros.
+model NfeNota {
+  id                    Int     @id @default(autoincrement())
+  empresaId             Int
+  chave                 String
+  numero                String
+  serie                 String
+  modelo                String
+  natOp                 String
+  dataEmissao           String
+  emitCnpj              String
+  emitNome              String
+  emitCrt               String
+  emitIe                String
+  emitIm                String
+  emitEndereco          String
+  emitCidade            String
+  emitUf                String
+  destDoc               String
+  destNome              String
+  destIe                String
+  valorProdutos         Float
+  valorTotal            Float
+  totalIbsXml           Float?
+  totalCbsXml           Float?
+  totalCreditoIbsCbsXml Float?
+  arquivo               String?
+  xmlConteudo           String?
+  refIBS                Float
+  refCBS                Float
+  totalIBS              Float
+  totalCBS              Float
+  totalTributos         Float
+  importadoEm           String
+  itens                 Json?
+  itensAnalisados       Json?
+  direcao               String
+
+  @@unique([empresaId, chave])
+  @@index([empresaId])
+  @@index([dataEmissao])
+  @@index([emitCnpj])
+  @@index([chave])
+  @@index([direcao])
+}
+
+// Reclassificações manuais do usuário por NCM (keyPath `ncm`).
+model ReclassificacaoManual {
+  ncm            String @id
+  cst            String
+  cClassTrib     String
+  descricao      String
+  fonteDescricao String
+  fonteUrl       String
+  criadoEm       String
+  atualizadoEm   String
+}
+
+// Classificação de produtos por DFe (store `classificacaoProduto`, keyPath `id`).
+model ClassificacaoProdutoSistema {
+  id             String   @id
+  sistema        String
+  cClassTrib     String
+  descricao      String?
+  permitido      Boolean?
+  confianca      String
+  flags          Json
+  inicioVigencia String?
+  fimVigencia    String?
+  sincronizadoEm String
+
+  @@index([sistema])
+  @@index([cClassTrib])
+}
+
+// Anexos por NCM/NBS (store `anexos`, keyPath `id`).
+model AnexoNcm {
+  id              String  @id
+  codigo          String?
+  tipo            String?
+  permissao       String?
+  nroAnexo        Int
+  nroItemAnexoLei Int?
+  descrAnexo      String
+  descrItemAnexo  String?
+  descrCondicao   String?
+  descrExcecao    String?
+  observacao      String?
+  inicioVigencia  String?
+  fimVigencia     String?
+
+  @@index([codigo])
+  @@index([nroAnexo])
+}
+
+// Catálogo de produtos por DFe (store `produtosDfe`, keyPath `id`).
+model ProdutoDfe {
+  id             String  @id
+  sistema        String
+  codClassProd   String
+  codGrupo       String?
+  descrGrupo     String?
+  descricao      String
+  tipoPrestacao  String?
+  flags          Json
+  sincronizadoEm String
+
+  @@index([sistema])
+  @@index([codClassProd])
+}
+
+// Log imutável de auditoria (store `audit_log`, `++id`, append-only).
+model AuditLog {
+  id       Int    @id @default(autoincrement())
+  quando   String
+  tabela   String
+  chave    String
+  operacao String
+  autor    String
+  antes    Json?
+  depois   Json?
+
+  @@index([quando])
+  @@index([tabela])
+}
+
+// CEST — tabela informativa (keyPath `codigo`, 7 dígitos).
+model TabelaCest {
+  codigo    String  @id
+  descricao String?
+  ncm       String?
+
+  @@index([ncm])
+}
+
+// Feedback "Não é esse" da Sugestão IA (store `ia_feedback`, `++id`).
+model IaFeedback {
+  id        Int      @id @default(autoincrement())
+  quando    String
+  descricao String
+  via       String
+  decisao   String?
+  confianca Float
+  motivo    String?
+  mock      Boolean?
+
+  @@index([quando])
+}
+
+// CNAE × Anexo Simples (store `cnae`, keyPath `codigo7`).
+model CnaeAnexo {
+  codigo7         String  @id
+  codigoFormatado String
+  descricao       String
+  situacao        String
+  anexos          Json
+  fatorR          Boolean
+
+  @@index([descricao])
+}
+
+// Cache de consultas por CNPJ (store `consultasCnpj`, keyPath `cnpj`).
+model ConsultaCnpj {
+  cnpj             String   @id
+  razaoSocial      String
+  fantasia         String
+  porte            String?
+  situacao         String?
+  opcaoSimples     Boolean?
+  cnaePrincipal    String?
+  cnaesSecundarios Json
+  quando           String
+}
+
+// Conversas da Aurum AI por emitente (keyPath `conversaId`).
+model ConversaEmitente {
+  conversaId     String @id
+  emitenteId     String
+  empresaAtivaId Int?
+  titulo         String
+  mensagens      Json
+  updatedAt      String
+  createdAt      String
+
+  @@index([emitenteId])
+  @@index([updatedAt])
+}
+
+// Links CNAE → NBS da fonte ponte (store `cnaeNbs`, `++id`).
+model CnaeNbsLink {
+  id    Int    @id @default(autoincrement())
+  cnae7 String
+  cnae  String
+  nbs   String
+  fonte String
+
+  @@unique([cnae7, nbs])
+  @@index([cnae7])
+  @@index([nbs])
+}
+
+// Relações LC 116 → NBS (store `lcNbs`, `++id`).
+model LcNbsRelation {
+  id           Int    @id @default(autoincrement())
+  lc           String
+  nbs          String
+  cct          String
+  descricaoLc  String
+  descricaoNbs String
+  descricaoCct String
+  onerosa      String
+  exterior     String
+  indop        String
+  local        String
+
+  @@index([lc])
+  @@index([nbs])
+}
+
+// Templates consolidados por CNAE (keyPath `cnae7`).
+model ClassificacaoConsolidada {
+  cnae7             String  @id
+  codigoFormatado   String
+  descricao         String
+  fonteDescricao    String
+  anexoSimples      Json
+  situacao          String
+  fatorR            Boolean
+  vedacoes          Json
+  nbsVinculadas     Json
+  beneficiosReforma Json
+  divergencia       Json?
+  estadoNbs         String
+}
+
+// Carimbo do grafo fiscal local (keyPath `id`, sempre 'atual').
+model GrafoMeta {
+  id       String @id
+  hash     String
+  versao   String
+  nodos    Int
+  arestas  Int
+  geradoEm String
+
+  @@index([hash])
+}

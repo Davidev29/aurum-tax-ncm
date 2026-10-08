@@ -5,7 +5,6 @@
  * `db.cnaeNbs` diretos. NBS sem vínculo oficial cai na regra geral
  * (`semLastro: true`, redução 0 — nunca redução inventada).
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { REF_DEFAULT } from '@/domain/constants'
 import { db } from '@/infrastructure/db/schema'

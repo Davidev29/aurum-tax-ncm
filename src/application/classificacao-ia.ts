@@ -174,7 +174,7 @@ async function selecionarAurumAILocal(
   )
   // Aprendizado com feedback: NCMs que o usuário já rejeitou ("Não é esse")
   // para a MESMA descrição perdem força — a IA não repete o erro.
-  // Best-effort: sem Dexie, segue sem demote. v2: import estático do schema.
+  // Best-effort: sem SQLite, segue sem demote. v2: import estático do schema.
   const rejeitados = new Set<string>()
   try {
     const { db } = await import('@/infrastructure/db/schema')

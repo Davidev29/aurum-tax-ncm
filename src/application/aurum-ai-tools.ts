@@ -139,7 +139,7 @@ export const PLANO_TOOL_CALLING: ToolSpec[] = [
     quandoUsar: 'intenção clientes: inventário do CADASTRO ("quais meus clientes?", "quantos clientes tenho?"). Lê Dexie empresas + movimento (qtd notas, base).',
     inputs: ['sem inputs (lista tudo) ou nome/CNPJ quando citado'],
     exemplo: ['"quais meus clientes?" → consultarClientes() + qtd notas por cliente', '"tem XML do cliente Padaria?" → delega a consultarDadosXml com filtro de cliente'],
-    guardrail: 'READ-ONLY Dexie; sem cadastro → orienta cadastrar via CNPJ + botão Empresas; nunca inventa cliente.',
+    guardrail: 'READ-ONLY SQLite; sem cadastro → orienta cadastrar via CNPJ + botão Empresas; nunca inventa cliente.',
     escreveNoSistema: false,
   },
   {

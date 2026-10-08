@@ -11,7 +11,7 @@ import type {
   VinculoNcm,
 } from '@/domain/entities'
 import { lerArquivoBase } from '../bridge'
-import { bulkPut, db, type GrafoMeta, type MetaRecord } from '../db/schema'
+import { bulkPut, db, INSERIR, type GrafoMeta, type MetaRecord } from '../db/schema'
 import { invalidarCacheBuscaTexto } from './classificacao-repo'
 import { fingerprintBase, type TipoBase } from './formatos'
 import {
@@ -156,6 +156,7 @@ export async function importarBase(
     onProgress('Gravando nomenclatura', 15)
     await bulkPut(db.ncmNomenclatura, itens, (f, t) =>
       onProgress('Gravando nomenclatura', 15 + Math.round((f / t) * 80)),
+      INSERIR,
     )
     await db.meta.put({
       chave: META_KEYS.IMPORTACAO_NOMENCLATURA,
@@ -190,17 +191,18 @@ export async function importarBase(
 
     if (cst.length) {
       onProgress('Gravando CST', 8)
-      await bulkPut(db.cst, cst)
+      await bulkPut(db.cst, cst, INSERIR)
     }
     if (cstct.length) {
       onProgress('Gravando cClassTrib', 18)
-      await bulkPut(db.cstClassTrib, cstct)
+      await bulkPut(db.cstClassTrib, cstct, INSERIR)
     }
     onProgress('Gravando NCM', 28)
     await bulkPut(db.ncm, ncm, (f, t) =>
       onProgress('Gravando NCM', 28 + Math.round((f / t) * 70)),
+      INSERIR,
     )
-    if (nbs.length) await bulkPut(db.nbs, nbs)
+    if (nbs.length) await bulkPut(db.nbs, nbs, INSERIR)
 
     await db.meta.put({ chave: META_KEYS.IMPORTACAO, data: agora, arquivo: nomeArquivo })
     onProgress('Finalizado', 100)
@@ -216,6 +218,7 @@ export async function importarBase(
     onProgress('Gravando referência', 30)
     await bulkPut(db.referencia, itens, (f, t) =>
       onProgress('Gravando referência', 30 + Math.round((f / t) * 65)),
+      INSERIR,
     )
     await db.meta.put({ chave: 'importacao_referencia', data: agora, arquivo: nomeArquivo, total: itens.length })
     onProgress('Finalizado', 100)
@@ -233,9 +236,10 @@ export async function importarBase(
     onProgress('Gravando referência', 20)
     await bulkPut(db.referencia, referencia, (f, t) =>
       onProgress('Gravando referência', 20 + Math.round((f / t) * 40)),
+      INSERIR,
     )
-    if (cst.length) await bulkPut(db.cst, cst)
-    if (cstClassTrib.length) await bulkPut(db.cstClassTrib, cstClassTrib)
+    if (cst.length) await bulkPut(db.cst, cst, INSERIR)
+    if (cstClassTrib.length) await bulkPut(db.cstClassTrib, cstClassTrib, INSERIR)
     await db.meta.put({ chave: META_KEYS.IMPORTACAO, data: agora, arquivo: nomeArquivo, total: referencia.length })
     await db.meta.put({ chave: 'importacao_referencia', data: agora, arquivo: nomeArquivo, total: referencia.length })
     invalidarCacheBuscaTexto()
@@ -253,6 +257,7 @@ export async function importarBase(
     onProgress('Gravando anexos', 20)
     await bulkPut(db.anexos, itens, (f, t) =>
       onProgress('Gravando anexos', 20 + Math.round((f / t) * 75)),
+      INSERIR,
     )
     await db.meta.put({ chave: META_BASES_CFF.ANEXOS, data: agora, arquivo: nomeArquivo, total: itens.length })
     onProgress('Finalizado', 100)
@@ -282,6 +287,7 @@ export async function importarBase(
     onProgress('Gravando CNAE', 20)
     await bulkPut(db.cnae, itens, (f, t) =>
       onProgress('Gravando CNAE', 20 + Math.round((f / t) * 75)),
+      INSERIR,
     )
     await db.meta.put({ chave: META_BASES_CFF.CNAE, data: agora, arquivo: nomeArquivo, total: itens.length })
     onProgress('Finalizado', 100)
@@ -298,6 +304,7 @@ export async function importarBase(
     onProgress('Gravando NBS', 20)
     await bulkPut(db.nbs, vinculos, (f, t) =>
       onProgress('Gravando NBS', 20 + Math.round((f / t) * 75)),
+      INSERIR,
     )
     await db.meta.put({ chave: META_BASES_CFF.NBS_SERVICOS, data: agora, arquivo: nomeArquivo, total: vinculos.length })
     onProgress('Finalizado', 100)
@@ -319,6 +326,7 @@ export async function importarBase(
     onProgress(`Gravando produtos (${sistema})`, 20)
     await bulkPut(db.produtosDfe, itens, (f, t) =>
       onProgress(`Gravando produtos (${sistema})`, 20 + Math.round((f / t) * 75)),
+      INSERIR,
     )
     await db.meta.put({ chave: `${META_BASES_CFF.PRODUTOS_DFE}_${sistema}`, data: agora, arquivo: nomeArquivo, total: itens.length })
     onProgress('Finalizado', 100)
@@ -353,17 +361,25 @@ export const ARQUIVOS_BASE = [
 ] as const
 
 /**
- * A base está **completa** quando tem vínculos NCM **e** a referência oficial
- * (`classificacao_tributaria.json`), que é o que habilita anexos, documentos e
- * chips de redução.
+ * A base está **completa** quando as 5 stores nucleares do reseed têm linhas:
+ * `ncm`, `referencia`, `cst`, `cstClassTrib` e `ncmNomenclatura` (as mesmas
+ * que `semearBaseEmbutida()` limpa e regrava).
  *
- * O banco legado (v2) foi criado antes da store `referencia` existir: ele tem
- * NCMs, mas nenhuma referência — e é justamente esse estado que manda ressemear
- * a base embutida na primeira abertura com a nova versão.
+ * Exigir as 5 (e não só `ncm` + `referencia`) dá auto-cura no boot: um seed
+ * interrompido entre tabelas (ex.: nomenclatura vazia) reprova o portão e
+ * cai no reseed total na próxima abertura, em vez de ficar mista para sempre.
+ *
+ * `cnae`/ponte seguem no top-up (Phase 7/9), fora deste portão, por desenho.
  */
 export async function baseCompleta(): Promise<boolean> {
-  const [ncm, referencia] = await Promise.all([db.ncm.count(), db.referencia.count()])
-  return ncm > 0 && referencia > 0
+  const [ncm, referencia, cst, cstClassTrib, nomenclatura] = await Promise.all([
+    db.ncm.count(),
+    db.referencia.count(),
+    db.cst.count(),
+    db.cstClassTrib.count(),
+    db.ncmNomenclatura.count(),
+  ])
+  return ncm > 0 && referencia > 0 && cst > 0 && cstClassTrib > 0 && nomenclatura > 0
 }
 
 /**
@@ -475,22 +491,22 @@ export async function semearBaseEmbutida(
     onProgress('Gravando', pctBase + Math.round((f / Math.max(t, 1)) * span))
 
   onProgress('Gravando referência', 46)
-  await bulkPut(db.referencia, referencia, reg(46, 6))
+  await bulkPut(db.referencia, referencia, reg(46, 6), INSERIR)
   onProgress('Gravando CST', 52)
-  await bulkPut(db.cst, cst)
+  await bulkPut(db.cst, cst, INSERIR)
   onProgress('Gravando cClassTrib', 56)
-  await bulkPut(db.cstClassTrib, cstct)
+  await bulkPut(db.cstClassTrib, cstct, INSERIR)
   onProgress('Gravando vinculações NCM', 60)
-  await bulkPut(db.ncm, ncm, reg(60, 20))
+  await bulkPut(db.ncm, ncm, reg(60, 20), INSERIR)
   onProgress('Gravando nomenclatura', 80)
-  await bulkPut(db.ncmNomenclatura, nomenclatura, reg(80, 18))
-  if (nbs.length) await bulkPut(db.nbs, nbs)
-  if (cnae.length) await bulkPut(db.cnae, cnae)
+  await bulkPut(db.ncmNomenclatura, nomenclatura, reg(80, 18), INSERIR)
+  if (nbs.length) await bulkPut(db.nbs, nbs, INSERIR)
+  if (cnae.length) await bulkPut(db.cnae, cnae, INSERIR)
   // Phase 9 — merge sem `clear()` em `db.cnae`/`db.nbs` (as derivadas foram
   // limpas acima no reseed total; aqui só grava).
-  if (linksCnaeNbs.length) await bulkPut(db.cnaeNbs, linksCnaeNbs)
-  if (relacoesLcNbs.length) await bulkPut(db.lcNbs, relacoesLcNbs)
-  if (consolidadas.length) await bulkPut(db.classificacoesConsolidadas, consolidadas)
+  if (linksCnaeNbs.length) await bulkPut(db.cnaeNbs, linksCnaeNbs, INSERIR)
+  if (relacoesLcNbs.length) await bulkPut(db.lcNbs, relacoesLcNbs, INSERIR)
+  if (consolidadas.length) await bulkPut(db.classificacoesConsolidadas, consolidadas, INSERIR)
   if (linksCnaeNbs.length || consolidadas.length) {
     await db.meta.put({
       chave: META_BASES_CFF.CNAE_NBS,
@@ -624,7 +640,7 @@ export async function completarStoresFase7(): Promise<boolean> {
         }
         const itens = normalizarCnaeAnexo(cnaeJson.itens ?? cnaeJson)
         if (itens.length) {
-          await bulkPut(db.cnae, itens)
+          await bulkPut(db.cnae, itens, INSERIR)
           await db.meta.put({
             chave: META_BASES_CFF.CNAE,
             data: new Date().toISOString(),
@@ -644,7 +660,7 @@ export async function completarStoresFase7(): Promise<boolean> {
         }
         const itens = normalizarNbs(reformaJson.nbs)
         if (itens.length) {
-          await bulkPut(db.nbs, itens)
+          await bulkPut(db.nbs, itens, INSERIR)
           completou = true
         }
       } catch {
@@ -664,7 +680,7 @@ export async function completarStoresFase7(): Promise<boolean> {
           const vistos = new Set(atuais.map((v) => `${v.codigo}|${v.cst}|${v.cClassTrib}`))
           const faltantes = oficiais.filter((v) => !vistos.has(`${v.codigo}|${v.cst}|${v.cClassTrib}`))
           if (faltantes.length) {
-            await bulkPut(db.nbs, faltantes)
+            await bulkPut(db.nbs, faltantes, INSERIR)
             completou = true
           }
         }
@@ -719,16 +735,16 @@ export async function completarStoresFase9(): Promise<boolean> {
       }
       const agora = new Date().toISOString()
       if (norm && nLinks === 0 && norm.links.length) {
-        await bulkPut(db.cnaeNbs, norm.links)
+        await bulkPut(db.cnaeNbs, norm.links, INSERIR)
         await db.meta.put({ chave: META_BASES_CFF.CNAE_NBS, data: agora, arquivo: 'base embutida (top-up Phase 9)', total: norm.links.length })
         completou = true
       }
       if (norm && nLc === 0 && norm.lcNbs.length) {
-        await bulkPut(db.lcNbs, norm.lcNbs)
+        await bulkPut(db.lcNbs, norm.lcNbs, INSERIR)
         completou = true
       }
       if (nTpl === 0 && itens.length) {
-        await bulkPut(db.classificacoesConsolidadas, itens)
+        await bulkPut(db.classificacoesConsolidadas, itens, INSERIR)
         await db.meta.put({ chave: META_BASES_CFF.CLASS_CONSOLIDADA, data: agora, arquivo: 'base embutida (top-up Phase 9)', total: itens.length })
         completou = true
       }
@@ -740,7 +756,7 @@ export async function completarStoresFase9(): Promise<boolean> {
 }
 
 /**
- * Completa o carimbo do grafo (Phase 10-01, Dexie v13 → v14).
+ * Completa o carimbo do grafo (Phase 10-01).
  *
  * Lê `grafo/MANIFEST.grafo.json` da base embutida e grava em `grafometa`
  * (`id: 'atual'`). Merge por `put`, nunca `clear()` — stores fiscais

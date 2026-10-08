@@ -140,7 +140,7 @@ describe('integração: diálogo do usuário (panorama → top produtos)', () =>
       totalTributos: 150, carga: 15, anexo: '0', observacoes: [],
     }
     await db.nfeNotas.add({
-      chave: 'a', numero: '1', serie: '1', modelo: '55', natOp: 'COMPRA',
+      chave: '1'.repeat(44), numero: '1', serie: '1', modelo: '55', natOp: 'COMPRA',
       dataEmissao: '2026-01-10', emitCnpj: '22222222000122', emitNome: 'NICOLAS ALENCAR VASCONCELOS',
       emitCrt: '3', emitIe: '', emitIm: '', emitEndereco: '', emitCidade: '', emitUf: 'SP',
       destDoc: '11111111000111', destNome: 'RR FRIOS LTDA', destIe: '',
@@ -150,7 +150,7 @@ describe('integração: diálogo do usuário (panorama → top produtos)', () =>
       importadoEm: new Date().toISOString(), itensAnalisados: [itemBase],
     } as never)
     await db.nfeNotas.add({
-      chave: 'b', numero: '2', serie: '1', modelo: '55', natOp: 'VENDA',
+      chave: '2'.repeat(44), numero: '2', serie: '1', modelo: '55', natOp: 'VENDA',
       dataEmissao: '2026-01-12', emitCnpj: '11111111000111', emitNome: 'RR FRIOS LTDA',
       emitCrt: '3', emitIe: '', emitIm: '', emitEndereco: '', emitCidade: '', emitUf: 'SP',
       destDoc: '33333333000133', destNome: 'CLIENTE FINAL', destIe: '',

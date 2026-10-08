@@ -91,7 +91,9 @@ export function mesclarEmpresa(base: Empresa, patch: Partial<Empresa>): Empresa 
 export async function cadastrarEmpresa(dados: DadosCadastroEmpresa): Promise<ResultadoEmpresa> {
   const razaoSocial = limpo(dados.razaoSocial)
   const cnpjDigitos = norm(dados.cnpj)
-  const cnpj = cnpjDigitos.length === 14 ? cnpjDigitos : limpo(dados.cnpj)
+  // Sem 14 dígitos não há CNPJ: cai no fluxo manual legado (`''`), em vez
+  // de gravar texto arbitrário que a validação do banco recusa (D1).
+  const cnpj = cnpjDigitos.length === 14 ? cnpjDigitos : ''
 
   if (cnpjDigitos.length === 14) {
     const existente = await buscarEmpresaPorCnpj(cnpjDigitos)
@@ -380,12 +382,16 @@ export async function importarEmpresas(file: File): Promise<{ total: number }> {
   const lote = await importarEmpresasDoArquivo(file)
   // Idempotente: quem já existe por CNPJ é mesclado, não duplicado.
   for (const item of lote) {
-    const cnpj = norm((item as Empresa).cnpj)
+    // CSV traz CNPJ mascarado (`fmtCnpj` no parser): normaliza para dígitos
+    // (ou `''` = linha manual) antes de gravar — o banco recusa máscara (D1).
+    const digitos = norm((item as Empresa).cnpj)
+    const normalizada = { ...(item as Empresa), cnpj: digitos.length === 14 ? digitos : '' } as Empresa
+    const cnpj = normalizada.cnpj
     if (cnpj.length === 14 && (await buscarEmpresaPorCnpj(cnpj))) {
       const existente = (await buscarEmpresaPorCnpj(cnpj))!
-      await db.empresas.put(mesclarEmpresa(existente, item as Empresa))
+      await db.empresas.put(mesclarEmpresa(existente, normalizada))
     } else {
-      await db.empresas.add(item as Empresa)
+      await db.empresas.add(normalizada)
     }
   }
   return { total: lote.length }

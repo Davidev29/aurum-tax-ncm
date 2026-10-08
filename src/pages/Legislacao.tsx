@@ -164,7 +164,7 @@ function CartaoLegislacao({
             try {
               void navigator.clipboard?.writeText(item.url)?.catch?.(() => undefined)
             } catch {
-              /* clipboard indisponível (http/Electron antigo) — ignora */
+              /* clipboard indisponível — ignora */
             }
           }}
           title="Copiar link oficial"

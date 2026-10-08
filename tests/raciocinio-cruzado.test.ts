@@ -7,7 +7,6 @@
  * Caso-mãe: "Temos tributação para tangerina?" caía em NÃO SEI mesmo com o
  * NCM 0805.21.00 na base (ruído "temos/tributação" quebrava o AND).
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { detectarIntencaoChat, classificarDominio, extrairNucleoBusca } from '@/domain/services/detector-chat'
 import { responderChat } from '@/application/aurum-ai-chat'

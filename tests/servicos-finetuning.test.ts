@@ -6,7 +6,6 @@
  * - sinais por setor + perguntas de refino + ambiguidades (raciocínio);
  * - pack de conhecimento (servicos-nbs.json + frases-modelo-servicos.json).
  */
-import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
 import { SINONIMOS_SERVICOS, expandirSinonimoServico } from '@/domain/services/vocabulario-servicos'
 import {

@@ -981,38 +981,18 @@ linhas sem razão são puladas; vazio → `'Nenhuma empresa válida encontrada.'
 
 ## 9.3 Seeds
 
-**R9.6** — `seedTabelasAuxiliares()` (l.777–785): sai se `meta('seed_v2_done').valor`; caso contrário conta cada store e grava **somente as vazias**; por fim grava `{chave:'seed_v2_done', valor:true, quando}`.
+**R9.6** — `seedTabelasAuxiliares()` (l.777–785): sai se `meta('seed_v2_done').valor`; caso contrário conta cada store e **complementa os códigos faltantes sem sobrescrever o que já existe**; por fim grava `{chave:'seed_v2_done', valor:true, quando}`.
 
-### `SEED_CFOP` — 24 registros (l.768)
+### `SEED_CFOP` — 619 registros (cura completa a partir de `bases-fonte/cfop.json`)
 
-| Código | Tipo | Descrição |
-|---|---|---|
-| 1101 | Entrada | Compra para industrialização ou produção rural |
-| 1102 | Entrada | Compra para comercialização |
-| 1551 | Entrada | Compra de bem para o ativo imobilizado |
-| 1949 | Entrada | Outra entrada de mercadoria ou prestação de serviço não especificada |
-| 2101 | Entrada | Compra para industrialização ou produção rural (interestadual) |
-| 2102 | Entrada | Compra para comercialização (interestadual) |
-| 5101 | Saída | Venda de produção do estabelecimento |
-| 5102 | Saída | Venda de mercadoria adquirida ou recebida de terceiros |
-| 5103 | Saída | Venda de produção do estabelecimento, efetuada fora do estabelecimento |
-| 5104 | Saída | Venda de mercadoria adquirida ou recebida de terceiros, efetuada fora do estabelecimento |
-| 5105 | Saída | Venda de produção do estabelecimento que não deva por ele transitar |
-| 5106 | Saída | Venda de mercadoria adquirida ou recebida de terceiros, que não deva por ele transitar |
-| 5405 | Saída | Venda de mercadoria adquirida ou recebida de terceiros, em operação sujeita a ST |
-| 5910 | Saída | Remessa em bonificação, doação ou brinde |
-| 5915 | Saída | Remessa para conserto ou reparo |
-| 5916 | Saída | Retorno de mercadoria recebida para conserto ou reparo |
-| 5917 | Saída | Remessa para demonstração |
-| 5949 | Saída | Outra saída de mercadoria ou prestação de serviço não especificado |
-| 6101 | Saída | Venda de produção do estabelecimento (interestadual) |
-| 6102 | Saída | Venda de mercadoria adquirida ou recebida de terceiros (interestadual) |
-| 6107 | Saída | Venda de produção do estabelecimento, destinada a não contribuinte |
-| 6108 | Saída | Venda de mercadoria a não contribuinte (interestadual) — *literal: "Venda de mercadoria adquirida ou recebida de terceiros, destinada a não contribuinte"* |
-| 7101 | Saída | Venda de produção do estabelecimento (exterior) |
-| 7102 | Saída | Venda de mercadoria adquirida ou recebida de terceiros (exterior) |
-
-*Obs.: a ordem de gravação preserva o array original (1949 é o último elemento).*
+Tabela oficial integral: grupos `1/2/3` como `Entrada`, `5/6/7` como `Saída`,
+código com 4 dígitos sem ponto, descrição oficial sem ponto final, ordem
+numérica. Os 24 registros da curadoria inicial (`1101`, `1102`, `1551`,
+`1949`, `2101`, `2102`, `5101`–`5106`, `5405`, `5910`, `5915`–`5917`,
+`5949`, `6101`, `6102`, `6107`, `6108`, `7101`, `7102`) estão contidos nela —
+"o que tiver não entra" (sem duplicar). Regeneração:
+`node scripts/gen-seeds-cfop.cjs`. A gravação complementa só os códigos
+faltantes sem sobrescrever edições do usuário (`garantirSementes`).
 
 ### `SEED_CST_ICMS` — 21 registros (l.770–772)
 

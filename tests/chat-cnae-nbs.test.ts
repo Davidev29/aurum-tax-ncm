@@ -16,7 +16,6 @@
  * PROIBIÇÕES verificadas aqui: nunca inventar NBS/benefício sem lastro;
  * nunca alterar números do DAS; nunca tocar fora do chat.
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { detectarIntencaoChat, extrairCnae } from '@/domain/services/detector-chat'
 import { PLANO_TOOL_CALLING, toolParaIntencao } from '@/application/aurum-ai-tools'

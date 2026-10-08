@@ -26,7 +26,7 @@ export const SISCOMEX_NCM_URLS = [
 
 export const SISCOMEX_PORTAL_URL = 'https://portalunico.siscomex.gov.br/classif/'
 
-/** Chave de metadados da sincronização no IndexedDB (store `meta`). */
+/** Chave de metadados da sincronização no SQLite (store `meta`). */
 export const SISCOMEX_NCM_META_KEY = 'siscomex_ncm_sync'
 
 /** Comportamento da sincronização (respeito ao rate-limit do Portal Único). */

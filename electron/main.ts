@@ -26,6 +26,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { autoUpdater } from 'electron-updater'
 import { grafoConsultar, registrarUso } from './ia/grafo-service.cjs'
+import { caminhoBanco, copiarBanco, prepararBanco, registrarIpcDb } from './main/db'
 
 /** URL do servidor Vite, definida pelo script `dev:electron` (cross-env). */
 const URL_DEV = process.env.VITE_DEV_SERVER_URL ?? ''
@@ -147,6 +148,12 @@ function paraFiltrosElectron(filtros?: FiltroEscolha[]): FiltroElectron[] {
 // ---------------------------------------------------------------------------
 
 function registrarIpc(): void {
+  // Banco SQLite (Prisma em userData): o renderer nunca toca no arquivo.
+  try {
+    registrarIpcDb(ipcMain, app)
+  } catch (erro) {
+    console.error(`[db] canal indisponível: ${erro instanceof Error ? erro.message : String(erro)}`)
+  }
   /** `base:ler` — conteúdo UTF-8 de um arquivo relativo ao diretório base. */
   ipcMain.handle('base:ler', async (_evento, caminhoRelativo: string) => {
     const caminho = resolverNoBase(caminhoRelativo)
@@ -368,9 +375,10 @@ function registrarIpc(): void {
     try {
       const r = await autoUpdater.checkForUpdates()
       const info = r?.updateInfo
+      const remota = typeof info?.version === 'string' && info.version.trim() ? info.version : null
       return {
-        disponivel: autoUpdater.currentVersion.compare(info?.version ?? '') < 0,
-        versao: info?.version ?? null,
+        disponivel: remota !== null && autoUpdater.currentVersion.compare(remota) < 0,
+        versao: remota,
         notas: notasVersao(info?.releaseNotes),
       }
     } catch (erro) {
@@ -389,9 +397,15 @@ function registrarIpc(): void {
     }
   })
 
-  /** `atualizacao:instalar` — fecha o app e aplica a versão baixada. */
+  /** `atualizacao:instalar` — copia de segurança do banco, fecha e aplica a versão. */
   ipcMain.handle('atualizacao:instalar', () => {
     if (!app.isPackaged) throw new Error('Instalação disponível apenas no app instalado.')
+    // Proteção pré-update: snapshot do banco antes de trocar o app.
+    try {
+      copiarBanco(caminhoBanco(app), `pre-update-${app.getVersion()}.bak`)
+    } catch {
+      /* backup best-effort: nunca bloqueia a atualização */
+    }
     autoUpdater.quitAndInstall(false, true)
     return { ok: true }
   })
@@ -744,6 +758,12 @@ if (!instanciaUnica) {
     .whenReady()
     .then(async () => {
       registrarIpc()
+      // Banco antes da janela: bootstrap de schema + integrity_check com
+      // quarentena em caso de corrupção (ver `electron/main/db.ts`).
+      const banco = await prepararBanco(app)
+      if (!banco.ok) {
+        console.error(`[db] banco indisponível no boot (${banco.detalhe}); a UI exibirá erros por operação.`)
+      }
       criarMenu()
       await criarJanela()
       configurarAtualizador()

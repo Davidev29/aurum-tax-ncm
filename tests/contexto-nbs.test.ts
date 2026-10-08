@@ -9,7 +9,6 @@
  * - a camada `origem: 'contexto-personalizado'` do preditivo funciona;
  * - JSON curado e espelho TS consistentes.
  */
-import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'

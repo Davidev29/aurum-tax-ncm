@@ -172,7 +172,7 @@ export function AvisoMultiplasOpcoes({ item }: { item: ResultadoItemNfe }) {
 
 /**
  * Faixa de confronto no topo do detalhe do item — comparativo neutro com
- * balão explicativo. Substitui o antigo alerta âmbar "⚠ Divergente do XML".
+ * balão explicativo.
  */
 export function FaixaConfrontoXml({ item }: { item: ResultadoItemNfe }) {
   const d = divergenciaXmlSistema(item)

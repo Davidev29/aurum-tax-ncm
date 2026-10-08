@@ -233,7 +233,7 @@ export const REGISTRO_FERRAMENTAS: SpecFerramenta[] = [
   },
   {
     nome: 'consultarClientes',
-    descricao: 'Inventário do CADASTRO de empresas/clientes (Dexie): lista, quantidades, movimento por cliente.',
+    descricao: 'Inventário do CADASTRO de empresas/clientes (SQLite): lista, quantidades, movimento por cliente.',
     dominio: 'dados',
     leitura: true,
     parametros: {
@@ -516,7 +516,7 @@ export async function executarFerramenta(
       }
       case 'consultarCnaeNbs': {
         // Phase 9 / 09-05: CNAE → regra (1.090, sempre) + NBS/benefício só
-        // com link (resolvedor oficial + ano). 100% offline (Dexie local,
+        // com link (resolvedor oficial + ano). 100% offline (SQLite local,
         // sem rede — o CNPJ continua sendo o único ponto de rede do chat).
         const cnaeBruto = str(args.cnae)
         if (!cnaeBruto) return { ok: false, ferramenta: nome, erro: 'cnae-ausente' }

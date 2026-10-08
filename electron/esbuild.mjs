@@ -43,7 +43,10 @@ const opcoesComuns = {
   // `electron`/`electron-updater` são fornecidos pelo runtime e nunca
   // bundlados. `@ladybugdb/core` (grafo fiscal 10-02) também fica externo:
   // o `grafo-service.cjs` o carrega com try/catch preguiçoso.
-  external: ['electron', 'electron-updater', '@xenova/transformers', 'vectra', '@ladybugdb/core'],
+  // `@prisma/client` fica externo: motores nativos (`.node`) não podem ser
+  // bundlados nem carregados de dentro do asar (ver `asarUnpack` no
+  // package.json) — o main os carrega de `node_modules` no runtime.
+  external: ['electron', 'electron-updater', '@xenova/transformers', 'vectra', '@ladybugdb/core', '@prisma/client', '.prisma/*'],
 }
 
 async function compilar() {

@@ -1,9 +1,8 @@
 /**
- * Simples Nacional — exportação isolada (CSV / JSON / PDF).
- * Reusa apenas `montarCSV` + `baixar` genéricos; PDF via setup lazy.
+ * Simples Nacional — exportação isolada (CSV / JSON).
+ * Reusa apenas `montarCSV` + `baixar` genéricos.
  */
 import { montarCSV, baixar } from '@/infrastructure/exporters/relatorios';
-import { fmtCarga, fmtMoeda } from '@/domain/services/format';
 import type { ResultadoConvencional, ResultadoHibrido } from './calculo';
 import { ANEXO_LABEL, type AnexoSimplesId } from './tabelas';
 
@@ -73,59 +72,4 @@ export function exportarSimplesCSV(p: PayloadSimples): void {
 
 export function exportarSimplesJSON(p: PayloadSimples): void {
   baixar(`simples_${p.anexoId}_${hoje()}.json`, jsonSimples(p), 'application/json');
-}
-
-export async function exportarSimplesPDF(p: PayloadSimples): Promise<void> {
-  const { baixarPdf } = await import('@/infrastructure/pdf/setup');
-  const cor = '#1e2f4d';
-  const temFatorR = p.rbt12 > 0 && p.folha12 > 0;
-  const indiceFR = temFatorR ? p.folha12 / p.rbt12 : 0;
-  const anexoFR = indiceFR >= 0.28 ? 'III' : 'V';
-  const subtituloFatorR = temFatorR ? ` · Fator R ${(indiceFR * 100).toFixed(2)}% → Anexo ${anexoFR}` : '';
-  const doc = {
-    pageSize: 'A4' as const,
-    pageMargins: [34, 60, 34, 44] as [number, number, number, number],
-    defaultStyle: { font: 'Roboto' as const, fontSize: 8, color: '#1e293b' },
-    info: { title: 'Simples Nacional — relatório', author: 'Aurum Tax NCM', creator: 'Aurum Tax NCM' },
-    content: [
-      { text: 'Simples Nacional — LC 123/2006 + LC 214/2025 (2027–2028)', fontSize: 13, bold: true, color: cor },
-      { text: `${ANEXO_LABEL[p.anexoId]} · ${p.conv.faixa}ª faixa · Cenário sublimite ${p.conv.cenario}${subtituloFatorR}`, fontSize: 8, color: '#64748b', margin: [0, 2, 0, 8] as [number, number, number, number] },
-      {
-        table: {
-          widths: ['*', '*', '*'],
-          body: [
-            [
-              { text: `RBT12\n${fmtMoeda(p.rbt12)}`, fontSize: 9, bold: true },
-              { text: `Receita do mês\n${fmtMoeda(p.receitaMes)}`, fontSize: 9, bold: true },
-              { text: `DAS\n${fmtMoeda(p.conv.das)} (${fmtCarga(p.conv.aliquotaEfetiva * 100)})`, fontSize: 9, bold: true },
-            ],
-          ],
-        },
-        layout: 'noBorders' as const,
-        margin: [0, 0, 0, 8] as [number, number, number, number],
-      },
-      {
-        table: {
-          headerRows: 1,
-          widths: ['*', '30%', '30%'],
-          body: [
-            [{ text: 'Tributo', bold: true, color: '#fff', fillColor: cor }, { text: 'Valor', bold: true, color: '#fff', fillColor: cor }, { text: '% repartição', bold: true, color: '#fff', fillColor: cor }],
-            ...(['IRPJ', 'CSLL', 'CBS', 'IBS', 'CPP', 'ICMS', 'IPI', 'ISS'] as const).map((t) => [
-              t,
-              fmtMoeda(p.conv.reparticao[t]),
-              p.conv.das > 0 ? fmtCarga((p.conv.reparticao[t] / p.conv.das) * 100) : '—',
-            ]),
-            [{ text: 'TOTAL DAS', bold: true }, { text: fmtMoeda(p.conv.das), bold: true }, { text: fmtCarga(p.conv.aliquotaEfetiva * 100), bold: true }],
-          ],
-        },
-      },
-      ...(p.hib
-        ? [
-            { text: `Híbrido: DAS reduzido ${fmtMoeda(p.hib.dasReduzido)} + CBS fora ${fmtMoeda(p.hib.cbsFora)} = ${fmtMoeda(p.hib.total)} · Melhor: ${p.hib.melhor}`, fontSize: 8, margin: [0, 8, 0, 0] as [number, number, number, number] },
-            { text: `CBS dentro do DAS ${fmtMoeda(p.conv.cbsDentroDAS)} · Débitos ${fmtMoeda(p.debitosCBS)} · Créditos ${fmtMoeda(p.creditosCBS)} · Saldo credor ${fmtMoeda(p.hib.saldoCredor)}`, fontSize: 7, color: '#64748b' },
-          ]
-        : [{ text: `CBS dentro do DAS ${fmtMoeda(p.conv.cbsDentroDAS)}`, fontSize: 7, color: '#64748b' }]),
-    ],
-  };
-  await baixarPdf(doc as never, `simples_${p.anexoId}_${hoje()}.pdf`);
 }

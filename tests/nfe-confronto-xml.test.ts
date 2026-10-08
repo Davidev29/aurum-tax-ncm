@@ -1,7 +1,6 @@
 /**
  * Confronto XML × sistema por item + reaplicação da vigente numa nota.
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { divergenciaXmlSistema } from '@/infrastructure/nfe/credito'

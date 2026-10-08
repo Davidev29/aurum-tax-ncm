@@ -120,7 +120,7 @@ export const CFF_SYNC_CONFIG = {
   retryDelay: 5_000,
 } as const
 
-/** Chaves de metadados usadas na store `meta` do IndexedDB */
+/** Chaves de metadados usadas na store `meta` do SQLite */
 export const CFF_META_KEYS = {
   ULTIMA_VERIFICACAO: 'cff_ultima_verificacao',
   VERSAO_BASE: 'cff_versao_base',

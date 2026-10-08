@@ -6,7 +6,7 @@
  * O texto diz "sujeito a ST" (a lista indica sujeição pelo Convênio ICMS;
  * a aplicação efetiva depende de UF/protocolo/operação).
  */
-import { buscarCest, formatarCest, resumoStNota } from '@/domain/services/cest'
+import { buscarCest, resumoStNota } from '@/domain/services/cest'
 import { Pill } from '@/ui/kit'
 
 /** Selo compacto do item — `ST · 01.001.00` com segmento/descrição no título. */
@@ -17,17 +17,6 @@ export function SeloST({ cest }: { cest: unknown }) {
   return (
     <span title={titulo} className="mt-1 inline-flex">
       <Pill cor="amber">ST · {info.formatado}</Pill>
-    </span>
-  )
-}
-
-/** CEST formatado inline (sempre que o XML trouxe, mesmo fora da lista ST). */
-export function CodigoCest({ cest }: { cest: unknown }) {
-  const d = String(cest ?? '').replace(/\D+/g, '')
-  if (!d) return null
-  return (
-    <span className="font-mono" title={buscarCest(cest)?.descricao ?? 'CEST informado no XML (fora da lista ST embutida)'}>
-      CEST {formatarCest(cest)}
     </span>
   )
 }

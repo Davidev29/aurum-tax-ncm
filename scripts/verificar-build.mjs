@@ -326,6 +326,45 @@ function verificarSaidas() {
   if (!falhas.length) ok('electron/dist/ ok (main+preload+grafo)')
 }
 
+function verificarBanco() {
+  console.log('\n[4b/5] Banco SQLite/Prisma (schema + motores + canal IPC)')
+  const prismaDir = path.join(RAIZ, 'node_modules', '.prisma', 'client')
+  for (const f of ['query_engine-windows.dll.node', 'libquery_engine-darwin.dylib.node', 'libquery_engine-darwin-arm64.dylib.node']) {
+    if (!fs.existsSync(path.join(prismaDir, f))) fail(`motor Prisma ausente: node_modules/.prisma/client/${f} (rode npm run db:generate no SO alvo)`)
+  }
+  if (!falhas.length) ok('motores Prisma win+mac presentes')
+  const schemaPrisma = path.join(RAIZ, 'prisma', 'schema.prisma')
+  const schemaSql = path.join(RAIZ, 'prisma', 'schema.sql')
+  const schemaTs = path.join(RAIZ, 'src', 'infrastructure', 'db', 'schema-sql.ts')
+  for (const [p, rotulo] of [[schemaSql, 'prisma/schema.sql'], [schemaTs, 'src/infrastructure/db/schema-sql.ts']]) {
+    if (!fs.existsSync(p)) fail(`${rotulo} ausente (rode npm run db:generate)`)
+  }
+  if (fs.existsSync(schemaSql) && fs.existsSync(schemaTs)) {
+    const tPrisma = fs.statSync(schemaPrisma).mtimeMs
+    const tSql = fs.statSync(schemaSql).mtimeMs
+    const tTs = fs.statSync(schemaTs).mtimeMs
+    if (tSql < tPrisma || tTs < tPrisma) {
+      fail('DDL embarcado desatualizado ante prisma/schema.prisma (rode npm run db:generate)')
+    } else ok('DDL embarcado em dia com o schema')
+  }
+  const mainJs = path.join(RAIZ, 'electron', 'dist', 'main.js')
+  const preload = path.join(RAIZ, 'electron', 'dist', 'preload.cjs')
+  if (fs.existsSync(mainJs)) {
+    const c = fs.readFileSync(mainJs, 'utf8')
+    if (!c.includes('db:op')) fail('electron/dist/main.js sem canal db:op (rebuild electron)')
+    else ok('canal db:op presente no main')
+    if (!c.includes('db:snapshot')) fail('electron/dist/main.js sem canal db:snapshot (rebuild electron)')
+    else ok('canal db:snapshot presente no main')
+  }
+  if (fs.existsSync(preload)) {
+    const c = fs.readFileSync(preload, 'utf8')
+    if (!c.includes('db:op')) fail('electron/dist/preload.cjs sem ponte db (rebuild electron)')
+    else ok('ponte db presente no preload')
+    if (!c.includes('db:snapshot')) fail('electron/dist/preload.cjs sem ponte db:snapshot (rebuild electron)')
+    else ok('ponte db:snapshot presente no preload')
+  }
+}
+
 function verificarOfuscacao() {
   console.log('\n[5/5] Anti-engenharia reversa (ofuscação + sem sourcemap)')
   const mapas = []
@@ -381,6 +420,7 @@ async function main() {
     return
   }
   verificarSaidas()
+  verificarBanco()
   verificarOfuscacao()
   if (falhas.length) {
     console.error(`\n✖ BUILD INCOMPLETA: ${falhas.length} falha(s) — instalador BLOQUEADO.`)

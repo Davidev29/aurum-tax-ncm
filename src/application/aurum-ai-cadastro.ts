@@ -16,7 +16,7 @@
  * `resumoProdutoPendente`, `ofertaAtualizarSkuPendente`). "Sim" sozinho, sem
  * oferta anterior, nunca grava nada.
  *
- * Tudo que é decisão de texto é puro e testável; o I/O (Dexie/BrasilAPI) vai
+ * Tudo que é decisão de texto é puro e testável; o I/O (SQLite/BrasilAPI) vai
  * em funções separadas com import dinâmico.
  */
 

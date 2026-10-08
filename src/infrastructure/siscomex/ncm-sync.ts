@@ -12,6 +12,7 @@
  */
 
 import { db, bulkPut } from '../db/schema'
+import { invalidarCacheBuscaTexto } from '../base/classificacao-repo'
 import { bridge } from '../bridge'
 import {
   SISCOMEX_NCM_META_KEY,
@@ -560,8 +561,19 @@ export async function aplicarTabelaNcm(
     }
   }
 
-  await db.ncmNomenclatura.clear()
+  // Sem `clear()`: upsert de tudo (novos + alterados + extintos recarimbados)
+  // e remoção só do que não está nem no remoto nem no histórico. Crash no
+  // meio nunca deixa a tabela truncada (antes: clear()+fill com janela de
+  // perda total). Modo upsert (não INSERIR): linhas existentes ATUALIZAM.
   await bulkPut(db.ncmNomenclatura, final)
+  const finais = new Set(final.map((f) => f.codigo))
+  const sobrando = [...locaisPorCodigo.keys()].filter((c) => !finais.has(c))
+  for (const codigo of sobrando) {
+    await db.ncmNomenclatura.delete(codigo).catch(() => undefined)
+  }
+  // O índice de busca-texto invalida por contagem; mesma contagem com
+  // conteúdo novo precisa de invalidação explícita.
+  invalidarCacheBuscaTexto()
 
   const agora = new Date().toISOString()
   await db.meta.put({

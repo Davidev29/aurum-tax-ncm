@@ -4,7 +4,6 @@
  * Trava a regra: item revogado ou NCM extinto com vínculo NUNCA apresenta
  * redução como vigente — cai para regra geral com aviso vermelho.
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import {

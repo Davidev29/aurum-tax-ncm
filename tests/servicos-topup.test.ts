@@ -6,7 +6,6 @@
  * todo CNAE caía em "fora da tabela viva". `semearBaseEmbutida()` no caminho
  * rápido agora completa as stores novas via `completarStoresFase7()`.
  */
-import 'fake-indexeddb/auto'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

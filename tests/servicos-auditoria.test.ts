@@ -6,7 +6,6 @@
  * Se a base viva mudar (novos NBS), este teste conta a história — ajuste as
  * expectativas junto com o MANIFEST.
  */
-import 'fake-indexeddb/auto'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

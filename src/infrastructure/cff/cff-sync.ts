@@ -4,12 +4,11 @@
  * Responsabilidades:
  * - Verificar periodicamente se há atualizações nos endpoints CFF
  * - Baixar e normalizar os dados
- * - Atualizar o IndexedDB local quando houver mudanças
+ * - Atualizar o SQLite local quando houver mudanças
  * - Gerenciar metadados de sincronização (timestamps, hashes, versões)
  */
 
-import { db } from '../db/schema'
-import type { Table } from 'dexie'
+import { bulkPut, db, INSERIR } from '../db/schema'
 import {
   CFF_ENDPOINTS,
   CFF_SYNC_CONFIG,
@@ -192,7 +191,7 @@ async function atualizarReferencia(
   lastModified?: string,
 ): Promise<number> {
   await db.referencia.clear()
-  await bulkPut(db.referencia, itens)
+  await bulkPut(db.referencia, itens, INSERIR)
 
   await db.meta.put({
     chave: metaKey,
@@ -223,7 +222,7 @@ async function atualizarClassificacaoProduto(
   lastModified?: string,
 ): Promise<number> {
   await db.classificacaoProduto.where('sistema').equals(sistema).delete()
-  await bulkPut(db.classificacaoProduto, itens)
+  await bulkPut(db.classificacaoProduto, itens, INSERIR)
 
   const negados = itens.filter((i) => i.permitido === false).length
   await db.meta.put({
@@ -327,15 +326,7 @@ export async function listarCoberturaClassProd(): Promise<
     ),
   }))
 }
-async function bulkPut<T>(
-  tabela: Table<T, string>,
-  itens: T[],
-): Promise<void> {
-  const TAM = 500
-  for (let i = 0; i < itens.length; i += TAM) {
-    await tabela.bulkPut(itens.slice(i, i + TAM) as never[])
-  }
-}
+/* bulkPut com progresso: helper central em `../db/schema` (lotes de 500). */
 
 /**
  * Sincroniza um endpoint específico

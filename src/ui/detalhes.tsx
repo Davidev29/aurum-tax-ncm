@@ -481,7 +481,7 @@ import { anexosDoCodigo, regrasCreditoPresumido } from '@/infrastructure/base/in
  * - **Crédito presumido**: regras vigentes, quando a classificação indica
  *   crédito presumido (`temCredito`).
  *
- * Carrega do Dexie local (sem rede) e nunca altera a classificação.
+ * Carrega do SQLite local (sem rede) e nunca altera a classificação.
  */
 export function SecaoInformacoesAdicionais({
   ncm,

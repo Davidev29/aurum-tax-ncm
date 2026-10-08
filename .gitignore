@@ -49,6 +49,13 @@ coverage/
 *.temp
 tmp/
 temp/
+
+# SQLite local — banco de dev/testes e artefatos do Prisma (nunca versionar;
+# o app usa <userData>/aurum.db; testes usam cópias em %TEMP%)
+*.db
+*.db-journal
+*.db-wal
+prisma/dev.db*
 # Phase 10-01: CSVs intermediários do build do grafo (regenerados por `npm run base`)
 scripts/grafo/.tmp/
 

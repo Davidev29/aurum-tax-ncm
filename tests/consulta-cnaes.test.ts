@@ -11,7 +11,6 @@
  * Fixtures espelham `cnae-nbs-motor.test.ts` (mesmos CNAEs/NBS/links) +
  * completude sintética até 1.090 linhas para provar a invariante em escala.
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { importarBase } from '@/infrastructure/base/base-service'

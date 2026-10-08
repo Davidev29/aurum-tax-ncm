@@ -3,10 +3,10 @@
  * Espelham SPEC-LOGICA-NEGOCIO §1.1.
  */
 
-/** Nome/versão do IndexedDB legado (paridade com a v1). */
-export const DB_NAME = 'aurum_tax_ncm_v1'
-/** Versão do IndexedDB. A v14 adiciona `grafometa` (Phase 10-01, hash/versão do grafo fiscal). */
-export const DB_VERSION = 14
+/** Nome do arquivo SQLite local (antes: nome do IndexedDB legado). */
+export const DB_NAME = 'aurum.db'
+/** Versão do schema SQLite (banco novo — sem cadeia de migração Dexie). */
+export const DB_VERSION = 1
 
 /** Itens por página nas listagens. */
 export const PAGE_SIZE = 10
@@ -96,7 +96,7 @@ export const STORES = {
   PRODUTOSDFE: 'produtosDfe',
   AUDIT: 'audit_log',
   CEST: 'cest',
-  /** Feedback "Não é esse" da Sugestão IA (Phase 6 / 06-06, Dexie v9). */
+  /** Feedback "Não é esse" da Sugestão IA (store `ia_feedback`). */
   IAFEEDBACK: 'ia_feedback',
   /** CNAE × Anexo Simples + Fator R (Phase 7, arquivo vivo `CNAE X ANEXO.json`). */
   CNAE: 'cnae',

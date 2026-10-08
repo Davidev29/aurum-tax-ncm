@@ -6,7 +6,6 @@
  * do serviço voltava em regra geral — sem descrição, sem redução de 60%,
  * sem anexo IX, sem base legal da LC e sem a opção de diferimento.
  */
-import 'fake-indexeddb/auto'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

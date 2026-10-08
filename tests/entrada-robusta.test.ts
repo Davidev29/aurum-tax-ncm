@@ -4,7 +4,6 @@
  * follow-ups de contexto ("e para revenda?") e multi-intenção
  * ("ncm de banana e quanto fica 2 mil").
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   detectarIntencaoChat,

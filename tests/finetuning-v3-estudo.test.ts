@@ -1,4 +1,3 @@
-import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
 import { detectarIntencaoChat, extrairCnpj, extrairSlotsProduto } from '@/domain/services/detector-chat'
 import { toolParaIntencao } from '@/application/aurum-ai-tools'

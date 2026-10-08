@@ -8,7 +8,7 @@
  *   `ia:classificar` (ou mock local) → `resolverClassificacoes` (única verdade);
  * - `NÃO SEI` sob baixa similaridade/confiança (sem código fictício);
  * - `calcularTributos` com as alíquotas padrão (`REF_DEFAULT`) para o painel;
- * - trilha: `audit_log` (Dexie) + `logs/consultas-ia.jsonl` (best-effort Node).
+ * - trilha: `audit_log` (SQLite) + `logs/consultas-ia.jsonl` (best-effort Node).
  *
  * Sem deps novas de produção. O append em `.jsonl` só acontece em ambiente
  * Node (vitest/scripts/Electron-main); no renderer é no-op silencioso — o
@@ -227,7 +227,7 @@ export async function classificarComIA(
 }
 
 /**
- * Registra o feedback "Não é esse" (Dexie `ia_feedback` v9 + `audit_log` +
+ * Registra o feedback "Não é esse" (SQLite `ia_feedback` + `audit_log` +
  * `.jsonl`). Best-effort: falha de trilha nunca quebra a UI.
  * Phase 10-05 (GRAFO-08): feedback ± alimenta o overlay (demote com TTL).
  */
@@ -244,7 +244,7 @@ export async function registrarFeedbackIa(fb: FeedbackIa): Promise<void> {
       mock: fb.mock ?? true,
     })
   } catch {
-    /* Dexie indisponível (ex.: teste sem fake-indexeddb) — segue p/ auditoria */
+    /* SQLite indisponível (ex.: teste sem banco) — segue p/ auditoria */
   }
   // GRAFO-08: demote por feedback negativo (boost zerado, TTL 90d).
   try {

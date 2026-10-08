@@ -211,7 +211,7 @@ export const useNfe = create<NfeState>((set, get) => ({
     // imediatamente (sem as notas "surgirem do nada").
     set({ carregandoHistorico: true })
     // Cede 2 frames para o React pintar o modal glass ANTES do trabalho
-    // pesado (IndexedDB + ranking + re-render de tabelas/gráficos). Sem
+    // pesado (SQLite + ranking + re-render de tabelas/gráficos). Sem
     // isso, a thread trava primeiro e o spinner só aparece depois — ou nem
     // aparece em cargas rápidas, dando a sensação de "só o glass".
     await new Promise<void>((r) => {

@@ -5,7 +5,6 @@
  * devem passar a refletir a classificação vigente (e voltar à regra geral ao
  * remover a manual).
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { propagarClassificacaoNcm } from '@/application/reclassificacao'

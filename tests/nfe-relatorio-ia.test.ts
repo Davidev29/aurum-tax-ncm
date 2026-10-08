@@ -1,7 +1,6 @@
 /**
  * Relatório XML v5 — dedup + recados simples + conferência na lei atual.
  */
-import 'fake-indexeddb/auto'
 import { describe, it, expect } from 'vitest'
 import type { Classificacao } from '@/domain/entities'
 import type { NotaXml, ResultadoItemNfe } from '@/infrastructure/nfe/tipos'

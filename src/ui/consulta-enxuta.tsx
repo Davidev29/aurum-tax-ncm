@@ -9,17 +9,16 @@
  * Nenhum componente aqui decide regra fiscal — só apresenta `Classificacao`
  * já resolvida (apresentação pura, paridade com `cartoes.tsx`).
  */
-import { useState, type ReactElement, type ReactNode } from 'react'
+import { useState, type ReactElement } from 'react'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
 import { LINK_LC214 } from '@/domain/constants'
 import { fmtNbs, fmtNcm, norm } from '@/domain/services/format'
 import { observacoesFiscais } from '@/domain/services/calculo'
 import { FaixaTributaria } from './faixa-tributaria'
 import { Btn } from './kit'
-import { IconeAurumPremium, SeloAurumAI, LinhaPreferidaAurumAI } from './aurum-ai'
+import { IconeAurumPremium, SeloAurumAI } from './aurum-ai'
 import { BotaoDetalhePremium, ModalDetalheFiscal } from './consulta-premium'
 import { BotaoVerLegislacao, type BloqueioSistema } from './cartoes'
-import { ListaObservacoes } from './cartoes'
 import { PillAnexos } from './cartoes'
 import { SeletorTributacao, useOpcaoTributacao } from './diferimento-opcoes'
 
@@ -199,92 +198,6 @@ export function CartaoEnxuto({
         bloqueios={bloqueios}
       />
     </article>
-  )
-}
-
-/* ------------------------------------------------- alternativas compactas -- */
-
-export interface ItemAlternativa {
-  codigo: string
-  titulo: string
-  subtitulo?: string
-  selo?: string
-}
-
-export function AlternativasCompactas({
-  itens,
-  onEscolher,
-  rotulo,
-  codigoPreferido,
-}: {
-  itens: ItemAlternativa[]
-  onEscolher: (codigo: string) => void
-  rotulo: string
-  /** NCM preferido da IA — ganha linha cintilante em espectro abaixo. */
-  codigoPreferido?: string | null
-}): ReactElement | null {
-  if (!itens.length) return null
-  const norm = (c: string) => c.replace(/\D+/g, '')
-  const visiveis = itens.slice(0, 5)
-  const restantes = itens.length - visiveis.length
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-2 dark:border-slate-800 dark:bg-slate-950/40">
-      <div className="px-2 pb-1 pt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">{rotulo}</div>
-      <ul className="space-y-1">
-        {visiveis.map((it) => {
-          const preferido = codigoPreferido != null && norm(it.codigo) === norm(codigoPreferido)
-          return (
-            <li key={it.codigo}>
-              <button
-                type="button"
-                onClick={() => onEscolher(it.codigo)}
-                title={preferido ? 'Referência preferida da IA' : it.titulo}
-                className="block w-full rounded-lg px-2 py-1.5 text-left text-xs transition hover:bg-brand-50 dark:hover:bg-brand-900/30"
-              >
-                <span className="flex w-full items-center gap-2">
-                  <span className="shrink-0 font-mono font-bold text-brand-700 dark:text-aurum-200">{it.titulo}</span>
-                  {it.subtitulo ? (
-                    <span className="min-w-0 flex-1 truncate text-slate-500 dark:text-slate-400">{it.subtitulo}</span>
-                  ) : null}
-                  {preferido ? (
-                    <span className="aurum-ai-selo-preferido">
-                      <IconeAurumPremium tamanho="sm" /> IA
-                    </span>
-                  ) : it.selo ? (
-                    <span className="shrink-0 rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-400">{it.selo}</span>
-                  ) : null}
-                </span>
-                {preferido ? <LinhaPreferidaAurumAI /> : null}
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-      {restantes > 0 ? (
-        <div className="px-2 py-1 text-[10px] text-slate-400">+ {restantes} alternativa{restantes > 1 ? 's' : ''} na busca completa…</div>
-      ) : null}
-    </div>
-  )
-}
-
-/* ------------------------------------------------- detalhes colapsáveis -- */
-
-export function DetalhesEnxutos({ titulo, children }: { titulo: string; children: ReactNode }): ReactElement {
-  return (
-    <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300">
-      <summary className="cursor-pointer font-bold">{titulo}</summary>
-      <div className="mt-2 space-y-2">{children}</div>
-    </details>
-  )
-}
-
-/** Observações legais em bloco único colapsado (evita N cartões de aviso). */
-export function ObservacoesEnxutas({ itens }: { itens: Parameters<typeof ListaObservacoes>[0]['itens'] }): ReactElement | null {
-  if (!itens.length) return null
-  return (
-    <DetalhesEnxutos titulo={`Observações legais (${itens.length})`}>
-      <ListaObservacoes itens={itens} />
-    </DetalhesEnxutos>
   )
 }
 

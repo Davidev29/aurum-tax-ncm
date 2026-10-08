@@ -4,7 +4,6 @@
  * REGRA: base/CFF/NCM/manual mudou → produtos e notas de XML já gravados são
  * reaplicados pela vigente. Manual do usuário é preservada.
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { revalidarBaseGravada, resumirRevalidacao } from '@/application/revalidacao'

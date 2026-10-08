@@ -1550,13 +1550,13 @@ function TabelasOficiaisCff() {
       const total = await db.table('produtosDfe').where('sistema').equals(s).count().catch(() => 0)
       setTotalProd(total)
       const lista = await db
-        .table('produtosDfe')
+        .table<import('@/domain/entities').ProdutoDfe, string>('produtosDfe')
         .where('sistema')
         .equals(s)
         .limit(50)
         .toArray()
         .catch(() => [])
-      setProdutos((Array.isArray(lista) ? lista : []) as import('@/domain/entities').ProdutoDfe[])
+      setProdutos(Array.isArray(lista) ? lista : [])
     } catch {
       setProdutos([])
       setTotalProd(0)

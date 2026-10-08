@@ -1614,7 +1614,8 @@ function ModalAuxEdicao({ aberto }: { aberto: boolean }) {
                 <Check
                   label={c.label}
                   checked={Boolean(dados[c.nome])}
-                  onChange={(e) => set(c.nome, e.target.checked ? 1 : 0)}
+                  // Booleano real: o banco (SQLite/Prisma) recusa 1/0 (D2).
+                  onChange={(e) => set(c.nome, e.target.checked)}
                 />
               </div>
             )

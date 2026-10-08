@@ -10,7 +10,7 @@
  *   5. Revisão e conclusão (grava o aceite só na máquina)
  *
  * Nada é enviado à nuvem: o aceite fica em `localStorage`, a empresa/emitente
- * no banco local (IndexedDB) e o tema no `localStorage`.
+ * no banco local (SQLite) e o tema no `localStorage`.
  */
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -440,11 +440,12 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
               {passo === 2 ? (
                 <div className="space-y-3">
                   <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-3 dark:border-aurum-900 dark:bg-brand-950/30">
-                    <strong>📜 Contrato de Licença Desktop (resumo).</strong>
+                    <strong>📜 Contrato de Licença Desktop v1.1 — Out/2026 (resumo).</strong>
                     <ol className="mt-1 list-decimal space-y-1 pl-5 text-slate-600 dark:text-slate-300">
-                      <li>Licença de uso do Aurum Tax NCM, software desktop da Aurum Bit Labs &amp; Studios LTDA.</li>
-                      <li>Roda 100% na sua máquina — sem nuvem, sem telemetria da base.</li>
-                      <li>Internet só para funções opcionais (BrasilAPI, normas oficiais, atualizações).</li>
+                      <li>Licença de uso do Aurum Tax NCM v1.1: 10 módulos — Calculadora, Simples Nacional (+ projeção dividida v2), Consulta NCM, Serviços (NBS), Consulta de CNAEs, Lote, XML de NF-e/NFC-e, Produtos, Tabelas auxiliares e Legislação.</li>
+                      <li>Roda 100% na sua máquina — sem nuvem, sem telemetria da base. Classificação determinística local (sem IA em nuvem, sem chat dedicado).</li>
+                      <li>Motor SPED existe localmente, mas a importação com tela é a de XML de NF-e/NFC-e.</li>
+                      <li>Internet só para funções opcionais (BrasilAPI, normas oficiais, CFF, atualizações).</li>
                       <li>Você é responsável por backups, conferência fiscal e segurança da máquina.</li>
                       <li>Ferramenta de apoio — não substitui o julgamento profissional.</li>
                     </ol>
@@ -729,6 +730,9 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
                     Ao concluir, gravo o aceite (contrato v{CONTRATO_VERSAO} + data/hora){' '}
                     <strong>só nesta máquina</strong>. Sem nuvem, sem conta, sem telemetria da sua base.
                   </div>
+                  <div className="rounded-xl border border-aurum-500/40 bg-gradient-to-br from-aurum-50 to-white p-3 text-brand-800 dark:border-aurum-800 dark:from-brand-950/40 dark:to-slate-900 dark:text-aurum-200">
+                    ✨ <strong>Na sequência, um tour guiado menu a menu</strong> mostra o que cada tela faz e como usar — você pode revê-lo quando quiser no botão <strong>✨ Guia</strong> do topo.
+                  </div>
                 </div>
               ) : null}
 
@@ -772,5 +776,3 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
   )
 }
 
-/** Nome antigo do portão simples — mantido como apelido do wizard. */
-export const PortaoAceite = AssistenteInstalacao

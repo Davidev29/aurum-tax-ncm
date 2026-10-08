@@ -16,7 +16,7 @@
 
 /** Dia a dia → vocabulário da nomenclatura (radical oficial). */
 export const SINONIMOS_FISCAIS: Record<string, string> = {
-  // --- pecuária / agro (legado, preservado) ---
+  // --- pecuária / agro ---
   boi: 'bovin',
   vaca: 'bovin',
   novilho: 'bovin',

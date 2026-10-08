@@ -10,7 +10,6 @@
  * - a justificativa LIDERA com a hipótese (nunca "sem benefício");
  * - `91271` (código interno de regime) jamais é exibido como anexo da LC.
  */
-import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { importarBase } from '@/infrastructure/base/base-service'

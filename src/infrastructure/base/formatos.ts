@@ -26,7 +26,7 @@ export interface InfoBase {
   tipo: TipoBase
   /** Rótulo curto para a UI. */
   rotulo: string
-  /** Store(s) de destino no Dexie. */
+  /** Store(s) de destino no SQLite. */
   destino: string
   /** Verdadeiro quando a importação exige o sistema (classprod). */
   precisaSistema: boolean

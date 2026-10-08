@@ -127,7 +127,7 @@ export function fatorDespesa(d: DespesaSimples): number {
   return 0;
 }
 
-/** Normaliza `anexos` vindos do Dexie/JSON em lista limpa `['III','V']`.
+/** Normaliza `anexos` vindos do SQLite/JSON em lista limpa `['III','V']`.
  * Robusto a formatos legados: `'III / V'`, `'III,V'`, `['III,V']`, `'iii/v'`. */
 export function normalizarListaAnexosSimples(v: unknown): string[] {
   const arr = Array.isArray(v) ? v : [v];

@@ -1,19 +1,31 @@
 AURUM TAX NCM — CONTRATO DE LICENÇA DE USO DE SOFTWARE DESKTOP
 Licença local (instalação na máquina do cliente) · Sem armazenamento em nuvem
-Versão 1.0 — Setembro/2026 · Aurum Bit Labs & Studios LTDA · CNPJ 44.366.379/0001-23
+Versão 1.1 — Outubro/2026 · Aurum Bit Labs & Studios LTDA · CNPJ 44.366.379/0001-23
 
 LEIA COM ATENÇÃO. Para instalar e usar o Aurum Tax NCM você precisa aceitar
-este contrato. Se não concordar, cancele a instalação.
+este contrato. Se não concordar, cancele a instalação. Esta v1.1 substitui a
+v1.0 (Set/2026) e reflete o software como ele é hoje: 10 módulos, classificação
+determinística local (sem IA em nuvem, sem chat dedicado, sem mascote), Simples
+Nacional com projeção dividida v2 e motor SPED local sem tela dedicada (a
+importação com interface é a de XML de NF-e/NFC-e). Quem já aceitou a v1.0
+aceita novamente a v1.1 no primeiro uso após atualizar.
 
 1. OBJETO. Licença de uso, não exclusiva e intransferível, do software desktop
-"Aurum Tax NCM" (classificador fiscal da Reforma Tributária: NCM/NBS, CST de
-IBS/CBS, cClassTrib, calculadora, SPED Fiscal, XML de NF-e/NFC-e, produtos,
-tabelas auxiliares, legislação e relatórios), nos limites da versão adquirida
+"Aurum Tax NCM" (classificador fiscal da Reforma Tributária: Calculadora
+IBS/CBS, Simples Nacional com DAS por Anexo I–V + projeção dividida v2 com
+segregação, Consulta NCM, Serviços NBS, Consulta de CNAEs, Classificação em
+lote CSV/XLSX, XML de NF-e/NFC-e com layouts Polida e Clássica, Produtos,
+Tabelas auxiliares editáveis, Legislação com leitura in-app e relatórios
+PDF/CSV/JSON com emitente timbrado), nos limites da versão adquirida
 (Proposta/Pedido). Não há transferência de propriedade, código-fonte ou
-propriedade intelectual (Leis 9.609/1998, 9.610/1998 e 9.279/1996).
+propriedade intelectual (Leis 9.609/1998, 9.610/1998 e 9.279/1996). Não há
+módulo de chat dedicado, mascote virtual ou modelo de linguagem embutido: a
+classificação é 100% determinística local (índice lexical + resolvedor oficial
++ grafo fiscal com fallback lexical) e os insights aparecem embutidos nos
+relatórios.
 
 2. INSTALAÇÃO LOCAL — SEM NUVEM. O software roda 100% nesta máquina. Todos os
-seus dados (empresas, produtos, SPED, XMLs, classificações, emitente) ficam
+seus dados (empresas, produtos, XMLs, classificações, emitente) ficam
 gravados EXCLUSIVAMENTE neste computador (banco local + pasta de dados do
 usuário) e NÃO são enviados, hospedados ou armazenados em nuvem pela Aurum.
 A Aurum NÃO recebe, NÃO coleta e NÃO tem acesso à sua base. Internet só é
@@ -25,9 +37,11 @@ backups (menu Configurações > Backup) e pela guarda dos dados.
 3. ACEITE. Ao clicar "Aceito", você declara que leu este contrato (resumo
 nesta tela + texto integral em docs/CONTRATO - Aurum Tax NCM (Licenca de Uso
 Desktop Local).docx) e o aceita livremente. O aceite registra localmente
-versão do contrato, data/hora e identificação da instalação como prova da
-contratação (MP 2.200-2/2001, Lei 14.063/2020, arts. 104, 107 e 219 do
-Código Civil). Quem aceita declara ter poderes para obrigar a contratante.
+versão do contrato (v1.1), data/hora e identificação da instalação como prova
+da contratação (MP 2.200-2/2001, Lei 14.063/2020, arts. 104, 107 e 219 do
+Código Civil). Quem aceita declara ter poderes para obrigar a contratante. O
+aceite da v1.0 não vale para a v1.1: o sistema pede o novo aceite uma única
+vez após atualizar.
 
 4. RESTRIÇÕES. É vedado: copiar além das instalações licenciadas, modificar,
 engenheirar reversa (salvo hipótese legal), sublicenciar/ceder/revender,
@@ -36,18 +50,22 @@ Descumprimento autoriza suspensão da licença e rescisão por justa causa.
 
 5. BASE TRIBUTÁRIA DE REFERÊNCIA. EC 132/2023, LC 214/2025 (IBS/CBS/IS),
 Decreto 12.955/2026 (CBS), Resolução CGIBS 6/2026 (IBS) e NT 2025.002 da
-NF-e, conforme a versão instalada. A Reforma está em transição: em caso de
-divergência, vale o texto oficial (Planalto/CGIBS/SEFAZ). O software é
-ferramenta de APOIO e não substitui seu julgamento profissional, nem garante
-resultado perante o Fisco. Você é responsável por conferir, revisar e entregar
-obrigações e documentos, e por multas/autuações.
+NF-e, conforme a versão instalada. Base embutida versionada (NCM, CST,
+cClassTrib, nomenclatura, NBS, CNAE, grafo fiscal) renovada a cada release do
+programa. A Reforma está em transição: em caso de divergência, vale o texto
+oficial (Planalto/CGIBS/SEFAZ). O software é ferramenta de APOIO e não
+substitui seu julgamento profissional, nem garante resultado perante o Fisco.
+Você é responsável por conferir, revisar e entregar obrigações e documentos,
+e por multas/autuações. O motor de SPED Fiscal roda localmente sem tela
+dedicada — a importação com interface é a de XML de NF-e/NFC-e.
 
-6. ATUALIZAÇÕES E SUPORTE. Atualizações da base e do software por download;
-aplique-as, pois a legislação está em implantação. Suporte em regime de
-melhores esforços, nos canais e horários informados. Software fornecido "como
-está", sem garantias implícitas. Não cobre: falhas do seu ambiente, perda de
-dados sem backup, uso indevido e indisponibilidade de serviços externos
-opcionais.
+6. ATUALIZAÇÕES E SUPORTE. Atualizações da base e do software por download
+(Configurações > Atualização, via GitHub Releases); aplique-as, pois a
+legislação está em implantação. Cada release traz as tabelas embutidas
+atualizadas. Suporte em regime de melhores esforços, nos canais e horários
+informados. Software fornecido "como está", sem garantias implícitas. Não
+cobre: falhas do seu ambiente, perda de dados sem backup, uso indevido e
+indisponibilidade de serviços externos opcionais.
 
 7. PREÇO E PAGAMENTO. Conforme a Proposta/Pedido. Inadimplência: multa de 2%,
 juros de 1% a.m., correção, e suspensão de atualizações/suporte/ativação.
@@ -81,6 +99,7 @@ CONTRATADA: AURUM BIT LABS & STUDIOS LTDA — CNPJ 44.366.379/0001-23, Rua
 Cônego de Castro, 5185, Loja 01, Canindezinho, Fortaleza/CE, CEP 60763-433,
 por seu sócio-administrador Francisco Davi Carneiro Brito.
 CONTRATANTE: você, pelos dados informados no assistente de instalação, com
-aceite local registrado.
+aceite local registrado (contrato v1.1, data, hora e identificação da
+instalação).
 
 Ao clicar "Aceito" (I Agree), você conclui a contratação nestes termos.

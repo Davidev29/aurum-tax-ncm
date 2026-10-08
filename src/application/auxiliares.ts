@@ -17,6 +17,7 @@
 import { norm, uid } from '@/domain/services/format'
 import type { StoreName } from '@/domain/constants'
 import { db } from '@/infrastructure/db/schema'
+import { validarRegistro as validarRegistroDb } from '@/infrastructure/db/validacao'
 import { registrarAuditoria } from './auditoria'
 
 export type KeyPath = 'codigo' | 'id' | 'chave'
@@ -99,19 +100,28 @@ export async function salvarRegistroAux(e: EntradaRegistroAux): Promise<Resultad
 
   const editando = e.chaveOriginal != null
 
-  // 3) duplicidade — agora cobre `codigo` **e** `id` (correção do L1879).
+  // 3) validação de domínio ANTES de qualquer escrita (o driver valida de
+  // novo; aqui é para não apagar a chave antiga antes de saber que a nova
+  // grava — ver D3 da auditoria SQLite).
+  try {
+    validarRegistroDb(e.store, dados)
+  } catch (erro) {
+    return { ok: false, motivo: `Erro ao gravar: ${(erro as Error).message}` }
+  }
+
+  // 4) duplicidade — agora cobre `codigo` **e** `id` (correção do L1879).
   if (!editando) {
     const existente = await db.table(e.store).get(chave)
     if (existente) {
       return { ok: false, motivo: 'Já existe um registro com esta chave. Ajuste os dados para não sobrescrever o existente.' }
     }
   } else if (String(e.chaveOriginal) !== String(chave)) {
-    // Chave alterada em edição: só remove a antiga quando a nova não colide.
+    // Chave alterada em edição: confere colisão e GRAVA A NOVA ANTES de
+    // apagar a antiga — crash/falha no meio nunca perde o registro.
     const colisao = await db.table(e.store).get(chave)
     if (colisao) {
       return { ok: false, motivo: 'Já existe outro registro com esta chave.' }
     }
-    await db.table(e.store).delete(e.chaveOriginal as string | number)
   }
 
   try {
@@ -119,6 +129,9 @@ export async function salvarRegistroAux(e: EntradaRegistroAux): Promise<Resultad
       ? await db.table(e.store).get(e.chaveOriginal as string | number).catch(() => null)
       : await db.table(e.store).get(chave as string | number).catch(() => null)
     await db.table(e.store).put(dados as never)
+    if (editando && String(e.chaveOriginal) !== String(chave)) {
+      await db.table(e.store).delete(e.chaveOriginal as string | number)
+    }
     await registrarAuditoria(e.store, String(chave), antes ? 'atualizar' : 'criar', antes, dados)
     return { ok: true, status: editando ? 'atualizado' : 'criado', registro: dados }
   } catch (erro) {
@@ -136,13 +149,26 @@ export async function excluirRegistroAux(store: StoreName, chave: string | numbe
 
 /**
  * Garante que as três tabelas simples tenham conteúdo (CFOP, CST ICMS e
- * CST PIS/COFINS), sem duplicar o que o usuário já cadastrou.
+ * CST PIS/COFINS), sem duplicar nem sobrescrever o que o usuário já
+ * cadastrou ("o que tiver não entra"): insere **somente os códigos
+ * faltantes**. Assim quem já tinha a base semeada com os 24 CFOPs iniciais
+ * recebe os demais na próxima inicialização, e edições do usuário em
+ * códigos existentes são preservadas.
  */
 export async function garantirSementes(
   sementes: { cfop: { codigo: string; descricao: string; tipo?: 'Entrada' | 'Saída' | 'Outros' }[]; cstIcms: { codigo: string; descricao: string }[]; cstPisCofins: { codigo: string; descricao: string }[] },
 ): Promise<void> {
-  const [nCfop, nIcms, nPis] = await Promise.all([db.cfop.count(), db.cstIcms.count(), db.cstPisCofins.count()])
-  if (nCfop === 0 && sementes.cfop.length) await db.cfop.bulkPut(sementes.cfop as never[])
-  if (nIcms === 0 && sementes.cstIcms.length) await db.cstIcms.bulkPut(sementes.cstIcms as never[])
-  if (nPis === 0 && sementes.cstPisCofins.length) await db.cstPisCofins.bulkPut(sementes.cstPisCofins as never[])
+  const pares = [
+    [db.cfop, sementes.cfop],
+    [db.cstIcms, sementes.cstIcms],
+    [db.cstPisCofins, sementes.cstPisCofins],
+  ] as const
+  for (const [tabela, lista] of pares) {
+    if (!lista.length) continue
+    const existentes = new Set<string | number>(
+      await (tabela as typeof db.cfop).toCollection().primaryKeys(),
+    )
+    const faltantes = lista.filter((r) => !existentes.has(r.codigo))
+    if (faltantes.length) await (tabela as typeof db.cfop).bulkPut(faltantes as never[])
+  }
 }

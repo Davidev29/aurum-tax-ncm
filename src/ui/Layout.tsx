@@ -19,6 +19,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { CURVA, Pagina, presetTransicao, useMovimentoReduzido } from './motion'
 import { DialogoGlass } from './dialogos'
 import { ModaisGlobais } from '@/modais/globais'
+import { TourGuiado } from './TourGuiado'
+import { reabrirTour } from '@/store/tutorial'
 
 /** Grupos do menu lateral — a ordem e os ícones espelham o sistema anterior. */
 const NAV: { secao?: string; itens: { id: ViewId; icone: NomeIcone; rotulo: string }[] }[] = [
@@ -340,6 +342,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <ChipEmpresa />
             <button
               type="button"
+              onClick={() => reabrirTour()}
+              className="btn btn-press btn-ghost btn-sm"
+              title="Tour guiado — aprenda menu por menu"
+            >
+              ✨<span className="hidden sm:inline"> Guia</span>
+            </button>
+            <button
+              type="button"
               onClick={() => abrirModal('empresas')}
               className="btn btn-press btn-ghost btn-sm"
               title="Empresas"
@@ -393,6 +403,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       <ModaisGlobais />
+      <TourGuiado />
       <DialogoGlass />
       <Toasts />
     </div>

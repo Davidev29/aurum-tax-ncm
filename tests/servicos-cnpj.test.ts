@@ -1,7 +1,6 @@
 /**
  * Phase 7 — consulta por CNPJ (BrasilAPI mockada + cache + matriz CNAE).
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { importarBase } from '@/infrastructure/base/base-service'

@@ -2,7 +2,7 @@
  * Consulta por CNPJ (Phase 7) — BrasilAPI → CNAEs → 1 consulta Aurum AI NBS
  * por atividade de serviço.
  *
- * Fluxo: valida DV → cache Dexie (TTL 30 dias) → BrasilAPI (única rede da
+ * Fluxo: valida DV → cache SQLite (TTL 30 dias) → BrasilAPI (única rede da
  * tela Serviços) → para cada CNAE: lookup na tabela viva → GATE NBS com
  * `cnaeOrigem` → teto da matriz CNAE. Nunca lança: falhas viram atividades
  * com `estado` explícito.

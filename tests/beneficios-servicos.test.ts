@@ -6,7 +6,6 @@
  * 200020, 200021, 200025, 200026, 200027, 200037, 200040, 200041(+200042),
  * 200046, 200048, 200051, 515001 — além dos 6 grupos com NBS/histórico.
  */
-import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { importarBase } from '@/infrastructure/base/base-service'

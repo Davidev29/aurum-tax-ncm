@@ -16,6 +16,7 @@ import type {
   EventoAtualizacao,
   ResultadoGrafoBridge,
 } from '../src/infrastructure/bridge'
+import type { DbOp } from '../src/infrastructure/db/db-protocolo'
 
 /**
  * Versão do aplicativo, repassada pelo processo principal por meio de
@@ -31,6 +32,17 @@ function versaoDoApp(): string {
 const aurum: AurumBridge = {
   versao: versaoDoApp(),
   plataforma: process.platform,
+
+  /**
+   * Banco SQLite (canal `db:op` → Prisma no processo main).
+   * Transporte cru de operações validadas no main; registros precisam ser
+   * JSON-puros (o Prisma rejeita `undefined` em campos Json nulos? não —
+   * `undefined` vira NULL/default; funções e símbolos não atravessam IPC).
+   */
+  db: {
+    op: (req: DbOp) => ipcRenderer.invoke('db:op', req),
+    snapshotBanco: () => ipcRenderer.invoke('db:snapshot'),
+  },
 
   /** Lê um arquivo do diretório base como texto UTF-8. */
   lerArquivo: (caminho) => ipcRenderer.invoke('base:ler', caminho),

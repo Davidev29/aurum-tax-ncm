@@ -11,6 +11,9 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     setupFiles: ['tests/setup.ts'],
+    // Suíte I/O-heavy: seeds de ~28k linhas SQLite por arquivo + workers em
+    // paralelo disputando disco. 30s evita flakes sob carga (padrão: 5s).
+    testTimeout: 30000,
     coverage: {
       provider: 'v8',
       include: ['src/domain/**', 'src/application/**', 'src/infrastructure/**'],

@@ -12,7 +12,7 @@
  * - Cordial: usa o nome em saudações/agradecimentos/despedidas.
  * - Aprende com todo chat: confirmações reforçam, correções penalizam
  *   (via `ia_feedback` + fato `termo -> código` confirmado).
- * - 100% local (Dexie `meta` + `localStorage` fallback p/ testes), best-effort:
+ * - 100% local (SQLite `meta` + `localStorage` fallback p/ testes), best-effort:
  *   nunca trava o chat.
  */
 
@@ -258,10 +258,10 @@ async function gravarMeta(chave: string, valor: unknown): Promise<void> {
   }
 }
 
-/** Carrega o perfil do emitente (Dexie `meta` + espelho localStorage). */
+/** Carrega o perfil do emitente (SQLite `meta` + espelho localStorage). */
 export async function carregarPerfilMemoria(emitenteId?: string): Promise<PerfilMemoria> {
   const id = emitenteId ?? emitenteIdAtual()
-  // 1) Dexie (fonte principal, sobrevive entre seções).
+  // 1) SQLite (fonte principal, sobrevive entre seções).
   const viaMeta = await lerMeta(chavePerfil(id)).catch(() => null)
   if (viaMeta && typeof viaMeta === 'object') {
     const p = viaMeta as Partial<PerfilMemoria>
@@ -275,7 +275,7 @@ export async function carregarPerfilMemoria(emitenteId?: string): Promise<Perfil
       }
     }
   }
-  // 2) Fallback local (testes / Dexie indisponível).
+  // 2) Fallback local (testes / SQLite indisponível).
   try {
     const raw = lerLocal(chavePerfil(id))
     if (raw) {
@@ -307,7 +307,7 @@ function padroesValidos(v: unknown): PadroesConversa | null {
   return { intents, total: Number(p.total) || 0, atualizadoEm: typeof p.atualizadoEm === 'string' ? p.atualizadoEm : null }
 }
 
-/** Salva o perfil (Dexie + espelho local). */
+/** Salva o perfil (SQLite + espelho local). */
 export async function salvarPerfilMemoria(perfil: PerfilMemoria, emitenteId?: string): Promise<void> {
   const id = emitenteId ?? emitenteIdAtual()
   const dado = { ...perfil, atualizadoEm: new Date().toISOString() }
@@ -415,7 +415,7 @@ export async function registrarAprendizadoTermo(
           })
           .catch(() => null)
       } catch {
-        /* sem Dexie: segue */
+        /* sem SQLite: segue */
       }
     }
     } catch {
@@ -448,7 +448,7 @@ function prefixoFatos(emitenteId: string): string {
 
 /**
  * Lista os fatos aprendidos do emitente (para o artefato-resumo).
- * Dexie `meta` por prefixo + espelho localStorage. Best-effort, sem throw.
+ * SQLite `meta` por prefixo + espelho localStorage. Best-effort, sem throw.
  */
 export async function listarFatosMemoria(emitenteId?: string, limite = 20): Promise<FatoAprendido[]> {
   const out: FatoAprendido[] = []

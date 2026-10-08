@@ -9,7 +9,6 @@
  * - fora de escopo real → recusa fixa;
  * - preditivas SEMPRE marcadas apenasInformativo (nunca decisão).
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { importarBase } from '@/infrastructure/base/base-service'

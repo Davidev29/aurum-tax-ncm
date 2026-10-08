@@ -8,14 +8,14 @@
  * claro: para o resto do sistema o artefato é um envelope opaco.
  *
  * Modelo de ameaça (honesto, documentado):
- * - Protege contra: backup vazado, inspeção casual do IndexedDB/`meta`,
+ * - Protege contra: backup vazado, inspeção casual do SQLite/`meta`,
  *   logs e relatórios (o claro nunca sai deste módulo; `backup.ts` nem lê
  *   a store `meta`, então chave e artefatos ficam fora de qualquer export).
  * - NÃO protege contra: invasor com acesso total ao dispositivo + DevTools
  *   (a chave precisa morar no aparelho para o modo offline funcionar).
  *   Para resistência total existe o gancho `definirProvedorSegredoOS()`: o
  *   Electron pode plugar o keychain do SO (safeStorage) sem mexer nos
- *   call sites — aí a KEK sai do IndexedDB.
+ *   call sites — aí a KEK sai do SQLite.
  *
  * Tudo é best-effort: sem WebCrypto ou sem banco, o chat segue sem artefato.
  */

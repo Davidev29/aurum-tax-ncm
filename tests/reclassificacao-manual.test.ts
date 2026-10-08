@@ -5,7 +5,6 @@
  * manual, todas as telas puxam a que o usuário criou (acima da base oficial),
  * sinalizada — responsabilidade dele, isentando o sistema.
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { resolverClassificacoes } from '@/infrastructure/base/classificacao-repo'

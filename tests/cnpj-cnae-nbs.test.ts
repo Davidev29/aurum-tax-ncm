@@ -6,7 +6,6 @@
  * - bens (`1011-2/01`) → `bens→NCM` + fallback Phase 7 intacto;
  * - fora-508 (`6201-5/01`) → regra + `sem-mapeamento-NBS` + fallback Phase 7.
  */
-import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
 import { importarBase } from '@/infrastructure/base/base-service'
