@@ -6,7 +6,9 @@
  *      oficiais (164 referência, 2335 NCM, 15156 nomenclatura, 1090 CNAE,
  *      122 NBS, 17 CST, 132 CST×cClassTrib).
  *   1b. Grafo fiscal `public/base/grafo/`: `grafo.lbug` (+ espelho
- *      `grafo.lbug.json`) + `MANIFEST.grafo.json` com hash íntegro.
+ *      `grafo.lbug.json`) + `MANIFEST.grafo.json` com hash íntegro +
+ *      `vetores.json` SINCRONIZADO (`hashGrafo` === hash do payload — par
+ *      dessincronizado BLOQUEIA a build, nunca embarca cosine defasado).
  *   2. IA offline: `ncm-para-ia.json` (2335) + índice lexical + hash MANIFEST
  *      sincronizado + sinônimos + conhecimento curado + GGUF (~640MB) com
  *      SHA256 conferido contra `CHECKSUMS.txt`.
@@ -236,8 +238,76 @@ async function verificarGrafo() {
     } else {
       ok('contadores conferem com o payload')
     }
+    verificarVetoresGrafo(payload.hash ?? null)
   } catch (e) {
     fail(`leitura do grafo: ${e.message}`)
+  }
+}
+
+/**
+ * Phase 10-04 — vetores sincronizados com o grafo (fail-closed).
+ * O runtime pula o estágio vetorial quando `hashGrafo` diverge (guarda
+ * `avisoVetor`), mas o INSTALADOR nunca deve embarcar o par dessincronizado:
+ * par divergente = build BLOQUEADA. Confere o par fonte (`public/base/`),
+ * o espelho empacotado (`recursos-ia/embedding/`) e a cópia do renderer
+ * (`dist/base/`, quando existir — ela viaja no pacote final).
+ */
+function verificarVetoresGrafo(hashGrafo) {
+  const pares = [
+    {
+      rotulo: 'par fonte (public/base)',
+      grafo: path.join(RAIZ, 'public', 'base', 'grafo', 'grafo.lbug.json'),
+      vetores: path.join(RAIZ, 'public', 'base', 'grafo', 'vetores.json'),
+      obrigatorio: true,
+    },
+    {
+      rotulo: 'espelho empacotado',
+      grafo: path.join(RAIZ, 'public', 'base', 'grafo', 'grafo.lbug.json'),
+      vetores: path.join(RAIZ, 'recursos-ia', 'embedding', 'vetores-ncm.json'),
+      obrigatorio: true,
+    },
+    {
+      rotulo: 'renderer (dist)',
+      grafo: path.join(RAIZ, 'dist', 'base', 'grafo', 'grafo.lbug.json'),
+      vetores: path.join(RAIZ, 'dist', 'base', 'grafo', 'vetores.json'),
+      obrigatorio: false,
+    },
+  ]
+  for (const par of pares) {
+    const nomeVet = path.relative(RAIZ, par.vetores)
+    if (!fs.existsSync(par.vetores)) {
+      if (par.obrigatorio) fail(`${nomeVet} ausente — rode node scripts/gerar-embeddings.mjs --hash`)
+      continue
+    }
+    if (!fs.existsSync(par.grafo)) continue
+    try {
+      const v = lerJson(par.vetores)
+      const g = lerJson(par.grafo)
+      if (v.formato !== 'vetores-grafo-v1') {
+        fail(`${nomeVet} com formato inválido (${v.formato}) — regenere os vetores`)
+        continue
+      }
+      if (Number(v.dim) !== 384 || !v.vetores || typeof v.vetores !== 'object' || !Object.keys(v.vetores).length) {
+        fail(`${nomeVet} vazio ou com dimensão inválida — regenere os vetores`)
+        continue
+      }
+      const hashV = typeof v.hashGrafo === 'string' ? v.hashGrafo : null
+      const hashG = typeof g.hash === 'string' ? g.hash : (hashGrafo ?? null)
+      if (!hashV || !hashG) {
+        warn(`${nomeVet} sem hashGrafo/hash para conferência (${par.rotulo})`)
+        continue
+      }
+      if (hashV !== hashG) {
+        fail(
+          `vetores dessincronizados (${par.rotulo}): vetores ${hashV.slice(0, 12)}… ≠ grafo ${hashG.slice(0, 12)}… — ` +
+          'rode node scripts/gerar-embeddings.mjs --hash (o npm run base já faz isso após rebuild do grafo)',
+        )
+      } else {
+        ok(`vetores sincronizados (${par.rotulo}, ${hashV.slice(0, 12)}…, ${Object.keys(v.vetores).length} docs)`)
+      }
+    } catch (e) {
+      fail(`${nomeVet} ilegível: ${e.message}`)
+    }
   }
 }
 
