@@ -3,27 +3,30 @@
  * lógica do portal da Reforma (tributação sobre o consumo): **débitos** das
  * saídas menos **créditos** das entradas, por tributo e no total.
  *
- * Regras:
- * - **saída de venda** (emitida pela empresa, CFOP/natureza de venda) →
- *   **débito** integral de IBS + CBS estimados. Saída com CFOP diferente de
- *   venda vai para `debitoSemEfeito*` (informativo, fora do saldo);
- * - **entrada de emitente em regime normal** (recebida de fornecedor, ou
- *   seja: ele emitiu, você recebe o **crédito**) → a apuração assistida usa o
- *   **crédito EFETIVO: o que veio destacado na nota** (`totalIbsXml` /
- *   `totalCbsXml`, grupo `imposto/IBSCBS`). É este valor que abate o saldo;
- * - a estimativa **via NCM** (`totalIBS` / `totalCBS`, "Análise pelo NCM —
- *   Pela reforma") é **INFORMATIVA**: não abate o saldo. O bloco da tela
- *   mostra a diferença (nota − NCM) e o cliente decide o que fazer;
+ * Simetria débito × crédito (o que o usuário vê na tela):
+ * - **saída de venda** (você emitiu) → **débito EFETIVO: o que você destacou
+ *   na nota** (`totalIbsXml` / `totalCbsXml`, grupo `imposto/IBSCBS`). É este
+ *   valor que compõe o saldo devedor;
+ * - **entrada de emitente em regime normal** (você recebeu) → **crédito
+ *   EFETIVO: o que veio destacado na nota do fornecedor**. É este valor que
+ *   abate o saldo;
+ * - as estimativas **via NCM** (`totalIBS` / `totalCBS`, "Análise pelo NCM —
+ *   Pela reforma") são **INFORMATIVAS** dos dois lados: não compõem o saldo.
+ *   A tela mostra as diferenças (nota − NCM) para conferir se a emissão está
+ *   correta perante a Reforma — o cliente decide o que fazer;
  * - **nota legada sem os campos do XML** (`totalIbsXml` ausente — dado
- *   anterior à Reforma): o efetivo usa a estimativa NCM como proxy e o
- *   bloco sinaliza `creditoProvisorio` (vale conferir o XML);
+ *   anterior à Reforma): o efetivo usa a estimativa NCM como proxy e o bloco
+ *   sinaliza `debitoProvisorio` / `creditoProvisorio` (vale conferir o XML);
+ * - **XML pós-Reforma sem destaque** (campos presentes e zerados): efetivo
+ *   zero — sem valor comprovado na nota (o informativo NCM segue exibido);
  * - **entrada de Simples/MEI** → crédito **bloqueado** (não transfere, LC
  *   214/2025) — somado à parte, nunca abatido;
  * - **entrada com regime desconhecido** → crédito **não confirmado** —
  *   também à parte, por prudência (não afirma o que o XML não prova);
  * - **CFOP diferente de venda / compra para imobilizado** (`./cfop`) →
- *   separado em `semEfeito*` / `imobilizado*` (informativos, fora do
- *   crédito) — o detalhamento fica no bloco de naturezas da operação;
+ *   separado em `semEfeito*` / `imobilizado*` / `debitoSemEfeito*`
+ *   (informativos, fora do saldo) — o detalhamento fica no bloco de
+ *   naturezas da operação;
  * - **quarentena** → fora da apuração (direção indefinida), apenas contada.
  *
  * Tudo em R$ com arredondamento de centavos; a comparação final usa tolerância
@@ -43,9 +46,38 @@ export interface ApuracaoIbsCbs {
   qtdQuarentena: number
   baseSaidas: number
   baseEntradas: number
+  /**
+   * Débito **informativo** — análise pelo NCM ("Pela reforma", estimado pelo
+   * sistema). NÃO compõe o saldo; serve para conferir se a emissão está
+   * correta. Mantido com o nome histórico por compatibilidade.
+   */
   debitoIBS: number
   debitoCBS: number
   debitoTotal: number
+  /**
+   * Débito **efetivo** — o que você destacou nas saídas
+   * (`totalIbsXml`/`totalCbsXml`). É este valor que a apuração assistida usa
+   * como débito no saldo devedor/credor do período.
+   */
+  debitoEfetivoIBS: number
+  debitoEfetivoCBS: number
+  debitoEfetivoTotal: number
+  /** Espelho explícito do informativo (NCM) para a UI não confundir. */
+  debitoInformativoIBS: number
+  debitoInformativoCBS: number
+  debitoInformativoTotal: number
+  /** `efetivo − informativo` (negativo = você destacou menos que a Reforma). */
+  divergenciaDebitoIBS: number
+  divergenciaDebitoCBS: number
+  divergenciaDebitoTotal: number
+  /** Saídas de venda com apuração de débito (efetivo e/ou informativo). */
+  qtdSaidasEfetivas: number
+  baseSaidasEfetiva: number
+  /**
+   * `true` quando ao menos uma saída legada (sem os campos do XML) usou a
+   * estimativa NCM como proxy do efetivo — vale conferir a emissão.
+   */
+  debitoProvisorio: boolean
   /** Saídas com CFOP/natureza diferente de venda (informativo, fora do saldo). */
   debitoSemEfeitoIBS: number
   debitoSemEfeitoCBS: number
@@ -129,6 +161,18 @@ export function apurarIbsCbs(notas: EntradaApuracao[]): ApuracaoIbsCbs {
     debitoIBS: 0,
     debitoCBS: 0,
     debitoTotal: 0,
+    debitoEfetivoIBS: 0,
+    debitoEfetivoCBS: 0,
+    debitoEfetivoTotal: 0,
+    debitoInformativoIBS: 0,
+    debitoInformativoCBS: 0,
+    debitoInformativoTotal: 0,
+    divergenciaDebitoIBS: 0,
+    divergenciaDebitoCBS: 0,
+    divergenciaDebitoTotal: 0,
+    qtdSaidasEfetivas: 0,
+    baseSaidasEfetiva: 0,
+    debitoProvisorio: false,
     debitoSemEfeitoIBS: 0,
     debitoSemEfeitoCBS: 0,
     debitoSemEfeitoTotal: 0,
@@ -177,7 +221,17 @@ export function apurarIbsCbs(notas: EntradaApuracao[]): ApuracaoIbsCbs {
       // Você emitiu = débito seu — mas SÓ quando a operação é de venda.
       // Saída com CFOP/natureza diferente de venda vai para o bucket
       // informativo (não compõe o saldo assistido).
+      // Débito EFETIVO = o que você destacou na nota; o NCM vira o
+      // informativo ("emitiu correto perante a Reforma?").
       const itensS = n.itensAnalisados ?? []
+      const temCampoXmlS =
+        (n as { totalIbsXml?: number }).totalIbsXml !== undefined ||
+        (n as { totalCbsXml?: number }).totalCbsXml !== undefined
+      const declaradoS = (): { ibs: number; cbs: number; total: number } => {
+        const ibs = cent(Number((n as { totalIbsXml?: number }).totalIbsXml))
+        const cbs = cent(Number((n as { totalCbsXml?: number }).totalCbsXml))
+        return { ibs, cbs, total: cent(ibs + cbs) }
+      }
       a.baseSaidas = cent(a.baseSaidas + cent(n.valorTotal))
       if (!itensS.length) {
         const natS = classificarNatOp((n as { natOp?: string })?.natOp)
@@ -187,16 +241,35 @@ export function apurarIbsCbs(notas: EntradaApuracao[]): ApuracaoIbsCbs {
           a.debitoSemEfeitoCBS = cent(a.debitoSemEfeitoCBS + cbs)
         } else {
           a.qtdSaidas++
+          a.qtdSaidasEfetivas++
           a.debitoIBS = cent(a.debitoIBS + ibs)
           a.debitoCBS = cent(a.debitoCBS + cbs)
+          a.debitoInformativoIBS = cent(a.debitoInformativoIBS + ibs)
+          a.debitoInformativoCBS = cent(a.debitoInformativoCBS + cbs)
+          a.baseSaidasEfetiva = cent(a.baseSaidasEfetiva + cent(n.valorTotal))
+          if (!temCampoXmlS) {
+            // Saída legada: proxy NCM (vale conferir a emissão).
+            a.debitoEfetivoIBS = cent(a.debitoEfetivoIBS + ibs)
+            a.debitoEfetivoCBS = cent(a.debitoEfetivoCBS + cbs)
+            a.debitoProvisorio = true
+          } else {
+            const d = declaradoS()
+            if (d.total > 0.005) {
+              a.debitoEfetivoIBS = cent(a.debitoEfetivoIBS + d.ibs)
+              a.debitoEfetivoCBS = cent(a.debitoEfetivoCBS + d.cbs)
+            }
+          }
         }
       } else {
         let vIbs = 0
         let vCbs = 0
         let sIbs = 0
         let sCbs = 0
+        let xvIbs = 0
+        let xvCbs = 0
         let temVenda = false
         let temSem = false
+        let baseEfetivaS = 0
         for (const it of itensS) {
           const efeito = efeitoDoItem(
             (it as { cfop?: string })?.cfop,
@@ -205,6 +278,8 @@ export function apurarIbsCbs(notas: EntradaApuracao[]): ApuracaoIbsCbs {
           )
           const nIbs = cent((it as { ibs?: number })?.ibs)
           const nCbs = cent((it as { cbs?: number })?.cbs)
+          const xIbs = cent((it as { vIbsItem?: number })?.vIbsItem)
+          const xCbs = cent((it as { vCbsItem?: number })?.vCbsItem)
           if (efeito === 'sem-efeito' || efeito === 'imobilizado') {
             temSem = true
             sIbs = cent(sIbs + nIbs)
@@ -213,6 +288,9 @@ export function apurarIbsCbs(notas: EntradaApuracao[]): ApuracaoIbsCbs {
             temVenda = true
             vIbs = cent(vIbs + nIbs)
             vCbs = cent(vCbs + nCbs)
+            xvIbs = cent(xvIbs + xIbs)
+            xvCbs = cent(xvCbs + xCbs)
+            baseEfetivaS = cent(baseEfetivaS + cent((it as { vlTotal?: number })?.vlTotal))
           }
         }
         if (vIbs + vCbs + sIbs + sCbs <= 0.005 && ibs + cbs > 0.005) {
@@ -227,10 +305,40 @@ export function apurarIbsCbs(notas: EntradaApuracao[]): ApuracaoIbsCbs {
             temVenda = true
           }
         }
+        if (temVenda && baseEfetivaS <= 0.005 && vIbs + vCbs > 0.005) {
+          baseEfetivaS = cent(n.valorTotal)
+        }
+        // Débito EFETIVO da venda: destacado nos itens; saída legada usa o
+        // proxy NCM; XML sem destaque = zero comprovado (declarado da capa
+        // como fallback quando há total sem detalhe por item).
+        let efIbsS = 0
+        let efCbsS = 0
+        if (temVenda) {
+          if (!temCampoXmlS) {
+            efIbsS = vIbs
+            efCbsS = vCbs
+            a.debitoProvisorio = true
+          } else if (xvIbs + xvCbs <= 0.005) {
+            const d = declaradoS()
+            if (d.total > 0.005) {
+              efIbsS = d.ibs
+              efCbsS = d.cbs
+            }
+          } else {
+            efIbsS = xvIbs
+            efCbsS = xvCbs
+          }
+        }
         if (temVenda) {
           a.qtdSaidas++
+          a.qtdSaidasEfetivas++
           a.debitoIBS = cent(a.debitoIBS + vIbs)
           a.debitoCBS = cent(a.debitoCBS + vCbs)
+          a.debitoEfetivoIBS = cent(a.debitoEfetivoIBS + efIbsS)
+          a.debitoEfetivoCBS = cent(a.debitoEfetivoCBS + efCbsS)
+          a.debitoInformativoIBS = cent(a.debitoInformativoIBS + vIbs)
+          a.debitoInformativoCBS = cent(a.debitoInformativoCBS + vCbs)
+          a.baseSaidasEfetiva = cent(a.baseSaidasEfetiva + baseEfetivaS)
         }
         if (temSem) {
           a.qtdSaidasSemEfeito++
@@ -241,8 +349,23 @@ export function apurarIbsCbs(notas: EntradaApuracao[]): ApuracaoIbsCbs {
           // Saída sem itens classificáveis: conta como venda
           // (compatibilidade com o comportamento histórico).
           a.qtdSaidas++
+          a.qtdSaidasEfetivas++
           a.debitoIBS = cent(a.debitoIBS + ibs)
           a.debitoCBS = cent(a.debitoCBS + cbs)
+          a.debitoInformativoIBS = cent(a.debitoInformativoIBS + ibs)
+          a.debitoInformativoCBS = cent(a.debitoInformativoCBS + cbs)
+          a.baseSaidasEfetiva = cent(a.baseSaidasEfetiva + cent(n.valorTotal))
+          if (!temCampoXmlS) {
+            a.debitoEfetivoIBS = cent(a.debitoEfetivoIBS + ibs)
+            a.debitoEfetivoCBS = cent(a.debitoEfetivoCBS + cbs)
+            a.debitoProvisorio = true
+          } else {
+            const d = declaradoS()
+            if (d.total > 0.005) {
+              a.debitoEfetivoIBS = cent(a.debitoEfetivoIBS + d.ibs)
+              a.debitoEfetivoCBS = cent(a.debitoEfetivoCBS + d.cbs)
+            }
+          }
         }
       }
     } else if (n.direcao === 'entrada') {
@@ -391,6 +514,12 @@ export function apurarIbsCbs(notas: EntradaApuracao[]): ApuracaoIbsCbs {
 
   a.debitoTotal = cent(a.debitoIBS + a.debitoCBS)
   a.debitoSemEfeitoTotal = cent(a.debitoSemEfeitoIBS + a.debitoSemEfeitoCBS)
+  // `debito*` histórico = informativo NCM (não compõe o saldo).
+  a.debitoInformativoTotal = cent(a.debitoInformativoIBS + a.debitoInformativoCBS)
+  a.debitoEfetivoTotal = cent(a.debitoEfetivoIBS + a.debitoEfetivoCBS)
+  a.divergenciaDebitoIBS = cent(a.debitoEfetivoIBS - a.debitoInformativoIBS)
+  a.divergenciaDebitoCBS = cent(a.debitoEfetivoCBS - a.debitoInformativoCBS)
+  a.divergenciaDebitoTotal = cent(a.debitoEfetivoTotal - a.debitoInformativoTotal)
   // `credito*` histórico = informativo NCM (não abate o saldo).
   a.creditoTotal = cent(a.creditoIBS + a.creditoCBS)
   a.creditoInformativoTotal = cent(a.creditoInformativoIBS + a.creditoInformativoCBS)
@@ -402,9 +531,10 @@ export function apurarIbsCbs(notas: EntradaApuracao[]): ApuracaoIbsCbs {
   a.imobilizadoTotal = cent(a.imobilizadoIBS + a.imobilizadoCBS)
   a.bloqueadoTotal = cent(a.bloqueadoIBS + a.bloqueadoCBS)
   a.naoConfirmadoTotal = cent(a.naoConfirmadoIBS + a.naoConfirmadoCBS)
-  // Apuração assistida: débitos − créditos EFETIVOS (vieram na nota).
-  a.saldoIBS = cent(a.debitoIBS - a.creditoEfetivoIBS)
-  a.saldoCBS = cent(a.debitoCBS - a.creditoEfetivoCBS)
+  // Apuração assistida: débitos EFETIVOS (você destacou nas saídas) −
+  // créditos EFETIVOS (vieram nas notas de entrada). Só venda dos dois lados.
+  a.saldoIBS = cent(a.debitoEfetivoIBS - a.creditoEfetivoIBS)
+  a.saldoCBS = cent(a.debitoEfetivoCBS - a.creditoEfetivoCBS)
   a.saldoTotal = cent(a.saldoIBS + a.saldoCBS)
 
   const temMovimento =

@@ -48,6 +48,7 @@ import { BlocoNaturezas } from './NfeNatureza'
 import { ModalItemNfeDetalhe, Olho } from '@/ui/detalhes'
 import { SeloST, SeloSTNota } from '@/ui/cest'
 import { toast, useUi } from '@/store/ui'
+import { CalendarioAnualModal } from './NfeCalendarioAnual'
 import { CartaoStat } from '@/ui/cartoes'
 import { Btn, IconeBadge, Modal, Painel, Pill, Texto, useAcaoTatil } from '@/ui/kit'
 import { EscudoAurum } from '@/ui/Marca'
@@ -728,8 +729,11 @@ function PainelHistorico() {
  */
 function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCbs; inicio: string; fim: string }) {
   const temMovimento = a.resultado !== 'sem-movimento'
-  const cobertura = a.debitoTotal > 0 ? Math.min(100, (a.creditoEfetivoTotal / a.debitoTotal) * 100) : 0
+  const cobertura = a.debitoEfetivoTotal > 0 ? Math.min(100, (a.creditoEfetivoTotal / a.debitoEfetivoTotal) * 100) : 0
   const divergencia = a.divergenciaCreditoTotal
+  const divergenciaDebito = a.divergenciaDebitoTotal
+  // Sem destaque nas saídas (XML anterior à Reforma): débito comprovado zero.
+  const semDestaqueSaidas = temMovimento && a.qtdSaidas > 0 && a.debitoEfetivoTotal <= 0.005 && a.debitoInformativoTotal > 0.005
   const vereditoTom =
     a.resultado === 'a-pagar' ? 'red' : a.resultado === 'saldo-credor' ? 'emerald' : 'slate'
   return (
@@ -754,10 +758,10 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
       <div className="space-y-4 p-5">
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
           <div className="calc-kpi border-l-4 !border-l-red-400">
-            <div className="text-[10px] font-bold uppercase text-slate-500">Débitos · saídas de venda</div>
-            <div className="font-mono text-lg font-black">{fmtMoeda(a.debitoTotal)}</div>
-            <div className="font-mono text-[10px] text-slate-400">IBS {fmtMoeda(a.debitoIBS)} + CBS {fmtMoeda(a.debitoCBS)}</div>
-            <div className="mt-0.5 text-[10px] text-slate-400">{a.qtdSaidas} venda(s) que você emitiu · base {fmtMoeda(a.baseSaidas)}</div>
+            <div className="text-[10px] font-bold uppercase text-slate-500">Débitos · você destacou nas saídas</div>
+            <div className="font-mono text-lg font-black">{fmtMoeda(a.debitoEfetivoTotal)}</div>
+            <div className="font-mono text-[10px] text-slate-400">IBS {fmtMoeda(a.debitoEfetivoIBS)} + CBS {fmtMoeda(a.debitoEfetivoCBS)}</div>
+            <div className="mt-0.5 text-[10px] text-slate-400">{a.qtdSaidas} venda(s) que você emitiu · base {fmtMoeda(a.baseSaidasEfetiva)} · esperado {fmtMoeda(a.debitoInformativoTotal)}</div>
           </div>
           <div className="calc-kpi border-l-4 !border-l-emerald-500">
             <div className="text-[10px] font-bold uppercase text-slate-500">Créditos efetivos · vieram na nota</div>
@@ -775,8 +779,8 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
         {temMovimento ? (
           <div>
             <div className="flex justify-between font-mono text-[10px] text-slate-400">
-              <span>Créditos da nota cobrem {cobertura.toFixed(0)}% dos débitos</span>
-              <span>{fmtMoeda(a.creditoEfetivoTotal)} / {fmtMoeda(a.debitoTotal)}</span>
+              <span>Créditos da nota cobrem {cobertura.toFixed(0)}% dos débitos destacados</span>
+              <span>{fmtMoeda(a.creditoEfetivoTotal)} / {fmtMoeda(a.debitoEfetivoTotal)}</span>
             </div>
             <div className="calc-bar mt-1" aria-hidden="true">
               <span className="bg-gradient-to-r from-emerald-600 to-teal-400" style={{ width: `${cobertura}%` }} />
@@ -796,15 +800,15 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
           <tbody>
             <tr>
               <td>
-                Débitos — Saídas de venda
+                Débitos efetivos — você destacou nas saídas
                 <span className="block text-[10px] font-normal text-slate-400">
-                  {a.qtdSaidas} venda(s) que você emitiu · base {fmtMoeda(a.baseSaidas)}
+                  {a.qtdSaidas} venda(s) que você emitiu · base {fmtMoeda(a.baseSaidasEfetiva)}
                   {a.debitoSemEfeitoTotal > 0 ? ` · +${fmtMoeda(a.debitoSemEfeitoTotal)} em ${a.qtdSaidasSemEfeito} saída(s) fora de venda (fora do saldo)` : ''}
                 </span>
               </td>
-              <td className="text-right font-mono">{fmtMoeda(a.debitoIBS)}</td>
-              <td className="text-right font-mono">{fmtMoeda(a.debitoCBS)}</td>
-              <td className="text-right font-mono font-bold">{fmtMoeda(a.debitoTotal)}</td>
+              <td className="text-right font-mono">{fmtMoeda(a.debitoEfetivoIBS)}</td>
+              <td className="text-right font-mono">{fmtMoeda(a.debitoEfetivoCBS)}</td>
+              <td className="text-right font-mono font-bold">{fmtMoeda(a.debitoEfetivoTotal)}</td>
             </tr>
             <tr>
               <td>
@@ -818,10 +822,36 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
               <td className="text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">{fmtMoeda(a.creditoEfetivoTotal)}</td>
             </tr>
             <tr>
-              <td className="font-bold">(=) Saldo assistido</td>
+              <td className="font-bold">(=) Saldo assistido · destacado − destacado</td>
               <td className="text-right font-mono font-bold">{fmtMoeda(a.saldoIBS)}</td>
               <td className="text-right font-mono font-bold">{fmtMoeda(a.saldoCBS)}</td>
               <td className="text-right font-mono font-black">{fmtMoeda(a.saldoTotal)}</td>
+            </tr>
+            <tr>
+              <td>
+                Análise pelo NCM — débito esperado das saídas
+                <span className="block text-[10px] font-normal text-slate-400">
+                  Informativo — o que a Reforma indica para suas vendas (não compõe o saldo)
+                </span>
+              </td>
+              <td className="text-right font-mono text-slate-500">{fmtMoeda(a.debitoInformativoIBS)}</td>
+              <td className="text-right font-mono text-slate-500">{fmtMoeda(a.debitoInformativoCBS)}</td>
+              <td className="text-right font-mono font-bold text-slate-500">{fmtMoeda(a.debitoInformativoTotal)}</td>
+            </tr>
+            <tr>
+              <td>
+                Diferença débito (nota − NCM) — emissão correta?
+                <span className="block text-[10px] font-normal text-slate-400">
+                  {divergenciaDebito === 0 && a.qtdSaidas > 0
+                    ? 'Você destacou exatamente o esperado — emissão de acordo com a Reforma.'
+                    : divergenciaDebito < 0
+                      ? 'Você destacou menos que o esperado — confira a emissão.'
+                      : 'Você destacou mais que o esperado — confira a emissão.'}
+                </span>
+              </td>
+              <td className={`text-right font-mono font-bold ${a.divergenciaDebitoIBS < 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{a.divergenciaDebitoIBS >= 0 ? '+' : ''}{fmtMoeda(a.divergenciaDebitoIBS)}</td>
+              <td className={`text-right font-mono font-bold ${a.divergenciaDebitoCBS < 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{a.divergenciaDebitoCBS >= 0 ? '+' : ''}{fmtMoeda(a.divergenciaDebitoCBS)}</td>
+              <td className={`text-right font-mono font-black ${divergenciaDebito < 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}`}>{divergenciaDebito >= 0 ? '+' : ''}{fmtMoeda(divergenciaDebito)}</td>
             </tr>
           </tbody>
         </table>
@@ -835,6 +865,15 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
               <Pill cor="slate">Informativo · não abate o saldo · você decide</Pill>
             </div>
             <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+              Pela lei (NCM), o seu débito <strong>poderia ser {fmtMoeda(a.debitoInformativoTotal)}</strong>{' '}
+              (IBS {fmtMoeda(a.debitoInformativoIBS)} + CBS {fmtMoeda(a.debitoInformativoCBS)}).
+              Você destacou <strong>{fmtMoeda(a.debitoEfetivoTotal)}</strong> — diferença de{' '}
+              <strong className={divergenciaDebito < 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}>
+                {divergenciaDebito >= 0 ? '+' : ''}{fmtMoeda(divergenciaDebito)}
+              </strong>{' '}
+              (nota − NCM). Vale o que você emitiu: confira se a emissão está de acordo com a Reforma.
+            </p>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
               Pela lei (NCM), o crédito <strong>poderia ser {fmtMoeda(a.creditoInformativoTotal)}</strong>{' '}
               (IBS {fmtMoeda(a.creditoInformativoIBS)} + CBS {fmtMoeda(a.creditoInformativoCBS)}).
               A nota trouxe <strong>{fmtMoeda(a.creditoEfetivoTotal)}</strong> — diferença de{' '}
@@ -843,8 +882,14 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
               </strong>{' '}
               (nota − NCM). Vale o que o fornecedor destacou: compare e decida se aceita, contesta ou complementa.
             </p>
-            {(a.semEfeitoTotal > 0 || a.imobilizadoTotal > 0 || a.creditoProvisorio) ? (
+            {(a.semEfeitoTotal > 0 || a.imobilizadoTotal > 0 || a.creditoProvisorio || a.debitoProvisorio || semDestaqueSaidas) ? (
               <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">
+                {semDestaqueSaidas ? (
+                  <>⤴ Suas saídas não destacam IBS/CBS (XML anterior à Reforma): débito comprovado zero — o esperado pela lei é <strong>{fmtMoeda(a.debitoInformativoTotal)}</strong>. Confira a emissão. </>
+                ) : null}
+                {a.debitoProvisorio && !semDestaqueSaidas ? (
+                  <>📎 Há saída legada sem os campos do XML: o débito usou a estimativa NCM como proxy — confira a emissão. </>
+                ) : null}
                 {a.semEfeitoTotal > 0 ? (
                   <>⚠️ Operações diferentes de venda: <strong>{fmtMoeda(a.semEfeitoTotal)}</strong> ({a.qtdSemEfeito} nota(s)) fora do crédito — veja o bloco de naturezas acima dos gráficos. </>
                 ) : null}
@@ -892,7 +937,9 @@ function ApuracaoReforma({ apuracao: a, inicio, fim }: { apuracao: ApuracaoIbsCb
             </div>
           ) : a.resultado === 'zerado' ? (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3.5 text-center text-xs font-bold text-slate-500 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-400">
-              ✓ Débitos e créditos se equivalem — sem saldo a pagar ou restituir.
+              {semDestaqueSaidas
+                ? `✓ Débitos e créditos destacados se equivalem (zero) — mas suas saídas não destacam IBS/CBS: o esperado pela Reforma é ${fmtMoeda(a.debitoInformativoTotal)}. Confira a emissão.`
+                : '✓ Débitos e créditos se equivalem — sem saldo a pagar ou restituir.'}
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-3.5 text-center text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-950/30">
@@ -934,6 +981,7 @@ function Calendario() {
   const diaSel = filtros.inicio && filtros.inicio === filtros.fim
     ? Number(filtros.inicio.slice(8, 10))
     : null
+  const [anualAberto, setAnualAberto] = useState(false)
 
   const anterior = () => {
     const d = new Date(mesAno, mesMes - 2, 1)
@@ -946,11 +994,19 @@ function Calendario() {
 
   return (
     <Painel className="flex h-full flex-col p-4">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-1">
         <button type="button" onClick={anterior} className="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Mês anterior">‹</button>
         <h3 className="flex items-center gap-2 text-sm font-bold"><IconeBadge nome="calendario" tom="brand" tamanho="sm" /> {MESES[mesMes - 1]} <span className="text-slate-400">{mesAno}</span></h3>
         <button type="button" onClick={proximo} className="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Próximo mês">›</button>
       </div>
+      <button
+        type="button"
+        onClick={() => setAnualAberto(true)}
+        title="Abre o calendário anual — meses com documentos ficam com a borda cintilante"
+        className="xml-focus-ouro mb-2 rounded-lg border border-dashed border-brand-300 bg-brand-50/60 px-2 py-1.5 text-[11px] font-bold text-brand-700 transition hover:bg-brand-50 dark:border-aurum-900 dark:bg-brand-950/30 dark:text-aurum-200"
+      >
+        📅 Calendário anual — achar meses com notas
+      </button>
       <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-slate-400">
         {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => <span key={i}>{d}</span>)}
       </div>
@@ -985,6 +1041,7 @@ function Calendario() {
       <p className="mt-auto pt-2 text-[10px] text-slate-400 dark:text-slate-500">
         Clique num dia para filtrar as notas.
       </p>
+      <CalendarioAnualModal aberto={anualAberto} onFechar={() => setAnualAberto(false)} />
     </Painel>
   )
 }
@@ -1344,6 +1401,19 @@ function Filtros() {
     filtros.texto, filtros.fornecedor, filtros.cfop, filtros.cstIcms,
     filtros.cClassTrib, filtros.cstReforma, filtros.reducao,
   ].filter((v) => v.trim()).length + (filtros.direcao !== 'todas' ? 1 : 0)
+  // Rascunho do período: digitar a data não refiltra sozinho — só aplica no
+  // botão Filtrar (ou Enter), para não recarregar a cada número digitado.
+  const [inicioRasc, setInicioRasc] = useState(filtros.inicio)
+  const [fimRasc, setFimRasc] = useState(filtros.fim)
+  useEffect(() => {
+    setInicioRasc(filtros.inicio)
+    setFimRasc(filtros.fim)
+  }, [filtros.inicio, filtros.fim])
+  const periodoPendente = inicioRasc !== filtros.inicio || fimRasc !== filtros.fim
+  const aplicarPeriodo = () => {
+    if (!periodoPendente) return
+    setFiltros({ inicio: inicioRasc, fim: fimRasc })
+  }
 
   const periodo = (dias: number) => {
     const hoje = new Date()
@@ -1388,11 +1458,25 @@ function Filtros() {
         <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 lg:grid-cols-12">
           <label className="block lg:col-span-2">
             <span className="field-label">Período · de</span>
-            <Texto type="date" value={filtros.inicio} onChange={(e) => setFiltros({ inicio: e.target.value })} />
+            <Texto
+              type="date"
+              value={inicioRasc}
+              onChange={(e) => setInicioRasc(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') aplicarPeriodo()
+              }}
+            />
           </label>
           <label className="block lg:col-span-2">
             <span className="field-label">Período · até</span>
-            <Texto type="date" value={filtros.fim} onChange={(e) => setFiltros({ fim: e.target.value })} />
+            <Texto
+              type="date"
+              value={fimRasc}
+              onChange={(e) => setFimRasc(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') aplicarPeriodo()
+              }}
+            />
           </label>
           <label className="block lg:col-span-2">
             <span className="field-label">Tipo de nota</span>
@@ -1448,6 +1532,38 @@ function Filtros() {
               ))}
             </select>
           </label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Btn
+            variante={periodoPendente ? 'primary' : 'ghost'}
+            onClick={aplicarPeriodo}
+            disabled={!periodoPendente}
+            title="Aplica o período digitado — digitar a data não filtra sozinho"
+          >
+            🔎 Filtrar período
+          </Btn>
+          {periodoPendente ? (
+            <span className="text-[11px] text-amber-700 dark:text-amber-300">
+              Período alterado — clique em Filtrar (ou Enter) para aplicar.
+            </span>
+          ) : (
+            <span className="text-[11px] text-slate-400">
+              Digite as datas e clique em Filtrar — a lista só atualiza ao confirmar.
+            </span>
+          )}
+          {(inicioRasc || fimRasc) && periodoPendente ? (
+            <button
+              type="button"
+              onClick={() => {
+                setInicioRasc(filtros.inicio)
+                setFimRasc(filtros.fim)
+              }}
+              className="xml-focus-ouro pill bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+              title="Descarta o que foi digitado e volta ao período aplicado"
+            >
+              ✕ descartar digitação
+            </button>
+          ) : null}
         </div>
         {/* Linha 2 — produto em destaque + Reforma */}
         <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-12">
@@ -1533,6 +1649,30 @@ function Filtros() {
  */
 const TAMANHOS_PAGINA = [10, 15, 30, 50] as const
 
+/**
+ * Estado vazio da tabela: em vez de "não exibe nada", oferece o
+ * calendário anual — meses com documentos ficam com a borda cintilante.
+ */
+function TabelaVazia() {
+  const [anualAberto, setAnualAberto] = useState(false)
+  return (
+    <Painel className="p-6 text-center">
+      <div className="text-3xl" aria-hidden="true">🗂️</div>
+      <p className="mt-2 text-sm font-bold">Nenhuma nota neste período</p>
+      <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+        Pode não haver documentos neste mês. Abra o calendário anual: os meses
+        com notas ficam com a <strong>borda cintilante</strong> para facilitar a identificação.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+        <Btn variante="primary" onClick={() => setAnualAberto(true)}>
+          📅 Abrir calendário anual
+        </Btn>
+      </div>
+      <CalendarioAnualModal aberto={anualAberto} onFechar={() => setAnualAberto(false)} />
+    </Painel>
+  )
+}
+
 function TabelaNotas({ notas, onVerDanfe }: { notas: NotaXml[]; onVerDanfe: (n: NotaXml) => void }) {
   const abrirNota = useNfe((s) => s.abrirNota)
   const excluir = useNfe((s) => s.excluir)
@@ -1559,11 +1699,7 @@ function TabelaNotas({ notas, onVerDanfe }: { notas: NotaXml[]; onVerDanfe: (n: 
   }, [paginaSegura, totalPaginas])
 
   if (!notas.length) {
-    return (
-      <Painel className="p-6 text-center text-sm text-slate-500">
-        Nenhuma nota encontrada no período. Importe XMLs ou ajuste os filtros acima.
-      </Painel>
-    )
+    return <TabelaVazia />
   }
 
   return (

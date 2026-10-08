@@ -46,6 +46,14 @@ export interface DespesaSimples {
   regra: RegraCreditoCBS;
 }
 
+export interface ParcelaSegStore {
+  id: string;
+  anexoId: AnexoSimplesId;
+  valor: number;
+  /** true = ICMS/ISS desta parcela já recolhido por ST (I/II → ICMS · demais → ISS). */
+  st: boolean;
+}
+
 export interface CnaeOpcao {
   cnae7: string;
   codigoFormatado: string;
@@ -95,6 +103,11 @@ interface SimplesState {
   hibrido: ResultadoHibrido | null;
   debitosCBS: number;
   creditosCBS: number;
+  // Segregação de receita (vale p/ manual e CNPJ): 1 botão, N parcelas com
+  // anexo + valor + checkbox ST. Cada desmembramento usa a RBT12 total na
+  // sua tabela; o DAS é a soma (ST já deduzida por parcela).
+  segAtivo: boolean;
+  segParcelas: ParcelaSegStore[];
 
   set: (p: Partial<SimplesState>) => void;
   setAnexo: (a: AnexoSimplesId) => void;
@@ -226,6 +239,8 @@ export const useSimples = create<SimplesState>((set, get) => ({
   hibrido: null,
   debitosCBS: 0,
   creditosCBS: 0,
+  segAtivo: false,
+  segParcelas: [],
 
   set: (p) => {
     // Trocar de modo esconde o relatório (novo passo 1).
@@ -395,6 +410,8 @@ export const useSimples = create<SimplesState>((set, get) => ({
       convencional: null,
       hibrido: null,
       relatorioVisivel: false,
+      segAtivo: false,
+      segParcelas: [],
       opcoes: [],
       cnaeEscolhido: '',
       empresaNome: '',

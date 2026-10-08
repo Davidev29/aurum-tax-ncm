@@ -205,13 +205,17 @@ export function Revelar({
   children,
   className = '',
   atraso = 0,
+  inert,
+  ...rest
 }: {
   children: ReactNode
   className?: string
   atraso?: number
+  inert?: boolean
+  [key: string]: unknown
 }) {
   const reduzir = useMovimentoReduzido()
-  if (reduzir) return <div className={className}>{children}</div>
+  if (reduzir) return <div className={className} inert={inert} {...rest}>{children}</div>
   return (
     <motion.div
       className={`transform-gpu ${className}`}
@@ -221,6 +225,8 @@ export function Revelar({
       viewport={{ once: true, amount: 0.12, margin: '-48px' }}
       transition={{ delay: Math.min(atraso, 0.25) }}
       style={{ willChange: 'opacity, transform' }}
+      inert={inert}
+      {...rest}
     >
       {children}
     </motion.div>

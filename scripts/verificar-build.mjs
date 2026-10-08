@@ -333,6 +333,41 @@ function verificarBanco() {
     if (!fs.existsSync(path.join(prismaDir, f))) fail(`motor Prisma ausente: node_modules/.prisma/client/${f} (rode npm run db:generate no SO alvo)`)
   }
   if (!falhas.length) ok('motores Prisma win+mac presentes')
+  // Portão anti-regressão do instalador: o cliente gerado (`node_modules/.prisma/`,
+  // diretório com ponto) é EXCLUÍDO do asar por padrão pelo electron-builder —
+  // sem entrada explícita em `build.files`, o app instalado perde o módulo
+  // `.prisma/client/default` e TODA operação `db:op` rejeita ("Error occurred in
+  // handler for 'db:op'", tabelas vazias, nenhuma consulta funciona).
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(RAIZ, 'package.json'), 'utf8'))
+    const files = (pkg.build && pkg.build.files) || []
+    const temPrisma = files.some((f) => {
+      if (typeof f === 'string') return f.includes('.prisma')
+      if (f && typeof f === 'object') {
+        return [f.from, f.to, ...(Array.isArray(f.filter) ? f.filter : [])].some(
+          (x) => typeof x === 'string' && x.includes('.prisma'),
+        )
+      }
+      return false
+    })
+    if (!temPrisma) fail('build.files sem entrada node_modules/.prisma/** (o instalador embarcaria sem o cliente gerado — todas as tabelas falhariam)')
+    else ok('build.files inclui o cliente Prisma gerado (.prisma)')
+    const unpack = (pkg.build && pkg.build.asarUnpack) || []
+    const desembrulhaPrisma = unpack.some((u) => typeof u === 'string' && u.includes('.prisma'))
+    if (!desembrulhaPrisma) fail('build.asarUnpack sem node_modules/.prisma/** (o motor .node não carrega de dentro do asar)')
+    else ok('asarUnpack desembrulha o motor nativo (.prisma)')
+    const extras = (pkg.build && pkg.build.extraResources) || []
+    const extrasTxt = JSON.stringify(extras)
+    for (const [fragmento, rotulo] of [
+      ['indice-ncm', 'recursos-ia/indice-ncm (índice lexical + .manifest-hash)'],
+      ['dados-brutos', 'recursos-ia/dados-brutos (base unificada da busca local)'],
+    ]) {
+      if (!extrasTxt.includes(fragmento)) fail(`build.extraResources sem ${rotulo} (caminhos-ia.cjs não o encontra no instalado)`)
+      else ok(`extraResources leva ${rotulo}`)
+    }
+  } catch (e) {
+    fail(`leitura do package.json (portão do instalador): ${e.message}`)
+  }
   const schemaPrisma = path.join(RAIZ, 'prisma', 'schema.prisma')
   const schemaSql = path.join(RAIZ, 'prisma', 'schema.sql')
   const schemaTs = path.join(RAIZ, 'src', 'infrastructure', 'db', 'schema-sql.ts')

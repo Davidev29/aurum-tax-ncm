@@ -229,7 +229,8 @@ export async function importarXmls(
 /**
  * Totais + apuração sempre reativos: rode após CADA importação/adoção/
  * exclusão sobre os documentos da empresa — é o "motor de comparação"
- * (débitos das saídas − créditos das entradas) que decide saldo ou débito.
+ * (débitos destacados nas saídas − créditos destacados nas entradas) que
+ * decide saldo devedor ou credor no período.
  */
 export async function apuracaoDaEmpresa(empresaId: number): Promise<{
   qtd: number
@@ -472,6 +473,36 @@ export async function contarPorDia(
   for (const n of notas) {
     const dia = Number(n.dataEmissao.slice(8, 10))
     mapa.set(dia, (mapa.get(dia) ?? 0) + 1)
+  }
+  return mapa
+}
+
+/** Anos distintos com notas (para navegar o calendário anual). */
+export async function listarAnosComNota(empresaId: number): Promise<number[]> {
+  const notas = await db.nfeNotas.where('empresaId').equals(empresaId).toArray()
+  const set = new Set<number>()
+  for (const n of notas) {
+    const ano = Number(String(n.dataEmissao ?? '').slice(0, 4))
+    if (Number.isInteger(ano) && ano > 0) set.add(ano)
+  }
+  return [...set].sort((a, b) => b - a)
+}
+
+/** Meses do ano com notas (1–12 → qtd) — base do calendário anual. */
+export async function contarMesesAno(
+  empresaId: number,
+  ano: number,
+): Promise<Map<number, number>> {
+  const prefixo = `${ano}-`
+  const notas = await db.nfeNotas
+    .where('empresaId')
+    .equals(empresaId)
+    .and((n) => String(n.dataEmissao ?? '').startsWith(prefixo))
+    .toArray()
+  const mapa = new Map<number, number>()
+  for (const n of notas) {
+    const mes = Number(String(n.dataEmissao ?? '').slice(5, 7))
+    if (mes >= 1 && mes <= 12) mapa.set(mes, (mapa.get(mes) ?? 0) + 1)
   }
   return mapa
 }

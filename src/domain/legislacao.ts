@@ -28,6 +28,7 @@
 import {
   LINK_DECRETO_12955,
   LINK_EC132,
+  LINK_LC123,
   LINK_LC214,
   LINK_LC227,
   LINK_PORTAL_CFF,
@@ -71,7 +72,7 @@ export const GRUPOS_LEGISLACAO: { id: GrupoLegislacao; titulo: string; descricao
   {
     id: 'base-federal',
     titulo: 'Reforma Tributária — base federal',
-    descricao: 'Emenda constitucional, leis complementares e regulamentos do IBS/CBS.',
+    descricao: 'Emenda constitucional, leis complementares e regulamentos do IBS/CBS, mais o Estatuto do Simples Nacional.',
   },
   {
     id: 'decretos-federais',
@@ -116,6 +117,20 @@ export const LEGISLACOES: ItemLegislacao[] = [
     utilidade:
       'Referência direta dos trechos citados na Consulta. Use "Visualizar legislação" no produto para cair exatamente no artigo citado.',
     url: LINK_LC214,
+    tipo: 'lei',
+    rotuloTipo: 'Lei Complementar',
+    esfera: 'federal',
+    grupo: 'base-federal',
+  },
+  {
+    id: 'lc123',
+    sigla: 'LC 123/2006',
+    titulo: 'Lei Complementar nº 123/2006 — Estatuto do Simples Nacional',
+    descricao:
+      'Institui o Estatuto da Microempresa e da Empresa de Pequeno Porte: Simples Nacional, DAS por Anexos I–V, sublimites, Fator R e regras de opção, exclusão e fiscalização.',
+    utilidade:
+      'Base legal do módulo Simples Nacional: Anexos I–V, art. 18 (DAS, faixas e segregação) e regras de enquadramento.',
+    url: LINK_LC123,
     tipo: 'lei',
     rotuloTipo: 'Lei Complementar',
     esfera: 'federal',
@@ -300,6 +315,32 @@ export const LEGISLACOES: ItemLegislacao[] = [
     grupo: 'portais',
   },
 ]
+
+/** Normaliza texto para busca: minúsculas + sem acentos. */
+export function normalizarBusca(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+/**
+ * Filtro da tela Legislação (usado em `src/pages/Legislacao.tsx`).
+ *
+ * - Insensível a acentos/caixa (`índice` casa com `indice`).
+ * - Busca em sigla, título, descrição, utilidade, rótulo do tipo,
+ *   termo do portal e id.
+ * - Multi-termo: cada palavra digitada precisa aparecer em algum campo
+ *   (ex.: `simples 123`, `decreto ceara`).
+ */
+export function casaFiltroLegislacao(item: ItemLegislacao, termo: string): boolean {
+  const norm = normalizarBusca(termo.trim())
+  if (!norm) return true
+  const campos = normalizarBusca(
+    [item.sigla, item.titulo, item.descricao, item.utilidade, item.rotuloTipo, item.buscaPortal ?? '', item.id].join(' '),
+  )
+  return norm.split(/\s+/).every((parte) => campos.includes(parte))
+}
 
 /** Extrai `art128` de textos como "Art. 128 — Redução…", "art133", "Artigo 137". */
 export function ancoraParaArtigo(texto?: string | null): string | null {

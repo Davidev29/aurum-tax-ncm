@@ -98,13 +98,17 @@ export function produtosVisiveis(p: {
 }): ProdutoLinha[] {
   const f = p.filtro.trim().toLowerCase()
   const filtrados = f
-    ? p.cache.filter((x) =>
-        // Busca também nos tributos do regime anterior: quem lembra do CST
-        // ICMS/CSOSN ou do CFOP acha o produto sem decorar o SKU.
-        `${x.codigo} ${x.nome} ${x.ncm} ${x.cstReforma} ${x.cClassTrib} ${x.cfop ?? ''} ${x.cstIcms ?? ''} ${x.pis ?? ''} ${x.cofins ?? ''}`
-          .toLowerCase()
-          .includes(f),
-      )
+    ? p.cache.filter((x) => {
+        const r = x as unknown as Record<string, unknown>
+        return (
+          // Busca também nos tributos do regime anterior (entrada × saída):
+          // quem lembra do CST ICMS/CSOSN ou do CFOP acha o produto sem
+          // decorar o SKU.
+          `${x.codigo} ${x.nome} ${x.ncm} ${x.cstReforma} ${x.cClassTrib} ${x.cfop ?? ''} ${x.cstIcms ?? ''} ${x.pis ?? ''} ${x.cofins ?? ''} ${String(r.cfopEntrada ?? '')} ${String(r.cfopSaida ?? '')} ${String(r.cstIcmsEntrada ?? '')} ${String(r.cstIcmsSaida ?? '')} ${String(r.pisEntrada ?? '')} ${String(r.pisSaida ?? '')} ${String(r.cofinsEntrada ?? '')} ${String(r.cofinsSaida ?? '')}`
+            .toLowerCase()
+            .includes(f)
+        )
+      })
     : p.cache
   return filtrados.slice(0, p.pagina)
 }

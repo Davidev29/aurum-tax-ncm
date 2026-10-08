@@ -1,18 +1,18 @@
 /**
  * Assistente de instalação local — primeira execução do Aurum Tax NCM.
  *
- * Wizard em 6 passos com transições elásticas (framer-motion spring):
+ * Wizard em 5 passos com transições elásticas (framer-motion spring):
  *   0. Apresentação do sistema (o que faz + 100% local)
  *   1. Boas-vindas (o que é + 100% local sem nuvem + o que vou perguntar)
  *   2. Contrato e identificação (nome, CPF/CNPJ, e-mail + checkbox de aceite)
- *   3. Sua empresa — CNPJ com consulta BrasilAPI + fallback manual offline
- *   4. Emitente + aparência — CNPJ com consulta BrasilAPI + fallback manual
- *   5. Revisão e conclusão (grava o aceite só na máquina)
+ *   3. Empresa e emitente — CNPJ único com busca automática em 2º plano
+ *      (BrasilAPI) + tema; detalhe só aparece no fallback manual/offline
+ *   4. Revisão e conclusão (visualiza os dados resolvidos + grava o aceite só na máquina)
  *
  * Nada é enviado à nuvem: o aceite fica em `localStorage`, a empresa/emitente
  * no banco local (SQLite) e o tema no `localStorage`.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { Btn, Campo, Check, Selecao, Texto } from './kit'
@@ -28,7 +28,7 @@ import { useSessao } from '@/store/sessao'
 import { toast } from '@/store/ui'
 import { EscudoAurum } from './Marca'
 
-const PASSOS = ['Apresentação', 'Boas-vindas', 'Contrato', 'Sua empresa', 'Emitente', 'Pronto'] as const
+const PASSOS = ['Apresentação', 'Boas-vindas', 'Contrato', 'Empresa e emitente', 'Pronto'] as const
 
 const PERFIS = [
   { valor: 'escritorio', rotulo: '🧾 Escritório contábil — cuido de vários clientes' },
@@ -67,17 +67,22 @@ function ApresentacaoSistema({ reduzir }: { reduzir: boolean }) {
         className="relative"
       >
         <motion.div
-          animate={reduzir ? undefined : { y: [0, -10, 0] }}
+          animate={reduzir ? undefined : { y: [0, -8, 0] }}
           transition={reduzir ? undefined : { duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-          className="grid place-items-center rounded-3xl border border-amber-200 bg-gradient-to-b from-amber-50 to-white p-4 shadow-card dark:border-amber-900 dark:from-amber-950/40 dark:to-slate-900"
         >
-          <EscudoAurum tamanho={104} />
+          {/* Moldura quadrada proporcional + anel ouro animado (padrão `.borda-cintilante` do sistema). */}
+          <div
+            style={{ '--cor-borda': '#be9433', '--cor-brilho': '#ead79e' } as CSSProperties}
+            className="borda-cintilante grid h-32 w-32 place-items-center rounded-2xl bg-gradient-to-b from-[#1c2a47] to-[#0e1628] shadow-card"
+          >
+            <EscudoAurum tamanho={76} />
+          </div>
         </motion.div>
         {/* sombra elástica */}
         {!reduzir ? (
           <motion.div
             aria-hidden="true"
-            className="mx-auto mt-1 h-2 w-20 rounded-full bg-slate-300/60 dark:bg-slate-700/60"
+            className="mx-auto mt-1.5 h-2 w-20 rounded-full bg-slate-300/60 dark:bg-slate-700/60"
             animate={{ scaleX: [1, 0.82, 1] }}
             transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
           />
@@ -160,7 +165,7 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
   const [contratante, setContratante] = useState<Contratante>({ nome: '', documento: '', email: '' })
   const [aceitou, setAceitou] = useState(false)
 
-  // Passo 3 — perfil + primeira empresa (opcional, com BrasilAPI).
+  // Passo 3 — perfil + CNPJ único (empresa + emitente) com busca automática em 2º plano.
   const [perfil, setPerfil] = useState<string>('escritorio')
   const [empresaCnpj, setEmpresaCnpj] = useState('')
   const [empresaRazao, setEmpresaRazao] = useState('')
@@ -168,7 +173,8 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
   const [empresaManual, setEmpresaManual] = useState(false)
   const [empresaOk, setEmpresaOk] = useState<string | null>(null)
 
-  // Passo 4 — emitente via CNPJ (BrasilAPI) + fallback manual + tema.
+  // Detalhe do emitente/timbrado — preenchido pela mesma busca; visível só no
+  // fallback manual ou na revisão final (passo 4).
   const [emitenteCnpj, setEmitenteCnpj] = useState('')
   const [emitenteRazao, setEmitenteRazao] = useState('')
   const [emitenteEndereco, setEmitenteEndereco] = useState('')
@@ -176,7 +182,6 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
   const [emitenteCep, setEmitenteCep] = useState('')
   const [emitenteTelefone, setEmitenteTelefone] = useState('')
   const [emitenteEmail, setEmitenteEmail] = useState('')
-  const [emitenteBuscando, setEmitenteBuscando] = useState(false)
   const [emitenteManual, setEmitenteManual] = useState(false)
   const [emitenteOk, setEmitenteOk] = useState<string | null>(null)
   const [tema, setTema] = useState<TemaEscolha>(() =>
@@ -184,6 +189,8 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
       ? 'dark'
       : 'light',
   )
+  // Último CNPJ já resolvido em 2º plano — evita refetch a cada tecla.
+  const ultimoBuscadoRef = useRef('')
 
   const irPara = (novo: number) => {
     setDir(novo > passo ? 1 : -1)
@@ -215,62 +222,73 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
     irPara(3)
   }
 
-  /** Empresa: consulta o CNPJ na BrasilAPI; em falha de rede, libera o manual. */
-  const buscarEmpresa = async (): Promise<void> => {
-    if (norm(empresaCnpj).length !== 14) {
-      setErro('Digite um CNPJ com 14 dígitos para buscar na BrasilAPI — ou cadastre manualmente.')
+  /** CNPJ único → resolve empresa + emitente na BrasilAPI; falha libera o manual. */
+  const buscarCnpjUnificado = async (modo: 'auto' | 'manual' = 'manual'): Promise<void> => {
+    const digitos = norm(empresaCnpj)
+    if (digitos.length !== 14) {
+      if (modo === 'manual') {
+        setErro('Digite um CNPJ com 14 dígitos — buscamos tudo em 2º plano, ou cadastre manualmente.')
+      }
       return
     }
+    if (ultimoBuscadoRef.current === digitos) return
     setEmpresaBuscando(true)
-    setErro(null)
+    if (modo === 'manual') setErro(null)
     try {
       const { buscarCnpj } = await import('@/infrastructure/receita/brasilapi')
       const d = await buscarCnpj(empresaCnpj)
-      setEmpresaRazao(d.razaoSocial || empresaRazao)
-      setEmpresaOk(d.razaoSocial)
+      ultimoBuscadoRef.current = digitos
+      const razao = d.razaoSocial || empresaRazao
+      setEmpresaRazao(razao)
+      setEmpresaOk(d.razaoSocial || null)
       setEmpresaManual(false)
-      toast('Empresa encontrada na BrasilAPI.', 'ok')
+      // O mesmo retorno alimenta o emitente/timbrado (sem 2ª etapa).
+      setEmitenteCnpj((v) => v || empresaCnpj)
+      if (d.razaoSocial) setEmitenteRazao(d.razaoSocial)
+      else if (!emitenteRazao && razao) setEmitenteRazao(razao)
+      if (d.endereco) setEmitenteEndereco(d.endereco)
+      setEmitenteCidade(d.cidade && d.uf ? `${d.cidade}/${d.uf}` : d.cidade || emitenteCidade)
+      if (d.cep) setEmitenteCep(d.cep)
+      if (d.telefone) setEmitenteTelefone(d.telefone)
+      if (d.email) setEmitenteEmail(d.email)
+      setEmitenteOk(d.razaoSocial || null)
+      setEmitenteManual(false)
+      if (modo === 'manual') toast('Dados puxados da BrasilAPI.', 'ok')
     } catch (e) {
-      // Falha de rede/limite/404 → habilita preenchimento manual.
+      // Falha de rede/limite/404 → libera preenchimento manual, sem travar.
+      ultimoBuscadoRef.current = ''
       setEmpresaManual(true)
+      setEmitenteManual(true)
       setEmpresaOk(null)
-      const msg = e instanceof Error ? e.message : String(e)
-      setErro(`${msg} — preencha manualmente abaixo.`)
+      setEmitenteOk(null)
+      if (modo === 'manual') {
+        const msg = e instanceof Error ? e.message : String(e)
+        setErro(`${msg} — preencha manualmente abaixo.`)
+      }
     } finally {
       setEmpresaBuscando(false)
     }
   }
 
-  /** Emitente: consulta o CNPJ na BrasilAPI; em falha de rede, libera o manual. */
-  const buscarEmitente = async (): Promise<void> => {
-    if (norm(emitenteCnpj).length !== 14) {
-      setErro('Digite um CNPJ com 14 dígitos para puxar os dados — ou preencha manualmente.')
-      return
-    }
-    setEmitenteBuscando(true)
-    setErro(null)
-    try {
-      const { buscarCnpj } = await import('@/infrastructure/receita/brasilapi')
-      const d = await buscarCnpj(emitenteCnpj)
-      setEmitenteRazao(d.razaoSocial || emitenteRazao)
-      setEmitenteEndereco(d.endereco || emitenteEndereco)
-      setEmitenteCidade(d.cidade && d.uf ? `${d.cidade}/${d.uf}` : d.cidade || emitenteCidade)
-      setEmitenteCep(d.cep || emitenteCep)
-      setEmitenteTelefone(d.telefone || emitenteTelefone)
-      setEmitenteEmail(d.email || emitenteEmail)
-      setEmitenteOk(d.razaoSocial)
-      setEmitenteManual(false)
-      toast('Dados do emitente completados via BrasilAPI.', 'ok')
-    } catch (e) {
-      // Falha de rede → habilita os campos para preenchimento manual.
-      setEmitenteManual(true)
-      setEmitenteOk(null)
-      const msg = e instanceof Error ? e.message : String(e)
-      setErro(`${msg} — preencha os campos manualmente abaixo.`)
-    } finally {
-      setEmitenteBuscando(false)
-    }
+  // Busca automática em 2º plano: completou 14 dígitos → resolve sozinho.
+  useEffect(() => {
+    if (norm(empresaCnpj).length !== 14) return
+    if (ultimoBuscadoRef.current === norm(empresaCnpj)) return
+    const t = window.setTimeout(() => void buscarCnpjUnificado('auto'), 600)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaCnpj])
+
+  /** Mantém o CNPJ único sincronizado nos dois cadastros (empresa + emitente). */
+  const trocarCnpjUnificado = (valor: string): void => {
+    setEmpresaCnpj(valor)
+    setEmitenteCnpj(valor)
+    setEmpresaOk(null)
+    setEmitenteOk(null)
   }
+
+  /** Compat: botões legados chamavam as buscas separadas — agora unificadas. */
+  const buscarEmpresa = async (): Promise<void> => buscarCnpjUnificado('manual')
 
   const concluir = async (): Promise<void> => {
     setSalvando(true)
@@ -425,8 +443,8 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
                     <strong>Vou te perguntar só o essencial:</strong>
                     <ol className="mt-1 list-decimal space-y-1 pl-5 text-slate-600 dark:text-slate-300">
                       <li>Seu nome, CPF/CNPJ e e-mail + aceite do contrato;</li>
-                      <li>Seu perfil e a primeira empresa (pode pular);</li>
-                      <li>Emitente pelo CNPJ (BrasilAPI) e tema claro/escuro.</li>
+                      <li>Seu perfil + CNPJ da empresa/emitente (busca automática) e tema;</li>
+                      <li>Revisão dos dados antes de concluir.</li>
                     </ol>
                   </div>
                   <p className="text-[11px] text-slate-400">
@@ -504,11 +522,12 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
                       ))}
                     </Selecao>
                   </Campo>
-                  <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/40">
-                    <strong>🏢 Primeira empresa (opcional).</strong>
-                    <p className="mb-2 text-[11px] text-slate-400">
-                      Digite o CNPJ e buscamos razão social na <strong>BrasilAPI</strong>. Sem internet,
-                      os campos liberam para preenchimento manual.
+                  <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-3 dark:border-aurum-900 dark:bg-brand-950/30">
+                    <strong>🏷️ Empresa e emitente pelo CNPJ.</strong>
+                    <p className="mb-2 mt-1 text-[11px] text-slate-500">
+                      Digite o CNPJ — buscamos razão social, endereço e contatos na{' '}
+                      <strong>BrasilAPI em 2º plano</strong>, sem outra tela. O detalhe
+                      aparece só na revisão final. Sem internet, liberamos o manual.
                     </p>
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <div className="flex-1">
@@ -516,10 +535,7 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
                           mask="cnpj"
                           mono
                           value={empresaCnpj}
-                          onChange={(e) => {
-                            setEmpresaCnpj(e.target.value)
-                            setEmpresaOk(null)
-                          }}
+                          onChange={(e) => trocarCnpjUnificado(e.target.value)}
                           placeholder="CNPJ — 00.000.000/0000-00"
                           inputMode="numeric"
                           onKeyDown={(e) => {
@@ -528,143 +544,82 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
                         />
                       </div>
                       <Btn variante="primary" carregando={empresaBuscando} onClick={() => void buscarEmpresa()}>
-                        {empresaBuscando ? 'Buscando…' : '🔍 Buscar'}
+                        {empresaBuscando ? 'Buscando…' : '🔍 Puxar dados'}
                       </Btn>
                     </div>
-                    {empresaOk ? (
+                    {empresaBuscando ? (
+                      <p className="mt-2 rounded-lg bg-brand-50 px-3 py-2 text-[11px] font-semibold text-brand-700 dark:bg-brand-950/40 dark:text-aurum-300">
+                        🔄 Buscando na BrasilAPI em 2º plano…
+                      </p>
+                    ) : empresaOk || emitenteOk ? (
                       <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                        ✓ {empresaOk} — dados vindos da BrasilAPI.
+                        ✓ {empresaOk ?? emitenteOk} — dados resolvidos. Confira na revisão final.
                       </p>
                     ) : null}
-                    {(empresaManual || !empresaCnpj) && (
-                      <div className="mt-2 grid grid-cols-1 gap-2">
-                        <Campo label="Razão social da empresa">
+                    {(empresaManual || emitenteManual) && (
+                      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <Campo label="Razão social (empresa + timbrado)" className="sm:col-span-2">
                           <Texto
-                            value={empresaRazao}
-                            onChange={(e) => setEmpresaRazao(e.target.value)}
-                            placeholder="Ex.: Cliente Modelo LTDA"
+                            value={empresaRazao || emitenteRazao}
+                            onChange={(e) => {
+                              setEmpresaRazao(e.target.value)
+                              setEmitenteRazao(e.target.value)
+                            }}
+                            placeholder="Ex.: Escritório Modelo LTDA"
                           />
                         </Campo>
-                        {!empresaManual ? (
-                          <button
-                            type="button"
-                            onClick={() => setEmpresaManual(true)}
-                            className="justify-self-start text-[11px] font-semibold text-slate-400 hover:text-brand-600"
-                          >
-                            ▸ Sem internet? Preencher manualmente
-                          </button>
-                        ) : null}
+                        <Campo label="Endereço" className="sm:col-span-2">
+                          <Texto
+                            value={emitenteEndereco}
+                            onChange={(e) => setEmitenteEndereco(e.target.value)}
+                            placeholder="Rua, número, bairro"
+                          />
+                        </Campo>
+                        <Campo label="Cidade/UF">
+                          <Texto
+                            value={emitenteCidade}
+                            onChange={(e) => setEmitenteCidade(e.target.value)}
+                            placeholder="Cidade/UF"
+                          />
+                        </Campo>
+                        <Campo label="CEP">
+                          <Texto
+                            value={emitenteCep}
+                            onChange={(e) => setEmitenteCep(e.target.value)}
+                            placeholder="00000-000"
+                            inputMode="numeric"
+                          />
+                        </Campo>
+                        <Campo label="Telefone">
+                          <Texto
+                            value={emitenteTelefone}
+                            onChange={(e) => setEmitenteTelefone(e.target.value)}
+                            placeholder="(00) 00000-0000"
+                          />
+                        </Campo>
+                        <Campo label="E-mail">
+                          <Texto
+                            value={emitenteEmail}
+                            onChange={(e) => setEmitenteEmail(e.target.value)}
+                            placeholder="contato@empresa.com.br"
+                            inputMode="email"
+                          />
+                        </Campo>
                       </div>
                     )}
-                    {empresaCnpj && !empresaManual && !empresaOk ? (
-                      <div className="mt-2">
-                        <Campo label="Razão social da empresa">
-                          <Texto
-                            value={empresaRazao}
-                            onChange={(e) => setEmpresaRazao(e.target.value)}
-                            placeholder="Ex.: Cliente Modelo LTDA"
-                          />
-                        </Campo>
-                      </div>
-                    ) : null}
+                    {!empresaManual && !emitenteManual && !empresaOk && !emitenteOk && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmpresaManual(true)
+                          setEmitenteManual(true)
+                        }}
+                        className="mt-2 text-[11px] font-semibold text-slate-400 hover:text-brand-600"
+                      >
+                        ▸ Sem internet? Preencher manualmente
+                      </button>
+                    )}
                   </div>
-                </div>
-              ) : null}
-
-              {passo === 4 ? (
-                <div className="space-y-3">
-                  <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-3 dark:border-aurum-900 dark:bg-brand-950/30">
-                    <strong>🏷️ Emitente pelo CNPJ.</strong>
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      Digite o CNPJ e puxamos razão social, endereço e contatos da{' '}
-                      <strong>BrasilAPI</strong>. Se a rede falhar, os campos liberam para
-                      preenchimento manual — você nunca trava sem internet.
-                    </p>
-                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                      <div className="flex-1">
-                        <Texto
-                          mask="cnpj"
-                          mono
-                          value={emitenteCnpj}
-                          onChange={(e) => {
-                            setEmitenteCnpj(e.target.value)
-                            setEmitenteOk(null)
-                          }}
-                          placeholder="CNPJ do emitente — 00.000.000/0000-00"
-                          inputMode="numeric"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') void buscarEmitente()
-                          }}
-                        />
-                      </div>
-                      <Btn variante="primary" carregando={emitenteBuscando} onClick={() => void buscarEmitente()}>
-                        {emitenteBuscando ? 'Buscando…' : '🔍 Puxar dados'}
-                      </Btn>
-                    </div>
-                    {emitenteOk ? (
-                      <p className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                        ✓ {emitenteOk} — timbrado completado via BrasilAPI. Confira e ajuste se precisar.
-                      </p>
-                    ) : null}
-                  </div>
-
-                  {(emitenteOk || emitenteManual || emitenteRazao || emitenteCnpj) && (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      <Campo label="Razão social (timbrado do PDF)" className="sm:col-span-2">
-                        <Texto
-                          value={emitenteRazao}
-                          onChange={(e) => setEmitenteRazao(e.target.value)}
-                          placeholder="Ex.: Escritório Modelo LTDA"
-                        />
-                      </Campo>
-                      <Campo label="Endereço" className="sm:col-span-2">
-                        <Texto
-                          value={emitenteEndereco}
-                          onChange={(e) => setEmitenteEndereco(e.target.value)}
-                          placeholder="Rua, número, bairro"
-                        />
-                      </Campo>
-                      <Campo label="Cidade/UF">
-                        <Texto
-                          value={emitenteCidade}
-                          onChange={(e) => setEmitenteCidade(e.target.value)}
-                          placeholder="Cidade/UF"
-                        />
-                      </Campo>
-                      <Campo label="CEP">
-                        <Texto
-                          value={emitenteCep}
-                          onChange={(e) => setEmitenteCep(e.target.value)}
-                          placeholder="00000-000"
-                          inputMode="numeric"
-                        />
-                      </Campo>
-                      <Campo label="Telefone">
-                        <Texto
-                          value={emitenteTelefone}
-                          onChange={(e) => setEmitenteTelefone(e.target.value)}
-                          placeholder="(00) 00000-0000"
-                        />
-                      </Campo>
-                      <Campo label="E-mail">
-                        <Texto
-                          value={emitenteEmail}
-                          onChange={(e) => setEmitenteEmail(e.target.value)}
-                          placeholder="contato@empresa.com.br"
-                          inputMode="email"
-                        />
-                      </Campo>
-                    </div>
-                  )}
-                  {!emitenteManual && !emitenteOk && (
-                    <button
-                      type="button"
-                      onClick={() => setEmitenteManual(true)}
-                      className="text-[11px] font-semibold text-slate-400 hover:text-brand-600"
-                    >
-                      ▸ Sem internet? Preencher manualmente
-                    </button>
-                  )}
 
                   <div>
                     <span className="field-label">Aparência</span>
@@ -695,7 +650,7 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
                 </div>
               ) : null}
 
-              {passo === 5 ? (
+              {passo === 4 ? (
                 <div className="space-y-3">
                   <p className="text-sm font-bold">✅ Tudo certo, {contratante.nome.split(' ')[0] || 'vamos lá'}! Confira:</p>
                   <dl className="space-y-1.5 rounded-xl bg-slate-50 p-3 dark:bg-slate-950/40">
@@ -716,16 +671,75 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
                       </dd>
                     </div>
                     <div className="flex justify-between gap-3">
-                      <dt className="text-slate-400">Empresa inicial</dt>
-                      <dd className="font-semibold">{empresaRazao.trim() || empresaOk || '— (cadastrar depois)'}</dd>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <dt className="text-slate-400">Emitente / tema</dt>
-                      <dd className="font-semibold">
-                        {(emitenteOk || emitenteRazao).trim() || '—'} · {tema === 'dark' ? 'escuro' : 'claro'}
+                      <dt className="text-slate-400">Empresa / emitente</dt>
+                      <dd className="text-right font-semibold">
+                        {(empresaOk || emitenteOk || empresaRazao || emitenteRazao || '').trim() || '— (cadastrar depois)'}
                       </dd>
                     </div>
+                    {empresaCnpj.trim() ? (
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-slate-400">CNPJ</dt>
+                        <dd className="font-semibold">{empresaCnpj}</dd>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-slate-400">Tema</dt>
+                      <dd className="font-semibold">{tema === 'dark' ? '🌙 escuro' : '☀️ claro'}</dd>
+                    </div>
                   </dl>
+                  {(emitenteRazao || emitenteEndereco || emitenteCidade || emitenteCep || emitenteTelefone || emitenteEmail) ? (
+                    <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-3 dark:border-aurum-900 dark:bg-brand-950/30">
+                      <div className="flex items-center justify-between gap-2">
+                        <strong>🏷️ Dados resolvidos via CNPJ (visualização).</strong>
+                        <button
+                          type="button"
+                          onClick={() => irPara(3)}
+                          className="text-[11px] font-semibold text-brand-600 hover:brightness-110 dark:text-aurum-300"
+                        >
+                          Corrigir →
+                        </button>
+                      </div>
+                      <dl className="mt-2 space-y-1 text-[11px]">
+                        {emitenteRazao.trim() ? (
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-slate-400">Razão social</dt>
+                            <dd className="text-right font-semibold">{emitenteRazao}</dd>
+                          </div>
+                        ) : null}
+                        {emitenteEndereco.trim() ? (
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-slate-400">Endereço</dt>
+                            <dd className="text-right font-semibold">{emitenteEndereco}</dd>
+                          </div>
+                        ) : null}
+                        {emitenteCidade.trim() ? (
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-slate-400">Cidade/UF</dt>
+                            <dd className="text-right font-semibold">{emitenteCidade}</dd>
+                          </div>
+                        ) : null}
+                        {emitenteCep.trim() ? (
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-slate-400">CEP</dt>
+                            <dd className="text-right font-semibold">{emitenteCep}</dd>
+                          </div>
+                        ) : null}
+                        {emitenteTelefone.trim() ? (
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-slate-400">Telefone</dt>
+                            <dd className="text-right font-semibold">{emitenteTelefone}</dd>
+                          </div>
+                        ) : null}
+                        {emitenteEmail.trim() ? (
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-slate-400">E-mail</dt>
+                            <dd className="text-right font-semibold">{emitenteEmail}</dd>
+                          </div>
+                        ) : null}
+                      </dl>
+                    </div>
+                  ) : null}
+
                   <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
                     Ao concluir, gravo o aceite (contrato v{CONTRATO_VERSAO} + data/hora){' '}
                     <strong>só nesta máquina</strong>. Sem nuvem, sem conta, sem telemetria da sua base.
@@ -750,7 +764,7 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
             <Btn variante="ghost" onClick={() => (podeVoltar ? irPara(passo - 1) : undefined)}>
               ← Voltar
             </Btn>
-            {passo === 3 || passo === 4 ? (
+            {passo === 3 ? (
               <button
                 type="button"
                 onClick={() => irPara(passo + 1)}

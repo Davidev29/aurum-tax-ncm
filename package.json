@@ -41,8 +41,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "electron .",
-    "dist": "npm run build && electron-builder --publish never",
-    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist": "npm run build && electron-builder --publish never && node scripts/verificar-pacote.mjs",
+    "dist:win": "npm run build && electron-builder --win --publish never && node scripts/verificar-pacote.mjs",
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "dist:linux": "npm run build && electron-builder --linux --publish never",
     "icon": "node scripts/make-icon.mjs",
@@ -102,6 +102,13 @@
       "dist/**/*",
       "electron/dist/**/*",
       "package.json",
+      {
+        "from": "node_modules/.prisma",
+        "to": "node_modules/.prisma",
+        "filter": [
+          "**/*"
+        ]
+      },
       "!**/*.map",
       "!**/.planning/**",
       "!**/docs/**",
@@ -149,6 +156,22 @@
       {
         "from": "recursos-ia/embedding/MANIFEST-embedding.json",
         "to": "recursos-ia/embedding/MANIFEST-embedding.json"
+      },
+      {
+        "from": "recursos-ia/indice-ncm/indice-lexical.json",
+        "to": "recursos-ia/indice-ncm/indice-lexical.json"
+      },
+      {
+        "from": "recursos-ia/indice-ncm/sinonimos-gerados.json",
+        "to": "recursos-ia/indice-ncm/sinonimos-gerados.json"
+      },
+      {
+        "from": "recursos-ia/indice-ncm/.manifest-hash",
+        "to": "recursos-ia/indice-ncm/.manifest-hash"
+      },
+      {
+        "from": "recursos-ia/dados-brutos/ncm-para-ia.json",
+        "to": "recursos-ia/dados-brutos/ncm-para-ia.json"
       }
     ],
     "asarUnpack": [

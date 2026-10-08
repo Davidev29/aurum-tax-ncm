@@ -134,6 +134,9 @@ export const REGRA_GERAL = { cst: '000', cClassTrib: '000001' } as const
  */
 export const REGRA_GERAL_NBS = { cst: '000', cClassTrib: '000001' } as const
 
+/** Lei Complementar nº 123/2006 — Estatuto do Simples Nacional. */
+export const LINK_LC123 = 'https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp123.htm'
+
 /** Linha da legislação de referência. */
 export const LINK_LC214 = 'https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp214.htm'
 

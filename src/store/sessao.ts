@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import type { Emitente, Empresa } from '@/domain/entities'
 import {
+  atualizarEmpresa,
   cadastrarEmpresa,
   cadastrarEmpresaPorCnpj,
   definirEmpresaAtiva as definirEmpresaAtivaSessao,
@@ -27,6 +28,7 @@ interface SessaoState {
   selecionar: (id: number | null) => Promise<void>
   limparSessao: () => Promise<void>
   criar: (dados: { razaoSocial: string; cnpj?: string; fantasia?: string }) => Promise<boolean>
+  atualizar: (id: number, patch: Partial<Empresa>) => Promise<boolean>
   excluir: (id: number) => Promise<{ produtos: number; notas: number }>
   importar: (file: File) => Promise<number>
   /** Cadastra pelo CNPJ via BrasilAPI (idempotente). Devolve `false` se falhar. */
@@ -88,6 +90,19 @@ export const useSessao = create<SessaoState>((set, get) => ({
     }
     set({ empresas, ativa })
     toast('Empresa cadastrada.', 'ok')
+    return true
+  },
+
+  atualizar: async (id, patch) => {
+    const r = await atualizarEmpresa(id, patch)
+    if (!r.ok) {
+      toast(r.motivo ?? 'Não foi possível salvar.', 'warn')
+      return false
+    }
+    const empresas = await listarEmpresas()
+    const ativa = get().ativa?.id === id ? (r.empresa ?? get().ativa) : get().ativa
+    set({ empresas, ativa })
+    toast('Dados da empresa atualizados.', 'ok')
     return true
   },
 

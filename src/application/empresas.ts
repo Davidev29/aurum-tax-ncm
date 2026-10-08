@@ -55,12 +55,19 @@ export interface DadosCadastroEmpresa {
   fantasia?: string
   ie?: string
   im?: string
+  regimeTributario?: 'simples' | 'mei' | 'normal'
   endereco?: string
   cidade?: string
   uf?: string
   cep?: string
   telefone?: string
   email?: string
+  contadorTipo?: 'pf' | 'pj' | null
+  contadorNome?: string | null
+  contadorDoc?: string | null
+  contadorCrc?: string | null
+  contadorEmail?: string | null
+  contadorTelefone?: string | null
 }
 
 const limpo = (v: unknown): string => String(v ?? '').trim()
@@ -71,12 +78,48 @@ export function mesclarEmpresa(base: Empresa, patch: Partial<Empresa>): Empresa 
   const chaves: (keyof Empresa)[] = [
     'razaoSocial', 'fantasia', 'ie', 'im', 'regimeTributario', 'endereco',
     'cidade', 'uf', 'cep', 'telefone', 'email',
+    'contadorTipo', 'contadorNome', 'contadorDoc', 'contadorCrc',
+    'contadorEmail', 'contadorTelefone',
   ]
   for (const k of chaves) {
-    const novo = limpo(patch[k])
-    if (novo && !limpo(out[k])) (out[k] as string) = novo
+    const novo = limpo(patch[k] as unknown)
+    if (novo && !limpo(out[k] as unknown)) (out[k] as string) = novo
   }
   return out
+}
+
+/**
+ * Normaliza o bloco do contador antes de gravar: sem tipo ou sem
+ * nome/documento, o bloco inteiro é limpo (campo condicional — não aparece
+ * quando vazio). PJ com 14 dígitos e PF com 11 dígitos; outro tamanho é
+ * recusado com motivo em pt-BR.
+ */
+export function normalizarContador(patch: Partial<Empresa>): { ok: boolean; motivo?: string; patch: Partial<Empresa> } {
+  const tipo = (patch.contadorTipo ?? null) as 'pf' | 'pj' | null | undefined
+  const nome = limpo(patch.contadorNome)
+  const doc = norm(patch.contadorDoc)
+  const crc = limpo(patch.contadorCrc)
+  const email = limpo(patch.contadorEmail)
+  const telefone = limpo(patch.contadorTelefone)
+  const temAlgo = Boolean(tipo || nome || doc || crc || email || telefone)
+  if (!temAlgo) {
+    return { ok: true, patch: { contadorTipo: null, contadorNome: null, contadorDoc: null, contadorCrc: null, contadorEmail: null, contadorTelefone: null } }
+  }
+  if (tipo !== 'pf' && tipo !== 'pj') return { ok: false, motivo: 'Informe se o contador é pessoa física ou jurídica.', patch: {} }
+  if (!nome) return { ok: false, motivo: 'Informe o nome do contador.', patch: {} }
+  if (tipo === 'pf' && doc.length !== 11) return { ok: false, motivo: 'CPF do contador deve ter 11 dígitos.', patch: {} }
+  if (tipo === 'pj' && doc.length !== 14) return { ok: false, motivo: 'CNPJ do contador deve ter 14 dígitos.', patch: {} }
+  return {
+    ok: true,
+    patch: {
+      contadorTipo: tipo,
+      contadorNome: nome,
+      contadorDoc: doc,
+      contadorCrc: crc || null,
+      contadorEmail: email || null,
+      contadorTelefone: telefone || null,
+    },
+  }
 }
 
 /**
@@ -115,12 +158,23 @@ export async function cadastrarEmpresa(dados: DadosCadastroEmpresa): Promise<Res
       return { ok: true, empresa: mesclada, atualizada: true, adotadas: ad?.adotadas ?? 0 }
     }
     if (!razaoSocial) return { ok: false, motivo: 'Informe a razão social.' }
+    const normCont = normalizarContador({
+      contadorTipo: dados.contadorTipo ?? null,
+      contadorNome: dados.contadorNome ?? null,
+      contadorDoc: dados.contadorDoc ?? null,
+      contadorCrc: dados.contadorCrc ?? null,
+      contadorEmail: dados.contadorEmail ?? null,
+      contadorTelefone: dados.contadorTelefone ?? null,
+    })
+    if (!normCont.ok) return { ok: false, motivo: normCont.motivo }
+    const temContador = Boolean(dados.contadorTipo || limpo(dados.contadorNome) || norm(dados.contadorDoc))
     const empresa: Empresa = {
       razaoSocial,
       cnpj: cnpjDigitos,
       fantasia: limpo(dados.fantasia),
       ie: limpo(dados.ie),
       im: limpo(dados.im),
+      regimeTributario: dados.regimeTributario,
       endereco: limpo(dados.endereco),
       cidade: limpo(dados.cidade),
       uf: limpo(dados.uf),
@@ -128,6 +182,7 @@ export async function cadastrarEmpresa(dados: DadosCadastroEmpresa): Promise<Res
       telefone: limpo(dados.telefone),
       email: limpo(dados.email),
       criadoEm: new Date().toISOString(),
+      ...(temContador ? normCont.patch : {}),
     }
     const id = await db.empresas.add(empresa)
     empresa.id = id
@@ -349,6 +404,78 @@ export async function completarEmpresa(
   } catch {
     return false
   }
+}
+
+/**
+ * Atualiza os dados cadastrais da empresa (edição pela tela de detalhes).
+ * Diferente de `mesclarEmpresa` (só preenche vazios), aqui o usuário edita
+ * de verdade: campos enviados sobrescrevem, `''`/`null` limpam opcionais.
+ * CNPJ exige 14 dígitos válidos (DV); razão social é obrigatória.
+ * O bloco do contador passa por `normalizarContador` (condicional).
+ */
+export async function atualizarEmpresa(
+  id: number,
+  patch: Partial<Empresa>,
+): Promise<ResultadoEmpresa> {
+  const atual = await db.empresas.get(id).catch(() => null)
+  if (!atual) return { ok: false, motivo: 'Empresa não encontrada.' }
+  const razaoSocial = patch.razaoSocial !== undefined ? limpo(patch.razaoSocial) : limpo(atual.razaoSocial)
+  if (!razaoSocial) return { ok: false, motivo: 'Informe a razão social.' }
+  if (patch.cnpj !== undefined) {
+    const d = norm(patch.cnpj)
+    if (d !== '' && d.length !== 14) return { ok: false, motivo: 'CNPJ deve ter exatamente 14 dígitos.' }
+    if (d.length === 14) {
+      const { ehCnpjValido } = await import('@/domain/services/cnpj')
+      if (!ehCnpjValido(d)) return { ok: false, motivo: 'CNPJ inválido (dígitos verificadores não conferem).' }
+      const outra = await buscarEmpresaPorCnpj(d).catch(() => null)
+      if (outra && outra.id !== id) return { ok: false, motivo: 'Este CNPJ já pertence a outra empresa cadastrada.' }
+    }
+  }
+  if (patch.regimeTributario !== undefined && patch.regimeTributario !== null) {
+    if (!['simples', 'mei', 'normal'].includes(String(patch.regimeTributario))) {
+      return { ok: false, motivo: 'Regime tributário inválido.' }
+    }
+  }
+  const temContador = ['contadorTipo', 'contadorNome', 'contadorDoc', 'contadorCrc', 'contadorEmail', 'contadorTelefone'].some(
+    (k) => (patch as Record<string, unknown>)[k] !== undefined,
+  )
+  let blocoContador: Partial<Empresa> = {}
+  if (temContador) {
+    const combinado: Partial<Empresa> = {
+      contadorTipo: patch.contadorTipo !== undefined ? patch.contadorTipo : (atual.contadorTipo ?? null),
+      contadorNome: patch.contadorNome !== undefined ? patch.contadorNome : (atual.contadorNome ?? null),
+      contadorDoc: patch.contadorDoc !== undefined ? patch.contadorDoc : (atual.contadorDoc ?? null),
+      contadorCrc: patch.contadorCrc !== undefined ? patch.contadorCrc : (atual.contadorCrc ?? null),
+      contadorEmail: patch.contadorEmail !== undefined ? patch.contadorEmail : (atual.contadorEmail ?? null),
+      contadorTelefone: patch.contadorTelefone !== undefined ? patch.contadorTelefone : (atual.contadorTelefone ?? null),
+    }
+    const normCont = normalizarContador(combinado)
+    if (!normCont.ok) return { ok: false, motivo: normCont.motivo }
+    blocoContador = normCont.patch
+  }
+  const proxima: Empresa = {
+    ...atual,
+    razaoSocial,
+    cnpj: patch.cnpj !== undefined ? (norm(patch.cnpj).length === 14 ? norm(patch.cnpj) : '') : atual.cnpj,
+    fantasia: patch.fantasia !== undefined ? limpo(patch.fantasia) : atual.fantasia,
+    ie: patch.ie !== undefined ? limpo(patch.ie) : (atual.ie ?? ''),
+    im: patch.im !== undefined ? limpo(patch.im) : (atual.im ?? ''),
+    regimeTributario: (patch.regimeTributario !== undefined ? (patch.regimeTributario as Empresa['regimeTributario']) : atual.regimeTributario) as Empresa['regimeTributario'],
+    endereco: patch.endereco !== undefined ? limpo(patch.endereco) : (atual.endereco ?? ''),
+    cidade: patch.cidade !== undefined ? limpo(patch.cidade) : (atual.cidade ?? ''),
+    uf: patch.uf !== undefined ? limpo(patch.uf).toUpperCase().slice(0, 2) : (atual.uf ?? ''),
+    cep: patch.cep !== undefined ? norm(patch.cep) || limpo(patch.cep) : (atual.cep ?? ''),
+    telefone: patch.telefone !== undefined ? limpo(patch.telefone) : (atual.telefone ?? ''),
+    email: patch.email !== undefined ? limpo(patch.email) : (atual.email ?? ''),
+    ...blocoContador,
+  }
+  // "Não identificado": grava NULL (limpa o regime anterior) em vez de
+  // omitir a chave (omitir manteria o valor antigo no upsert).
+  if (patch.regimeTributario === null || (patch.regimeTributario as unknown) === '') {
+    (proxima as unknown as Record<string, unknown>).regimeTributario = null
+  }
+  await db.empresas.put(proxima)
+  return { ok: true, empresa: proxima }
 }
 
 /* --------------------------------------------------------------- sessão --- */

@@ -32,6 +32,7 @@ import { useNfe } from '@/store/nfe'
 import { BannerContribuintesNovos } from './NfePendentes'
 import { BlocoNaturezas } from './NfeNatureza'
 import { toast, useUi } from '@/store/ui'
+import { CalendarioAnualModal } from './NfeCalendarioAnual'
 import { SeloST, SeloSTNota } from '@/ui/cest'
 import { Btn, IconeBadge, Modal, Painel, Pill } from '@/ui/kit'
 
@@ -225,8 +226,8 @@ function HeroExecutivo() {
   const tot = useMemo(() => totaisNotas(notas), [notas])
   const ap = useMemo(() => apurarIbsCbs(notas), [notas])
 
-  const cobertura = ap.debitoTotal > 0 ? Math.min(100, (ap.creditoEfetivoTotal / ap.debitoTotal) * 100) : 0
-  const falta = Math.max(0, ap.debitoTotal - ap.creditoEfetivoTotal)
+  const cobertura = ap.debitoEfetivoTotal > 0 ? Math.min(100, (ap.creditoEfetivoTotal / ap.debitoEfetivoTotal) * 100) : 0
+  const falta = Math.max(0, ap.debitoEfetivoTotal - ap.creditoEfetivoTotal)
   const saldoAnim = useCountUp(ap.resultado === 'a-pagar' ? ap.valorAPagar : ap.resultado === 'saldo-credor' ? ap.saldoCredor : ap.saldoTotal)
   const baseAnim = useCountUp(tot.base)
   const tribAnim = useCountUp(tot.trib)
@@ -251,8 +252,10 @@ function HeroExecutivo() {
 
   const vincular = useNfe((s) => s.vincularProdutos)
 
+  // FIX sobreposição mobile: hero grudado ocupava 1/3 da tela e cobria
+  // filtros/tabs. Sticky só em lg, com scroll-margin para âncoras.
   return (
-    <div className="sticky top-0 z-20">
+    <div className="lg:sticky lg:top-0 lg:z-20 scroll-mt-24">
       <div className="calc-hero overflow-hidden rounded-2xl">
         <div className="h-0.5 bg-gradient-to-r from-aurum-400 via-aurum-200 to-transparent" />
         <div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center">
@@ -299,14 +302,17 @@ function HeroExecutivo() {
                         : 'Sem débitos no filtro'}
                 </span>
                 <span>
-                  {fmtMoeda(ap.creditoEfetivoTotal)} / {fmtMoeda(ap.debitoTotal)}
+                  {fmtMoeda(ap.creditoEfetivoTotal)} / {fmtMoeda(ap.debitoEfetivoTotal)}
                 </span>
               </div>
               <div className="calc-bar mt-1.5 bg-white/15" aria-hidden="true">
                 <BarraViva pct={cobertura} className={`h-full rounded-full ${barraCor}`} />
               </div>
               <div className="mt-1.5 font-mono text-[10px] text-white/60">
-                Crédito efetivo (nota) · Análise pelo NCM: {fmtMoeda(ap.creditoInformativoTotal)} (informativo — você decide)
+                Débito destacado {fmtMoeda(ap.debitoEfetivoTotal)} · esperado {fmtMoeda(ap.debitoInformativoTotal)} (nota−NCM {ap.divergenciaDebitoTotal >= 0 ? '+' : ''}{fmtMoeda(ap.divergenciaDebitoTotal)})
+              </div>
+              <div className="mt-1 font-mono text-[10px] text-white/60">
+                Crédito efetivo (nota) {fmtMoeda(ap.creditoEfetivoTotal)} · Análise pelo NCM: {fmtMoeda(ap.creditoInformativoTotal)} (informativo — você decide)
               </div>
             </div>
           </div>
@@ -605,6 +611,18 @@ function FiltroBarra({
     { id: 'quarentena', rot: 'Quarentena' },
   ] as const
   const comPeriodo = Boolean(inicio || fim)
+  // Rascunho do período: digitar a data não refiltra sozinho — só aplica no
+  // botão Filtrar (ou Enter).
+  const [inicioRasc, setInicioRasc] = useState(inicio)
+  const [fimRasc, setFimRasc] = useState(fim)
+  useEffect(() => {
+    setInicioRasc(inicio)
+    setFimRasc(fim)
+  }, [inicio, fim])
+  const periodoPendente = inicioRasc !== inicio || fimRasc !== fim
+  const aplicar = () => {
+    if (periodoPendente) onPeriodo(inicioRasc, fimRasc)
+  }
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -643,28 +661,47 @@ function FiltroBarra({
           <span className="font-bold">Período</span>
           <input
             type="date"
-            value={inicio}
-            onChange={(e) => onPeriodo(e.target.value, fim)}
+            value={inicioRasc}
+            onChange={(e) => setInicioRasc(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') aplicar()
+            }}
             aria-label="Apurar desde"
             className="field field-sm !w-auto !rounded-full !py-1 font-mono"
           />
           <span aria-hidden="true">a</span>
           <input
             type="date"
-            value={fim}
-            onChange={(e) => onPeriodo(inicio, e.target.value)}
+            value={fimRasc}
+            onChange={(e) => setFimRasc(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') aplicar()
+            }}
             aria-label="Apurar até"
             className="field field-sm !w-auto !rounded-full !py-1 font-mono"
           />
         </label>
-        {comPeriodo ? (
+        <Btn
+          tam="sm"
+          variante={periodoPendente ? 'primary' : 'ghost'}
+          onClick={aplicar}
+          disabled={!periodoPendente}
+          title="Aplica o período digitado — digitar a data não filtra sozinho"
+        >
+          🔎 Filtrar
+        </Btn>
+        {periodoPendente ? (
+          <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300">
+            Período alterado — clique em Filtrar (ou Enter).
+          </span>
+        ) : comPeriodo ? (
           <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400" aria-live="polite">
             Apurando {rotuloPeriodoApuracao(inicio, fim)}
           </span>
         ) : (
           <span className="text-[11px] text-slate-400">Apurando todas as notas da empresa</span>
         )}
-        {comPeriodo ? (
+        {comPeriodo && !periodoPendente ? (
           <button
             type="button"
             onClick={() => onPeriodo('', '')}
@@ -696,12 +733,7 @@ function AbaNotas() {
   const visiveis = notas.slice(pag * porPag, pag * porPag + porPag)
 
   if (!notas.length) {
-    return (
-      <VazioPolido
-        titulo="Nenhuma nota neste filtro"
-        texto="Importe XMLs ou limpe os filtros para ver a tabela."
-      />
-    )
+    return <AbaNotasVazia />
   }
 
   return (
@@ -1083,7 +1115,9 @@ function AbaInsights() {
           <Expansivel aberto={detalhe}>
             <table className="tbl tbl-compacta mt-2">
               <tbody>
-                <tr><td>Débitos — vendas que você emitiu ({ap.qtdSaidas})</td><td className="text-right font-mono">{fmtMoeda(ap.debitoTotal)}</td></tr>
+                <tr><td>Débitos destacados — vendas que você emitiu ({ap.qtdSaidas})</td><td className="text-right font-mono">{fmtMoeda(ap.debitoEfetivoTotal)}</td></tr>
+                <tr><td>Análise pelo NCM — débito esperado (informativo)</td><td className="text-right font-mono text-slate-500">{fmtMoeda(ap.debitoInformativoTotal)}</td></tr>
+                <tr><td>Diferença débito nota − NCM (emissão correta?)</td><td className={`text-right font-mono font-bold ${ap.divergenciaDebitoTotal < 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{ap.divergenciaDebitoTotal >= 0 ? '+' : ''}{fmtMoeda(ap.divergenciaDebitoTotal)}</td></tr>
                 {ap.debitoSemEfeitoTotal > 0 ? <tr><td>Saídas fora de venda ({ap.qtdSaidasSemEfeito}) — fora do saldo</td><td className="text-right font-mono text-slate-500">{fmtMoeda(ap.debitoSemEfeitoTotal)}</td></tr> : null}
                 <tr><td>(−) Créditos efetivos — notas que você recebeu ({ap.qtdEntradasEfetivas})</td><td className="text-right font-mono text-emerald-700">{fmtMoeda(ap.creditoEfetivoTotal)}</td></tr>
                 <tr><td className="font-bold">(=) Saldo assistido</td><td className="text-right font-mono font-black">{fmtMoeda(ap.saldoTotal)}</td></tr>
@@ -1157,7 +1191,7 @@ function rotuloPeriodoApuracao(inicio: string, fim: string): string {
   return 'todas as notas da empresa'
 }
 
-function VazioPolido({ titulo, texto }: { titulo: string; texto?: string }) {
+function VazioPolido({ titulo, texto, children }: { titulo: string; texto?: string; children?: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-8 text-center dark:border-slate-700 dark:bg-slate-950/30">
       <motion.div
@@ -1169,6 +1203,24 @@ function VazioPolido({ titulo, texto }: { titulo: string; texto?: string }) {
       </motion.div>
       <div className="mt-2 text-[14px] font-bold">{titulo}</div>
       {texto ? <div className="mx-auto mt-1 max-w-sm text-[12px] leading-relaxed text-slate-500">{texto}</div> : null}
+      {children ? <div className="mt-3 flex flex-wrap items-center justify-center gap-2">{children}</div> : null}
     </div>
+  )
+}
+
+function AbaNotasVazia() {
+  const [anualAberto, setAnualAberto] = useState(false)
+  return (
+    <>
+      <VazioPolido
+        titulo="Nenhuma nota neste filtro"
+        texto="Pode não haver documentos neste mês. Abra o calendário anual: os meses com notas ficam com a borda cintilante."
+      >
+        <Btn variante="primary" tam="sm" onClick={() => setAnualAberto(true)}>
+          📅 Abrir calendário anual
+        </Btn>
+      </VazioPolido>
+      <CalendarioAnualModal aberto={anualAberto} onFechar={() => setAnualAberto(false)} />
+    </>
   )
 }

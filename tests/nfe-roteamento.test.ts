@@ -190,7 +190,12 @@ describe('motor reativo a cada lote', () => {
     expect(r1.novas).toBe(1)
     const ap1 = await apuracaoDaEmpresa(ativa.id!)
     expect(ap1.qtd).toBe(1)
-    expect(ap1.apuracao.resultado).toBe('a-pagar')
+    // XML legado sem grupo IBSCBS: débito efetivo zero (nada destacado),
+    // informativo NCM preservado — a emissão fica pendente de conferência.
+    expect(ap1.apuracao.debitoEfetivoTotal).toBe(0)
+    expect(ap1.apuracao.debitoInformativoTotal).toBeGreaterThan(0)
+    expect(ap1.apuracao.divergenciaDebitoTotal).toBeLessThan(0)
+    expect(ap1.apuracao.resultado).toBe('zerado')
     const saldo1 = ap1.apuracao.saldoTotal
 
     const r2 = await importarXmls(
@@ -209,11 +214,13 @@ describe('motor reativo a cada lote', () => {
     const ap2 = await apuracaoDaEmpresa(ativa.id!)
     expect(ap2.qtd).toBe(2)
     // Informativo NCM cresceu com a entrada; o efetivo segue zero porque o
-    // XML não destaca IBS/CBS — a apuração assistida usa o efetivo (nota).
+    // XML não destaca IBS/CBS — a apuração assistida usa o efetivo (nota)
+    // nos dois lados (débito destacado − crédito destacado).
     expect(ap2.apuracao.creditoTotal).toBeGreaterThan(0)
     expect(ap2.apuracao.creditoEfetivoTotal).toBe(0)
     expect(ap2.apuracao.creditoInformativoTotal).toBeGreaterThan(0)
-    // Sem crédito comprovado na nota, o saldo assistido não se move.
+    // Sem valor comprovado nas notas (nem débito nem crédito destacados),
+    // o saldo assistido não se move.
     expect(ap2.apuracao.saldoTotal).toBe(saldo1)
     // Datas para expansão reativa do filtro.
     expect(r2.menorData).toBe('2026-09-11')

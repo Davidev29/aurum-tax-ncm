@@ -898,7 +898,10 @@ function Nomenclatura({
 
                 {expandido ? (
                   <div className="border-t border-slate-100 dark:border-slate-800">
-                    <div className="scroll-elegante max-h-[320px] overflow-auto">
+                    {/* FIX sobreposição: sem viewport interno — só o externo
+                        (max-h-560) rola. Viewport duplo criava 2 barras +
+                        headers sticky empilhados. */}
+                    <div className="overflow-visible">
                       <table className="tbl w-full">
                         <thead>
                           <tr>

@@ -5,9 +5,10 @@
  * verde, tabela com célula Multa/Juros vazia, SENDA 1.8.0, autenticação +
  * canhoto com ITF real ). Documento sempre branco, sem dark-mode.
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { fmtCnpj, fmtMoeda } from '@/domain/services/format';
+import { empilharEscapeModal, ehTopoEscapeModal } from '@/ui/kit';
 import type { ResultadoConvencional } from './calculo';
 import type { TributoSimples } from './tabelas';
 
@@ -78,7 +79,7 @@ function gerarNumero(conv: ResultadoConvencional): string {
 /** Monta os dados do documento a partir do cálculo + origem (CNPJ x manual). */
 export function montarDadosDas(
   conv: ResultadoConvencional,
-  opts: { modo: 'manual' | 'cnpj'; empresaNome: string; cnpj: string; cnae: string; rbt12: number; receitaMes: number },
+  opts: { modo: 'manual' | 'cnpj'; empresaNome: string; cnpj: string; cnae: string; rbt12: number; receitaMes: number; st?: { tributo: string; valorST: number; deducao: number; detalhe?: string }; seg?: { anexos: string[]; temResto: boolean; redir: string[] } },
 ): DadosDas {
   const hoje = new Date();
   const per = periodoAnterior(hoje);
@@ -95,10 +96,16 @@ export function montarDadosDas(
   const empresa = viaCnpj ? opts.empresaNome.trim().toUpperCase() : 'CONTRIBUINTE — CÁLCULO MANUAL';
   const cnpj = viaCnpj ? opts.cnpj : null;
   const obsBase = `Anexo ${conv.anexoId} · ${conv.faixa}ª faixa · RBT12 ${fmtMoeda(opts.rbt12)} · Receita ${fmtMoeda(opts.receitaMes)}`;
+  const obsSeg = opts.seg
+    ? ` · Segregado ${opts.seg.anexos.join(' + ')}${opts.seg.temResto ? ' (inclui restante automático)' : ''}${opts.seg.redir.length > 0 ? ` (${opts.seg.redir.join(', ')})` : ''}`
+    : '';
+  const obsST = opts.st && opts.st.deducao > 0
+    ? ` · ${opts.st.detalhe || `ST ${opts.st.tributo} ${fmtMoeda(opts.st.valorST)} (deduzido ${fmtMoeda(opts.st.deducao)})`}`
+    : '';
   const observacoes =
     viaCnpj && opts.cnae
-      ? `${obsBase} · CNAE ${opts.cnae} · Documento elaborado pelo Aurum TAX`
-      : `${obsBase} · Documento elaborado pelo Aurum TAX – sem validade fiscal`;
+      ? `${obsBase}${obsSeg}${obsST} · CNAE ${opts.cnae} · Documento elaborado pelo Aurum TAX`
+      : `${obsBase}${obsSeg}${obsST} · Documento elaborado pelo Aurum TAX – sem validade fiscal`;
   return {
     empresa,
     cnpj,
@@ -255,6 +262,23 @@ export function BotaoReparticao({ onClick }: { onClick: () => void }) {
 /* ---------------------------------- modal ---------------------------------- */
 
 export function DasModal({ aberto, onFechar, dados }: { aberto: boolean; onFechar: () => void; dados: DadosDas | null }) {
+  // FIX sobreposição/scroll: trava body + Escape em pilha (igual InsightsModal).
+  // Antes o fundo continuava rolando atrás do DAS e Esc não fechava.
+  useEffect(() => {
+    if (!aberto) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && ehTopoEscapeModal(onKey)) onFechar();
+    };
+    window.addEventListener('keydown', onKey);
+    const desempilhar = empilharEscapeModal(onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      desempilhar();
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [aberto, onFechar]);
   const grupos = useMemo(() => (dados ? gruposArrecadacao(dados) : []), [dados]);
   if (!aberto || !dados) return null;
   if (typeof document === 'undefined') return null;
@@ -274,7 +298,9 @@ export function DasModal({ aberto, onFechar, dados }: { aberto: boolean; onFecha
       aria-label="Documento de Arrecadação do Simples Nacional"
     >
       <div className="max-h-[92vh] w-full max-w-[820px] overflow-y-auto rounded-2xl bg-white text-black shadow-2xl [color-scheme:light]">
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-slate-200 bg-white/95 px-4 py-2 backdrop-blur print:hidden">
+        {/* FIX: header sólido (sem backdrop-blur) — blur em sticky dentro de
+            scroller força recomposição a cada scroll */}
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2 print:hidden">
           <span className="text-xs font-bold text-slate-500">Pré-visualização · DAS Simples Nacional</span>
           <div className="flex gap-2">
             <button type="button" onClick={() => window.print()} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-bold hover:bg-slate-50">

@@ -101,22 +101,36 @@ export function baixar(nome: string, conteudo: string | Blob, mime = 'applicatio
 /* ----------------------------------------------------------- CSV / JSON -- */
 
 export const CABECALHO_PRODUTOS = [
-  'SKU', 'Nome', 'NCM', 'CFOP', 'CST ICMS', 'PIS', 'COFINS', 'Qtd',
+  'SKU', 'Nome', 'NCM', 'CFOP entrada', 'CFOP saída', 'CST ICMS entrada', 'CST ICMS saída',
+  'PIS entrada', 'PIS saída', 'COFINS entrada', 'COFINS saída', 'Qtd',
   'Valor Unitário', 'Total', 'CST Reforma', 'cClassTrib',
   'Classificação Reforma', 'Red. IBS (%)', 'Red. CBS (%)', 'Anexo',
 ] as const
 
-/** Linha de produto idêntica a `produtoParaLinha` da v1. */
+/** Linha de produto idêntica a `produtoParaLinha` da v1 + colunas entrada×saída. */
 export function produtoParaLinha(p: Produto): unknown[] {
   const c = p.classificacaoSnapshot ?? ({} as Produto['classificacaoSnapshot'])
+  const r = p as unknown as Record<string, string | undefined>
+  const cfopE = r.cfopEntrada || p.cfop || ''
+  const cfopS = r.cfopSaida || ''
+  const icmsE = r.cstIcmsEntrada || p.cstIcms || ''
+  const icmsS = r.cstIcmsSaida || ''
+  const pisE = r.pisEntrada || p.pis || ''
+  const pisS = r.pisSaida || ''
+  const cofE = r.cofinsEntrada || p.cofins || ''
+  const cofS = r.cofinsSaida || ''
   return [
     p.codigo,
     p.nome,
     fmtNcm(p.ncm),
-    p.cfop ?? '',
-    p.cstIcms ?? '',
-    p.pis ?? '',
-    p.cofins ?? '',
+    cfopE,
+    cfopS,
+    icmsE,
+    icmsS,
+    pisE,
+    pisS,
+    cofE,
+    cofS,
     p.quantidade ?? 0,
     Number(p.valorUnitario ?? 0).toFixed(2),
     (Number(p.quantidade ?? 0) * Number(p.valorUnitario ?? 0)).toFixed(2),
@@ -563,11 +577,16 @@ export async function exportarProdutosPDF({ produtos, empresa, emitente, refIBS,
 
   const rows = produtos.map((p) => {
     const c = p.classificacaoSnapshot ?? ({} as Produto['classificacaoSnapshot'])
+    const r = p as unknown as Record<string, string | undefined>
+    const cfopE = r.cfopEntrada || p.cfop || ''
+    const cfopS = r.cfopSaida || ''
+    const icmsE = r.cstIcmsEntrada || p.cstIcms || ''
+    const icmsS = r.cstIcmsSaida || ''
     const antiga = [
-      p.cfop ? `CFOP ${p.cfop}` : null,
-      p.cstIcms ? `CST ${p.cstIcms}` : null,
-      p.pis ? `PIS ${p.pis}` : null,
-      p.cofins ? `COFINS ${p.cofins}` : null,
+      cfopE ? `CFOP E ${cfopE}` : null,
+      cfopS ? `CFOP S ${cfopS}` : null,
+      icmsE ? `CST E ${icmsE}` : null,
+      icmsS ? `CST S ${icmsS}` : null,
     ]
       .filter(Boolean)
       .join('\n')
@@ -1191,10 +1210,12 @@ export function csvNfe(notas: NotaXml[]): string {
         : ap.resultado.toUpperCase().replace('-', ' ')
   const blocoApuracao: unknown[][] = [
     [],
-    ['APURACAO IBS/CBS (estimativa LC 214/2025)', 'IBS', 'CBS', 'Total'],
-    [`Débitos — Saídas (${ap.qtdSaidas} notas)`, ap.debitoIBS.toFixed(2), ap.debitoCBS.toFixed(2), ap.debitoTotal.toFixed(2)],
-    [`Créditos apropriáveis — Entradas (${ap.qtdEntradasApropriaveis} notas)`, ap.creditoIBS.toFixed(2), ap.creditoCBS.toFixed(2), ap.creditoTotal.toFixed(2)],
-    ['Saldo apurado', ap.saldoIBS.toFixed(2), ap.saldoCBS.toFixed(2), ap.saldoTotal.toFixed(2)],
+    ['APURACAO IBS/CBS (assistida — destacado nas notas)', 'IBS', 'CBS', 'Total'],
+    [`Débitos destacados — Saídas (${ap.qtdSaidas} notas)`, ap.debitoEfetivoIBS.toFixed(2), ap.debitoEfetivoCBS.toFixed(2), ap.debitoEfetivoTotal.toFixed(2)],
+    [`Análise pelo NCM — débito esperado (informativo)`, ap.debitoInformativoIBS.toFixed(2), ap.debitoInformativoCBS.toFixed(2), ap.debitoInformativoTotal.toFixed(2)],
+    [`Créditos destacados — Entradas (${ap.qtdEntradasApropriaveis} notas)`, ap.creditoEfetivoIBS.toFixed(2), ap.creditoEfetivoCBS.toFixed(2), ap.creditoEfetivoTotal.toFixed(2)],
+    [`Análise pelo NCM — crédito esperado (informativo)`, ap.creditoInformativoIBS.toFixed(2), ap.creditoInformativoCBS.toFixed(2), ap.creditoInformativoTotal.toFixed(2)],
+    ['Saldo apurado (destacado − destacado)', ap.saldoIBS.toFixed(2), ap.saldoCBS.toFixed(2), ap.saldoTotal.toFixed(2)],
     [vereditoCsv],
     [`Bloqueados Simples/MEI (${ap.qtdEntradasBloqueadas} notas)`, ap.bloqueadoIBS.toFixed(2), ap.bloqueadoCBS.toFixed(2), ap.bloqueadoTotal.toFixed(2)],
   ]
@@ -1458,8 +1479,8 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
         ? `Você tem ${fmtMoeda(ap.creditoEfetivoTotal)} de crédito nas notas para usar`
         : 'Nenhum crédito destacado nas notas do período'
       : op.resumo === 'debito'
-        ? ap.debitoTotal > 0
-          ? `Suas vendas deram ${fmtMoeda(ap.debitoTotal)} de imposto`
+        ? ap.qtdSaidas > 0
+          ? `Suas vendas destacaram ${fmtMoeda(ap.debitoEfetivoTotal)} de IBS/CBS (esperado pela Reforma: ${fmtMoeda(ap.debitoInformativoTotal)})`
           : 'Nenhuma venda no período'
         : ap.resultado === 'a-pagar'
           ? `Você vai pagar ${fmtMoeda(ap.valorAPagar)}`
@@ -1633,6 +1654,7 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
   ]
   /** A conta final obedece ao modal: completa, só crédito ou só débito. */
   const divergenciaTxt = `${ap.divergenciaCreditoTotal >= 0 ? '+' : ''}${fmtMoeda(ap.divergenciaCreditoTotal)}`
+  const divergenciaDebitoTxt = `${ap.divergenciaDebitoTotal >= 0 ? '+' : ''}${fmtMoeda(ap.divergenciaDebitoTotal)}`
   const rowsResumo: Cell[][] =
     op.resumo === 'credito'
       ? [
@@ -1641,11 +1663,15 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
         [`Diferença nota − NCM`, divergenciaTxt],
       ]
       : op.resumo === 'debito'
-        ? [[`Imposto das vendas que você emitiu · ${ap.qtdSaidas} venda(s)`, fmtMoeda(ap.debitoTotal)]]
+        ? [
+          [`Débito destacado — você emitiu · ${ap.qtdSaidas} venda(s)`, fmtMoeda(ap.debitoEfetivoTotal)],
+          ['Análise pelo NCM — débito esperado (informativo, confira a emissão)', fmtMoeda(ap.debitoInformativoTotal)],
+          [`Diferença débito nota − NCM (emissão correta?)`, divergenciaDebitoTxt],
+        ]
         : [
-            [`Imposto das vendas que você emitiu · ${ap.qtdSaidas} venda(s)`, fmtMoeda(ap.debitoTotal)],
+            [`Débito destacado — vendas que você emitiu · ${ap.qtdSaidas} venda(s)`, fmtMoeda(ap.debitoEfetivoTotal)],
             [`Menos: crédito efetivo das notas que você recebeu · ${ap.qtdEntradasEfetivas} compra(s) com destaque`, `− ${fmtMoeda(ap.creditoEfetivoTotal)}`],
-            ['Resultado assistido para você', resultadoValor],
+            ['Resultado assistido para você (destacado − destacado)', resultadoValor],
                 ...(ap.debitoSemEfeitoTotal > 0.005
                   ? [[`Saídas fora de venda (fora do saldo) · ${ap.qtdSaidasSemEfeito} nota(s)`, fmtMoeda(ap.debitoSemEfeitoTotal)] as Cell[]]
                   : []),
@@ -1658,10 +1684,10 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
       ? 'Débito apurado'
       : 'Resumo do imposto (apuração assistida)'
   const subResumo = op.resumo === 'completo'
-    ? 'A conta é simples: imposto das vendas menos o crédito que veio destacado nas notas. A análise pelo NCM é informativa.'
+    ? 'A conta é simples: débito destacado nas suas vendas menos o crédito que veio destacado nas notas. As análises pelo NCM são informativas.'
     : op.resumo === 'credito'
       ? 'Vale o que o fornecedor destacou na nota. A análise pelo NCM é informativa — você decide.'
-      : undefined
+      : 'Vale o que você destacou nas vendas. A análise pelo NCM é informativa — confira a emissão.'
 
   const infoTimbre = linhasEmitente(emitente).map((l) => l[0]).filter(Boolean)
   const doc: TDocumentDefinitions = {
@@ -1758,12 +1784,12 @@ export async function exportarNfePDF(params: RelatorioNfeParams): Promise<void> 
           widths: op.resumo === 'completo' ? ['*', '*'] : ['*'],
           body: [
             op.resumo === 'debito'
-              ? [cartaoKpi('Imposto das suas vendas', fmtMoeda(ap.debitoTotal), `${ap.qtdSaidas} venda(s) no período`)]
+              ? [cartaoKpi('Débito destacado nas vendas', fmtMoeda(ap.debitoEfetivoTotal), `${ap.qtdSaidas} venda(s) no período · NCM diria ${fmtMoeda(ap.debitoInformativoTotal)}`)]
               : op.resumo === 'credito'
                 ? [cartaoKpi('Crédito efetivo nas notas', fmtMoeda(ap.creditoEfetivoTotal), `${ap.qtdEntradasEfetivas} compra(s) com destaque IBS/CBS`)]
                 : [
                     cartaoKpi('Crédito efetivo nas notas', fmtMoeda(ap.creditoEfetivoTotal), `${ap.qtdEntradasEfetivas} compra(s) com destaque · NCM diria ${fmtMoeda(ap.creditoInformativoTotal)}`),
-                    cartaoKpi('Imposto das suas vendas', fmtMoeda(ap.debitoTotal), `${ap.qtdSaidas} venda(s) no período`),
+                    cartaoKpi('Débito destacado nas vendas', fmtMoeda(ap.debitoEfetivoTotal), `${ap.qtdSaidas} venda(s) no período · NCM diria ${fmtMoeda(ap.debitoInformativoTotal)}`),
                   ],
           ],
         },

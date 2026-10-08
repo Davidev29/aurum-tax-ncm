@@ -198,12 +198,21 @@ export function ModalProdutoDetalhe({
             ) : null}
           </Secao>
 
-          <Secao titulo="Regime anterior" icone="🧾">
+          <Secao titulo="Regime anterior — entrada" icone="📥">
             <Grade cols="grid-cols-2 md:grid-cols-4">
-              <Campo rotulo="CFOP" valor={produto.cfop || '—'} mono />
-              <Campo rotulo="CST ICMS" valor={produto.cstIcms || '—'} mono />
-              <Campo rotulo="PIS" valor={produto.pis || '—'} mono />
-              <Campo rotulo="COFINS" valor={produto.cofins || '—'} mono />
+              <Campo rotulo="CFOP entrada" valor={(produto as unknown as Record<string, string>).cfopEntrada || produto.cfop || '—'} mono />
+              <Campo rotulo="CST ICMS entrada" valor={(produto as unknown as Record<string, string>).cstIcmsEntrada || produto.cstIcms || '—'} mono />
+              <Campo rotulo="PIS entrada" valor={(produto as unknown as Record<string, string>).pisEntrada || produto.pis || '—'} mono />
+              <Campo rotulo="COFINS entrada" valor={(produto as unknown as Record<string, string>).cofinsEntrada || produto.cofins || '—'} mono />
+            </Grade>
+          </Secao>
+
+          <Secao titulo="Regime anterior — saída" icone="📤">
+            <Grade cols="grid-cols-2 md:grid-cols-4">
+              <Campo rotulo="CFOP saída" valor={(produto as unknown as Record<string, string>).cfopSaida || '—'} mono />
+              <Campo rotulo="CST ICMS saída" valor={(produto as unknown as Record<string, string>).cstIcmsSaida || '—'} mono />
+              <Campo rotulo="PIS saída" valor={(produto as unknown as Record<string, string>).pisSaida || '—'} mono />
+              <Campo rotulo="COFINS saída" valor={(produto as unknown as Record<string, string>).cofinsSaida || '—'} mono />
             </Grade>
           </Secao>
 
@@ -299,6 +308,8 @@ export function ModalItemNfeDetalhe({
     }
     setSalvando(true)
     try {
+      const { distribuirCfopUnico } = await import('@/application/produtos')
+      const fluxoCfop = distribuirCfopUnico(item.cfop ?? '')
       const r = await salvarProdutosEmLote(
         [
           {
@@ -306,9 +317,16 @@ export function ModalItemNfeDetalhe({
             nome: item.descricao || item.codProd,
             ncm: item.ncm,
             cfop: item.cfop,
+            ...fluxoCfop,
             cstIcms: item.cstIcms,
+            cstIcmsEntrada: item.cstIcms,
+            cstIcmsSaida: item.cstIcms,
             pis: item.cstPis,
+            pisEntrada: item.cstPis,
+            pisSaida: item.cstPis,
             cofins: item.cstCofins,
+            cofinsEntrada: item.cstCofins,
+            cofinsSaida: item.cstCofins,
             quantidade: Number(item.qtd) || 0,
             valorUnitario: Number(item.vlUnit) || 0,
             classificacao: item.classificacao,

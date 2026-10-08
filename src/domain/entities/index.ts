@@ -403,6 +403,17 @@ export interface Empresa {
   cep?: string
   telefone?: string
   email?: string
+  /**
+   * Contador responsável (condicional — só aparece quando preenchido).
+   * `contadorTipo`: 'pf' (pessoa física, CPF) ou 'pj' (pessoa jurídica, CNPJ).
+   * Quando PJ, a UI resolve via BrasilAPI para exibir os dados corretos.
+   */
+  contadorTipo?: 'pf' | 'pj' | null
+  contadorNome?: string | null
+  contadorDoc?: string | null
+  contadorCrc?: string | null
+  contadorEmail?: string | null
+  contadorTelefone?: string | null
 }
 
 export interface Emitente {
@@ -498,10 +509,20 @@ export interface Produto {
   codigo: string
   nome: string
   ncm: string
+  /** Legado (compat): espelha entrada/saída quando só há um valor. */
   cfop: string
   cstIcms: string
   pis: string
   cofins: string
+  /** Tributação anterior por fluxo — entrada × saída (pré-reforma, manual). */
+  cfopEntrada?: string
+  cfopSaida?: string
+  cstIcmsEntrada?: string
+  cstIcmsSaida?: string
+  pisEntrada?: string
+  pisSaida?: string
+  cofinsEntrada?: string
+  cofinsSaida?: string
   quantidade: number
   valorUnitario: number
   cstReforma: string

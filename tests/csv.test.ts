@@ -148,7 +148,7 @@ describe('montarCSV', () => {
 })
 
 describe('produtoParaLinha / csvProdutos', () => {
-  it('gera as 16 colunas na ordem do cabeçalho', () => {
+  it('gera as colunas entrada × saída na ordem do cabeçalho', () => {
     const linha = produtoParaLinha(produto())
     expect(linha).toHaveLength(CABECALHO_PRODUTOS.length)
     expect(linha).toEqual([
@@ -156,9 +156,13 @@ describe('produtoParaLinha / csvProdutos', () => {
       'Queijo Minas Frescal 500g',
       '0201.10.00',
       '5102',
+      '',
       '000',
+      '',
       '01',
+      '',
       '01',
+      '',
       2,
       '19.90',
       '39.80',
@@ -174,10 +178,11 @@ describe('produtoParaLinha / csvProdutos', () => {
   it('snapshot vazio cai em string vazia', () => {
     const p = produto({ classificacaoSnapshot: undefined as never })
     const linha = produtoParaLinha(p)
-    expect(linha[12]).toBe('')
-    expect(linha[13]).toBe('')
-    expect(linha[14]).toBe('')
-    expect(linha[15]).toBe('')
+    // Índices deslocados pelas 4 colunas entrada×saída: classificação=16, reduções=17/18, anexo=19.
+    expect(linha[16]).toBe('')
+    expect(linha[17]).toBe('')
+    expect(linha[18]).toBe('')
+    expect(linha[19]).toBe('')
   })
 
   it('cabeçalho não é entreaspado, célula com ; é', () => {

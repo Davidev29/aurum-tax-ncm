@@ -505,12 +505,84 @@ function ModalDetalheEmpresa({
   onExcluida: () => void
 }) {
   const excluirStore = useSessao((s) => s.excluir)
+  const atualizarStore = useSessao((s) => s.atualizar)
+  const emitente = useSessao((s) => s.emitente)
   const [vinculos, setVinculos] = useState<{ produtos: number; notas: number } | null>(null)
   const [produtos, setProdutos] = useState<Array<{ id?: number; codigo: string; nome: string; ncm: string }>>([])
   const [carregando, setCarregando] = useState(false)
   const [excluindo, setExcluindo] = useState(false)
+  // Edição do cadastro (1º pedido: editar os dados a partir daqui).
+  const [editando, setEditando] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const [form, setForm] = useState({ razaoSocial: '', fantasia: '', cnpj: '', ie: '', im: '', regime: '', endereco: '', cidade: '', uf: '', cep: '', telefone: '', email: '' })
+  // Contador responsável (condicional — só aparece quando preenchido).
+  const [contadorTipo, setContadorTipo] = useState<'' | 'pf' | 'pj'>('')
+  const [contadorNome, setContadorNome] = useState('')
+  const [contadorDoc, setContadorDoc] = useState('')
+  const [contadorCrc, setContadorCrc] = useState('')
+  const [contadorEmail, setContadorEmail] = useState('')
+  const [contadorFone, setContadorFone] = useState('')
+  const [buscandoContador, setBuscandoContador] = useState(false)
+  const [buscandoEmpresa, setBuscandoEmpresa] = useState(false)
+  // Cartão + exportações a partir da empresa.
+  const [gerandoCartao, setGerandoCartao] = useState(false)
+  const [imprimindoCartao, setImprimindoCartao] = useState(false)
+  const [exportando, setExportando] = useState<string | null>(null)
 
   const id = empresa?.id ?? null
+
+  // Troca de empresa: fecha a edição e espelha o novo cadastro — nunca
+  // mostra dado de outro cliente no formulário.
+  useEffect(() => {
+    setEditando(false)
+    if (!empresa) return
+    setForm({
+      razaoSocial: empresa.razaoSocial ?? '',
+      fantasia: empresa.fantasia ?? '',
+      cnpj: empresa.cnpj ? fmtCnpj(empresa.cnpj) : '',
+      ie: empresa.ie ?? '',
+      im: empresa.im ?? '',
+      regime: empresa.regimeTributario ?? '',
+      endereco: empresa.endereco ?? '',
+      cidade: empresa.cidade ?? '',
+      uf: empresa.uf ?? '',
+      cep: empresa.cep ?? '',
+      telefone: empresa.telefone ?? '',
+      email: empresa.email ?? '',
+    })
+    setContadorTipo((empresa.contadorTipo ?? '') as '' | 'pf' | 'pj')
+    setContadorNome(empresa.contadorNome ?? '')
+    setContadorDoc(empresa.contadorDoc ?? '')
+    setContadorCrc(empresa.contadorCrc ?? '')
+    setContadorEmail(empresa.contadorEmail ?? '')
+    setContadorFone(empresa.contadorTelefone ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+  // Sempre que troca de empresa, o formulário volta a espelhar o cadastro.
+  // Na entrada em edição, ressincroniza também (o `id` não muda após salvar).
+  useEffect(() => {
+    if (!editando || !empresa) return
+    setForm({
+      razaoSocial: empresa.razaoSocial ?? '',
+      fantasia: empresa.fantasia ?? '',
+      cnpj: empresa.cnpj ? fmtCnpj(empresa.cnpj) : '',
+      ie: empresa.ie ?? '',
+      im: empresa.im ?? '',
+      regime: empresa.regimeTributario ?? '',
+      endereco: empresa.endereco ?? '',
+      cidade: empresa.cidade ?? '',
+      uf: empresa.uf ?? '',
+      cep: empresa.cep ?? '',
+      telefone: empresa.telefone ?? '',
+      email: empresa.email ?? '',
+    })
+    setContadorTipo((empresa.contadorTipo ?? '') as '' | 'pf' | 'pj')
+    setContadorNome(empresa.contadorNome ?? '')
+    setContadorDoc(empresa.contadorDoc ?? '')
+    setContadorCrc(empresa.contadorCrc ?? '')
+    setContadorEmail(empresa.contadorEmail ?? '')
+    setContadorFone(empresa.contadorTelefone ?? '')
+  }, [editando])
 
   useEffect(() => {
     if (id == null) {
@@ -577,6 +649,134 @@ function ModalDetalheEmpresa({
     })()
   }
 
+  const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
+    setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  /** Puxa razão/endereço/contatos da BrasilAPI pelo CNPJ digitado. */
+  const puxarDadosEmpresa = () => {
+    if (buscandoEmpresa) return
+    setBuscandoEmpresa(true)
+    void (async () => {
+      try {
+        const { buscarCnpj } = await import('@/infrastructure/receita/brasilapi')
+        const d = await buscarCnpj(form.cnpj)
+        setForm((f) => ({
+          ...f,
+          razaoSocial: d.razaoSocial || f.razaoSocial,
+          fantasia: d.fantasia || f.fantasia,
+          endereco: d.endereco || f.endereco,
+          cidade: d.cidade || f.cidade,
+          uf: d.uf || f.uf,
+          cep: d.cep || f.cep,
+          telefone: d.telefone || f.telefone,
+          email: d.email || f.email,
+        }))
+        toast('Dados puxados da Receita (BrasilAPI). Confira e salve.', 'ok')
+      } catch (e2) {
+        toast(e2 instanceof Error ? e2.message : String(e2), 'err')
+      } finally {
+        setBuscandoEmpresa(false)
+      }
+    })()
+  }
+
+  /** Contador PJ: consulta completa do CNPJ para ir com as informações corretas. */
+  const puxarContadorPJ = () => {
+    if (contadorTipo !== 'pj' || buscandoContador) return
+    setBuscandoContador(true)
+    void (async () => {
+      try {
+        const { buscarCnpj } = await import('@/infrastructure/receita/brasilapi')
+        const d = await buscarCnpj(contadorDoc)
+        if (d.razaoSocial) setContadorNome(d.razaoSocial)
+        toast('Contador (PJ) localizado na Receita — dados aplicados. Confira e salve.', 'ok')
+      } catch (e2) {
+        toast(e2 instanceof Error ? e2.message : String(e2), 'err')
+      } finally {
+        setBuscandoContador(false)
+      }
+    })()
+  }
+
+  const salvarEdicao = () => {
+    if (id == null || salvando) return
+    setSalvando(true)
+    void (async () => {
+      try {
+        const regime = form.regime.trim()
+        const ok = await atualizarStore(id, {
+          razaoSocial: form.razaoSocial.trim(),
+          fantasia: form.fantasia.trim(),
+          cnpj: form.cnpj.trim(),
+          ie: form.ie.trim(),
+          im: form.im.trim(),
+          regimeTributario: (regime === 'simples' || regime === 'mei' || regime === 'normal' ? regime : null) as Empresa['regimeTributario'],
+          endereco: form.endereco.trim(),
+          cidade: form.cidade.trim(),
+          uf: form.uf.trim(),
+          cep: form.cep.trim(),
+          telefone: form.telefone.trim(),
+          email: form.email.trim(),
+          contadorTipo: contadorTipo || null,
+          contadorNome: contadorNome.trim() || null,
+          contadorDoc: contadorDoc.trim() || null,
+          contadorCrc: contadorCrc.trim() || null,
+          contadorEmail: contadorEmail.trim() || null,
+          contadorTelefone: contadorFone.trim() || null,
+        })
+        if (ok) setEditando(false)
+      } finally {
+        setSalvando(false)
+      }
+    })()
+  }
+
+  const gerarCartao = (imprimir: boolean) => {
+    if (!empresa || gerandoCartao || imprimindoCartao) return
+    if (imprimir) setImprimindoCartao(true)
+    else setGerandoCartao(true)
+    void (async () => {
+      try {
+        const mod = await import('@/application/cartao-empresa')
+        const cartao = await mod.montarCartaoEmpresa(empresa)
+        if (imprimir) {
+          await mod.imprimirCartaoEmpresa(cartao, emitente ?? EMITENTE_PADRAO)
+          toast('Cartão aberto para impressão.', 'ok')
+        } else {
+          await mod.exportarCartaoEmpresaPDF(cartao, emitente ?? EMITENTE_PADRAO)
+          toast('Cartão informativo gerado (PDF elegante).', 'ok')
+        }
+      } catch (e2) {
+        toast(`Cartão: ${e2 instanceof Error ? e2.message : String(e2)}`, 'err')
+      } finally {
+        setGerandoCartao(false)
+        setImprimindoCartao(false)
+      }
+    })()
+  }
+
+  const exportarProdutos = (formato: 'csv' | 'xlsx' | 'pdf' | 'pdf-rico') => {
+    if (!empresa || exportando) return
+    setExportando(formato)
+    void (async () => {
+      try {
+        const mod = await import('@/application/empresa-exportacoes')
+        if (formato === 'pdf-rico') await mod.exportarProdutosRicoDaEmpresa(empresa, emitente ?? EMITENTE_PADRAO)
+        else await mod.exportarProdutosDaEmpresa(empresa, formato, { emitente: emitente ?? EMITENTE_PADRAO })
+        toast(`Produtos exportados (${formato === 'pdf-rico' ? 'PDF completo' : formato.toUpperCase()}) — idêntico à tela de Produtos.`, 'ok')
+      } catch (e2) {
+        toast(`Exportação: ${e2 instanceof Error ? e2.message : String(e2)}`, 'warn')
+      } finally {
+        setExportando(null)
+      }
+    })()
+  }
+
+  const temContador = Boolean(
+    (empresa?.contadorTipo === 'pf' || empresa?.contadorTipo === 'pj') &&
+    ((empresa?.contadorNome ?? '').trim() || (empresa?.contadorDoc ?? '').trim()),
+  )
+
   const regime = tagRegime(empresa?.regimeTributario)
   const enderecoCompleto = empresa
     ? [empresa.endereco, empresa.cidade && empresa.uf ? `${empresa.cidade}/${empresa.uf}` : empresa.cidade ?? empresa.uf, empresa.cep ? `CEP ${empresa.cep}` : '']
@@ -636,7 +836,145 @@ function ModalDetalheEmpresa({
                 📦 sem produtos
               </span>
             )}
+            <span className="ml-auto flex flex-wrap gap-1.5">
+              {!editando ? (
+                <Btn tam="sm" variante="primary" onClick={() => setEditando(true)}>
+                  ✏️ Editar dados
+                </Btn>
+              ) : null}
+            </span>
           </div>
+
+          <section className="rounded-xl border border-brand-200/60 bg-brand-50/50 p-3 dark:border-aurum-900/50 dark:bg-brand-950/20">
+            <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">🪪 Cartão informativo · CNAE × Anexo do Simples</h3>
+            <p className="mb-2 text-[11px] leading-relaxed text-slate-500">
+              Cartão estilo CNPJ com o selo Simples sim/não e cada CNAE acompanhado do seu Anexo do Simples. O contador só sai no cartão quando preenchido.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              <Btn tam="sm" variante="primary" carregando={gerandoCartao} onClick={() => gerarCartao(false)}>
+                {gerandoCartao ? 'Gerando…' : '📄 Baixar cartão (PDF)'}
+              </Btn>
+              <Btn tam="sm" carregando={imprimindoCartao} onClick={() => gerarCartao(true)}>
+                {imprimindoCartao ? 'Abrindo…' : '🖨 Imprimir cartão'}
+              </Btn>
+            </div>
+          </section>
+
+          {editando ? (
+          <section className="space-y-2 rounded-xl border border-brand-300 bg-brand-50/40 p-3 dark:border-brand-900 dark:bg-brand-950/20">
+            <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">✏️ Editar dados da empresa</h3>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <Campo label="Razão social" obrigatorio className="sm:col-span-2">
+                <Texto value={form.razaoSocial} onChange={set('razaoSocial')} placeholder="Razão social *" />
+              </Campo>
+              <Campo label="Nome fantasia">
+                <Texto value={form.fantasia} onChange={set('fantasia')} placeholder="Nome fantasia" />
+              </Campo>
+              <Campo label="CNPJ">
+                <Texto mask="cnpj" mono value={form.cnpj} onChange={set('cnpj')} placeholder="00.000.000/0000-00" />
+              </Campo>
+              <div className="sm:col-span-2">
+                <Btn tam="sm" carregando={buscandoEmpresa} onClick={puxarDadosEmpresa}>
+                  {buscandoEmpresa ? 'Buscando…' : '🔍 Puxar dados da Receita pelo CNPJ'}
+                </Btn>
+              </div>
+              <Campo label="IE">
+                <Texto value={form.ie} onChange={set('ie')} placeholder="Inscrição estadual" />
+              </Campo>
+              <Campo label="IM">
+                <Texto value={form.im} onChange={set('im')} placeholder="Inscrição municipal" />
+              </Campo>
+              <Campo label="Regime tributário">
+                <select className="field" value={form.regime} onChange={(e) => setForm((f) => ({ ...f, regime: e.target.value }))}>
+                  <option value="">❓ Não identificado</option>
+                  <option value="simples">🧾 Simples Nacional (optante)</option>
+                  <option value="mei">🧾 MEI (optante)</option>
+                  <option value="normal">🏢 Regime normal (não optante)</option>
+                </select>
+              </Campo>
+              <Campo label="CEP">
+                <Texto value={form.cep} onChange={set('cep')} placeholder="00000-000" />
+              </Campo>
+              <Campo label="Endereço (logradouro)" className="sm:col-span-2">
+                <Texto value={form.endereco} onChange={set('endereco')} placeholder="Rua, número, bairro…" />
+              </Campo>
+              <Campo label="Cidade">
+                <Texto value={form.cidade} onChange={set('cidade')} placeholder="Cidade" />
+              </Campo>
+              <Campo label="UF">
+                <Texto value={form.uf} onChange={set('uf')} placeholder="UF" maxLength={2} />
+              </Campo>
+              <Campo label="E-mail">
+                <Texto value={form.email} onChange={set('email')} placeholder="contato@empresa.com.br" />
+              </Campo>
+              <Campo label="Telefone">
+                <Texto value={form.telefone} onChange={set('telefone')} placeholder="(00) 00000-0000" />
+              </Campo>
+            </div>
+            <div className="mt-2 rounded-xl border border-[var(--line)] p-2.5">
+              <div className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-500">🧑‍💼 Contador responsável (condicional)</div>
+              <div className="mb-2 flex gap-1.5">
+                {(['pf', 'pj'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setContadorTipo((atual) => (atual === t ? '' : t))}
+                    aria-pressed={contadorTipo === t}
+                    className={`flex-1 rounded-lg border-2 px-2 py-1.5 text-xs font-bold transition ${contadorTipo === t ? 'border-brand-500 bg-brand-50 text-brand-800 dark:bg-brand-900/30 dark:text-brand-200' : 'border-[var(--line)] text-slate-500'}`}
+                  >
+                    {t === 'pf' ? '🧑 Pessoa física (CPF)' : '🏢 Pessoa jurídica (CNPJ)'}
+                  </button>
+                ))}
+                {contadorTipo ? (
+                  <button
+                    type="button"
+                    onClick={() => { setContadorTipo(''); setContadorNome(''); setContadorDoc(''); setContadorCrc(''); setContadorEmail(''); setContadorFone('') }}
+                    className="rounded-lg border border-[var(--line)] px-2 py-1.5 text-xs text-slate-500"
+                    title="Limpar contador (some do cartão)"
+                  >
+                    ✕
+                  </button>
+                ) : null}
+              </div>
+              {contadorTipo ? (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Campo label={contadorTipo === 'pj' ? 'Razão social do escritório' : 'Nome do contador'} obrigatorio className="sm:col-span-2">
+                    <Texto value={contadorNome} onChange={(e) => setContadorNome(e.target.value)} placeholder={contadorTipo === 'pj' ? 'Escritório contábil LTDA' : 'Nome completo'} />
+                  </Campo>
+                  <Campo label={contadorTipo === 'pj' ? 'CNPJ do escritório' : 'CPF do contador'} obrigatorio>
+                    <Texto mask="cnpj" mono value={contadorDoc} onChange={(e) => setContadorDoc(e.target.value)} placeholder={contadorTipo === 'pj' ? '00.000.000/0000-00' : '000.000.000-00'} />
+                  </Campo>
+                  <Campo label="CRC">
+                    <Texto value={contadorCrc} onChange={(e) => setContadorCrc(e.target.value)} placeholder="CRC/UF 000000" />
+                  </Campo>
+                  {contadorTipo === 'pj' ? (
+                    <div className="sm:col-span-2">
+                      <Btn tam="sm" carregando={buscandoContador} onClick={puxarContadorPJ}>
+                        {buscandoContador ? 'Consultando…' : '🔍 Consulta completa do CNPJ (PJ)'}
+                      </Btn>
+                    </div>
+                  ) : null}
+                  <Campo label="E-mail do contador">
+                    <Texto value={contadorEmail} onChange={(e) => setContadorEmail(e.target.value)} placeholder="contador@escritorio.com.br" />
+                  </Campo>
+                  <Campo label="Telefone do contador">
+                    <Texto value={contadorFone} onChange={(e) => setContadorFone(e.target.value)} placeholder="(00) 00000-0000" />
+                  </Campo>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400">Sem contador — o cartão sai sem este bloco. Escolha PF ou PJ para anotar.</p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Btn variante="primary" tam="sm" carregando={salvando} onClick={salvarEdicao}>
+                {salvando ? 'Salvando…' : '💾 Salvar alterações'}
+              </Btn>
+              <Btn tam="sm" onClick={() => setEditando(false)}>
+                Cancelar
+              </Btn>
+            </div>
+          </section>
+          ) : null}
 
           <section>
             <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">Identificação</h3>
@@ -688,6 +1026,48 @@ function ModalDetalheEmpresa({
               ) : (
                 <>Regime <strong>ainda não identificado</strong>. Ele é detectado automaticamente pelo CRT/CSOSN ao importar um XML desta empresa.</>
               )}
+            </div>
+          </section>
+
+          {temContador ? (
+          <section>
+            <h3 className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">🧑‍💼 Contador responsável</h3>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <LinhaDetalhe rotulo="Tipo" valor={empresa.contadorTipo === 'pj' ? 'Pessoa jurídica' : 'Pessoa física'} />
+              <LinhaDetalhe rotulo="Documento" valor={empresa.contadorTipo === 'pj' && empresa.contadorDoc ? fmtCnpj(empresa.contadorDoc) : (empresa.contadorDoc ?? '').replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')} mono />
+              <div className="sm:col-span-2">
+                <LinhaDetalhe rotulo={empresa.contadorTipo === 'pj' ? 'Escritório' : 'Nome'} valor={empresa.contadorNome ?? ''} />
+              </div>
+              {empresa.contadorCrc ? <LinhaDetalhe rotulo="CRC" valor={empresa.contadorCrc} mono /> : null}
+              {empresa.contadorEmail ? <LinhaDetalhe rotulo="E-mail" valor={empresa.contadorEmail} /> : null}
+              {empresa.contadorTelefone ? <LinhaDetalhe rotulo="Telefone" valor={empresa.contadorTelefone} mono /> : null}
+            </div>
+          </section>
+          ) : null}
+
+          <section className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">📤 Exportar desta empresa · idêntico a Produtos</h3>
+              <Btn tam="sm" onClick={() => irPara('produtos')}>
+                Ver produtos →
+              </Btn>
+            </div>
+            <p className="mb-2 text-[11px] text-slate-500">
+              Mesmos motores da tela de Produtos (CSV `;` + BOM · XLSX entrada × saída · PDF). O filtro já vem na empresa — sem trocar a ativa.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              <Btn tam="sm" carregando={exportando === 'csv'} onClick={() => exportarProdutos('csv')}>
+                {exportando === 'csv' ? 'Exportando…' : 'CSV'}
+              </Btn>
+              <Btn tam="sm" carregando={exportando === 'xlsx'} onClick={() => exportarProdutos('xlsx')}>
+                {exportando === 'xlsx' ? 'Exportando…' : 'XLSX'}
+              </Btn>
+              <Btn tam="sm" carregando={exportando === 'pdf'} onClick={() => exportarProdutos('pdf')}>
+                {exportando === 'pdf' ? 'Exportando…' : 'PDF conferência'}
+              </Btn>
+              <Btn tam="sm" carregando={exportando === 'pdf-rico'} onClick={() => exportarProdutos('pdf-rico')}>
+                {exportando === 'pdf-rico' ? 'Exportando…' : 'PDF completo (IBS/CBS)'}
+              </Btn>
             </div>
           </section>
 

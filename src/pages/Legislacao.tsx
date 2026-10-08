@@ -11,9 +11,9 @@
  * por norma): o card aponta para o portal e indica o termo exato de busca.
  */
 import { useMemo, useState } from 'react'
-import { GRUPOS_LEGISLACAO, LEGISLACOES, type ItemLegislacao } from '@/domain/legislacao'
+import { GRUPOS_LEGISLACAO, LEGISLACOES, casaFiltroLegislacao, type ItemLegislacao } from '@/domain/legislacao'
 import { Painel, Pill, Vazio } from '@/ui/kit'
-import { Entrada, Lista, Item, Secao } from '@/ui/motion'
+import { Entrada } from '@/ui/motion'
 import { ModalLegislacao, type DestinoLegislacao } from '@/ui/ModalLegislacao'
 
 const COR_TIPO: Record<ItemLegislacao['tipo'], 'brand' | 'emerald' | 'amber' | 'slate'> = {
@@ -37,16 +37,9 @@ export function Legislacao() {
   const [destino, setDestino] = useState<DestinoLegislacao | null>(null)
 
   const grupos = useMemo(() => {
-    const termo = filtro.trim().toLowerCase()
-    const casa = (item: ItemLegislacao) =>
-      !termo ||
-      [item.sigla, item.titulo, item.descricao, item.buscaPortal ?? '']
-        .join(' ')
-        .toLowerCase()
-        .includes(termo)
     return GRUPOS_LEGISLACAO.map((grupo) => ({
       ...grupo,
-      itens: LEGISLACOES.filter((item) => item.grupo === grupo.id && casa(item)),
+      itens: LEGISLACOES.filter((item) => item.grupo === grupo.id && casaFiltroLegislacao(item, filtro)),
     })).filter((grupo) => grupo.itens.length > 0)
   }, [filtro])
 
@@ -89,29 +82,42 @@ export function Legislacao() {
 
       {grupos.length ? (
         grupos.map((grupo) => (
-          <Secao key={grupo.id} rotulo={grupo.titulo}>
+          // NOTA: sem `Secao`/`Lista`/`Item` aqui de propósito — esses
+          // primitivos usam `whileInView once:true` (scroll trigger). Com
+          // filtro dinâmico a altura da lista muda a cada tecla e seções
+          // recém-montadas podiam ficar presas em `opacity: 0` (cards
+          // invisíveis / interface "bugada"). Lista filtrada = `div` puro,
+          // sempre visível, sem re-animar a cada tecla (sem perder o foco).
+          <section key={grupo.id} aria-label={grupo.titulo}>
             <div className="mb-2 px-1">
               <h3 className="text-sm font-black">{grupo.titulo}</h3>
               <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                 {grupo.descricao}
               </p>
             </div>
-            <Lista className="grid grid-cols-1 gap-4 md:grid-cols-2" intervalo={0.05}>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {grupo.itens.map((item) => (
-                <Item key={item.id}>
                 <CartaoLegislacao
+                  key={item.id}
                   item={item}
                   onLer={(alvo) =>
                     setDestino({ url: alvo.url, titulo: alvo.titulo, integra: true })
                   }
                 />
-                </Item>
               ))}
-            </Lista>
-          </Secao>
+            </div>
+          </section>
         ))
       ) : (
-        <Vazio icone="⚖️" titulo="Nenhuma legislação encontrada para o filtro" />
+        <Vazio icone="⚖️" titulo="Nenhuma legislação encontrada para o filtro">
+          <button
+            type="button"
+            className="btn btn-press btn-ghost btn-sm mx-auto mt-3"
+            onClick={() => setFiltro('')}
+          >
+            Limpar filtro
+          </button>
+        </Vazio>
       )}
 
       <ModalLegislacao destino={destino} onFechar={() => setDestino(null)} />

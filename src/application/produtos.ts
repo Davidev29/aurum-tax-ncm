@@ -41,11 +41,23 @@ export function snapshotDe(cl: Classificacao): ClassificacaoSnapshot {
   }
 }
 
-export interface EntradaProduto {
+export interface TributacaoAnteriorFluxo {
+  cfopEntrada?: string
+  cfopSaida?: string
+  cstIcmsEntrada?: string
+  cstIcmsSaida?: string
+  pisEntrada?: string
+  pisSaida?: string
+  cofinsEntrada?: string
+  cofinsSaida?: string
+}
+
+export interface EntradaProduto extends TributacaoAnteriorFluxo {
   empresaId: number | null
   codigo: string
   nome: string
   ncm: string
+  /** Legado: quando os fluxos vêm vazios, o único preenche ambos. */
   cfop?: string
   cstIcms?: string
   pis?: string
@@ -53,6 +65,45 @@ export interface EntradaProduto {
   quantidade?: number
   valorUnitario?: number
   classificacao: Classificacao
+}
+
+/** Normaliza entrada/saída: legado preenche ambos; tudo vira string limpa. */
+export function normalizarFluxo(e: Pick<EntradaProduto, keyof TributacaoAnteriorFluxo | 'cfop' | 'cstIcms' | 'pis' | 'cofins'>): Required<TributacaoAnteriorFluxo> {
+  const limpa = (v: unknown): string => String(v ?? '').trim()
+  const legado = {
+    cfop: limpa((e as EntradaProduto).cfop),
+    cstIcms: limpa((e as EntradaProduto).cstIcms),
+    pis: limpa((e as EntradaProduto).pis),
+    cofins: limpa((e as EntradaProduto).cofins),
+  }
+  return {
+    cfopEntrada: limpa(e.cfopEntrada) || legado.cfop,
+    cfopSaida: limpa(e.cfopSaida) || legado.cfop,
+    cstIcmsEntrada: limpa(e.cstIcmsEntrada) || legado.cstIcms,
+    cstIcmsSaida: limpa(e.cstIcmsSaida) || legado.cstIcms,
+    pisEntrada: limpa(e.pisEntrada) || legado.pis,
+    pisSaida: limpa(e.pisSaida) || legado.pis,
+    cofinsEntrada: limpa(e.cofinsEntrada) || legado.cofins,
+    cofinsSaida: limpa(e.cofinsSaida) || legado.cofins,
+  }
+}
+
+/** Distribui um CFOP único para o fluxo certo pelo 1º dígito (1/2/3→entrada, 5/6/7→saída). */
+export function distribuirCfopUnico(cfop: string): { cfopEntrada: string; cfopSaida: string } {
+  const v = String(cfop ?? '').trim()
+  const d = v.replace(/\D/g, '')[0]
+  if (['1', '2', '3'].includes(d)) return { cfopEntrada: v, cfopSaida: '' }
+  if (['5', '6', '7'].includes(d)) return { cfopEntrada: '', cfopSaida: v }
+  return { cfopEntrada: v, cfopSaida: v }
+}
+
+/** Texto resumido do regime anterior (entrada × saída) para listagens. */
+export function rotuloTributacaoAnterior(p: Pick<Produto, 'cfop' | 'cstIcms' | 'pis' | 'cofins'> & Partial<TributacaoAnteriorFluxo>): string {
+  const f = normalizarFluxo(p as EntradaProduto)
+  const ent = [f.cfopEntrada, f.cstIcmsEntrada, f.pisEntrada, f.cofinsEntrada].filter(Boolean).join('/')
+  const sai = [f.cfopSaida, f.cstIcmsSaida, f.pisSaida, f.cofinsSaida].filter(Boolean).join('/')
+  if (ent && sai) return `E:${ent} · S:${sai}`
+  return ent || sai || [p.cfop, p.cstIcms, p.pis, p.cofins].filter(Boolean).join('/') || '—'
 }
 
 export type ResultadoSalvar =
@@ -100,7 +151,9 @@ export async function produtoPorSku(
 function validarForm(f: { codigo?: string; nome?: string; ncm?: string }): string | null {
   if (!f.codigo?.trim()) return 'Informe o SKU.'
   if (!f.nome?.trim()) return 'Informe o nome do produto.'
-  if (norm(f.ncm).length !== 8) return 'NCM deve ter 8 dígitos.'
+  const dig = norm(f.ncm)
+  if (dig.length === 9) return 'NBS (9 dígitos) é só para serviços. Aqui é só produto: informe um NCM de 8 dígitos.'
+  if (dig.length !== 8) return 'NCM deve ter 8 dígitos.'
   return null
 }
 
@@ -160,6 +213,16 @@ export async function salvarProduto(
   const erro = validar(e)
   if (erro) return { ok: false, motivo: erro }
 
+  // Validação multiagente (sintaxe + auxiliar + coerência + reforma-imutável
+  // + SKU): bloqueios impedem a escrita; avisos só sinalizam.
+  try {
+    const { validarProdutoMultiagente, primeiroBloqueio } = await import('@/domain/services/validacao-produto')
+    const v = await validarProdutoMultiagente(e)
+    if (!v.ok) return { ok: false, motivo: primeiroBloqueio(v) ?? 'Dados inválidos.' }
+  } catch {
+    /* validador indisponível: segue com a validação básica acima */
+  }
+
   let cl = e.classificacao
   let revalidada = false
   if (opts.reresolver) {
@@ -175,16 +238,19 @@ export async function salvarProduto(
   const agora = new Date().toISOString()
   const ncm = norm(e.ncm)
   const snapshot = snapshotDe(cl)
+  const fluxo = normalizarFluxo(e)
 
   const base: Omit<Produto, 'id' | 'criadoEm'> = {
     empresaId: e.empresaId,
     codigo: e.codigo.trim(),
     nome: e.nome.trim(),
     ncm,
-    cfop: e.cfop ?? '',
-    cstIcms: e.cstIcms ?? '',
-    pis: e.pis ?? '',
-    cofins: e.cofins ?? '',
+    // Legado: primeiro valor disponível (compat com telas/relatórios antigos).
+    cfop: fluxo.cfopEntrada || fluxo.cfopSaida || e.cfop || '',
+    cstIcms: fluxo.cstIcmsEntrada || fluxo.cstIcmsSaida || e.cstIcms || '',
+    pis: fluxo.pisEntrada || fluxo.pisSaida || e.pis || '',
+    cofins: fluxo.cofinsEntrada || fluxo.cofinsSaida || e.cofins || '',
+    ...fluxo,
     quantidade: Number(e.quantidade ?? 0),
     valorUnitario: Number(e.valorUnitario ?? 0),
     cstReforma: cl.cst,
@@ -290,7 +356,7 @@ export function classificacaoDeItemManual(it: ItemManualCalc): Classificacao {
 
 /* ------------------------------------------------------- gravações em lote -- */
 
-export interface ItemLoteGravavel {
+export interface ItemLoteGravavel extends Partial<TributacaoAnteriorFluxo> {
   codigo: string
   nome: string
   ncm: string
@@ -335,15 +401,17 @@ export async function salvarProdutosEmLote(
       continue
     }
     const snapshot = snapshotDe(it.classificacao)
+    const fluxo = normalizarFluxo(it as EntradaProduto)
     const comum: Omit<Produto, 'id' | 'criadoEm' | 'atualizadoEm'> = {
       empresaId,
       codigo,
       nome: it.nome?.trim() || codigo,
       ncm: norm(it.ncm),
-      cfop: it.cfop ?? '',
-      cstIcms: it.cstIcms ?? '',
-      pis: it.pis ?? '',
-      cofins: it.cofins ?? '',
+      cfop: fluxo.cfopEntrada || fluxo.cfopSaida || it.cfop || '',
+      cstIcms: fluxo.cstIcmsEntrada || fluxo.cstIcmsSaida || it.cstIcms || '',
+      pis: fluxo.pisEntrada || fluxo.pisSaida || it.pis || '',
+      cofins: fluxo.cofinsEntrada || fluxo.cofinsSaida || it.cofins || '',
+      ...fluxo,
       quantidade: it.quantidade ?? 0,
       valorUnitario: it.valorUnitario ?? 0,
       cstReforma: it.classificacao.cst,
@@ -395,7 +463,7 @@ export function produtoLinha(p: Produto, empresas: Map<number, string>): Produto
 }
 
 /** Campos brutos do formulário de produto (texto, já com máscaras). */
-export interface FormularioProduto {
+export interface FormularioProduto extends Partial<TributacaoAnteriorFluxo> {
   codigo: string
   nome: string
   ncm: string
@@ -422,6 +490,14 @@ export function entradaProdutoDeFormulario(
     cstIcms: form.cstIcms ?? '',
     pis: form.pis ?? '',
     cofins: form.cofins ?? '',
+    cfopEntrada: (form.cfopEntrada as string | undefined) ?? '',
+    cfopSaida: (form.cfopSaida as string | undefined) ?? '',
+    cstIcmsEntrada: (form.cstIcmsEntrada as string | undefined) ?? '',
+    cstIcmsSaida: (form.cstIcmsSaida as string | undefined) ?? '',
+    pisEntrada: (form.pisEntrada as string | undefined) ?? '',
+    pisSaida: (form.pisSaida as string | undefined) ?? '',
+    cofinsEntrada: (form.cofinsEntrada as string | undefined) ?? '',
+    cofinsSaida: (form.cofinsSaida as string | undefined) ?? '',
     quantidade: parseQtd(form.qtd ?? ''),
     valorUnitario: parseMoeda(form.valor ?? ''),
     classificacao,

@@ -18,15 +18,16 @@ const ATIVA = '12345678000190'
 const FORN_A = '11111111000111'
 const FORN_B = '22222222000122'
 
-const det = (cProd: string, cfop: string, vProd: string): string => `
+const det = (cProd: string, cfop: string, vProd: string, ibsCbs?: { vIbs: string; vCbs: string }): string => `
     <det nItem="1">
       <prod><cProd>${cProd}</cProd><xProd>Produto ${cProd}</xProd><NCM>02011000</NCM>
       <CFOP>${cfop}</CFOP><uCom>UN</uCom><qCom>1.0000</qCom><vUnCom>${vProd}</vUnCom><vProd>${vProd}</vProd></prod>
       <imposto><ICMS><ICMS00><orig>0</orig><CST>00</CST><vBC>${vProd}</vBC><vICMS>18.00</vICMS></ICMS00></ICMS>
-      <PIS><PISAliq><CST>01</CST></PISAliq></PIS><COFINS><COFINSAliq><CST>01</CST></COFINSAliq></COFINS></imposto>
+      <PIS><PISAliq><CST>01</CST></PISAliq></PIS><COFINS><COFINSAliq><CST>01</CST></COFINSAliq></COFINS>${ibsCbs ? `
+      <IBSCBS><CST>000</CST><cClassTrib>000001</cClassTrib><gIBSCBS><vBC>${vProd}</vBC><gIBSUF><vIBSUF>${ibsCbs.vIbs}</vIBSUF></gIBSUF><gCBS><vCBS>${ibsCbs.vCbs}</vCBS></gCBS></gIBSCBS></IBSCBS>` : ''}</imposto>
     </det>`
 
-const xml = (opcoes: { chave: string; emit: string; dest: string; data: string; vProd?: string }): string => `
+const xml = (opcoes: { chave: string; emit: string; dest: string; data: string; vProd?: string; ibsCbs?: { vIbs: string; vCbs: string } }): string => `
 <?xml version="1.0" encoding="UTF-8"?>
 <nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
   <NFe xmlns="http://www.portalfiscal.inf.br/nfe">
@@ -35,7 +36,7 @@ const xml = (opcoes: { chave: string; emit: string; dest: string; data: string; 
       <dhEmi>${opcoes.data}T10:00:00-03:00</dhEmi></ide>
       <emit><CNPJ>${opcoes.emit}</CNPJ><xNome>Emit ${opcoes.emit}</xNome><CRT>3</CRT></emit>
       <dest><CNPJ>${opcoes.dest}</CNPJ><xNome>Dest</xNome></dest>
-      ${det('P1', '5102', opcoes.vProd ?? '100.00')}
+      ${det('P1', '5102', opcoes.vProd ?? '100.00', opcoes.ibsCbs)}
       <total><ICMSTot><vProd>${opcoes.vProd ?? '100.00'}</vProd><vNF>${opcoes.vProd ?? '100.00'}</vNF></ICMSTot></total>
     </infNFe>
   </NFe>
@@ -118,13 +119,21 @@ describe('apuração reativa à data filtrada', () => {
     const ativa = await massa()
     const ap10 = apurarIbsCbs(await listarNotas(ativa.id!, noDia('2026-09-10')))
     const ap11 = apurarIbsCbs(await listarNotas(ativa.id!, noDia('2026-09-11')))
-    // Dia 10 tem saída (débito) abatida pelo crédito efetivo; dia 11 só tem
-    // entrada sem destaque no XML (efetivo zero, só informativo NCM).
-    expect(ap10.saldoTotal).not.toBe(ap11.saldoTotal)
+    // XMLs legados (sem grupo IBSCBS): efetivos zerados nos dois dias —
+    // o saldo assistido (destacado − destacado) fica zerado, e os
+    // informativos NCM continuam reagindo ao dia filtrado.
+    expect(ap10.debitoEfetivoTotal).toBe(0)
+    expect(ap10.debitoInformativoTotal).toBeGreaterThan(0)
+    expect(ap10.divergenciaDebitoTotal).toBeLessThan(0)
+    expect(ap10.saldoTotal).toBe(0)
+    expect(ap10.resultado).toBe('zerado')
     expect(ap11.debitoTotal).toBe(0)
+    expect(ap11.debitoEfetivoTotal).toBe(0)
     expect(ap11.creditoEfetivoTotal).toBe(0)
     expect(ap11.creditoInformativoTotal).toBeGreaterThan(0)
     expect(ap11.resultado).toBe('zerado')
+    // O informativo do dia 11 (entrada de 500) supera o do dia 10.
+    expect(ap11.creditoInformativoTotal).toBeGreaterThan(ap10.creditoInformativoTotal)
   })
 
   it('faixa de período soma os dois dias sem vazar notas fora', async () => {
@@ -138,5 +147,44 @@ describe('apuração reativa à data filtrada', () => {
     const fora = await listarNotas(ativa.id!, noDia('2026-09-12'))
     expect(fora).toHaveLength(0)
     expect(apurarIbsCbs(fora).resultado).toBe('sem-movimento')
+  })
+
+  it('saída com destaque: débito efetivo compõe o saldo e o NCM confere a emissão', async () => {
+    const ativa = await massa()
+    // Saída da ativa COM grupo IBSCBS destacado (10 + 5).
+    await importarXmls(
+      [arq('s12.xml', xml({ chave: '4'.repeat(44), emit: ATIVA, dest: '99999999000199', data: '2026-09-12', ibsCbs: { vIbs: '10.00', vCbs: '5.00' } }))],
+      ativa,
+    )
+    const dia12 = await listarNotas(ativa.id!, noDia('2026-09-12'))
+    expect(dia12).toHaveLength(1)
+    const ap12 = apurarIbsCbs(dia12)
+    // Débito = o destacado na saída; informativo NCM segue para conferência.
+    expect(ap12.qtdSaidas).toBe(1)
+    expect(ap12.debitoEfetivoTotal).toBe(15)
+    expect(ap12.debitoInformativoTotal).toBeGreaterThan(0)
+    expect(ap12.creditoEfetivoTotal).toBe(0)
+    expect(ap12.saldoTotal).toBe(15)
+    expect(ap12.resultado).toBe('a-pagar')
+    expect(ap12.valorAPagar).toBe(15)
+  })
+
+  it('entrada com destaque abate o débito: saldo devedor ou credor do período', async () => {
+    const ativa = await massa()
+    // Saída com destaque 15 e entrada com destaque 6 no mesmo dia.
+    await importarXmls(
+      [
+        arq('s13.xml', xml({ chave: '5'.repeat(44), emit: ATIVA, dest: '99999999000199', data: '2026-09-13', ibsCbs: { vIbs: '10.00', vCbs: '5.00' } })),
+        arq('e13.xml', xml({ chave: '6'.repeat(44), emit: FORN_A, dest: ATIVA, data: '2026-09-13', ibsCbs: { vIbs: '4.00', vCbs: '2.00' } })),
+      ],
+      ativa,
+    )
+    const dia13 = await listarNotas(ativa.id!, noDia('2026-09-13'))
+    expect(dia13).toHaveLength(2)
+    const ap13 = apurarIbsCbs(dia13)
+    expect(ap13.debitoEfetivoTotal).toBe(15)
+    expect(ap13.creditoEfetivoTotal).toBe(6)
+    expect(ap13.saldoTotal).toBe(9)
+    expect(ap13.resultado).toBe('a-pagar')
   })
 })

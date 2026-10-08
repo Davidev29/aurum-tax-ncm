@@ -19,6 +19,10 @@ export interface PayloadSimples {
   creditosCBS: number;
   empresa?: string;
   cnae?: string;
+  /** Referência sem segregar (anexo único) — linha própria no CSV. */
+  dasReferencia: number;
+  st?: { ativo: boolean; tributo: string; valorST: number; deducao: number; detalhe: string; detalhePorTributo: Array<{ tributo: string; valorST: number; deducao: number }>; dasIntegral: number; dasFinal: number };
+  seg?: { ativo: boolean; anexos: string[]; dasBruto: number; parcelas: Array<{ anexoId: string; anexoCalculado: string; escolhido: string; receitaMes: number; faixa: number; aliquotaEfetiva: number; das: number; dasBruto: number; st: boolean; tributoST: string | null; deducaoST: number; resto: boolean }> };
 }
 
 const hoje = (): string => new Date().toISOString().slice(0, 10);
@@ -38,7 +42,21 @@ export function csvSimples(p: PayloadSimples): string {
     ['Folha 12m', p.folha12.toFixed(2)],
     ['RBA', p.rba.toFixed(2)],
     ['Alíquota efetiva', (p.conv.aliquotaEfetiva * 100).toFixed(4) + '%'],
-    ['DAS convencional', p.conv.das.toFixed(2)],
+    ...(p.seg?.ativo ? [
+      ['Anexos segregados (efetivos)', p.seg.anexos.join(' + ')],
+      ...p.seg.parcelas.map((d) => [`${d.resto ? 'Restante' : 'Parcela'} Anexo ${d.anexoCalculado}${d.anexoCalculado !== d.escolhido ? ` (escolhido ${d.escolhido})` : ''} — receita`, d.receitaMes.toFixed(2)]),
+      ...p.seg.parcelas.map((d) => [`${d.resto ? 'Restante' : 'Parcela'} Anexo ${d.anexoCalculado} — DAS (${(d.aliquotaEfetiva * 100).toFixed(4)}%, ${d.faixa}ª faixa)${d.st && d.tributoST ? ` · ST ${d.tributoST} −${Number(d.deducaoST).toFixed(2)}` : ''}`, d.das.toFixed(2)]),
+      ['DAS bruto (soma parcelas)', p.seg.dasBruto.toFixed(2)],
+      ['DAS segregado (final)', p.conv.das.toFixed(2)],
+      ['DAS convencional (anexo único, referência)', p.dasReferencia.toFixed(2)],
+    ] as unknown[][] : [
+      ['DAS convencional', p.conv.das.toFixed(2)],
+    ] as unknown[][]),
+    ...(p.st?.ativo ? [
+      ...p.st.detalhePorTributo.map((d) => [`Receita com ST (${d.tributo})`, Number(d.valorST).toFixed(2)]),
+      ...p.st.detalhePorTributo.map((d) => [`Dedução ST (${d.tributo})`, Number(d.deducao).toFixed(2)]),
+      ['DAS final (guia)', p.st.dasFinal.toFixed(2)],
+    ] as unknown[][] : []),
     ['CBS dentro do DAS', p.conv.cbsDentroDAS.toFixed(2)],
     ['IRPJ', p.conv.reparticao.IRPJ.toFixed(2)],
     ['CSLL', p.conv.reparticao.CSLL.toFixed(2)],

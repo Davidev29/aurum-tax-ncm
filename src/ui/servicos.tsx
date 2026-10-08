@@ -873,7 +873,9 @@ export function DropdownElegante({
           ▶
         </span>
         {icone ? <span aria-hidden="true">{icone}</span> : null}
-        <span className="min-w-0 flex-1 truncate">{titulo}</span>
+        {/* FIX sobreposição/corte: título crítico (ex. "NÃO são decisão final")
+            nunca pode ser truncado — quebra em 2 linhas em vez de ellipsis */}
+        <span className="min-w-0 flex-1 whitespace-normal break-words" title={titulo}>{titulo}</span>
         {typeof contagem === 'number' ? (
           <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black ${selo}`}>
             {contagem}

@@ -11,21 +11,15 @@
  *   de Classificação e excluir com confirmação;
  * - a paginação avança `PAGE_SIZE` por clique em "Carregar mais".
  */
-import { useEffect, useState, type ReactNode } from 'react'
-import { EMITENTE_PADRAO } from '@/domain/entities'
-import { fmtMoeda, fmtNcm, fmtNum, formatarMoedaInput } from '@/domain/services/format'
-import { obterAliquotasRefDinamica } from '@/domain/services/referencia-service'
-import {
-  exportarProdutosCSV,
-  exportarProdutosJSON,
-  exportarProdutosPDF,
-} from '@/infrastructure/exporters/relatorios'
-import { registrarExportador } from '@/infrastructure/pdf/menu-exportacao'
+import { useState, type ReactNode } from 'react'
+import { fmtMoeda, fmtNcm } from '@/domain/services/format'
 import { useConsulta } from '@/store/consulta'
 import { produtosVisiveis, useProdutos, type ProdutoLinha } from '@/store/produtos'
 import { useSessao } from '@/store/sessao'
 import { confirmar } from '@/store/dialogo'
-import { toast, useUi } from '@/store/ui'
+import { ModalProdutoManual } from '@/modais/produto-manual'
+import { ModalExportacaoGeral } from '@/modais/exportacao-geral'
+import { useUi } from '@/store/ui'
 import { Vazio, Btn, Painel, Texto, useDebounce } from '@/ui/kit'
 import { Entrada } from '@/ui/motion'
 import { ModalProdutoDetalhe, Olho } from '@/ui/detalhes'
@@ -37,13 +31,14 @@ export function Produtos() {
   const setFiltro = useProdutos((s) => s.setFiltro)
   const ampliarPagina = useProdutos((s) => s.ampliarPagina)
   const ativa = useSessao((s) => s.ativa)
-  const emitente = useSessao((s) => s.emitente)
   const [textoFiltro, setTextoFiltro] = useState(filtro)
   // 👁 Detalhe compacto de tributos (tabela minimalista — resto vai ao modal).
   const [detalhe, setDetalhe] = useState<ProdutoLinha | null>(null)
-  // PDF (pdfMake + download): giro no botão enquanto monta — sem ele o
-  // usuário clica no vazio entre o toque e o download.
-  const [gerandoPdf, setGerandoPdf] = useState(false)
+  // ➕ Cadastro manual: abre o modal com NCM sugerido + Reforma automática.
+  const [manualAberto, setManualAberto] = useState(false)
+  const [editandoManual, setEditandoManual] = useState<ProdutoLinha | null>(null)
+  // 📤 Exportação geral (todas as tabelas, com filtro + formato).
+  const [exportAberto, setExportAberto] = useState(false)
 
   // Filtro com debounce de 180 ms (paridade com a v1).
   const aplicarFiltro = useDebounce((t: string) => setFiltro(t), 180)
@@ -52,49 +47,17 @@ export function Produtos() {
   // Mesmo texto pesquisado em `produtosVisiveis` — o total precisa bater com
   // a lista visível (inclui CFOP, CST ICMS, PIS e COFINS).
   const total = filtro
-    ? cache.filter((x) =>
-        `${x.codigo} ${x.nome} ${x.ncm} ${x.cstReforma} ${x.cClassTrib} ${x.cfop ?? ''} ${x.cstIcms ?? ''} ${x.pis ?? ''} ${x.cofins ?? ''}`
+    ? cache.filter((x) => {
+        const r = x as unknown as Record<string, unknown>
+        return `${x.codigo} ${x.nome} ${x.ncm} ${x.cstReforma} ${x.cClassTrib} ${x.cfop ?? ''} ${x.cstIcms ?? ''} ${x.pis ?? ''} ${x.cofins ?? ''} ${String(r.cfopEntrada ?? '')} ${String(r.cfopSaida ?? '')} ${String(r.cstIcmsEntrada ?? '')} ${String(r.cstIcmsSaida ?? '')}`
           .toLowerCase()
-          .includes(filtro.trim().toLowerCase()),
-      ).length
+          .includes(filtro.trim().toLowerCase())
+      }).length
     : cache.length
   const restantes = total - visiveis.length
   const semEmpresa = !ativa
 
   const vazio = (msg: string, texto: ReactNode) => <Vazio icone="📦" titulo={msg} texto={texto} />
-
-  const exportarCsv = () => {
-    if (!cache.length) return toast('Nenhum produto para exportar.', 'warn')
-    exportarProdutosCSV(cache, ativa)
-    toast('CSV gerado.', 'ok')
-  }
-  const exportarJson = () => {
-    if (!cache.length) return toast('Nenhum produto para exportar.', 'warn')
-    exportarProdutosJSON(cache, ativa)
-    toast('JSON gerado.', 'ok')
-  }
-  const exportarPdf = async () => {
-    if (!cache.length) return toast('Nenhum produto para exportar.', 'warn')
-    setGerandoPdf(true)
-    try {
-      const ref = await obterAliquotasRefDinamica()
-      await exportarProdutosPDF({
-        produtos: cache,
-        empresa: ativa,
-        emitente: emitente ?? EMITENTE_PADRAO,
-        refIBS: ref.refIBS,
-        refCBS: ref.refCBS,
-      })
-      toast('PDF gerado.', 'ok')
-    } catch (e) {
-      toast(`Erro ao gerar PDF: ${e instanceof Error ? e.message : String(e)}`, 'err')
-    } finally {
-      setGerandoPdf(false)
-    }
-  }
-
-  // Menu nativo (Ctrl+E): registra o exportador de PDF desta view.
-  useEffect(() => registrarExportador('produtos', () => void exportarPdf()), [exportarPdf])
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -112,6 +75,9 @@ export function Produtos() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <Btn variante="primary" onClick={() => { setEditandoManual(null); setManualAberto(true) }}>
+              ➕ Novo produto
+            </Btn>
             <div className="field-wrap">
               <span className="field-icon">🔍</span>
               <Texto
@@ -125,10 +91,8 @@ export function Produtos() {
                 }}
               />
             </div>
-            <Btn onClick={exportarCsv}>📊 CSV</Btn>
-            <Btn onClick={exportarJson}>🧾 JSON</Btn>
-            <Btn variante="primary" carregando={gerandoPdf} onClick={() => void exportarPdf()}>
-              {gerandoPdf ? 'Gerando…' : '📕 PDF'}
+            <Btn variante="primary" onClick={() => setExportAberto(true)}>
+              📤 Exportar
             </Btn>
           </div>
         </div>
@@ -138,9 +102,15 @@ export function Produtos() {
             ? vazio(
                 'Nenhum produto cadastrado',
                 <>
-                  Comece pela aba <strong>Consulta NCM</strong>,{' '}
+                  Cadastre com <strong>➕ Novo produto</strong> ou importe pela{' '}
+                  <strong>Consulta NCM</strong>,{' '}
                   <strong>Classificação em lote</strong> ou{' '}
                   <strong>Notas Fiscais (XML)</strong>.
+                  <span className="mt-3 flex justify-center">
+                    <Btn variante="primary" tam="sm" onClick={() => { setEditandoManual(null); setManualAberto(true) }}>
+                      ➕ Cadastrar produto manualmente
+                    </Btn>
+                  </span>
                 </>,
               )
             : !visiveis.length
@@ -167,6 +137,10 @@ export function Produtos() {
                               p={p}
                               semEmpresa={semEmpresa}
                               onDetalhe={() => setDetalhe(p)}
+                              onEditar={() => {
+                                setEditandoManual(p)
+                                setManualAberto(true)
+                              }}
                             />
                           ))}
                         </tbody>
@@ -192,18 +166,26 @@ export function Produtos() {
       </Painel>
       </Entrada>
       <ModalProdutoDetalhe produto={detalhe} onFechar={() => setDetalhe(null)} />
+      <ModalProdutoManual
+        aberto={manualAberto}
+        editando={editandoManual}
+        onFechar={() => {
+          setManualAberto(false)
+          setEditandoManual(null)
+        }}
+      />
+      <ModalExportacaoGeral aberto={exportAberto} onFechar={() => setExportAberto(false)} escopo="produto" />
     </div>
   )
 }
 
 /* --------------------------------------------------------------- linhas --- */
 
-function LinhaProduto({ p, semEmpresa, onDetalhe }: { p: ProdutoLinha; semEmpresa: boolean; onDetalhe: () => void }) {
+function LinhaProduto({ p, semEmpresa, onDetalhe, onEditar }: { p: ProdutoLinha; semEmpresa: boolean; onDetalhe: () => void; onEditar: () => void }) {
   const trocarView = useUi((s) => s.trocarView)
   const abrirCalc = useUi((s) => s.abrirCalc)
   const setCodigo = useConsulta((s) => s.setCodigo)
   const consultar = useConsulta((s) => s.consultar)
-  const setPrefillSalvar = useConsulta((s) => s.setPrefillSalvar)
   const excluir = useProdutos((s) => s.excluir)
 
   const ver = () => {
@@ -216,29 +198,6 @@ function LinhaProduto({ p, semEmpresa, onDetalhe }: { p: ProdutoLinha; semEmpres
   // Mesmo caminho da Consulta: o cálculo do item acontece no modal, sem
   // arrastar o usuário para a tela da Calculadora.
   const paraCalculadora = () => abrirCalc({ tipo: 'produto', produto: p })
-
-  // Edição via Consulta: o produto viaja pré-preenchido, o usuário escolhe
-  // a classificação e salva com o mesmo SKU (atualiza o registro original).
-  const editar = () => {
-    setPrefillSalvar({
-      codigo: p.codigo,
-      nome: p.nome,
-      // Formatos BR das máscaras: qtd com vírgula, valor em moeda real
-      // (`"50"` → R$ 50,00 e cálculo 50 — nunca centavos).
-      qtd: p.quantidade ? fmtNum(p.quantidade) : '',
-      valor: p.valorUnitario ? formatarMoedaInput(p.valorUnitario) : '',
-      cfop: p.cfop ?? '',
-      cstIcms: p.cstIcms ?? '',
-      pis: p.pis ?? '',
-      cofins: p.cofins ?? '',
-      editarId: p.id ?? null,
-    })
-    const codigo = fmtNcm(p.ncm) || p.ncm
-    setCodigo(codigo)
-    void consultar(codigo)
-    trocarView('consulta')
-    toast('Escolha a classificação e salve com o mesmo SKU para atualizar.', '')
-  }
 
   const remover = () => {
     void (async () => {
@@ -282,7 +241,7 @@ function LinhaProduto({ p, semEmpresa, onDetalhe }: { p: ProdutoLinha; semEmpres
           <Olho onClick={onDetalhe} />
           <Acao titulo="Ver na consulta" icone="🔍" onClick={ver} />
           <Acao titulo="Enviar para a calculadora" icone="🧮" onClick={paraCalculadora} />
-          <Acao titulo="Editar" icone="✏️" onClick={editar} />
+          <Acao titulo="Editar" icone="✏️" onClick={onEditar} />
           <Acao titulo="Excluir" icone="🗑" onClick={remover} perigo />
         </div>
       </td>
