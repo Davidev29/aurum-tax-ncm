@@ -40,6 +40,14 @@ export function dividirLoteParaSalvamento(itens: ItemLote[]): {
 
 /** Origem da linha gravável para o preview de revisão (pílula por linha). */
 export function origemLinhaLote(item: ItemLote): string {
+  const base = origemLinhaLoteBase(item)
+  // Conferência do XML: a escolha veio da regra salva no cadastro (SKU).
+  // O lote nunca marca este flag — comportamento dele inalterado.
+  const doCadastro = (item as { usouRegraDoCadastro?: boolean }).usouRegraDoCadastro === true
+  return doCadastro ? `${base} · 📦 do cadastro` : base
+}
+
+function origemLinhaLoteBase(item: ItemLote): string {
   const a = item.analiseIA
   if (item.manual) return 'manual · sua regra'
   if (item.nomenclatura?.dataFim) return 'NCM extinto · referência histórica'

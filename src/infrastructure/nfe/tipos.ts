@@ -121,6 +121,13 @@ export interface ResultadoItemNfe extends ItemNotaXml {
   ncmInvalido?: boolean
   /** Quantas classificações oficiais existem para este NCM (1 = unívoco, >1 = ambíguo). */
   opcoesClassificacao?: number
+  /**
+   * `true` quando a classificação vigente veio da regra salva no cadastro
+   * do produto (SKU + empresa) em vez da 1ª opção oficial — ver
+   * `regra-produto.ts`. A apuração assistida e a conferência do XML usam;
+   * as consultas ignoram (motor puro).
+   */
+  regraDoProduto?: boolean
   redIBS: number
   redCBS: number
   ibs: number

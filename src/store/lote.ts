@@ -100,7 +100,22 @@ export const useLote = create<LoteState>((set, get) => ({
     const ignorados = r.itens.length - paraGravar.length
     const c = await salvarProdutosEmLote(paraGravar, ativa?.id ?? null)
     await useProdutos.getState().carregar()
-    toast(`${c.salvos + c.atualizados} produtos salvos.${ignorados ? ` ${ignorados} ignorados.` : ''}`, 'ok')
+    // Mesma garantia da conferência do XML: a apuração assistida adota na
+    // hora as regras salvas nas notas com estes SKUs.
+    let apuracao = ''
+    if (ativa?.id != null) {
+      try {
+        const { propagarRegrasProdutosParaNotas } = await import('@/application/notas-xml')
+        const prop = await propagarRegrasProdutosParaNotas(
+          ativa.id,
+          paraGravar.map((p) => p.codigo),
+        )
+        if (prop.notas > 0) apuracao = ` Apuração atualizada em ${prop.notas} nota(s).`
+      } catch {
+        /* notas indisponíveis — o cadastro foi salvo; reaplicar adota depois */
+      }
+    }
+    toast(`${c.salvos + c.atualizados} produtos salvos.${ignorados ? ` ${ignorados} ignorados.` : ''}${apuracao}`, 'ok')
     return true
   },
 

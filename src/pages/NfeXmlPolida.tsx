@@ -32,6 +32,8 @@ import { useNfe } from '@/store/nfe'
 import { BannerContribuintesNovos } from './NfePendentes'
 import { BlocoNaturezas } from './NfeNatureza'
 import { toast, useUi } from '@/store/ui'
+import { ModalConferenciaXml } from './NfeConferenciaProdutos'
+import { useConferenciaXml } from '@/store/conferencia-xml'
 import { CalendarioAnualModal } from './NfeCalendarioAnual'
 import { SeloST, SeloSTNota } from '@/ui/cest'
 import { Btn, IconeBadge, Modal, Painel, Pill } from '@/ui/kit'
@@ -158,6 +160,7 @@ export function NfeXmlPolida() {
       <Entrada atraso={0.14}>
         <TabsExploracao aba={aba} onTrocar={setAba} />
       </Entrada>
+      <ModalConferenciaXml />
     </div>
   )
 }
@@ -222,6 +225,9 @@ function SemEmpresaPolida() {
 
 function HeroExecutivo() {
   const notas = useNfe((s) => s.notas)
+  const ativa = useSessao((s) => s.ativa)
+  const preparar = useConferenciaXml((s) => s.preparar)
+  const preparando = useConferenciaXml((s) => s.preparando)
   const filtros = useNfe((s) => s.filtros)
   const tot = useMemo(() => totaisNotas(notas), [notas])
   const ap = useMemo(() => apurarIbsCbs(notas), [notas])
@@ -250,7 +256,7 @@ function HeroExecutivo() {
         ? 'bg-gradient-to-r from-brand-600 to-brand-400'
         : 'bg-gradient-to-r from-emerald-600 to-teal-400'
 
-  const vincular = useNfe((s) => s.vincularProdutos)
+  const vincular = () => void preparar(notas, ativa?.id ?? null)
 
   // FIX sobreposição mobile: hero grudado ocupava 1/3 da tela e cobria
   // filtros/tabs. Sticky só em lg, com scroll-margin para âncoras.
@@ -337,8 +343,8 @@ function HeroExecutivo() {
               <Btn variante="primary" tam="sm" className="!border-aurum-400/60" onClick={() => document.getElementById('xml-polida-import')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
                 Importar XML
               </Btn>
-              <Btn tam="sm" className="!bg-white/10 !text-white hover:!bg-white/15" onClick={() => void vincular()}>
-                Vincular produtos
+              <Btn tam="sm" className="!bg-white/10 !text-white hover:!bg-white/15" onClick={vincular} carregando={preparando} title="Abre a conferência dos produtos (igual ao lote) antes de salvar">
+                {preparando ? 'Conferindo…' : '📦 Conferir e vincular'}
               </Btn>
             </div>
           </div>

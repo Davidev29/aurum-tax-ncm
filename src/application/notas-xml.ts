@@ -12,6 +12,7 @@ import type {
   ResumoImportacaoXml,
 } from '@/infrastructure/nfe/tipos'
 import { salvarProdutosEmLote, type ItemLoteGravavel } from './produtos'
+import { mapaRegrasProdutos, type MapaRegraProduto } from './regra-produto'
 import { completarEmpresa } from './empresas'
 import { norm } from '@/domain/services/format'
 import { round2 } from '@/domain/services/calculo'
@@ -131,6 +132,9 @@ export async function importarXmls(
     if (resumo.menorData == null || iso < resumo.menorData) resumo.menorData = iso
     if (resumo.maiorData == null || iso > resumo.maiorData) resumo.maiorData = iso
   }
+  // Regras do cadastro por dono (SKU + empresa) — um mapa por empresa para a
+  // importação inteira, não por arquivo.
+  const mapas = new Map<number, MapaRegraProduto>()
 
   for (let i = 0; i < arquivos.length; i++) {
     const file = arquivos[i]
@@ -168,9 +172,10 @@ export async function importarXmls(
         if (bruta.destDoc) anotarPendente(bruta.destDoc, bruta.destNome, 'destinatario')
       }
 
-      // Análise uma vez por arquivo (mesmo motor para todos os espelhos).
-      const itensAnalisados = await analisarItensNfe(bruta.itens, ref)
-      const tot = totaisItensNfe(itensAnalisados)
+      // Análise por dono (não mais uma vez por arquivo): cada espelho usa as
+      // regras salvas no cadastro do SEU dono — SKU + empresa. Sem dono
+      // (órfã), motor puro.
+      const analises = new Map<number, { itens: Awaited<ReturnType<typeof analisarItensNfe>>; tot: ReturnType<typeof totaisItensNfe> }>()
       const agora = new Date().toISOString()
 
       let gravouAlguma = false
@@ -184,6 +189,18 @@ export async function importarXmls(
           resumo.duplicadas++
           continue
         }
+        let an = analises.get(idDono)
+        if (!an) {
+          let mapa = mapas.get(idDono)
+          if (!mapa) {
+            mapa = await mapaRegrasProdutos(alvo.dono?.id ?? null)
+            mapas.set(idDono, mapa)
+          }
+          const itensAnalisados = await analisarItensNfe(bruta.itens, ref, undefined, { regras: mapa })
+          an = { itens: itensAnalisados, tot: totaisItensNfe(itensAnalisados) }
+          analises.set(idDono, an)
+        }
+        const { itens: itensAnalisados, tot } = an
         // Pasta do dono (isolamento também no disco); órfã usa o emitente.
         const pastaCnpj = (alvo.dono?.cnpj || bruta.emitCnpj || 'avulso') as string
         const { arquivo, xmlConteudo } = await salvarXmlImportado(pastaCnpj, bruta.chave, conteudo)
@@ -663,9 +680,11 @@ export async function excluirNota(nota: NotaXml): Promise<void> {
 /* ------------------------------------------ reaplicar classificação vigente -- */
 
 /**
- * Reaplica a classificação vigente (base oficial > manual > regra geral) em
+ * Reaplica a classificação vigente
+ * (base oficial › manual global › regra do produto (SKU) › regra geral) em
  * todos os itens de uma nota já importada — é o "forçar atualização" quando
- * uma reclassificação manual (ou a base oficial) mudou depois da importação.
+ * uma reclassificação manual, uma escolha salva no cadastro (conferência do
+ * XML / lote) ou a base oficial mudou depois da importação.
  *
  * Usa o `refIBS/refCBS` guardado na própria nota para não misturar
  * referências entre importações. Retorna quantos itens foram tocados e
@@ -680,7 +699,8 @@ export async function reaplicarClassificacaoNota(
     refIBS: Number(nota.refIBS) || REF_DEFAULT.IBS,
     refCBS: Number(nota.refCBS) || REF_DEFAULT.CBS,
   }
-  const refeitos = await analisarItensNfe(nota.itensAnalisados ?? [], ref)
+  const regras = await mapaRegrasProdutos(nota.empresaId)
+  const refeitos = await analisarItensNfe(nota.itensAnalisados ?? [], ref, undefined, { regras })
   let alterados = 0
   const antes = nota.itensAnalisados ?? []
   for (let i = 0; i < refeitos.length; i++) {
@@ -695,7 +715,8 @@ export async function reaplicarClassificacaoNota(
       Number(a.ibs) !== Number(b.ibs) ||
       Number(a.cbs) !== Number(b.cbs) ||
       Boolean(a.regraGeral) !== Boolean(b.regraGeral) ||
-      Boolean(a.manual) !== Boolean(b.manual)
+      Boolean(a.manual) !== Boolean(b.manual) ||
+      Boolean(a.regraDoProduto) !== Boolean(b.regraDoProduto)
     ) {
       alterados++
     }
@@ -710,4 +731,44 @@ export async function reaplicarClassificacaoNota(
   })
   notificarNotasMudaram([nota.empresaId])
   return { ok: true, itens: refeitos.length, alterados }
+}
+
+/**
+ * Propaga as regras salvas no cadastro (SKU + empresa) para as notas que
+ * contêm esses SKUs — é o que faz a **apuração assistida adotar na hora** o
+ * que o usuário escolheu ao salvar (conferência do XML ou lote).
+ *
+ * Reaproveita `reaplicarClassificacaoNota` (que já aplica o overlay da regra
+ * do produto e recalcula os totais da nota): só as notas da empresa com ao
+ * menos um dos SKUs são tocadas. A notificação recarrega a tela sozinha.
+ */
+export async function propagarRegrasProdutosParaNotas(
+  empresaId: number,
+  codigos: string[],
+): Promise<{ notas: number; itens: number }> {
+  const out = { notas: 0, itens: 0 }
+  const alvos = new Set(
+    (codigos ?? []).map((c) => String(c ?? '').trim()).filter(Boolean),
+  )
+  if (!empresaId && empresaId !== 0) return out
+  if (!alvos.size) return out
+  let notas: NotaXml[] = []
+  try {
+    notas = await db.nfeNotas.where('empresaId').equals(empresaId).toArray()
+  } catch {
+    return out
+  }
+  for (const n of notas) {
+    if (n.id == null) continue
+    const tem = (n.itensAnalisados ?? []).some((it) =>
+      alvos.has(String(it.codProd ?? '').trim()),
+    )
+    if (!tem) continue
+    const r = await reaplicarClassificacaoNota(n.id)
+    if (r.ok) {
+      out.notas++
+      out.itens += r.alterados
+    }
+  }
+  return out
 }

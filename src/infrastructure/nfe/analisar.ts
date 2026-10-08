@@ -6,11 +6,22 @@ import {
   classificacaoRegraGeral,
   resolverClassificacoes,
 } from '../base/classificacao-repo'
+import { escolherComRegraProduto, type MapaRegraProduto } from '@/application/regra-produto'
 import type { ItemNotaXml, ResultadoItemNfe } from './tipos'
 
 export interface AliquotasRefNfe {
   refIBS: number
   refCBS: number
+}
+
+export interface OpcoesAnaliseNfe {
+  /**
+   * Regras salvas no cadastro (SKU → CST × cClassTrib), por empresa.
+   * Quando o item tem regra salva válida para o seu NCM, ela vence a 1ª
+   * opção oficial (perde só para a reclassificação manual global).
+   * Ausente = motor puro (consultas, SPED e testes determinísticos).
+   */
+  regras?: MapaRegraProduto
 }
 
 /**
@@ -28,6 +39,7 @@ export async function analisarItensNfe(
   itens: ItemNotaXml[],
   ref: AliquotasRefNfe,
   onProgress?: (feito: number, total: number) => void,
+  opts?: OpcoesAnaliseNfe,
 ): Promise<ResultadoItemNfe[]> {
   const cacheNcm = new Map<string, { lista: Classificacao[]; regraGeral: boolean; manual: boolean }>()
   const cacheNomen = new Map<string, NomenclaturaNcm | null>()
@@ -63,6 +75,7 @@ export async function analisarItensNfe(
     let classificacao: Classificacao
     let regraGeral: boolean
     let manual = false
+    let regraDoProduto = false
 
     if (lista.length > 0) {
       // Múltiplas classificações: mantém lista[0] como estimativa, mas
@@ -88,6 +101,21 @@ export async function analisarItensNfe(
       manual = manualDoNcm || listaEfetiva[0].manual != null
       // Expõe a contagem original (o desempate não cria nem remove opções).
       lista = listaEfetiva
+      // Regra do produto (SKU + empresa): quando o cadastro tem escolha salva
+      // para este SKU/NCM e ela existe entre as opções, ela vence a 1ª opção
+      // oficial — é assim que a apuração assistida adota o que o usuário
+      // escolheu na conferência/lote. Perde só para a manual global.
+      if (!manual) {
+        const salva = escolherComRegraProduto(
+          listaEfetiva,
+          cod,
+          opts?.regras?.get(String(item.codProd ?? '').trim()) ?? null,
+        )
+        if (salva && (salva.id !== classificacao.id || salva.cst !== classificacao.cst)) {
+          classificacao = salva
+          regraDoProduto = true
+        }
+      }
     } else if (valido) {
       let nom = cacheNomen.get(cod)
       if (nom === undefined) {
@@ -125,6 +153,7 @@ export async function analisarItensNfe(
       classificacao,
       regraGeral,
       manual,
+      regraDoProduto,
       redIBS,
       redCBS,
       ibs: calc.vIBS,
@@ -144,6 +173,9 @@ export async function analisarItensNfe(
           ? (() => {
             const oficiais = lista.filter((x) => !x.integralFallback).length || lista.length
             const temFallback = lista.some((x) => x.integralFallback)
+            if (regraDoProduto) {
+              return [{ titulo: 'Regra do cadastro do produto', texto: `Este SKU tem regra salva no cadastro (CST ${classificacao.cst} × ${classificacao.cClassTrib}) — a apuração usa ela, não a 1ª opção. Este NCM tem ${oficiais} enquadramentos oficiais${temFallback ? ' + tributação integral de segurança (última opção)' : ''}; para trocar, abra a conferência dos produtos e escolha outra regra.`, cor: 'amber' as const }]
+            }
             return [{ titulo: 'Múltiplas classificações', texto: `Este NCM tem ${oficiais} enquadramentos oficiais${temFallback ? ' + tributação integral de segurança (última opção)' : ''}. Foi usada a 1ª opção como estimativa — escolha a correta na Consulta/Lote. Não se encaixa nessa qualificação? Aplique a tributação integral.`, cor: 'amber' as const }]
           })()
           : []),

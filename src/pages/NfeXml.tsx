@@ -46,6 +46,8 @@ import { useNfe } from '@/store/nfe'
 import { BannerContribuintesNovos } from './NfePendentes'
 import { BlocoNaturezas } from './NfeNatureza'
 import { ModalItemNfeDetalhe, Olho } from '@/ui/detalhes'
+import { ModalConferenciaXml } from './NfeConferenciaProdutos'
+import { useConferenciaXml } from '@/store/conferencia-xml'
 import { SeloST, SeloSTNota } from '@/ui/cest'
 import { toast, useUi } from '@/store/ui'
 import { CalendarioAnualModal } from './NfeCalendarioAnual'
@@ -476,7 +478,10 @@ function EsqueletoHistorico() {
 function PainelHistorico() {
   const notas = useNfe((s) => s.notas)
   const carregandoHistorico = useNfe((s) => s.carregandoHistorico)
-  const vincularProdutos = useNfe((s) => s.vincularProdutos)
+  const ativa = useSessao((s) => s.ativa)
+  const prepararConferencia = useConferenciaXml((s) => s.preparar)
+  const preparandoConf = useConferenciaXml((s) => s.preparando)
+  const progressoConf = useConferenciaXml((s) => s.progresso)
   const reaplicarVigentes = useNfe((s) => s.reaplicarVigentes)
   const setFiltros = useNfe((s) => s.setFiltros)
   const tot = useMemo(() => totaisNotas(notas), [notas])
@@ -488,9 +493,10 @@ function PainelHistorico() {
   // Modal "Gerar relatório" (no início da seção) + trava do botão Gerar PDF.
   const [modalRelatorio, setModalRelatorio] = useState(false)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
-  // Giro nos botões de ação (reaplicar/vincular percorrem as notas filtradas).
+  // Giro nos botões de ação (reaplicar percorre as notas filtradas;
+  // conferir abre a mesma revisão do lote antes de salvar).
   const acaoReaplicar = useAcaoTatil(reaplicarVigentes)
-  const acaoVincular = useAcaoTatil(vincularProdutos)
+  const acaoConferir = useAcaoTatil(() => prepararConferencia(notas, ativa?.id ?? null))
   const filtrosTela = useNfe((s) => s.filtros)
 
   const fecharFornecedor = () => {
@@ -580,16 +586,18 @@ function PainelHistorico() {
                 Cadastro de produtos
               </h3>
               <p className="mt-1 pl-9 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                Vincula os itens das <strong>{notas.length} nota(s) filtrada(s)</strong> ao cadastro (NCM, CFOP,
-                CST ICMS, PIS e COFINS), cria os que faltam e atualiza preço/quantidade.
-                Exporte antes se quiser conferir a lista.
+                Confere os itens das <strong>{notas.length} nota(s) filtrada(s)</strong> como na
+                importação em lote (produtos com mais de uma regra exigem a sua escolha),
+                depois cria os que faltam no cadastro e atualiza preço/quantidade.
+                Nada é salvo sem a sua revisão.
+                {preparandoConf && progressoConf ? <span className="block font-bold">{progressoConf}</span> : null}
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
               <Btn onClick={() => setModalRelatorio(true)}>📕 PDF</Btn>
               <Btn onClick={() => exportarCsv(notas)}>📊 CSV</Btn>
               <Btn
-                title="Recalcular as notas filtradas pela classificação vigente (base oficial › manual › regra geral) — use após uma reclassificação manual"
+                title="Recalcular as notas filtradas pela classificação vigente (base oficial › manual › regra do produto › regra geral) — use após salvar regras ou uma reclassificação manual"
                 carregando={acaoReaplicar.carregando}
                 onClick={acaoReaplicar.executar}
               >
@@ -597,10 +605,11 @@ function PainelHistorico() {
               </Btn>
               <Btn
                 variante="primary"
-                carregando={acaoVincular.carregando}
-                onClick={acaoVincular.executar}
+                title="Abre a conferência dos produtos (igual ao lote): com mais de uma regra, você escolhe antes de salvar"
+                carregando={acaoConferir.carregando || preparandoConf}
+                onClick={acaoConferir.executar}
               >
-                {acaoVincular.carregando ? 'Vinculando…' : '📦 Vincular produtos ao cadastro'}
+                {acaoConferir.carregando || preparandoConf ? 'Conferindo…' : '📦 Conferir e vincular produtos'}
               </Btn>
             </div>
           </div>
@@ -635,6 +644,7 @@ function PainelHistorico() {
 
       <ModalDetalheNfe onVerDanfe={setDanfeNota} />
       {danfeNota ? <DanfeModal nota={danfeNota} onFechar={() => setDanfeNota(null)} /> : null}
+      <ModalConferenciaXml />
       <ModalRelatorioNfe
         aberto={modalRelatorio}
         onFechar={() => {

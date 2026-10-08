@@ -337,6 +337,10 @@ export const useNfe = create<NfeState>((set, get) => ({
   },
 
   vincularProdutos: async () => {
+    // LEGADO: gravação direta sem conferência (mantido para compatibilidade).
+    // A UI (clássica e polida) agora abre a conferência igual ao lote
+    // (`useConferenciaXml.preparar`) — produtos com mais de uma regra exigem
+    // escolha antes de salvar.
     const { notas } = get()
     if (!notas.length) {
       toast('Nenhuma nota filtrada para vincular.', 'warn')
@@ -404,7 +408,7 @@ export const useNfe = create<NfeState>((set, get) => ({
     }
     const ok = await confirmar(
       'Reaplicar vigentes?',
-      `Recalcular ${notas.length} nota(s) filtrada(s) pela classificação vigente (base oficial › manual › regra geral)?`,
+      `Recalcular ${notas.length} nota(s) filtrada(s) pela classificação vigente (base oficial › manual › regra do produto › regra geral)?`,
       { icone: '↻', confirmar: 'Reaplicar' },
     )
     if (!ok) return
