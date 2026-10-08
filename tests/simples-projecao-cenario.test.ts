@@ -85,12 +85,12 @@ describe('cenario dividido — integração com motor existente', () => {
     expect(codigos).toContain('CONSOLIDACAO_RECEITA_GRUPO');
   });
 
-  it('validações explícitas: percentual fora de (0,1) e anexo inválido', () => {
+  it('validações explícitas: percentual fora de [0,1] e anexo inválido', () => {
     expect(() =>
       simularCenarioDividido({
         mesInicio: '2026-01',
         receitaTotalMensal: total3(),
-        percentualNova: 1,
+        percentualNova: 1.5,
         mae: { anexoId: 'III', folha12: 0, historico12: HIST_MAE },
         nova: { anexoId: 'III', folha12: 0, historico12: [] },
       }),

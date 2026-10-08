@@ -7,17 +7,15 @@
  * Embaralha TUDO que é JavaScript entregue no instalador:
  *   1. Renderer: `dist/assets/*.js` (React/Vite)
  *   2. Main: `electron/dist/main.js` + `preload.cjs`
- *   3. IA: `electron/dist/ia-worker.cjs` (delega ao `ofuscar-ia.cjs` leve
- *      quando o pacote real falta; aqui usa o preset médio real)
+ *   3. Busca local: `electron/dist/grafo-service.cjs` + `caminhos-ia.cjs`
+ *      (CJS puros copiados pelo esbuild)
  *
  * Preset médio SEGURO (nunca quebra Electron/React):
  *   compact + simplify + stringArray(0.75) + rotate/shuffle.
  *   NUNCA: selfDefending, debugProtection (quebram fork/asar),
  *   renameGlobals, controlFlowFlattening, deadCodeInjection.
  *
- * Validação antes de confirmar (por arquivo):
- *   - `node --check` (sintaxe);
- *   - worker IA: smoke real (buscar "frango vivo" + classificar).
+ * Validação antes de confirmar (por arquivo): `node --check` (sintaxe).
  * Falha em qualquer arquivo = RESTAURA o original e exit 1.
  * O build nunca é deixado quebrado.
  *
@@ -30,7 +28,7 @@
 
 const fs = require('node:fs')
 const path = require('node:path')
-const { spawnSync, fork } = require('node:child_process')
+const { spawnSync } = require('node:child_process')
 
 const RAIZ = path.resolve(__dirname, '..')
 const DIR_RENDERER = path.join(RAIZ, 'dist', 'assets')
@@ -55,8 +53,8 @@ function listarAlvos() {
     }
   }
   if (!soRenderer) {
-    // Electron: main + preload + helpers IA copiados (CJS puros).
-    for (const f of ['main.js', 'preload.cjs', 'ia-worker.cjs', 'caminhos-ia.cjs', 'modelo-seguro.cjs']) {
+    // Electron: main + preload + helpers da busca local copiados (CJS puros).
+    for (const f of ['main.js', 'preload.cjs', 'caminhos-ia.cjs', 'grafo-service.cjs']) {
       const p = path.join(DIR_ELECTRON, f)
       if (fs.existsSync(p)) alvos.push({ tipo: f === 'renderer' ? 'x' : 'electron', caminho: p })
     }
@@ -67,72 +65,6 @@ function listarAlvos() {
 function checarSintaxe(arquivo) {
   const r = spawnSync(process.execPath, ['--check', arquivo], { encoding: 'utf8' })
   return { ok: r.status === 0, saida: ((r.stdout || '') + (r.stderr || '')).trim().slice(0, 300) }
-}
-
-/** Smoke real só para o worker IA (renderer/main não têm entry testável sem janela). */
-function smokeWorker(caminhoWorker, tempoLimiteMs = 25000) {
-  return new Promise((resolve) => {
-    const detalhe = { etapas: [] }
-    let finalizado = false
-    function concluir(ok, erro) {
-      if (finalizado) return
-      finalizado = true
-      clearTimeout(timer)
-      try { filho.kill() } catch (_) { /* best-effort */ }
-      resolve({ ok, erro, detalhe })
-    }
-    let filho
-    try {
-      filho = fork(caminhoWorker, [], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] })
-    } catch (e) {
-      concluir(false, `fork falhou: ${e && e.message ? e.message : e}`)
-      return
-    }
-    const timer = setTimeout(() => concluir(false, 'timeout do smoke (>25s)'), tempoLimiteMs)
-    const pendentes = new Map()
-    let proximoId = 1
-    function enviar(cmd, extra) {
-      return new Promise((res) => {
-        const id = proximoId++
-        pendentes.set(id, { res })
-        filho.send({ id, cmd, ...(extra || {}) })
-      })
-    }
-    filho.on('message', (msg) => {
-      void (async () => {
-        try {
-          if (msg && msg.cmd === 'pronto' && msg.id == null) {
-            detalhe.etapas.push('pronto')
-            const ini = await enviar('init', { mock: true })
-            if (!ini.ok) throw new Error(`init mock falhou: ${ini.erro || '?'}`)
-            detalhe.etapas.push('init-mock')
-            const bus = await enviar('buscar', { consulta: 'frango vivo para abate', k: 5 })
-            if (!bus.ok || !Array.isArray(bus.candidatos) || !bus.candidatos.length) {
-              throw new Error(`buscar sem candidatos: ${bus.erro || '?'}`)
-            }
-            detalhe.etapas.push(`buscar:top1=${bus.candidatos[0] && bus.candidatos[0].codigo}`)
-            const cla = await enviar('classificar', { descricao: 'frango vivo para abate' })
-            if (!cla.ok || !cla.codigo) throw new Error(`classificar falhou: ${cla.erro || '?'}`)
-            detalhe.etapas.push(`classificar:${cla.codigo}`)
-            await enviar('encerrar', {})
-            detalhe.etapas.push('encerrar')
-            concluir(true, null)
-          } else if (msg && msg.id != null && pendentes.has(msg.id)) {
-            pendentes.get(msg.id).res(msg)
-            pendentes.delete(msg.id)
-          }
-        } catch (e) {
-          concluir(false, e && e.message ? e.message : String(e))
-        }
-      })()
-    })
-    filho.on('error', (e) => concluir(false, `erro worker: ${e && e.message ? e.message : e}`))
-    filho.on('exit', (code) => {
-      if (!finalizado && detalhe.etapas.length < 4) {
-        concluir(false, `worker saiu cedo (code=${code}) após [${detalhe.etapas.join(', ')}]`)
-      }
-    })
-  })
 }
 
 async function ofuscarArquivo(caminho, obfuscator) {
@@ -166,14 +98,6 @@ async function ofuscarArquivo(caminho, obfuscator) {
   if (!sint.ok) {
     fs.writeFileSync(caminho, original, 'utf8')
     throw new Error(`sintaxe inválida após ofuscar ${path.basename(caminho)}: ${sint.saida} (original restaurado)`)
-  }
-  // Worker IA exige smoke funcional além da sintaxe.
-  if (path.basename(caminho) === 'ia-worker.cjs') {
-    const smoke = await smokeWorker(caminho)
-    if (!smoke.ok) {
-      fs.writeFileSync(caminho, original, 'utf8')
-      throw new Error(`smoke IA falhou após ofuscar: ${smoke.erro} (original restaurado)`)
-    }
   }
   return { pulado: false, bytesAntes, bytesDepois: Buffer.byteLength(ofuscado, 'utf8') }
 }

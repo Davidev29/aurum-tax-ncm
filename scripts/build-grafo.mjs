@@ -78,7 +78,7 @@ const digits = (v) => String(v ?? '').replace(/\D+/g, '');
 export function normalizarTermo(s) {
   return String(s ?? '')
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim()
     .replace(/\s+/g, ' ');
@@ -616,14 +616,14 @@ const ANDAIME_WORDS = new Set(
     'para', 'pfv', 'pf', 'p', 'em', 'se', 'enquadra', 'sabe', 'um', 'uma', 'os', 'as',
     'é', 'quall', 'qula', 'qul', 'cnnae', 'cnaee', 'fiscal', 'informe', 'com', 'no',
     'tributação', 'tributacao', 'das', 'meu', 'minha', 'sou',
-  ].map((w) => w.normalize('NFD').replace(/[̀-ͯ]/g, '')),
+  ].map((w) => w.normalize('NFD').replace(/[\u0300-\u036f]/g, '')),
 );
 const ANDAIME_TRAILING = new Set(
   ['por', 'favor', 'pfv', 'pf', 'na', 'reforma', 'tributaria', 'tributária',
     'simples', 'nacional', 'ncm', 'nbs', 'cnae', 'o', 'a', 'os', 'as', 'um',
     'uma', 'e', 'qual', 'se', 'enquadra', 'em', 'de', 'do', 'da', 'para',
     'saber', 'dizer'].map((w) =>
-    w.normalize('NFD').replace(/[̀-ͯ]/g, ''),
+    w.normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
   ),
 );
 
@@ -631,7 +631,7 @@ const normPalavra = (w) =>
   String(w ?? '')
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/^[^a-z0-9%]+|[^a-z0-9%]+$/g, '');
 
 /** Remove o andaime de pergunta e devolve o núcleo (produto/serviço). */

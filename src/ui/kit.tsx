@@ -176,7 +176,7 @@ export function Area({ className = '', ...props }: TextareaHTMLAttributes<HTMLTe
 }
 
 export function Selecao({ className = '', ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select className={`field ${className}`} {...props} />
+  return <select className={`field select-glass ${className}`} {...props} />
 }
 
 export function Check({

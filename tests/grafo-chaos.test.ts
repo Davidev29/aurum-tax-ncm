@@ -74,14 +74,18 @@ afterEach(() => {
 
 describe('grafo-chaos — multi-hop + herança (01–02)', () => {
   it('01 multi-hop NCM→CCT→Anexo→Artigo auditável na base real', async () => {
-    // Esperado: "carne bovina" acha 02102000 com caminho
-    //   NCM:02102000 → CCT:200003 → Anexo:I → ArtigoLC214:125.
-    // Obtido: top 02102000, caminho exato acima, proveniência
+    // Esperado: "carne bovina" acha 02013000 com caminho
+    //   NCM:02013000 → CCT:200003 → Anexo:I → ArtigoLC214:125.
+    // Obtido: top 02013000, caminho exato acima, proveniência
     //   [por_codigo, por_codigo, curadoria], cypher com MATCH+TEM_CLASSIFICACAO.
+    // Top-1 intencional (Phase 10-04): o pin FT curadoria/0.9
+    // ("carne bovina fresca desossada" → 02013000) faz FTS e vetor
+    // concordarem; o caminho fiscal é idêntico ao de 02102000 (#2) —
+    // mesma CCT, Anexo e Artigo, sem mudança de significado fiscal.
     const r = await grafo.grafoConsultar({ texto: 'carne bovina', k: 5 }, {});
     expect(r.ok).toBe(true);
-    expect(r.candidatos[0].codigo).toBe('02102000');
-    expect(r.candidatos[0].caminho).toEqual(['NCM:02102000', 'CCT:200003', 'Anexo:I', 'ArtigoLC214:125']);
+    expect(r.candidatos[0].codigo).toBe('02013000');
+    expect(r.candidatos[0].caminho).toEqual(['NCM:02013000', 'CCT:200003', 'Anexo:I', 'ArtigoLC214:125']);
     expect(r.candidatos[0].proveniencia.map((p: { origem: string }) => p.origem)).toEqual([
       'por_codigo',
       'por_codigo',
@@ -360,13 +364,14 @@ describe('grafo-chaos — overlay com travas (12–16)', () => {
 
 describe('grafo-chaos — garantias globais (19–22)', () => {
   it('19 performance: consulta fria na base real <2s CPU', async () => {
-    // Esperado: cache limpo + "carne bovina" → tempoMs < 2000, top 02102000.
+    // Esperado: cache limpo + "carne bovina" → tempoMs < 2000, top 02013000.
     // Obtido: <2s (medido ~500ms) + top correto.
+    // Top-1 intencional (Phase 10-04): ver teste 01.
     grafo._limparCache();
     grafo._limparCacheVetores();
     const r = await grafo.grafoConsultar({ texto: 'carne bovina', k: 5 }, {});
     expect(r.ok).toBe(true);
-    expect(r.candidatos[0].codigo).toBe('02102000');
+    expect(r.candidatos[0].codigo).toBe('02013000');
     expect(r.tempoMs).toBeLessThan(2000);
   });
 
@@ -397,9 +402,11 @@ describe('grafo-chaos — garantias globais (19–22)', () => {
 
   it('22 via:grafo auditável: cypher + caminho + proveniência na trilha real', async () => {
     // Esperado: consultarGrafoPrimeiro (bridge ligada ao serviço real) →
-    //   usouGrafo, cypher com MATCH, caminho 02102000 com proveniência,
+    //   usouGrafo, cypher com MATCH, caminho 02013000 com proveniência,
     //   fundir põe grafo primeiro, "por que sugeriu" cita base.
-    // Obtido: trilha completa + fusão [02102000, ...] + texto base.
+    // Obtido: trilha completa + fusão [02013000, ...] + texto base.
+    // Top-1 intencional (Phase 10-04): ver teste 01 (02102000 segue no
+    // top-5 com caminho fiscal idêntico e permanece endereçável na trilha).
     vi.spyOn(bridgeMod, 'grafoConsultarGrafo').mockImplementation(
       (async (texto: string, k: number, ano?: number) =>
         grafo.grafoConsultar({ texto, k, anoReferencia: ano ?? null }, {})) as never,
@@ -414,7 +421,7 @@ describe('grafo-chaos — garantias globais (19–22)', () => {
       { codigo: '02102000', descricao: 'Carnes bovinas', score: 1 },
     ];
     const fundidos = fundirCandidatosGrafoLexical(resposta, lexicais, trilha);
-    expect(fundidos[0].codigo).toBe('02102000');
+    expect(fundidos[0].codigo).toBe('02013000');
     expect(fundidos[0].viaGrafo).toBe(true);
     expect(textoPorQueSugeriu('02102000', trilha)).toContain('base: NCM:02102000 → CCT:200003 → Anexo:I');
   });

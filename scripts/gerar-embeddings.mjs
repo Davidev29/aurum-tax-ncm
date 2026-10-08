@@ -63,11 +63,14 @@ export function textoDocumentoVetor(no, aliasPorId) {
   return partes.join(' ').trim()
 }
 
-/** Mapa id→Set(termo) a partir das arestas SINONIMO_DE (Termo→nó). */
+/** Mapa id→Set(termo) a partir das arestas SINONIMO_DE/SINONIMO_NBS (Termo→nó).
+ * Paridade com o runtime (`construirIndices` coleta os dois tipos): sem o
+ * NBS aqui, os termos do fine-tuning de serviços nunca entravam no
+ * `vetores.json` e o cosine os ignorava. */
 export function mapaAliases(arestas) {
   const mapa = new Map()
   for (const a of arestas || []) {
-    if (!a || a.tipo !== 'SINONIMO_DE' || typeof a.de !== 'string' || typeof a.para !== 'string') continue
+    if (!a || (a.tipo !== 'SINONIMO_DE' && a.tipo !== 'SINONIMO_NBS') || typeof a.de !== 'string' || typeof a.para !== 'string') continue
     if (!a.de.startsWith('Termo:')) continue
     const termo = a.de.slice('Termo:'.length)
     if (!mapa.has(a.para)) mapa.set(a.para, new Set())

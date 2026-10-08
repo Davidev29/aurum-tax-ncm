@@ -8,7 +8,6 @@
  */
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react'
 import { ANEXO_LABELS } from '@/domain/constants/tributarios'
-import { NOME_IA } from '@/domain/aurum-ai'
 import { analisarFichaAbsoluta, type FichaAbsoluta } from '@/application/aurum-ai-contexto'
 import { urlLegislacaoComAncora } from '@/domain/legislacao'
 import type {
@@ -637,7 +636,7 @@ export function CartaoClassificacao({
 /* ------------------------------------------- cartão: tributação integral --- */
 
 /**
- * Cartão "sem vínculo oficial" (regra geral) com veredito unificado Aurum AI.
+ * Cartão "sem vínculo oficial" (regra geral) com veredito unificado automático.
  *
  * Corrige a divergência "alíquota cheia × redução 60%": há UMA verdade com
  * duas camadas rotuladas —
@@ -646,8 +645,7 @@ export function CartaoClassificacao({
  *   in natura / alimento. Hipótese nunca entra no cálculo nem no selo.
  *
  * É o **único** lugar onde aparece o aviso *in natura* (Art. 137) — SPEC D04 —
- * agora dentro do painel `Aurum AI · análise do conjunto absoluto`, assinado
- * como "Sugerido por Aurum AI".
+ * agora dentro do painel `Resultado automático · análise do conjunto absoluto`.
  */
 export function CartaoTributacaoIntegral({
   cl,
@@ -657,7 +655,7 @@ export function CartaoTributacaoIntegral({
   onAddCalc,
   onReclassificar,
   ficha,
-  /** Borda animada ouro + selo: este enquadramento foi sugerido pela IA. */
+  /** Borda animada ouro + selo: este enquadramento veio do resultado automático. */
   destaqueIA = false,
 }: {
   cl: Classificacao
@@ -668,7 +666,7 @@ export function CartaoTributacaoIntegral({
   onAddCalc?: () => void
   /** Aberto somente quando não há classificação específica (caso regra geral). */
   onReclassificar?: () => void
-  /** Ficha absoluta da Aurum AI (quando já montada — evita releitura). */
+  /** Ficha absoluta do seletor (quando já montada — evita releitura). */
   ficha?: FichaAbsoluta | null
   destaqueIA?: boolean
 }) {
@@ -708,7 +706,7 @@ export function CartaoTributacaoIntegral({
       mensagemVigente:
         'Sem vínculo específico na base oficial: HOJE vale a regra geral (CST 000/cClassTrib 000001, alíquota cheia). O cálculo abaixo usa a alíquota cheia — nenhuma redução foi aplicada.',
       mensagemHipotese:
-        `A ${NOME_IA} identificou hipótese CONDICIONAL de redução de 60% (não vigente): ela só vale SE o seu produto/operação comprovar a condição legal. Enquanto não comprovada, escriture pela regra geral.`,
+        `A busca automática identificou hipótese CONDICIONAL de redução de 60% (não vigente): ela só vale SE o seu produto/operação comprovar a condição legal. Enquanto não comprovada, escriture pela regra geral.`,
       checklist: [
         'O produto é in natura (agropecuário, aquícola, pesqueiro, florestal ou extrativista vegetal, sem industrialização relevante)?',
         'Se confirmar a condição, reclassifique com a regra específica (botão "Reclassificar manualmente") informando descrição + link da legislação.',
@@ -767,7 +765,7 @@ export function CartaoTributacaoIntegral({
         {aviso ? (
           <section
             className="aurum-ai-analise animate-fade-up"
-            aria-label={`${NOME_IA} · análise do conjunto absoluto — vigente vs hipótese`}
+            aria-label="Resultado automático · análise do conjunto absoluto — vigente vs hipótese"
           >
             <div className="aurum-ai-analise-cab">
               <SeloAurumAI variante="compacto" />
@@ -862,7 +860,7 @@ export function CartaoTributacaoIntegral({
               </Btn>
             ) : null}
             {onReclassificar ? (
-              <Btn variante="primary" tam="sm" onClick={onReclassificar} title={veredito.exigeVerificacao ? `A ${NOME_IA} detectou hipótese de 60% — reclassifique com a regra específica + fonte legal` : undefined}>
+              <Btn variante="primary" tam="sm" onClick={onReclassificar} title={veredito.exigeVerificacao ? 'Hipótese de 60% detectada — reclassifique com a regra específica + fonte legal' : undefined}>
                 ✋ Reclassificar manualmente
               </Btn>
             ) : null}

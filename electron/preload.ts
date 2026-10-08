@@ -13,11 +13,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AurumBridge,
-  CandidatoIa,
   EventoAtualizacao,
   ResultadoGrafoBridge,
-  ResultadoIaBridge,
-  StatusIaBridge,
 } from '../src/infrastructure/bridge'
 
 /**
@@ -108,19 +105,13 @@ const aurum: AurumBridge = {
   },
 
   /**
-   * IA offline (Phase 6 / IA-05 — tracer 06-05).
+   * Busca local (grafo fiscal via processo principal).
    *
-   * O LLM roda exclusivamente no worker `utilityProcess` (nunca no
-   * renderer/preload — `node-llama-cpp` declara crash em renderer). Aqui só
-   * o round-trip IPC `ia:classificar`/`ia:buscar`/`ia:status`.
+   * O modelo de linguagem foi removido: a classificação é 100%
+   * determinística (RAG lexical + grafo + resolvedor oficial). Aqui só o
+   * round-trip IPC do grafo (`ia:grafo`/`ia:grafo-uso`).
    */
   ia: {
-    classificar: (descricao: string, candidatos?: CandidatoIa[]): Promise<ResultadoIaBridge> =>
-      ipcRenderer.invoke('ia:classificar', descricao, candidatos),
-    buscar: (consulta: string, k?: number) => ipcRenderer.invoke('ia:buscar', consulta, k),
-    status: (): Promise<StatusIaBridge> => ipcRenderer.invoke('ia:status'),
-    conversar: (pergunta: string, opts?: { sistema?: string; historico?: { papel: string; texto: string }[]; think?: boolean; maxTokens?: number; temperature?: number }) =>
-      ipcRenderer.invoke('ia:conversar', pergunta, opts ?? {}),
     /**
      * Grafo fiscal local (Phase 10-02 / GRAFO-02, híbrido em 10-03): FTS +
      * vetor + 2-hops no worker (`utilityProcess`) via canal `ia:grafo`.

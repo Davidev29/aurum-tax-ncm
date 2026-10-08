@@ -224,6 +224,24 @@ const caixaVantagem = (vencedor: 'CONV' | 'HIB' | 'EMPATE', texto: string) => ({
   margin: [0, 5, 0, 5] as [number, number, number, number],
 });
 
+/**
+ * Quadro explicativo estilo "professor no quadro": cabeçalho escuro com o
+ * tema, fórmula em destaque sobre fundo cinza e uma linha didática curta
+ * com os números deste cálculo. Compacto — 3 linhas por quadro.
+ */
+const quadroProfessor = (n: string, titulo: string, formula: string, explicacao: string) => ({
+  table: {
+    widths: ['*'],
+    body: [
+      [{ text: pdfText(`${n} · ${titulo}`), bold: true, fontSize: 8.5, color: '#FFFFFF', fillColor: '#0F3D3E', margin: [8, 4, 8, 4] as [number, number, number, number] }],
+      [{ text: pdfText(formula), bold: true, fontSize: 8, color: '#0F3D3E', fillColor: '#F2F4F7', margin: [8, 4, 8, 4] as [number, number, number, number] }],
+      [{ text: pdfText(explicacao), fontSize: 7.8, color: '#344054', margin: [8, 4, 8, 4] as [number, number, number, number] }],
+    ],
+  },
+  layout: 'noBorders' as const,
+  margin: [0, 3, 0, 3] as [number, number, number, number],
+});
+
 function corEmitente(e: Emitente): string {
   const c = String(e?.cor ?? '').trim();
   return /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#0f215c';
@@ -449,9 +467,67 @@ export async function exportarRelatorioAnaliticoPDF(
     push({ text: pdfText(acaoTxt), fontSize: 8, italics: true, color: '#344054' });
   }
 
-  push(tituloSecao(comMatriz ? '6' : '4', 'Metodologia e fontes'));
-  push({ ul: r.metodologia.formulas.map((x) => ({ text: pdfText(x), fontSize: 7.2 })), margin: [12, 0, 0, 3] as [number, number, number, number] });
-  push({ text: pdfText(`Fontes: ${r.metodologia.fontes.join('  ·  ')}. ${r.metodologia.aviso}`), fontSize: 7, color: CINZA });
+  push(tituloSecao(comMatriz ? '6' : '4', 'Metodologia e fontes — quadro do professor'));
+  {
+    const convCen = cen(r, d.convId);
+    const comFatorR = r.contexto.mostrarFatorR;
+    const totalQuadros = comFatorR ? 5 : 3;
+    push({ text: pdfText(`Como este relatório foi montado: ${totalQuadros} contas simples, com os números deste cálculo em cada quadro. A IA só interpreta — não calcula.`), fontSize: 7.5, color: CINZA, margin: [0, 0, 0, 4] as [number, number, number, number] });
+    push(quadroProfessor(
+      '1',
+      'Alíquota efetiva do DAS',
+      'Efetiva = (RBT12 x nominal - deduzir) / RBT12',
+      `A tabela dá a alíquota cheia e um desconto fixo. Aqui: ${fmtCarga(convCen.aliquotaNominal * 100)} x ${fmtMoeda(r.premissas.rbt12)} - ${fmtMoeda(convCen.parcelaDeduzir)} / RBT12 = ${fmtCarga(convCen.aliquotaEfetiva * 100)}.`,
+    ));
+    if (comFatorR) {
+      push(quadroProfessor(
+        '2',
+        'Fator R — a folha decide o anexo',
+        'Fator R = Folha 12m / RBT12 · corte em 28%',
+        r.fatorR.dadosSuficientes
+          ? `Com 28% ou mais a empresa fica no Anexo III; abaixo, cai no V. Aqui: ${fmtMoeda(r.fatorR.folha12)} / ${fmtMoeda(r.fatorR.rbt12)} = ${fmtCarga(r.fatorR.valor * 100)}.`
+          : 'Sem folha informada não há enquadramento. Informe a folha dos últimos 12 meses.',
+      ));
+      push(quadroProfessor(
+        '3',
+        'Gap até os 28%',
+        'Gap = max(0; 0,28 x RBT12 - Folha 12m)',
+        r.fatorR.dadosSuficientes
+          ? (r.fatorR.gapFolha > 0
+            ? `Quanto falta para o Anexo III. Aqui: faltam ${fmtMoeda(r.fatorR.gapFolha)} (~${fmtMoeda(r.fatorR.gapMensalProlabore)}/mês de pró-labore).`
+            : `Meta batida. Folha mínima sustentada: ${fmtMoeda(r.fatorR.folhaMinimaIII)}.`)
+          : 'Exemplo: 0,28 x RBT12 - folha informada.',
+      ));
+    } else {
+      push({ text: pdfText(`Fator R não se aplica ao Anexo ${d.anexo} — vale somente para os Anexos III/V.`), fontSize: 7.8, italics: true, color: CINZA, margin: [0, 3, 0, 3] as [number, number, number, number] });
+    }
+    push(quadroProfessor(
+      comFatorR ? '4' : '2',
+      'DAS reduzido (híbrido)',
+      'DAS reduzido = DAS - CBS dentro do DAS',
+      `No híbrido a CBS sai da guia para apuração por fora. Aqui: ${fmtMoeda(memFoco.dasTotal)} - ${fmtMoeda(memFoco.cbsDentroDas)} = ${fmtMoeda(memFoco.dasReduzido)}.`,
+    ));
+    push(quadroProfessor(
+      comFatorR ? '5' : '3',
+      'CBS por fora (híbrido)',
+      'CBS fora = max(0; débitos - créditos)',
+      `Débitos sobre a receita menos créditos sobre despesas. Aqui: ${fmtMoeda(memFoco.debitosCbs)} - ${fmtMoeda(memFoco.creditosCbs)} = ${fmtMoeda(memFoco.cbsARecolher)}.`,
+    ));
+  }
+  push({
+    table: {
+      headerRows: 1,
+      widths: ['38%', '62%'],
+      body: [
+        [th('Fonte'), th('O que ela sustenta aqui')],
+        [td('LC 123/2006 · Art. 18', true), td('Faixas, alíquotas nominais e parcela a deduzir de cada anexo.')],
+        [td('LC 214/2025 · Arts. 28-45', true), td('CBS/IBS da reforma: débito cheio sobre a receita e crédito sobre despesas.')],
+        [td('Tabelas Anexos I-V · 2027-2028', true), td(`Valores aplicados neste cálculo — ${r.premissas.regraDas}.`)],
+      ],
+    },
+    margin: [0, 4, 0, 4] as [number, number, number, number],
+  });
+  push({ text: pdfText(r.metodologia.aviso), fontSize: 7.5, italics: true, color: '#344054', margin: [0, 2, 0, 0] as [number, number, number, number] });
 
   const subtitulo = `Simples Nacional · LC 123/2006 × LC 214/2025 · ${(r.empresa.razaoSocial || r.competencia) ?? ''} · Gerado em ${dataGeracao} · hash ${r.hash}`;
   const doc = {

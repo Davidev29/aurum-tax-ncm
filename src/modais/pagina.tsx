@@ -559,8 +559,14 @@ function PreviaCalculo({
   const temReducao = (Number(redIBS) || 0) > 0 || (Number(redCBS) || 0) > 0
   const totalTributos = c.total
   const totalItem = c.base + c.total
-  const pctIBS = totalTributos > 0 ? (c.vIBS / totalTributos) * 100 : 50
   const temValor = c.base > 0
+  // Barra empilhada proporcional ao TOTAL do item (operação + tributos).
+  const pctBase = totalItem > 0 ? (c.base / totalItem) * 100 : 0
+  const pctIBSBarra = totalItem > 0 ? (c.vIBS / totalItem) * 100 : 0
+  const pctCBSBarra = totalItem > 0 ? (c.vCBS / totalItem) * 100 : 0
+  // Participação de cada tributo dentro dos tributos (para a legenda do card).
+  const fatiaIBS = totalTributos > 0 ? (c.vIBS / totalTributos) * 100 : 0
+  const fatiaCBS = totalTributos > 0 ? (c.vCBS / totalTributos) * 100 : 0
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--line)]">
@@ -575,33 +581,131 @@ function PreviaCalculo({
         )}
       </div>
       <div className="p-4">
-        <div className="calc-bar" aria-hidden="true">
-          <span className="calc-bar-ibs" style={{ width: `${pctIBS}%` }} />
-          <span className="calc-bar-cbs" style={{ width: `${100 - pctIBS}%` }} />
-        </div>
+        {temValor ? (
+          <div className="rounded-2xl border border-slate-200/80 bg-slate-50 p-3 dark:border-slate-700/70 dark:bg-slate-950/50">
+            <div
+              className="flex h-16 w-full gap-[3px] overflow-hidden rounded-xl bg-white/70 p-[3px] shadow-inner ring-1 ring-black/5 dark:bg-slate-900 dark:ring-white/10"
+              role="img"
+              aria-label={`Composição do total: operação ${fmtMoeda(c.base)} (${fmtCarga(pctBase)}), IBS ${fmtMoeda(c.vIBS)} (${fmtCarga(pctIBSBarra)}), CBS ${fmtMoeda(c.vCBS)} (${fmtCarga(pctCBSBarra)})`}
+            >
+              <div
+                className="flex min-w-0 flex-col items-start justify-center overflow-hidden rounded-l-[9px] rounded-r-[3px] bg-gradient-to-b from-slate-100 to-slate-300 px-3 dark:from-slate-600 dark:to-slate-800"
+                style={{ width: `${pctBase}%` }}
+                title={`Operação (valor bruto): ${fmtMoeda(c.base)} — ${fmtCarga(pctBase)} do total`}
+              >
+                {pctBase >= 22 ? (
+                  <>
+                    <span className="truncate text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-300">
+                      Operação · {fmtCarga(pctBase)}
+                    </span>
+                    <span className="truncate font-mono text-sm font-black tabular-nums text-slate-800 dark:text-white">
+                      {fmtMoeda(c.base)}
+                    </span>
+                  </>
+                ) : pctBase >= 12 ? (
+                  <span className="truncate font-mono text-[11px] font-black tabular-nums text-slate-700 dark:text-slate-100">
+                    {fmtCarga(pctBase)}
+                  </span>
+                ) : null}
+              </div>
+              <div
+                className="calc-bar-ibs flex min-w-[44px] flex-col items-center justify-center overflow-hidden rounded-[3px] px-1"
+                style={{ width: `${pctIBSBarra}%` }}
+                title={`IBS: ${fmtMoeda(c.vIBS)} — ${fmtCarga(pctIBSBarra)} do total (${fmtCarga(fatiaIBS)} dos tributos)`}
+              >
+                {pctIBSBarra >= 16 ? (
+                  <>
+                    <span className="truncate text-[10px] font-black uppercase tracking-widest text-white/90 [text-shadow:0_1px_2px_rgb(0_0_0/0.35)]">
+                      IBS · {fmtCarga(pctIBSBarra)}
+                    </span>
+                    <span className="truncate font-mono text-sm font-black tabular-nums text-white [text-shadow:0_1px_2px_rgb(0_0_0/0.35)]">
+                      {fmtMoeda(c.vIBS)}
+                    </span>
+                  </>
+                ) : pctIBSBarra > 0 ? (
+                  <span className="truncate font-mono text-[11px] font-black tabular-nums text-white [text-shadow:0_1px_2px_rgb(0_0_0/0.35)]">
+                    {fmtCarga(pctIBSBarra)}
+                  </span>
+                ) : null}
+              </div>
+              <div
+                className="calc-bar-cbs flex min-w-[44px] flex-col items-center justify-center overflow-hidden rounded-l-[3px] rounded-r-[9px] px-1"
+                style={{ width: `${pctCBSBarra}%` }}
+                title={`CBS: ${fmtMoeda(c.vCBS)} — ${fmtCarga(pctCBSBarra)} do total (${fmtCarga(fatiaCBS)} dos tributos)`}
+              >
+                {pctCBSBarra >= 16 ? (
+                  <>
+                    <span className="truncate text-[10px] font-black uppercase tracking-widest text-[#16233a]">
+                      CBS · {fmtCarga(pctCBSBarra)}
+                    </span>
+                    <span className="truncate font-mono text-sm font-black tabular-nums text-[#16233a]">
+                      {fmtMoeda(c.vCBS)}
+                    </span>
+                  </>
+                ) : pctCBSBarra > 0 ? (
+                  <span className="truncate font-mono text-[11px] font-black tabular-nums text-[#16233a]">
+                    {fmtCarga(pctCBSBarra)}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            <div className="mt-2.5 flex flex-wrap items-stretch gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900">
+                <span className="h-3 w-3 shrink-0 rounded-[4px] bg-gradient-to-b from-slate-100 to-slate-400 ring-1 ring-black/10 dark:from-slate-500 dark:to-slate-700" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Operação · {fmtCarga(pctBase)}</span>
+                  <span className="block truncate font-mono text-xs font-black tabular-nums">{fmtMoeda(c.base)}</span>
+                </span>
+              </div>
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900">
+                <span className="calc-bar-ibs h-3 w-3 shrink-0 rounded-[4px] ring-1 ring-black/10" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">IBS · {fmtCarga(pctIBSBarra)}</span>
+                  <span className="block truncate font-mono text-xs font-black tabular-nums text-brand-700 dark:text-aurum-200">{fmtMoeda(c.vIBS)}</span>
+                </span>
+              </div>
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-[#be9433]/50 bg-white px-2.5 py-1.5 dark:border-[#be9433]/40 dark:bg-slate-900">
+                <span className="calc-bar-cbs h-3 w-3 shrink-0 rounded-[4px] ring-1 ring-black/10" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="block text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">CBS · {fmtCarga(pctCBSBarra)}</span>
+                  <span className="block truncate font-mono text-xs font-black tabular-nums text-brand-700 dark:text-aurum-200">{fmtMoeda(c.vCBS)}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-slate-300 px-3 py-2.5 text-[11px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            Informe quantidade e valor para ver a composição do total na barra.
+          </div>
+        )}
         <div className="mt-3 grid grid-cols-2 gap-2.5 md:grid-cols-4">
           <div className="calc-kpi">
-            <div className="text-[10px] font-bold uppercase text-slate-500">Operação</div>
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-500">
+              <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm bg-slate-300 dark:bg-slate-500" aria-hidden="true" />
+              Operação
+            </div>
             <div className="font-mono text-sm font-black">{fmtMoeda(c.base)}</div>
-            <div className="font-mono text-[10px] text-slate-400">BC cheia</div>
+            <div className="font-mono text-[10px] text-slate-400">valor bruto · {temValor ? fmtCarga(pctBase) : '—'} do total</div>
           </div>
           <div className="calc-kpi">
-            <div className="text-[10px] font-bold uppercase text-slate-500">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-500">
+              <span className="calc-bar-ibs inline-block h-2.5 w-2.5 shrink-0 rounded-sm" aria-hidden="true" />
               Valor do IBS · {fmtCarga(c.aliqIBS)}
             </div>
             <div className="font-mono text-sm font-black text-brand-700 dark:text-aurum-200">
               {fmtMoeda(c.vIBS)}
             </div>
-            <div className="font-mono text-[10px] text-slate-400">azul na barra</div>
+            <div className="font-mono text-[10px] text-slate-400">azul na barra · {temValor ? fmtCarga(pctIBSBarra) : '—'} do total</div>
           </div>
           <div className="calc-kpi">
-            <div className="text-[10px] font-bold uppercase text-slate-500">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-500">
+              <span className="calc-bar-cbs inline-block h-2.5 w-2.5 shrink-0 rounded-sm" aria-hidden="true" />
               Valor da CBS · {fmtCarga(c.aliqCBS)}
             </div>
             <div className="font-mono text-sm font-black text-brand-700 dark:text-aurum-200">
               {fmtMoeda(c.vCBS)}
             </div>
-            <div className="font-mono text-[10px] text-slate-400">dourado na barra</div>
+            <div className="font-mono text-[10px] text-slate-400">dourado na barra · {temValor ? fmtCarga(pctCBSBarra) : '—'} do total</div>
           </div>
           <div className="calc-hero rounded-xl p-3">
             <div className="calc-hero-rotulo">Total item · operação + tributos</div>

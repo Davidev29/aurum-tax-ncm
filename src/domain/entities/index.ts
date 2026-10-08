@@ -589,6 +589,14 @@ export interface Classificacao {
   referencia: ReferenciaTributaria | null
   resumo: ResumoClassificacao
   regraGeral: boolean
+  /**
+   * Legenda do serviço (NBS 9 dígitos) lida da ponte LC 116 → NBS
+   * (`lcNbs`: `descricaoNbs` + item LC + `descricaoLc`). Preenchida tanto no
+   * vínculo oficial quanto na regra geral — é o "o que é este serviço",
+   * separado do significado tributário (`resumo.descricaoCClassTrib`).
+   * `null` = NBS sem legenda na base (ex.: código inexistente).
+   */
+  detalheNbs?: { lc: string; descricaoNbs: string; descricaoLc: string } | null
   manual?: ReclassificacaoManual | null
   /**
    * Herança por família (NCM sem vínculo exato, enquadramento herdado dos

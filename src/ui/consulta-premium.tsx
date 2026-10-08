@@ -6,13 +6,12 @@
  * detalhes fiscais, simulação — mora em botões que abrem o `Modal` padrão
  * do sistema (glassmorphism, `.glass-box`).
  *
- * O modal "NCMs analisados" marca a referência preferida da IA com selo +
+ * O modal "NCMs analisados" marca a referência preferida da busca com selo +
  * linha cintilante em espectro (`LinhaPreferidaAurumAI`).
  */
 import { useState, type ReactNode } from 'react'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
 import { fmtNbs, fmtNcm, fmtPct, norm } from '@/domain/services/format'
-import { NOME_IA } from '@/domain/aurum-ai'
 import { Modal, Pill } from './kit'
 import { FontesAurumAI, IconeAurumPremium, LinhaPreferidaAurumAI } from './aurum-ai'
 import { anexoOficial, observacoesFiscais } from '@/domain/services/calculo'
@@ -82,7 +81,7 @@ export function ModalNcmsAnalisados({
   onFechar,
   itens,
   codigoPreferido,
-  titulo = 'NCMs analisados pela Aurum AI',
+  titulo = 'NCMs analisados pela busca automática',
   subtitulo,
   rotuloCodigo: rotuloProp,
   onEscolher,
@@ -90,7 +89,7 @@ export function ModalNcmsAnalisados({
   aberto: boolean
   onFechar: () => void
   itens: ItemNcmAnalisado[]
-  /** NCM que a IA usou como referência preferida — ganha selo + linha espectro. */
+  /** NCM que a busca usou como referência preferida — ganha selo + linha espectro. */
   codigoPreferido?: string | null
   titulo?: string
   subtitulo?: string
@@ -106,7 +105,7 @@ export function ModalNcmsAnalisados({
       aberto={aberto}
       onFechar={onFechar}
       titulo={`🔎 ${titulo}`}
-      subtitulo={subtitulo ?? `A ${NOME_IA} confrontou ${itens.length} hipótese(s) com a base oficial — a preferida está destacada.`}
+      subtitulo={subtitulo ?? `A busca automática confrontou ${itens.length} hipótese(s) com a base oficial — a preferida está destacada.`}
       largura="max-w-2xl"
     >
       <div className="consulta-ncm-lista">
@@ -121,14 +120,14 @@ export function ModalNcmsAnalisados({
                 onFechar()
               }}
               className={`consulta-ncm-item${preferido ? ' consulta-ncm-item--preferido' : ''}`}
-              title={preferido ? 'Referência preferida da IA' : onEscolher ? 'Clique para classificar oficialmente' : it.titulo}
+              title={preferido ? 'Referência preferida da busca' : onEscolher ? 'Clique para classificar oficialmente' : it.titulo}
             >
               <span className="consulta-ncm-item-topo">
                 <span className="font-mono text-sm font-black text-brand-700 dark:text-aurum-200">
                   {it.titulo}
                 </span>
                 {preferido ? (
-                  <span className="aurum-ai-selo-preferido" title={`A ${NOME_IA} usou este ${rotulo} como referência preferida`}>
+                  <span className="aurum-ai-selo-preferido" title={`A busca usou este ${rotulo} como referência preferida`}>
                     <IconeAurumPremium tamanho="sm" /> Referência preferida
                   </span>
                 ) : it.selo ? (
@@ -183,7 +182,7 @@ export function ModalRaciocinioIA({
     <Modal
       aberto={aberto}
       onFechar={onFechar}
-      titulo={`🧠 Por que este NCM? — ${NOME_IA}`}
+      titulo="🧠 Por que este NCM? — resultado automático"
       subtitulo="Raciocínio auditável da resposta, sem poluir o herói."
       largura="max-w-2xl"
     >
@@ -244,7 +243,7 @@ export function ModalAuditoriaIA({
     <Modal
       aberto={aberto}
       onFechar={onFechar}
-      titulo={`📚 Bases lidas e auditoria — ${NOME_IA}`}
+      titulo="📚 Bases lidas e auditoria — resultado automático"
       subtitulo="Prova de lastro oficial da decisão."
       largura="max-w-2xl"
     >
@@ -421,13 +420,37 @@ export function ModalDetalheFiscal({
         </div>
 
         {ehNbs ? (
-          <Secao titulo="Serviço / NBS" icone="🧾">
+          <Secao titulo="Serviço / NBS — o que é" icone="🧾">
             <div className="font-mono text-lg font-black tracking-tight text-slate-900 dark:text-white" title={digitos}>
               {codigoFormatado}
             </div>
             <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-700 dark:text-slate-200" title={descricaoServico}>
               {descricaoServico}
             </p>
+            {visivel.detalheNbs && (visivel.detalheNbs.descricaoNbs || visivel.detalheNbs.lc || visivel.detalheNbs.descricaoLc) ? (
+              <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 dark:border-slate-700 dark:bg-slate-950/40">
+                {visivel.detalheNbs.descricaoNbs ? (
+                  <p className="text-xs font-black leading-relaxed text-slate-700 dark:text-slate-200" title="Nome da atividade (ponte LC 116 → NBS)">
+                    🧾 {visivel.detalheNbs.descricaoNbs}
+                  </p>
+                ) : null}
+                <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                  📖 LC 116{visivel.detalheNbs.lc ? ` — item ${visivel.detalheNbs.lc}` : ''}
+                </p>
+                {visivel.detalheNbs.descricaoLc ? (
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400" title={visivel.detalheNbs.descricaoLc}>
+                    {visivel.detalheNbs.descricaoLc}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+                  Legenda do serviço (ponte LC 116 → NBS) — o enquadramento IBS/CBS está na seção abaixo.
+                </p>
+              </div>
+            ) : visivel.regraGeral ? (
+              <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+                NBS sem legenda na base — confira o código antes de escriturar. O enquadramento abaixo é a regra geral.
+              </p>
+            ) : null}
             <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
               {visivel.regraGeral ? 'Regra geral' : 'Vínculo oficial'}
               {visivel.manual ? ' · Classificado por você' : ''}
@@ -470,18 +493,36 @@ export function ModalDetalheFiscal({
 
         <Secao titulo="Enquadramento — Reforma (LC 214/2025)" icone="💠">
           <div className="flex flex-wrap items-stretch gap-2">
-            <div className="min-w-[7rem] flex-1 rounded-xl bg-slate-950 px-3 py-2 text-white dark:bg-white dark:text-slate-950">
+            <div
+              className="min-w-[7rem] flex-1 rounded-xl bg-slate-950 px-3 py-2 text-white dark:bg-white dark:text-slate-950"
+              title="CST — Código de Situação Tributária do IBS/CBS. Diz qual regime de tributação se aplica a esta operação."
+            >
               <div className="text-[10px] font-bold uppercase opacity-60">CST</div>
               <div className="font-mono text-lg font-black leading-tight" title={cst?.descricao}>{visivel.cst || '000'}</div>
+              <div className="mt-0.5 text-[10px] font-semibold normal-case leading-tight opacity-70">
+                Situação tributária IBS/CBS
+              </div>
             </div>
-            <div className="min-w-[7rem] flex-1 rounded-xl bg-slate-950 px-3 py-2 text-white dark:bg-white dark:text-slate-950">
+            <div
+              className="min-w-[7rem] flex-1 rounded-xl bg-slate-950 px-3 py-2 text-white dark:bg-white dark:text-slate-950"
+              title="cClassTrib — Classificação tributária. Detalha o tipo da operação dentro da Reforma (ex.: venda com benefício, regra geral)."
+            >
               <div className="text-[10px] font-bold uppercase opacity-60">cClassTrib</div>
               <div className="font-mono text-lg font-black leading-tight" title={cct?.nome ?? cct?.descricao ?? undefined}>{visivel.cClassTrib || '000001'}</div>
+              <div className="mt-0.5 text-[10px] font-semibold normal-case leading-tight opacity-70">
+                Tipo da operação na Reforma
+              </div>
             </div>
-            <div className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-center font-black ${temReducao ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
+            <div
+              className={`flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-center font-black ${temReducao ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}
+              title={temReducao ? `Redução de alíquota aplicada sobre a alíquota cheia: IBS −${fmtPct(redIBS)} / CBS −${fmtPct(redCBS)}. −100% = alíquota zero.` : 'Sem redução — vale a alíquota cheia do IBS/CBS (regra geral).'}
+            >
               <span title={`Redução IBS ${fmtPct(redIBS)} / CBS ${fmtPct(redCBS)}`}>
                 {temReducao ? reducaoTexto : 'Alíquota cheia'}
                 <span className="block text-[10px] font-bold uppercase opacity-80">IBS/CBS</span>
+                <span className="mt-0.5 block text-[10px] font-semibold normal-case leading-tight opacity-80">
+                  {temReducao ? 'Redução da alíquota' : 'Sem redução aplicada'}
+                </span>
               </span>
             </div>
           </div>

@@ -58,7 +58,7 @@ export interface OpcaoAnalisada {
 export interface AnaliseLoteIA {
   situacao: SituacaoAnaliseLote
   totalOpcoes: number
-  /** Índice (em `classificacoes`) que a IA sugere como mais provável. */
+  /** Índice (em `classificacoes`) que a busca sugere como mais provável. */
   maisProvavelIndice: number
   confianca: number
   nivel: NivelConfiancaIa
@@ -109,7 +109,7 @@ function tokensDoNome(nome: string): { originais: string[]; expandidos: Set<stri
   return { originais, expandidos }
 }
 
-/** Texto oficial de UMA opção (tudo que a IA pode ler — nada fora da base). */
+/** Texto oficial de UMA opção (tudo que a busca pode ler — nada fora da base). */
 function textoOficialDaOpcao(c: Classificacao): string {
   return [
     c.resumo?.descricaoCClassTrib ?? '',
@@ -331,7 +331,7 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
       confianca: 1,
       nivel: 'alta',
       titulo: 'Enquadramento manual seu — o sistema só aplicou',
-      resumo: `Você já reclassificou o NCM ${ncm} manualmente (${c ? `CST ${c.cst}/${c.cClassTrib}` : '—'}). A ${NOME_IA} não disputa: vale a sua regra, com a sua fonte — responsabilidade sua, sinalizada em toda a tela.`,
+      resumo: `Você já reclassificou o NCM ${ncm} manualmente (${c ? `CST ${c.cst}/${c.cClassTrib}` : '—'}). A busca automática não disputa: vale a sua regra, com a sua fonte — responsabilidade sua, sinalizada em toda a tela.`,
       porqueMultiplas: null,
       orientacaoEscolha: 'Se a regra manual continua valendo, mantenha. Para voltar à base oficial, exclua a reclassificação manual e reimporte.',
       alertas: [],
@@ -448,7 +448,7 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
     confianca = 0.35
     resumo =
       `O NCM ${ncm} tem ${classificacoes.length} tributações oficiais possíveis e a linha veio sem nome para confrontar — ` +
-      `a ${NOME_IA} manteve a ordem oficial (CST/cClassTrib crescente) como sugestão inicial. Abra cada opção e escolha pela operação real.`
+      `a busca manteve a ordem oficial (CST/cClassTrib crescente) como sugestão inicial. Abra cada opção e escolha pela operação real.`
     orientacao = 'Sem nome, sem desempate: leia cada base legal abaixo e escolha a que descreve a sua operação. A decisão final é sua.'
   } else if (gap >= 10) {
     confianca = 0.85
@@ -457,20 +457,20 @@ export function analisarItemLoteIA(entrada: EntradaAnaliseLote): AnaliseLoteIA {
       `O NCM ${ncm} tem ${classificacoes.length} tributações oficiais possíveis. ` +
       `Pelo nome (“${nomeSeguro.slice(0, 60)}”), a mais provável é a Opção ${sugerida + 1} (CST ${top.cst}/${top.cClassTrib}) — ` +
       `${top.termosCasados.length} termo(s) casaram (${top.termosCasados.join(', ')}), contra ${segunda?.score ? `${Math.round((segunda.score) / 10)} termo(s) na segunda colocada` : 'nenhum termo nas demais'}. Já deixei ela pré-selecionada, mas confira a base legal antes de salvar.`
-    orientacao = `Sugestão da ${NOME_IA}: Opção ${sugerida + 1} (maior aderência ao nome). Se a sua operação for outra, troque — a escolha final é sua e fica registrada na linha.`
+    orientacao = `Sugestão automática: Opção ${sugerida + 1} (maior aderência ao nome). Se a sua operação for outra, troque — a escolha final é sua e fica registrada na linha.`
   } else if (gap > 0) {
     confianca = 0.6
     const top = opcoes[sugerida]
     resumo =
       `O NCM ${ncm} tem ${classificacoes.length} tributações oficiais possíveis e o nome (“${nomeSeguro.slice(0, 60)}”) dá vantagem pequena à Opção ${sugerida + 1} ` +
       `(CST ${top.cst}/${top.cClassTrib} — ${top.termosCasados.join(', ') || 'aderência parcial'}). Vale conferir as demais antes de salvar.`
-    orientacao = `Sugestão fraca da ${NOME_IA}: Opção ${sugerida + 1} à frente por pouco. Compare as bases legais abaixo — em caso de dúvida, prevalece a operação real, não o nome.`
+    orientacao = `Sugestão fraca: Opção ${sugerida + 1} à frente por pouco. Compare as bases legais abaixo — em caso de dúvida, prevalece a operação real, não o nome.`
   } else {
     confianca = 0.35
     resumo =
       `O NCM ${ncm} tem ${classificacoes.length} tributações oficiais possíveis e o nome (“${nomeSeguro.slice(0, 60)}”) não desempatou ` +
       `(empate ou nenhum termo no texto oficial). Mantive a ordem oficial como ponto de partida — a escolha precisa da sua conferência.`
-    orientacao = `Empate técnico: a ${NOME_IA} não chutou — manteve a ordem oficial. Leia cada comentário (redução, anexo, base legal) e escolha pela operação real.`
+    orientacao = `Empate técnico: o sistema não chutou — manteve a ordem oficial. Leia cada comentário (redução, anexo, base legal) e escolha pela operação real.`
   }
 
   const alertas: string[] = []

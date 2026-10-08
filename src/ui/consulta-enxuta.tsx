@@ -11,6 +11,7 @@
  */
 import { useState, type ReactElement, type ReactNode } from 'react'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
+import { LINK_LC214 } from '@/domain/constants'
 import { fmtNbs, fmtNcm, norm } from '@/domain/services/format'
 import { observacoesFiscais } from '@/domain/services/calculo'
 import { FaixaTributaria } from './faixa-tributaria'
@@ -53,16 +54,21 @@ export function CartaoEnxuto({
   const redCBS = Number(r.percentualReducaoCBS ?? cct?.pRedCBS ?? 0)
   const anexo = r.anexo ?? visivel.referencia?.anexo ?? null
   const baseLegal = cct?.lcRef || visivel.baseLegal || null
-  const url = r.urlLegislacao ?? visivel.referencia?.urlLegislacao ?? null
+  // O mesmo cartão serve a NCM (8 dígitos) e NBS (9 dígitos, tela Serviços):
+  // rótulos e ficha acompanham o tipo do código.
+  const ehNbs = norm(visivel.codigo).length === 9
+  const url = r.urlLegislacao ?? visivel.referencia?.urlLegislacao ?? (ehNbs ? LINK_LC214 : null)
   const ehManual = visivel.manual != null
   const negado = bloqueios?.some((b) => b.permitido === false) ?? false
   const obs = observacoesFiscais(visivel.codigo, visivel, nomenclatura ?? null)
   const [fiscalAberto, setFiscalAberto] = useState(false)
-  // O mesmo cartão serve a NCM (8 dígitos) e NBS (9 dígitos, tela Serviços):
-  // rótulos e ficha acompanham o tipo do código.
-  const ehNbs = norm(visivel.codigo).length === 9
   const rotuloCodigo = ehNbs ? 'NBS' : 'NCM'
   const codigoFormatado = visivel.codigoFormatado || (ehNbs ? fmtNbs(visivel.codigo) : fmtNcm(visivel.codigo))
+  // Legenda do serviço (NBS): nome da atividade + item LC 116 + texto do item,
+  // separados do significado tributário (que mora na faixa + CST/cClassTrib
+  // abaixo). `descricaoNbs` é o "o que é este serviço" (ex.: "Serviços
+  // cirúrgicos"); sem ele o cartão mostra só o juridiquês do vínculo.
+  const legendaNbs = ehNbs ? (visivel.detalheNbs ?? null) : null
 
   return (
     <article className={`panel animate-fade-up p-4 sm:p-5 ${destaqueIA ? 'aurum-ai-destaque' : ''}`} aria-label={`${rotuloCodigo} ${codigoFormatado} — ${r.descricaoCClassTrib ?? 'classificação'}`}>
@@ -76,10 +82,78 @@ export function CartaoEnxuto({
       <SeletorTributacao cl={cl} opcao={opcao} onChange={setOpcao} />
 
       <div className="mt-3">
-        <div className="font-mono text-xl font-black tracking-tight text-brand-700 dark:text-aurum-200">
-          {codigoFormatado}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="font-mono text-xl font-black tracking-tight text-brand-700 dark:text-aurum-200">
+            {codigoFormatado}
+          </div>
+          {!ehNbs && nomenclatura ? (
+            nomenclatura.dataFim ? (
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-800 dark:bg-red-950/60 dark:text-red-200">
+                ⛔ Extinto em {nomenclatura.dataFim}
+              </span>
+            ) : (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
+                ✓ Vigente
+              </span>
+            )
+          ) : null}
         </div>
-        <div className="mt-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{visivel.descricao || nomenclatura?.descricao || '—'}</div>
+        {!ehNbs && nomenclatura?.descricao ? (
+          <div
+            className="mt-2 flex items-start gap-2 rounded-xl border border-brand-200/60 border-l-4 border-l-brand-500 bg-brand-50/70 px-3 py-2 dark:border-aurum-900/50 dark:border-l-aurum-400 dark:bg-brand-950/30"
+            title="Descrição oficial do NCM na nomenclatura vigente"
+          >
+            <span aria-hidden="true" className="mt-0.5 shrink-0 text-base leading-none">📦</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] font-black uppercase tracking-wider text-brand-600/80 dark:text-aurum-200/70">
+                Descrição do NCM pela tabela Siscomex
+              </div>
+              <p className="mt-0.5 text-[15px] font-semibold leading-relaxed text-brand-900 dark:text-brand-100">
+                {nomenclatura.descricao}
+              </p>
+            </div>
+          </div>
+        ) : null}
+        {(() => {
+          const fiscal = (visivel.descricao || '').trim()
+          const oficial = (!ehNbs && nomenclatura?.descricao ? nomenclatura.descricao : '').trim()
+          if (!fiscal || (oficial && fiscal === oficial)) return null
+          return (
+            <div className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{visivel.descricao}</div>
+          )
+        })()}
+        {ehNbs && legendaNbs && (legendaNbs.descricaoNbs || legendaNbs.lc || legendaNbs.descricaoLc) ? (
+          <div
+            className="mt-2 flex items-start gap-2 rounded-xl border border-brand-200/60 border-l-4 border-l-brand-500 bg-brand-50/70 px-3 py-2 dark:border-aurum-900/50 dark:border-l-aurum-400 dark:bg-brand-950/30"
+            title="Descrição do NBS — nome da atividade (ponte LC 116 → NBS)"
+          >
+            <span aria-hidden="true" className="mt-0.5 shrink-0 text-base leading-none">🧾</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] font-black uppercase tracking-wider text-brand-600/80 dark:text-aurum-200/70">
+                Descrição do NBS — nome da atividade
+              </div>
+              {legendaNbs.descricaoNbs ? (
+                <p className="mt-0.5 text-[15px] font-semibold leading-relaxed text-brand-900 dark:text-brand-100">
+                  {legendaNbs.descricaoNbs}
+                </p>
+              ) : null}
+              {legendaNbs.lc || legendaNbs.descricaoLc ? (
+                <p
+                  className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400"
+                  title={legendaNbs.descricaoLc || undefined}
+                >
+                  <span className="font-bold">LC 116{legendaNbs.lc ? ` — item ${legendaNbs.lc}` : ''}:</span>{' '}
+                  {legendaNbs.descricaoLc}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        {ehNbs && !visivel.detalheNbs && visivel.regraGeral ? (
+          <div className="mt-1 text-[11px] leading-relaxed text-slate-400">
+            NBS sem legenda na base — confira o código antes de escriturar.
+          </div>
+        ) : null}
       </div>
       <p className="mt-1 font-mono text-xs text-slate-500 dark:text-slate-400">
         CST {visivel.cst || '000'} · cClassTrib {visivel.cClassTrib || '000001'}

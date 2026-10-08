@@ -1,10 +1,12 @@
 /**
  * Validação determinística absoluta (Phase 6 / 06-09, IA-09).
  *
- * Um worker alucinando o código inexistente `99999999` (fora da base
- * homologada) NUNCA chega à UI: o gate (`classificarComIa`) exige código
- * homologado na nomenclatura vigente via `resolverClassificacoes`
- * (única fonte de verdade) e cai em NÃO SEI.
+ * Sem modelo LLM, o gate (`classificarComIa`) decide SEMPRE pelo seletor
+ * local ancorado e exige código homologado na nomenclatura vigente via
+ * `resolverClassificacoes` (única fonte de verdade). Um mock de worker
+ * alucinando (`99999999`, fora da base homologada) é inócuo: o gate nem
+ * consulta o bridge — e se um dia consultar, o código fora da base cai em
+ * NÃO SEI, nunca chega à UI.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -41,21 +43,24 @@ describe('validacao-deterministica: alucinação bloqueada', () => {
     expect(v.nomenclatura).toBeNull()
   })
 
-  it('gate recusa a alucinação mesmo com worker "confiante" (NÃO SEI)', async () => {
-    // 'semeadura' gera candidato real → worker é chamado e alucina.
+  it('gate ignora worker mockado e decide pelo seletor local (10051000 validado)', async () => {
+    // 'semeadura' gera candidato real → sem LLM, o seletor local decide
+    // sozinho (mock de `bridge.ia.classificar` acima é inócuo: o gate nem
+    // consulta o bridge). O alucinado nunca aparece na decisão.
     let usouWorker = false
     const g = await classificarComIa({ descricao: 'semeadura' }, { aoWorker: (u) => { usouWorker = u } })
     expect(usouWorker).toBe(true)
-    expect(g.codigoEscolhido).toBe(ALUCINADO)
-    expect(g.ncmValidado).toBeNull()
+    expect(g.codigoEscolhido).toBe('10051000')
+    expect(g.ncmValidado).toBe('10051000')
+    expect(JSON.stringify(g)).not.toContain(ALUCINADO)
   })
 
-  it('repositório nunca exibe o alucinado (sem decisão, sem cálculo)', async () => {
+  it('repositório exibe o código validado (com decisão, cálculo e lastro)', async () => {
     const r = await classificarComIA('semeadura')
-    expect(r.codigoEscolhido).toBeNull()
-    expect(r.decisao).toBeNull()
-    expect(r.nomenclatura).toBeNull()
-    expect(r.calculo).toBeNull()
+    expect(r.codigoEscolhido).toBe('10051000')
+    expect(r.decisao).not.toBeNull()
+    expect(r.nomenclatura?.codigo).toBe('10051000')
+    expect(r.calculo).not.toBeNull()
     expect(JSON.stringify(r)).not.toContain(ALUCINADO)
   })
 })

@@ -1,5 +1,5 @@
 /**
- * Tela **Classificação em lote** (SPEC §6) — com Aurum AI assistida.
+ * Tela **Classificação em lote** (SPEC §6) — com classificação assistida.
  *
  * Fluxo 1 · 2 · 3:
  * 1. Enviar CSV/XLSX (COD/SKU, NOME DO PRODUTO, NCM, CFOP, CST, PIS, COFINS);
@@ -15,7 +15,6 @@
  * (o que será salvo × o que ficará de fora + aceite explícito do usuário).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { NOME_IA } from '@/domain/aurum-ai'
 import { EMITENTE_PADRAO } from '@/domain/entities'
 import { fmtNcm } from '@/domain/services/format'
 import type { AnaliseLoteIA } from '@/domain/services/analise-lote-ia'
@@ -43,7 +42,6 @@ import {
 } from '@/ui/aurum-ai'
 import { BarraProgresso, Btn, Check, Modal, Painel, Texto } from '@/ui/kit'
 import { Entrada, Revelar } from '@/ui/motion'
-import { AurinhaLote } from '@/ui/aurinha-lote'
 import { Campo, Olho, Secao, SecaoInformacoesAdicionais } from '@/ui/detalhes'
 
 /**
@@ -56,7 +54,7 @@ type FiltroLote = 'todos' | 'multiplas' | 'regra-geral' | 'invalidos' | 'unicas'
 
 const FILTROS: { id: FiltroLote; rotulo: string; dica: string }[] = [
   { id: 'todos', rotulo: 'Todos', dica: 'Todas as linhas processadas' },
-  { id: 'multiplas', rotulo: 'Escolha assistida', dica: 'NCM com 2+ tributações — a IA sugere a mais provável' },
+  { id: 'multiplas', rotulo: 'Escolha assistida', dica: 'NCM com 2+ tributações — o sistema sugere a mais provável' },
   { id: 'regra-geral', rotulo: 'Regra geral', dica: 'Sem vínculo oficial — tributação integral vigente' },
   { id: 'invalidos', rotulo: 'Inválidos', dica: 'NCM fora do padrão de 8 dígitos' },
   { id: 'unicas', rotulo: 'Únicas', dica: 'Tributação única confirmada' },
@@ -155,23 +153,23 @@ export function Lote() {
               <h2 className="text-base font-black tracking-tight sm:text-lg">
                 Classificação em lote
               </h2>
-              <SeloAurumAI variante="compacto" titulo={`${NOME_IA} assistida: nome + NCM = tributação provável, sempre validada pela base oficial`} />
+              <SeloAurumAI variante="compacto" titulo="Classificação assistida: nome + NCM = tributação provável, sempre validada pela base oficial" />
             </div>
             <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
               Envie CSV/Excel com colunas COD/SKU, NOME DO PRODUTO, NCM, CFOP, CST, PIS, COFINS.
-              A {NOME_IA} lê o <strong>nome + NCM</strong> de cada linha: com 1 tributação ela confirma;
+              A busca automática lê o <strong>nome + NCM</strong> de cada linha: com 1 tributação ela confirma;
               com 2+ ela explica <strong>por que há várias</strong> e
               <strong> pré-seleciona a mais provável</strong> — você confere e confirma.
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <AtribuicaoAurumAI detalhe="nome + NCM = tributação provável" />
-              <span className="lote-garantia" title="A Aurum AI roda 100% local neste computador: lê o nome + NCM e sugere entre as tributações oficiais da base do sistema.">
-                💻 Aurum AI — sua inteligência artificial rodando local
+              <span className="lote-garantia" title="A classificação em lote roda 100% local neste computador: lê o nome + NCM e indica entre as tributações oficiais da base do sistema.">
+                💻 Classificação automática — 100% local
               </span>
             </div>
           </div>
           <ol className="lote-steps" aria-label="Etapas da importação em lote">
-            {['Enviar', 'Revisar IA', 'Salvar'].map((rot, i) => {
+            {['Enviar', 'Revisar', 'Salvar'].map((rot, i) => {
               const n = i + 1
               const estado = n < etapa || (resumo && n === 2) ? 'feito' : n === etapa ? 'atual' : 'todo'
               return (
@@ -204,7 +202,10 @@ export function Lote() {
 
           {processando ? (
             <div className="lote-processando mt-4" role="status" aria-live="polite">
-              <AurinhaLote progresso={progresso} />
+              <div className="flex flex-wrap items-baseline gap-x-2 text-xs font-bold">
+                <span>{progresso < 40 ? 'Lendo planilha…' : progresso < 75 ? 'Resolvendo NCMs na base oficial…' : 'Analisando nome × tributação…'}</span>
+                <span className="num font-mono text-slate-500">{`${Math.max(0, Math.min(100, Math.round(progresso)))}%`}</span>
+              </div>
               <div className="mt-2">
                 <BarraProgresso pct={progresso} etapa="Nada é salvo antes da sua revisão — pode acompanhar." />
               </div>
@@ -308,7 +309,7 @@ function ResumoHero({ resumo }: { resumo: ResumoLote }) {
   const cards = [
     { rot: 'Linhas', val: resumo.itens.length, sub: resumo.nomeArquivo, tom: '' as const, icone: '📄' },
     { rot: 'Classificadas', val: resumo.comClassificacao, sub: `${unicas} únicas confirmadas`, tom: 'ok' as const, icone: '✅' },
-    { rot: `✨ ${NOME_IA} sugere`, val: resumo.ambiguos, sub: `${assistidas} com sugestão forte`, tom: 'ia' as const, icone: '✨' },
+    { rot: '✨ Sugestão automática', val: resumo.ambiguos, sub: `${assistidas} com sugestão forte`, tom: 'ia' as const, icone: '✨' },
     { rot: 'Regra geral', val: resumo.regraGeral, sub: 'tributação integral vigente', tom: 'warn' as const, icone: '⚡' },
     { rot: 'Revisar', val: resumo.semNcm, sub: `${resumo.semNcm} inválidos`, tom: 'err' as const, icone: '👁' },
   ]
@@ -397,7 +398,7 @@ function BarraFerramentas({
         </div>
       </div>
       <p className="lote-toolbar-dica">
-        ✨ A sugestão da {NOME_IA} já vem <strong>pré-selecionada</strong> em cada linha — abra a linha, leia o porquê e confirme ou troque. <strong>Nada é salvo sem a sua revisão e aceite no “Revisar e salvar…”.</strong>
+        ✨ O resultado automático já vem <strong>pré-selecionado</strong> em cada linha — abra a linha, leia o porquê e confirme ou troque. <strong>Nada é salvo sem a sua revisão e aceite no “Revisar e salvar…”.</strong>
       </p>
     </Painel>
   )
@@ -559,7 +560,7 @@ function ModalRevisaoSalvamento({
                 <li>⚡ {alertas.regraGeral.length} em regra geral (tributação integral vigente — sem vínculo oficial).</li>
               ) : null}
               {alertas.trocadas.length ? (
-                <li>✨ {alertas.trocadas.length} onde você trocou a sugestão da {NOME_IA} — vale a sua escolha.</li>
+                <li>✨ {alertas.trocadas.length} onde você trocou o resultado automático — vale a sua escolha.</li>
               ) : null}
             </ul>
           </div>
@@ -655,7 +656,7 @@ function TabelaLote({
                 <th>SKU · Produto · NCM</th>
                 <th>Tributação</th>
                 <th>
-                  <span className="inline-flex items-center gap-1">✨ {NOME_IA}</span>
+                  <span className="inline-flex items-center gap-1">✨ Automático</span>
                 </th>
                 <th className="th-r">Detalhe</th>
               </tr>
@@ -713,7 +714,7 @@ function TabelaLote({
                 <tr>
                   <td colSpan={4} className="px-3 py-3 text-center text-[11px] text-slate-500">
                     Exibindo todas as {linhas.length} linhas filtradas ({resumo.itens.length} no arquivo).
-                    A seta abre a análise da {NOME_IA}; 👁 abre CFOP · CST · PIS · COFINS e Reforma.
+                    A seta abre a análise automática; 👁 abre CFOP · CST · PIS · COFINS e Reforma.
                   </td>
                 </tr>
               )}
@@ -793,7 +794,7 @@ function LinhaLote({
   )
 }
 
-/** Selo compacto da IA na grade: confiança + estado da sugestão. */
+/** Selo compacto do resultado automático na grade: confiança + estado. */
 function CelulaIA({ item, indiceEscolhido, trocouSugestao }: { item: ItemLote; indiceEscolhido: number; trocouSugestao: boolean }) {
   const a = item.analiseIA
   if (!a) return <span className="text-[11px] text-slate-400">—</span>
@@ -838,11 +839,11 @@ function CelulaIA({ item, indiceEscolhido, trocouSugestao }: { item: ItemLote; i
       <span aria-hidden="true">✨</span> sugere Opção {a.maisProvavelIndice + 1}/{a.totalOpcoes}
       <BarraConfiancaAurumAI valor={a.confianca} compact />
       {trocouSugestao ? (
-        <span className="lote-ia-trocou" title={`Você escolheu a Opção ${indiceEscolhido + 1}; a IA sugeria a Opção ${a.maisProvavelIndice + 1}. A decisão final é sua.`}>
+        <span className="lote-ia-trocou" title={`Você escolheu a Opção ${indiceEscolhido + 1}; o sistema sugeria a Opção ${a.maisProvavelIndice + 1}. A decisão final é sua.`}>
           você optou pela {indiceEscolhido + 1}
         </span>
       ) : (
-        <span className="lote-ia-ok" title="A sugestão da IA está selecionada — confira a análise abrindo a linha.">
+        <span className="lote-ia-ok" title="O resultado automático está selecionado — confira a análise abrindo a linha.">
           pré-selecionada ✓
         </span>
       )}
@@ -870,7 +871,7 @@ function PainelAnaliseIA({
   const sugerida = a.maisProvavelIndice
 
   return (
-    <div className="lote-analise animate-fade-up" aria-label={`Análise da ${NOME_IA} para ${item.codigo || 'item'}`}>
+    <div className="lote-analise animate-fade-up" aria-label={`Análise automática para ${item.codigo || 'item'}`}>
       <div className="lote-analise-cab">
         <SeloAurumAI variante="compacto" />
         <span className="text-[11px] font-black uppercase tracking-wide">{a.titulo}</span>
@@ -918,7 +919,7 @@ function PainelAnaliseIA({
                   }
                 }}
                 className={`lote-opcao${selecionada ? ' is-selecionada' : ''}${ehSugerida ? ' is-sugerida' : ''}`}
-                aria-label={`Opção ${op.indice + 1}: CST ${op.cst}, cClassTrib ${op.cClassTrib}${ehSugerida ? ' (sugestão da IA)' : ''}`}
+                aria-label={`Opção ${op.indice + 1}: CST ${op.cst}, cClassTrib ${op.cClassTrib}${ehSugerida ? ' (resultado automático)' : ''}`}
               >
                 <span className="lote-opcao-topo">
                   <span className="lote-opcao-radio" aria-hidden="true">{selecionada ? '●' : '○'}</span>
@@ -926,12 +927,12 @@ function PainelAnaliseIA({
                     Opção {op.indice + 1} · {op.cst} · {op.cClassTrib}
                   </span>
                   {ehSugerida ? (
-                    <span className="lote-opcao-selo" title="Sugestão da IA pela aderência do nome — confira a base legal antes de salvar.">
-                      ✨ sugere a {NOME_IA}
+                    <span className="lote-opcao-selo" title="Resultado automático pela aderência do nome — confira a base legal antes de salvar.">
+                      ✨ sugestão automática
                     </span>
                   ) : null}
                   {selecionada && !ehSugerida ? (
-                    <span className="lote-opcao-selo lote-opcao-selo--sua" title="Você trocou a sugestão da IA — a decisão final é sua e fica registrada.">
+                    <span className="lote-opcao-selo lote-opcao-selo--sua" title="Você trocou o resultado automático — a decisão final é sua e fica registrada.">
                       sua escolha
                     </span>
                   ) : null}
@@ -1078,9 +1079,9 @@ function ModalLoteDetalhe({ item, indiceOriginal, onFechar }: { item: ItemLote |
 }
 
 /**
- * Célula "Classificação Reforma" — 3 estados da v1 (SPEC R6.10) + selo IA:
+ * Célula "Classificação Reforma" — 3 estados da v1 (SPEC R6.10) + selo automático:
  * NCM inválido → regra geral (âmbar) → uma opção → seletor de N opções
- * (agora com ✨ na sugestão da IA).
+ * (agora com ✨ no resultado automático).
  */
 function celulaLote(
   item: ItemLote,
@@ -1135,7 +1136,7 @@ function celulaLote(
     return (
       <div className="lote-celula min-w-[170px]">
         <div className="font-mono text-[11px] font-bold">
-          {c.cst} · {c.cClassTrib} <span className="lote-ok" title={a?.resumo ?? 'Tributação única oficial.'}>✓ IA</span>
+          {c.cst} · {c.cClassTrib} <span className="lote-ok" title={a?.resumo ?? 'Tributação única oficial.'}>✓ auto</span>
           {c.heranca ? (
             <span className="lote-sugere" title={`Enquadramento herdado por família (${c.heranca.origem} ${c.heranca.prefixo}, ${c.heranca.irmaosVinculados} irmãos) — sem vínculo exato na base.${c.heranca.aConfirmar ? ' Confirme antes de operar.' : ''}`}>
               {' '}🧬 família
@@ -1156,7 +1157,7 @@ function celulaLote(
           ⚠ {item.classificacoes.length} opções
         </span>
         {a ? (
-          <span className="lote-sugere" title={`A ${NOME_IA} sugere a Opção ${a.maisProvavelIndice + 1} pelo nome — já pré-selecionada. ${a.resumo}`}>
+          <span className="lote-sugere" title={`O sistema sugere a Opção ${a.maisProvavelIndice + 1} pelo nome — já pré-selecionada. ${a.resumo}`}>
             ✨ sugere {a.maisProvavelIndice + 1}
           </span>
         ) : null}
@@ -1191,8 +1192,8 @@ function paraLinhaLote(it: ItemLote): LinhaLote {
         : it.regraGeral
           ? 'regra geral'
           : it.classificacoes.length > 1
-            ? `${it.classificacoes.length} opções · ${NOME_IA} sugere Opção ${(a?.maisProvavelIndice ?? 0) + 1} · escolha do usuário`
-            : `classificada${a ? ` · ${NOME_IA} confirma` : ''}`
+            ? `${it.classificacoes.length} opções · automática sugere Opção ${(a?.maisProvavelIndice ?? 0) + 1} · escolha do usuário`
+            : `classificada${a ? ' · automática confirma' : ''}`
 
   return {
     linha: it.indice,

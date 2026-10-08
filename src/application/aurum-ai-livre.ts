@@ -1,15 +1,9 @@
 /**
- * Aurum AI livre — conversa geral com as travas do motor determinístico (IA-06).
- *
- * Estável por construção:
- * - o motor continua fonte da verdade fiscal (NCM/NBS/valores/artigos);
- * - a IA livre só verbaliza papo leve/generico/capacidades/ajuda;
- * - sem modelo real (`bridge.ia.conversar` ausente ou `ok:false`) cai no
- *   template determinístico (fail-closed, nunca mock verbalizando);
- * - sanitização remove NCM/NBS/valores inventados e corta thinking vazado.
+ * Modelo LLM removido: sem conversa livre. Retorna sempre `null` para o
+ * chamador cair no template determinístico. Mantido como stub tipado para
+ * não quebrar o orquestrador (fora da rota UI) nem os testes de sanitização.
  */
 
-import { bridge } from '@/infrastructure/bridge'
 import type { MensagemHistorico } from './aurum-ai-tools'
 
 /** Intenções liberadas para verbalização livre (nada fiscal com número). */
@@ -47,7 +41,7 @@ export function montarSistemaLivre(args?: { nome?: string | null; modo?: string 
   void args?.modo
   const nome = args?.nome ? ` O usuário é ${args.nome}.` : ''
   return (
-    `Você é a Aurinha, assistente fiscal do Aurum Tax NCM (NCM/NBS/CNAE/CNPJ, IBS/CBS, Simples/DAS/Fator R, XMLs, relatórios). Responda em português, curto (1-3 linhas), simpático.${nome}\n` +
+    `Você é o assistente fiscal do Aurum Tax NCM (fiscal: NCM/NBS/CNAE/CNPJ, IBS/CBS, Simples/DAS/Fator R, XMLs, relatórios). Responda em português, curto (1-3 linhas), simpático.${nome}\n` +
     `Nunca invente códigos, valores ou artigos de lei. Se pedirem fiscal, peça 1 detalhe. Nunca ofereça "pesquisas, resumos, tradução" como principal — seu forte é o fiscal deste sistema. Nunca emita tokens de template (<|im_start|>, <|im_end|>, papéis user/assistant/system) nem repita a pergunta do usuário.`
   )
 }
@@ -166,9 +160,8 @@ export function sanitizarAbertura(texto: string): string | null {
 }
 
 /**
- * Tenta verbalizar com o modelo embarcado (qualquer GGUF via camada de
- * compatibilidade). Retorna `null` quando indisponível ou sanitização
- * barrou (o chamador usa o template determinístico).
+ * Modelo LLM removido: sempre `null` (o chamador usa o template
+ * determinístico). Assinatura preservada para o orquestrador e testes.
  */
 export async function conversarLivre(args: {
   pergunta: string
@@ -178,31 +171,6 @@ export async function conversarLivre(args: {
   fatos?: { codigos?: string[]; valores?: string[] }
   temperature?: number
 }): Promise<{ texto: string; motivo: string } | null> {
-  const conversar = bridge?.ia?.conversar
-  if (typeof conversar !== 'function') return null
-  try {
-    // C-008: histórico e pergunta sem PII antes do IPC/modelo
-    const { removerPII } = await import('@/ai/guards')
-    const r = await conversar(removerPII(args.pergunta), {
-      sistema: args.sistema ?? montarSistemaLivre(),
-      historico: (args.historico ?? []).slice(-6).map((m) => ({ papel: m.papel, texto: removerPII(String(m.texto)).slice(0, 500) })),
-      think: args.think === true,
-      maxTokens: args.think ? 448 : 280,
-      temperature: args.temperature ?? 0.35,
-    })
-    if (!r || !r.ok || !r.texto) return null
-    // Modo teste: mostra o cru do seu modelo (DebugIA) — C-009: carimbado e sem PII,
-    // nunca alimenta relatório/backup nem vale como fato fiscal.
-    if (modoTesteLivre()) {
-      const { removerPII: strip } = await import('@/ai/guards')
-      const cru = strip(String(r.texto)).slice(0, 1200).trim()
-      if (!cru) return null
-      return { texto: `[TESTE — NÃO-VALIDADO, sem valor fiscal] ${cru}`, motivo: `${r.motivo ?? 'llm-livre'}+bruto` }
-    }
-    const limpo = sanitizarLivre(r.texto, args.fatos)
-    if (!limpo) return null
-    return { texto: limpo, motivo: r.motivo ?? 'llm-livre' }
-  } catch {
-    return null
-  }
+  void args
+  return null
 }

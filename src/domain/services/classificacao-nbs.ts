@@ -28,11 +28,31 @@ export function interpretarEntradaNbs(v: unknown): EntradaNbs {
 export async function classificacaoRegraGeralNbs(codigo: unknown): Promise<Classificacao> {
   const ctx = await contextoRegraGeral()
   const cl = montarRegraGeral(norm(codigo), ctx)
+  // Regra geral NÃO tem vínculo em `db.nbs` (só os 122 com benefício) — sem
+  // este passo a `descricao` vira o texto genérico do cClassTrib
+  // ("Situações tributadas integralmente…") e o usuário não identifica o
+  // serviço. Busca a legenda na ponte LC 116 → NBS (`db.lcNbs`, 676 NBS):
+  // `descricao` passa a ser o nome do serviço; o significado tributário
+  // continua em `resumo.descricaoCClassTrib`.
+  let detalheNbs: Classificacao['detalheNbs'] = null
+  let descricao = cl.descricao
+  try {
+    const { buscarLegendaNbs } = await import('@/infrastructure/base/classificacao-repo')
+    const legenda = await buscarLegendaNbs(norm(codigo))
+    if (legenda && (legenda.descricaoNbs || legenda.descricaoLc)) {
+      detalheNbs = legenda
+      descricao = legenda.descricaoNbs || legenda.descricaoLc
+    }
+  } catch {
+    /* legenda é enriquecimento — nunca quebra a regra geral */
+  }
   return {
     ...cl,
     codigoFormatado: fmtNbs(cl.codigo),
     cst: cl.cst || REGRA_GERAL_NBS.cst,
     cClassTrib: cl.cClassTrib || REGRA_GERAL_NBS.cClassTrib,
+    descricao,
+    detalheNbs,
     regraGeral: true,
   }
 }

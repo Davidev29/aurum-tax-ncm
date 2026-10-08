@@ -3,13 +3,12 @@
  *
  * Dois modos:
  * - **Manual**: input único (NBS 9 dígitos, nome do serviço ou descrição) com
- *   fan-out exato + nome + ✨ Aurum AI, e painel oficial 0/1/N;
+ *   fan-out exato + nome + ✨ busca automática, e painel oficial 0/1/N;
  * - **Por CNPJ**: digita o CNPJ → BrasilAPI → 1 cartão elegante por CNAE com
  *   a tributação possível (NBS + CST/cClassTrib + alíquotas + confiança).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Classificacao } from '@/domain/entities'
-import { NOME_IA } from '@/domain/aurum-ai'
 import { fmtCnpj, fmtNbs, MASK, norm } from '@/domain/services/format'
 import { detectarIntencaoConsulta } from '@/domain/services/detector-consulta'
 import { ModalSalvarClass } from '@/modais/pagina'
@@ -26,7 +25,7 @@ import {
 } from '@/ui/aurum-ai'
 import { Btn, Painel, Texto, Vazio } from '@/ui/kit'
 import { Entrada, Revelar } from '@/ui/motion'
-import { CartaoCnae, DetalhesPerguntasServicos, FichaEmpresaCnpj, BlocoContextoNbs } from '@/ui/servicos'
+import { CartaoCnae, DetalhesPerguntasServicos, DropdownElegante, FichaEmpresaCnpj, BlocoContextoNbs, BotaoVerNaLei, LegendaAtividadeNbs } from '@/ui/servicos'
 
 const DEBOUNCE_MS = 3000
 
@@ -211,7 +210,7 @@ export function ConsultaServicos() {
                 {classificando ? (
                   <span className="flex items-center gap-1.5 font-semibold text-brand-600 dark:text-aurum-200" role="status" aria-live="polite">
                     <IconeAurumPremium tamanho="sm" />
-                    {NOME_IA} pensando…
+                    Buscando…
                   </span>
                 ) : carregando || buscandoTexto ? (
                   <span className="flex items-center gap-1.5 font-semibold text-brand-600 dark:text-aurum-200">
@@ -224,7 +223,7 @@ export function ConsultaServicos() {
               <details className="mt-3 text-xs text-slate-500 dark:text-slate-400">
                 <summary className="cursor-pointer font-semibold">
                   <span className="inline-flex items-center gap-1.5">
-                    <IconeAurumPremium tamanho="sm" /> Refinar resposta da IA (tomador, local — opcional)
+                    <IconeAurumPremium tamanho="sm" /> Refinar resposta (tomador, local — opcional)
                   </span>
                 </summary>
                 <div className="mt-2 grid gap-2 sm:grid-cols-3">
@@ -241,7 +240,7 @@ export function ConsultaServicos() {
                 <div className="mt-2">
                   <Btn tam="sm" variante="primary" disabled={!entrada.trim()} carregando={classificando} onClick={() => void classificarDescricao({ descricao: entrada, tomador: destinatario, local: localPrestacaoValor, uso: usoServico })}>
                     <span className="inline-flex items-center gap-1.5">
-                      <IconeAurumPremium tamanho="sm" /> Perguntar à {NOME_IA}
+                      <IconeAurumPremium tamanho="sm" /> Classificar descrição
                     </span>
                   </Btn>
                 </div>
@@ -284,20 +283,20 @@ export function ConsultaServicos() {
             <Vazio
               icone="🔍"
               titulo="Busque por código, nome ou descrição"
-              texto="Ex.: 122.011.100 (valida na base oficial) · aula de inglês (a ✨ Aurum AI responde primeiro) · atendimento médico domiciliar."
+              texto="Ex.: 122.011.100 (valida na base oficial) · aula de inglês (a ✨ busca automática responde primeiro) · atendimento médico domiciliar."
             />
           </Entrada>
         ) : (
           <Revelar className="mt-6 space-y-4">
             {prioridadeIA ? (
-              <section aria-label={`Resposta da ${NOME_IA}`} className="space-y-3">
+              <section aria-label="Resposta automática" className="space-y-3">
                 <h3 className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   <span className="inline-flex items-center gap-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200">
-                    <IconeAurumPremium tamanho="sm" /> Resposta da {NOME_IA}
+                    <IconeAurumPremium tamanho="sm" /> Resposta automática
                   </span>
                   {via === 'deterministico' ? (
                     <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black normal-case text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                      determinístico · sem worker
+                      determinístico
                     </span>
                   ) : null}
                   {classificando ? <StatusAurumAI estado="processando">analisando…</StatusAurumAI> : null}
@@ -314,7 +313,7 @@ export function ConsultaServicos() {
                   </MolduraAurumAI>
                 ) : (
                   <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/40">
-                    Descreva com mais contexto para a {NOME_IA} sugerir o NBS — sempre ancorada na base oficial.
+                    Descreva com mais contexto para a busca automática sugerir o NBS — sempre ancorada na base oficial.
                   </div>
                 )}
                 {(via === 'ia' || via === 'grafo' || via === 'grafo+ia') && decisaoIa ? (
@@ -346,7 +345,7 @@ export function ConsultaServicos() {
                           tam="sm"
                           onClick={() => {
                             void usarSugestaoIa()
-                            toast(`Sugestão da ${NOME_IA} enviada para classificação oficial.`, 'ok')
+                            toast('Resultado enviado para classificação oficial.', 'ok')
                           }}
                         >
                           Classificar {fmtNbs(codigoIa ?? '')} oficialmente
@@ -405,12 +404,12 @@ export function ConsultaServicos() {
             ) : null}
 
             {(mostrarExata && !ehExatoNbs && norm(entrada).length >= 2) || mostrarNome ? (
-              <details className="rounded-xl border border-slate-200 bg-slate-50/40 px-3 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400">
-                <summary className="cursor-pointer font-bold">
-                  🔎 Outras correspondências na base oficial
-                  {sugestoes.length || resultadosTexto.length ? ` (${sugestoes.length + resultadosTexto.length})` : ''}
-                </summary>
-                <div className="mt-2 space-y-1">
+              <DropdownElegante
+                icone="🔎"
+                titulo="Outras correspondências na base oficial"
+                contagem={sugestoes.length + resultadosTexto.length}
+              >
+                <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
                   {sugestoes.map((s) => (
                     <button
                       key={s.codigo}
@@ -437,22 +436,19 @@ export function ConsultaServicos() {
                     <p className="px-2 py-1">Nenhuma correspondência para esta busca.</p>
                   ) : null}
                 </div>
-              </details>
+              </DropdownElegante>
             ) : null}
 
             {!prioridadeIA && mostrarDescricao && sugestao && !sugestao.foraDeEscopo ? (
-              <details className="rounded-xl border border-violet-200 bg-violet-50/40 px-3 py-2 text-xs text-slate-600 dark:border-violet-900 dark:bg-violet-950/20 dark:text-slate-300">
-                <summary className="cursor-pointer font-bold">
-                  <span className="inline-flex items-center gap-1.5">
-                    <IconeAurumPremium tamanho="sm" /> Ver resposta da {NOME_IA} para este texto
-                  </span>
-                </summary>
-                <div className="mt-2">
-                  <MolduraAurumAI detalhe="predição assistiva · ancorada na base oficial">
-                    <SecaoSugestaoNbs />
-                  </MolduraAurumAI>
-                </div>
-              </details>
+              <DropdownElegante
+                icone="✨"
+                titulo="Ver resposta automática para este texto"
+                variante="violet"
+              >
+                <MolduraAurumAI detalhe="predição assistiva · ancorada na base oficial">
+                  <SecaoSugestaoNbs />
+                </MolduraAurumAI>
+              </DropdownElegante>
             ) : null}
           </Revelar>
         )
@@ -467,7 +463,7 @@ export function ConsultaServicos() {
             <Vazio
               icone="🏢"
               titulo="Digite o CNPJ para ver as atividades"
-              texto="Buscamos os dados na Receita (BrasilAPI) e classificamos cada CNAE de serviço com a ✨ Aurum AI — sempre validado na base oficial."
+              texto="Buscamos os dados na Receita (BrasilAPI) e classificamos cada CNAE de serviço com a ✨ busca automática — sempre validado na base oficial."
             />
           ) : null}
           {buscandoCnpj && !vereditoEmpresa ? (
@@ -562,76 +558,93 @@ function SecaoSugestaoNbs() {
       <p className="consulta-justificativa-clamp text-slate-600 dark:text-slate-300" title={sugestao.justificativa}>
         {sugestao.justificativa}
       </p>
+      {sugestao.nbs_provavel ? <LegendaAtividadeNbs codigo={sugestao.nbs_provavel} /> : null}
       {sugestao.contextoNbs ? <BlocoContextoNbs contexto={sugestao.contextoNbs} /> : null}
-      {sugestao.nbs_provavel ? (
+      {sugestao.nbs_provavel || sugestao.baseLegal || sugestao.urlLegislacao ? (
         <div className="flex flex-wrap gap-2">
-          <Btn
-            variante="primary"
-            tam="sm"
-            onClick={() => {
-              void usarSugestao()
-              toast('NBS sugerido enviado para classificação oficial.', 'ok')
-            }}
-          >
-            Classificar {sugestao.nbs_provavel} oficialmente
-          </Btn>
+          {sugestao.nbs_provavel ? (
+            <Btn
+              variante="primary"
+              tam="sm"
+              onClick={() => {
+                void usarSugestao()
+                toast('NBS sugerido enviado para classificação oficial.', 'ok')
+              }}
+            >
+              Classificar {sugestao.nbs_provavel} oficialmente
+            </Btn>
+          ) : null}
+          <BotaoVerNaLei baseLegal={sugestao.baseLegal} urlLegislacao={sugestao.urlLegislacao} texto={sugestao.justificativa} />
         </div>
       ) : null}
-      {preditivas.length ? (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" role="note" aria-label="Sugestões preditivas informativas">
-          <p className="font-black">🔮 Sugestão preditiva — apenas informativa, NÃO é decisão final</p>
-          <p className="mt-0.5 text-[11px] opacity-90">
+      {preditivas.length || sugestao.alternativas.length ? (
+        <DropdownElegante
+          icone="🔮"
+          titulo="Outras sugestões — apenas informativas, NÃO são decisão final"
+          contagem={preditivas.length + sugestao.alternativas.length}
+          aberto={!sugestao.nbs_provavel}
+          variante="amber"
+        >
+          <p className="text-[11px] text-amber-900/90 dark:text-amber-200/90">
             Pelos nomes/sinônimos do sistema há lastro nestas pistas. Confirme com o contador e classifique oficialmente antes de escriturar.
           </p>
-          <ul className="mt-1.5 space-y-1">
-            {preditivas.map((p) => (
-              <li key={`${p.tipo}-${p.codigo}`} className="space-y-1 rounded-lg bg-white/60 px-2 py-1 dark:bg-black/20">
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-mono font-black">{p.codigoFormatado}</span>
-                  <span className="min-w-0 flex-1 truncate" title={p.titulo}>{p.titulo}</span>
-                  <span className="rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[10px] font-black dark:bg-amber-900/50">
-                    {Math.round(p.cobertura * 100)}% termos
-                  </span>
-                  {p.tipo === 'nbs' ? (
-                    <button
-                      type="button"
-                      onClick={() => void escolher(p.codigo)}
-                      className="rounded-full bg-amber-600 px-2 py-0.5 text-[10px] font-black text-white hover:bg-amber-700"
-                      title={`Classificar ${p.codigoFormatado} oficialmente (valida na base)`}
-                    >
-                      Classificar oficialmente
-                    </button>
-                  ) : (
-                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300" title={p.baseLegal ?? 'Hipótese de benefício sem NBS direto — verificar Anexo/cct'}>
-                      hipótese {p.cClassTrib}
+          {preditivas.length ? (
+            <ul className="mt-1.5 space-y-1">
+              {preditivas.map((p) => (
+                <li key={`${p.tipo}-${p.codigo}`} className="space-y-1 rounded-lg bg-white/60 px-2 py-1 dark:bg-black/20">
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono font-black">{p.codigoFormatado}</span>
+                    <span className="min-w-0 flex-1 truncate" title={p.titulo}>{p.titulo}</span>
+                    <span className="rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[10px] font-black dark:bg-amber-900/50">
+                      {Math.round(p.cobertura * 100)}% termos
                     </span>
-                  )}
-                </span>
-                {p.contexto ? <BlocoContextoNbs contexto={p.contexto} compacto /> : null}
-              </li>
-            ))}
-          </ul>
-          <p className="mt-1 text-[10px] opacity-75">
-            {preditivas[0]?.termosCasados?.length ? `Termos que casaram: ${preditivas[0].termosCasados.join(', ')}` : ''}
-            {preditivas[0]?.sinonimosUsados?.length ? ` · sinônimos: ${preditivas[0].sinonimosUsados.join(', ')}` : ''}
-            {` · origem: ${preditivas[0]?.origem ?? '—'}`}
-          </p>
-        </div>
-      ) : null}
-      {sugestao.alternativas.length ? (
-        <div className="flex flex-wrap gap-1.5">
-          {sugestao.alternativas.slice(0, 5).map((a) => (
-            <button
-              key={a}
-              type="button"
-              onClick={() => void escolher(a)}
-              className="rounded-full bg-slate-200 px-2 py-0.5 font-mono text-[11px] font-bold text-slate-600 hover:bg-brand-100 hover:text-brand-700 dark:bg-slate-800 dark:text-slate-300"
-              title={`Classificar ${a} oficialmente`}
-            >
-              {a}
-            </button>
-          ))}
-        </div>
+                    {p.tipo === 'nbs' ? (
+                      <button
+                        type="button"
+                        onClick={() => void escolher(p.codigo)}
+                        className="rounded-full bg-amber-600 px-2 py-0.5 text-[10px] font-black text-white hover:bg-amber-700"
+                        title={`Classificar ${p.codigoFormatado} oficialmente (valida na base)`}
+                      >
+                        Classificar oficialmente
+                      </button>
+                    ) : (
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300" title={p.baseLegal ?? 'Hipótese de benefício sem NBS direto — verificar Anexo/cct'}>
+                        hipótese {p.cClassTrib}
+                      </span>
+                    )}
+                    {p.tipo !== 'nbs' && p.baseLegal ? (
+                      <BotaoVerNaLei baseLegal={p.baseLegal} texto={p.titulo} compacto />
+                    ) : null}
+                  </span>
+                  {p.tipo === 'nbs' ? <LegendaAtividadeNbs codigo={p.codigo} compacto /> : null}
+                  {p.contexto ? <BlocoContextoNbs contexto={p.contexto} compacto /> : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {sugestao.alternativas.length ? (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {sugestao.alternativas.slice(0, 5).map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  onClick={() => void escolher(a)}
+                  className="rounded-full bg-slate-200 px-2 py-0.5 font-mono text-[11px] font-bold text-slate-600 hover:bg-brand-100 hover:text-brand-700 dark:bg-slate-800 dark:text-slate-300"
+                  title={`Classificar ${a} oficialmente`}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {preditivas[0] ? (
+            <p className="mt-1 text-[10px] opacity-75">
+              {preditivas[0]?.termosCasados?.length ? `Termos que casaram: ${preditivas[0].termosCasados.join(', ')}` : ''}
+              {preditivas[0]?.sinonimosUsados?.length ? ` · sinônimos: ${preditivas[0].sinonimosUsados.join(', ')}` : ''}
+              {` · origem: ${preditivas[0]?.origem ?? '—'}`}
+            </p>
+          ) : null}
+        </DropdownElegante>
       ) : null}
       <DetalhesPerguntasServicos itens={sugestao.perguntasComplementares} />
       {sugestao.cst && sugestao.cClassTrib && (

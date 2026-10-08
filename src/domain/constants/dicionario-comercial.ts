@@ -37,7 +37,7 @@ export interface EntradaDicionarioComercial {
   /** Termos normalizados que disparam este pin (frase ou palavra inequívoca). */
   termos: string[]
   /** Prateleira para auditoria/organização. */
-  categoria: 'queijos' | 'carnes-embutidos' | 'eletronicos' | 'alimentos-bebidas' | 'vestuario-calcados' | 'casa-ferramentas' | 'higiene-farmacia' | 'papelaria-brinquedos' | 'autopecas' | 'metalurgia' | 'textil' | 'construcao' | 'moveis' | 'quimicos-farma' | 'plasticos-borracha' | 'madeira-papel' | 'maquinas-equipamentos' | 'instrumentos-otica' | 'esporte-lazer'
+  categoria: 'queijos' | 'carnes-embutidos' | 'eletronicos' | 'alimentos-bebidas' | 'vestuario-calcados' | 'casa-ferramentas' | 'higiene-farmacia' | 'papelaria-brinquedos' | 'autopecas' | 'metalurgia' | 'textil' | 'construcao' | 'moveis' | 'quimicos-farma' | 'plasticos-borracha' | 'madeira-papel' | 'maquinas-equipamentos' | 'instrumentos-otica' | 'esporte-lazer' | 'animais-vivos' | 'carnes-animais' | 'ovos-partes'
 }
 
 export const DICIONARIO_COMERCIAL: EntradaDicionarioComercial[] = [
@@ -156,6 +156,41 @@ export const DICIONARIO_COMERCIAL: EntradaDicionarioComercial[] = [
   { ncm: '94036000', categoria: 'moveis', termos: ['guarda roupa', 'roupeiro', 'armario de quarto'] },
   { ncm: '95069900', categoria: 'esporte-lazer', termos: ['bola de futebol', 'bola esportiva'] },
   { ncm: '96032100', categoria: 'esporte-lazer', termos: ['escova de dentes', 'escova dental'] },
+  // --- animais vivos: comuns, incomuns e silvestres (cap. 01) ---
+  // Vivo decide 01 × 02; espécie + destinação decidem a subposição.
+  // Vivo decide 01 × 02; espécie + destinação decidem a subposição.
+  // NOTA: pins usam SEMPRE forma qualificada ("para abate/reprodução",
+  // "caipira", "para postura") — o "X vivo" nu fica sem pin de propósito:
+  // sem destinação o funil do chat pergunta antes de afirmar (reprodução ×
+  // abate muda a subposição) e o RAG tolerante cobre o léxico na Consulta.
+  { ncm: '01012100', categoria: 'animais-vivos', termos: ['cavalo reprodutor', 'egua reprodutora', 'cavalo de raca pura'] },
+  { ncm: '01012900', categoria: 'animais-vivos', termos: ['cavalo vivo para abate', 'egua viva para abate', 'potro vivo para engorda'] },
+  { ncm: '01041090', categoria: 'animais-vivos', termos: ['ovelha viva para reproducao', 'carneiro vivo para reproducao', 'ovelha viva para abate'] },
+  { ncm: '01042090', categoria: 'animais-vivos', termos: ['cabra viva para reproducao', 'bode vivo para reproducao', 'cabrito vivo para abate'] },
+  { ncm: '01061400', categoria: 'animais-vivos', termos: ['coelho vivo para reproducao', 'lebre viva para reproducao', 'coelho vivo para abate'] },
+  { ncm: '01063310', categoria: 'animais-vivos', termos: ['avestruz para reproducao', 'ema para reproducao'] },
+  { ncm: '01063390', categoria: 'animais-vivos', termos: ['avestruz vivo para abate', 'avestruz viva para corte', 'ema viva para abate'] },
+  { ncm: '01063200', categoria: 'animais-vivos', termos: ['papagaio vivo domesticado', 'arara viva para criacao', 'periquito vivo para criacao', 'calopsita viva para criacao', 'papagaio'] },
+  { ncm: '01063100', categoria: 'animais-vivos', termos: ['gaviao vivo para criacao', 'falcao vivo para criacao', 'ave de rapina viva para criacao', 'coruja viva para criacao'] },
+  { ncm: '01062000', categoria: 'animais-vivos', termos: ['jacare vivo para criacao', 'jacare', 'tartaruga viva para criacao', 'jabuti vivo para criacao', 'cobra viva para criacao', 'repteis vivos para criacao'] },
+  { ncm: '01061900', categoria: 'animais-vivos', termos: ['sagui vivo para criacao', 'macaco prego vivo para criacao', 'animal silvestre vivo para criacao'] },
+  { ncm: '01064100', categoria: 'animais-vivos', termos: ['abelha viva para polinizacao', 'abelha rainha', 'colmeia com abelhas'] },
+  { ncm: '01059400', categoria: 'animais-vivos', termos: ['frango caipira vivo', 'galinha caipira viva', 'frango vivo para abate', 'frango vivo para reproducao', 'galinha viva para postura'] },
+  { ncm: '01059900', categoria: 'animais-vivos', termos: ['pato vivo para abate', 'pata viva para postura', 'ganso vivo para reproducao', 'peru vivo para abate'] },
+  // --- carnes de animais exóticos/incomuns (cap. 02) ---
+  { ncm: '02085000', categoria: 'carnes-animais', termos: ['carne de jacare', 'carne de reptil', 'jacare congelado'] },
+  { ncm: '02081000', categoria: 'carnes-animais', termos: ['carne de coelho', 'coelho abatido', 'carne de lebre'] },
+  { ncm: '02050000', categoria: 'carnes-animais', termos: ['carne de cavalo', 'carne equina'] },
+  { ncm: '02062200', categoria: 'carnes-animais', termos: ['figado bovino', 'figado de boi'] },
+  { ncm: '02062100', categoria: 'carnes-animais', termos: ['lingua bovina', 'lingua de boi'] },
+  { ncm: '02062910', categoria: 'carnes-animais', termos: ['rabo bovino', 'rabada'] },
+  { ncm: '02061000', categoria: 'carnes-animais', termos: ['miudezas bovinas frescas', 'miudos bovinos frescos'] },
+  { ncm: '02071419', categoria: 'carnes-animais', termos: ['pedacos de frango', 'frango em pedacos', 'coxa de frango', 'peito de frango'] },
+  // --- ovos e partes (cap. 04/05) ---
+  { ncm: '04071100', categoria: 'ovos-partes', termos: ['ovo de galinha para incubacao', 'ovo fertil de galinha', 'ovo para chocadeira'] },
+  { ncm: '04072100', categoria: 'ovos-partes', termos: ['ovo de galinha para consumo', 'ovo de galinha caipira', 'duzia de ovos'] },
+  { ncm: '04072900', categoria: 'ovos-partes', termos: ['ovo de codorna', 'ovos de codorna', 'ovo de pata', 'ovo de gansa'] },
+  { ncm: '04089900', categoria: 'ovos-partes', termos: ['gema de ovo', 'clara de ovo', 'ovo desidratado'] },
   // --- metalurgia complementar ---
   { ncm: '73041100', categoria: 'metalurgia', termos: ['tubo inox', 'tubo de aco inoxidavel'] },
   { ncm: '73181100', categoria: 'metalurgia', termos: ['tirafundo', 'parafuso tirafundo'] },

@@ -47,6 +47,11 @@ const VEREDITO: Record<AnaliseRetorno['status'], { titulo: string; classe: strin
     classe: 'border-amber-600/40 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100',
     dica: 'Existem meses positivos, mas insuficientes para zerar o acumulado.',
   },
+  'empate-tecnico': {
+    titulo: 'Empate técnico',
+    classe: 'border-amber-600/40 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100',
+    dica: 'Economia dentro da margem de empate — a decisão é operacional, não fiscal.',
+  },
   prejuizo: {
     titulo: 'Só prejuízo no horizonte',
     classe: 'border-red-600/40 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-100',
@@ -58,8 +63,8 @@ export function ResultadoDividido({ relatorio, custoMensalNova }: { relatorio: R
   const serie = relatorio.serieMensal;
 
   const retorno: AnaliseRetorno = useMemo(
-    () => relatorio.analiseRetorno ?? analisarRetorno(serie, custoMensalNova),
-    [relatorio.analiseRetorno, serie, custoMensalNova],
+    () => relatorio.analiseRetorno ?? analisarRetorno(serie, custoMensalNova, relatorio.metadados.margemEmpate ?? 0),
+    [relatorio.analiseRetorno, serie, custoMensalNova, relatorio.metadados.margemEmpate],
   );
   const veredito = VEREDITO[retorno.status];
 
@@ -248,7 +253,10 @@ export function ResultadoDividido({ relatorio, custoMensalNova }: { relatorio: R
                 if (!ultimo.aplicaFatorR) {
                   return (
                     <p key={lado} className="rounded-xl bg-slate-100 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                      {lado === 'mae' ? 'Mãe' : 'Nova'} no Anexo {ultimo.anexo}: sem Fator R — folha dispensada.
+                      {lado === 'mae' ? 'Mãe' : 'Nova'} no Anexo {ultimo.anexo}:{' '}
+                      {ultimo.dispensa === 'iii-puro'
+                        ? 'Anexo III puro (atividade não sujeita ao Fator R) — sem cálculo, sem folha.'
+                        : 'sem Fator R — folha dispensada.'}
                     </p>
                   );
                 }

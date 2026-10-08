@@ -1,12 +1,11 @@
 /**
- * Gate determinístico → Aurum AI para SERVIÇOS (Phase 7).
+ * Gate determinístico → seletor automático para SERVIÇOS (Phase 7).
  *
  * Mesma arquitetura do GATE de bens (`./classificacao-ia.ts`), com
- * adaptadores de domínio NBS:
+ * adaptadores de domínio NBS — 100% determinística, sem modelo de linguagem:
  * 1. `classificarServicoPorDescricao()` primeiro; `nbs_provavel` com
- *    confiança `alta` devolve `via: 'deterministico'` sem worker;
- * 2. senão, Top-20 RAG NBS → worker (`window.aurum.ia.classificar`, que é
- *    por índice e portanto agnóstico a 8/9 dígitos) ou seletor local NBS →
+ *    confiança `alta` devolve `via: 'deterministico'` sem seletor;
+ * 2. senão, Top-20 RAG NBS → seletor local NBS →
  *    `resolverClassificacoesNbs` (única verdade; fora da base = inválido);
  * 3. NÃO SEI só sem lastro oficial; hipótese provisória ancorada caso contrário.
  */
@@ -19,7 +18,7 @@ import {
   buscarNbsPorTexto,
   resolverClassificacoesNbs,
 } from '@/infrastructure/base/classificacao-repo'
-import { bridge, type CandidatoIa } from '@/infrastructure/bridge'
+import type { CandidatoIa } from '@/infrastructure/bridge'
 import {
   consultarGrafoPrimeiro,
   fundirCandidatosGrafoLexical,
@@ -358,7 +357,7 @@ export async function classificarComIaServicos(
   }
   const candidatos: CandidatoIa[] = fundirCandidatosGrafoLexical(respostaGrafo, lexicais, trilhaGrafo)
   const usouGrafo = trilhaGrafo.usouGrafo
-  const viaBase: import('@/store/ia').ViaClassificacao = usouGrafo ? (bridge?.ia ? 'grafo+ia' : 'grafo') : 'ia'
+  const viaBase: import('@/store/ia').ViaClassificacao = usouGrafo ? 'grafo' : 'ia'
   const fontes = usouGrafo
     ? [...FONTES_GATE_NBS, 'Grafo fiscal local (FTS + vetor + 2-hops, caminho auditável)']
     : [...FONTES_GATE_NBS]
@@ -368,31 +367,11 @@ export async function classificarComIaServicos(
     confianca: 0,
     motivo: 'sem-candidatos',
   }
-  let mock = true
+  const mock = true
   if (candidatos.length) {
-    if (bridge?.ia) {
-      const r = await bridge.ia.classificar(contextoRico || entrada.descricao, candidatos).catch((e) => {
-        throw new Error(`Modelo IA obrigatório indisponível: ${e instanceof Error ? e.message : String(e)}`)
-      })
-      if (!r.ok) {
-        throw new Error(`Modelo IA obrigatório indisponível: ${r.erro}`)
-      }
-      mock = r.mock
-      if (r.codigo === 'NÃO SEI') {
-        try {
-          const segunda = await selecionarAurumAILocalNbs(contextoRico || entrada.descricao, candidatos)
-          escolha = segunda.codigo !== 'NÃO SEI'
-            ? { ...segunda, motivo: `${r.motivo}/segunda-opiniao-${segunda.motivo}` }
-            : { codigo: 'NÃO SEI', confianca: 0, motivo: r.motivo }
-        } catch {
-          escolha = { codigo: 'NÃO SEI', confianca: 0, motivo: r.motivo }
-        }
-      } else {
-        escolha = { codigo: r.codigo, confianca: Math.max(0, Math.min(1, Number(r.confianca) || 0)), motivo: r.motivo }
-      }
-    } else {
-      escolha = await selecionarAurumAILocalNbs(contextoRico || entrada.descricao, candidatos)
-    }
+    // Seletor automático local NBS (determinístico): RAG lexical +resolvedor.
+    // Sem modelo, sem IPC.
+    escolha = await selecionarAurumAILocalNbs(contextoRico || entrada.descricao, candidatos)
   }
 
   if (escolha.codigo === 'NÃO SEI') {

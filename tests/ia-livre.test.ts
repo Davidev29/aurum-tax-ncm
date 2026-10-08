@@ -13,7 +13,7 @@ describe('ia-livre (IA-06)', () => {
 
   it('sistema carrega as travas do motor', () => {
     const s = montarSistemaLivre({ nome: 'David', modo: 'leve' })
-    expect(s).toMatch(/Aurinha/)
+    expect(s).toMatch(/assistente fiscal do Aurum Tax NCM/)
     expect(s).toMatch(/Nunca invente/)
   })
 

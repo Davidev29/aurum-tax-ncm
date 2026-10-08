@@ -602,6 +602,34 @@ export function tituloNbs(v: Pick<VinculoNbs, 'baseLegal' | 'descricao'>): strin
   return String(v.descricao ?? '').trim().slice(0, 90) || 'Serviço sem descrição'
 }
 
+/**
+ * Legenda do serviço (NBS 9 dígitos) lida da ponte LC 116 → NBS
+ * (`store lcNbs`: 1.739 relações, 676 NBS distintos). É a fonte do "o que é
+ * este serviço" quando o NBS cai na regra geral (sem vínculo em `db.nbs`,
+ * que só tem os 122 com benefício): `descricaoNbs` (nome curto do serviço)
+ * + item LC 116 + `descricaoLc` (texto do item da LC 116).
+ *
+ * Best-effort: `null` quando o NBS não tem legenda (código inexistente) ou
+ * a store ainda não foi semeada — o chamador mantém o fallback genérico.
+ */
+export async function buscarLegendaNbs(
+  codigo: unknown,
+): Promise<{ lc: string; descricaoNbs: string; descricaoLc: string } | null> {
+  const c = norm(codigo)
+  if (c.length !== 9) return null
+  try {
+    const rels = await db.lcNbs.where('nbs').equals(c).limit(10).toArray()
+    if (!rels.length) return null
+    const comNome = rels.find((r) => String(r.descricaoNbs ?? '').trim()) ?? rels[0]
+    const descricaoNbs = String(comNome.descricaoNbs ?? '').trim()
+    const descricaoLc = String(comNome.descricaoLc ?? '').trim()
+    if (!descricaoNbs && !descricaoLc) return null
+    return { lc: String(comNome.lc ?? '').trim(), descricaoNbs, descricaoLc }
+  } catch {
+    return null
+  }
+}
+
 /** R2.3-NBS — prefixo com no mínimo 2 dígitos; vigentes conceituais primeiro. */
 export async function sugerirNbs(prefixo: unknown, limite = 30): Promise<VinculoNbs[]> {
   const t = norm(prefixo)
@@ -750,6 +778,18 @@ export async function resolverClassificacoesNbs(
   }
   const ctxs = await Promise.all(vivos.map(contextoDe))
   const lista = vivos.map((v, i) => montarClassificacao(v, ctxs[i]))
+  // NBS com vínculo: anexa a legenda curta do serviço (nome + item LC 116)
+  // para a UI identificar "o que é" sem ler o juridiquês do vínculo.
+  try {
+    const legenda = await buscarLegendaNbs(c)
+    if (legenda) {
+      for (const cl of lista) {
+        if (!cl.detalheNbs) cl.detalheNbs = legenda
+      }
+    }
+  } catch {
+    /* legenda é enriquecimento — nunca quebra a classificação */
+  }
   return { vinculos, lista, regraGeral: false, revogado: null }
 }
 

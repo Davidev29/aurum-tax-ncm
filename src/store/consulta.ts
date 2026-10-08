@@ -91,10 +91,10 @@ interface ConsultaState {
   classificandoDescricao: boolean
 
   /**
-   * Camada Aurum AI (Phase 6 / 06-06): `via` indica se o determinístico venceu
-   * (`deterministico`, sem worker) ou o fallback Aurum AI acionou (`ia`).
-   * Phase 10-05: `grafo` / `grafo+ia` quando o grafo fiscal participou.
-   * Só quando `via` é `ia`/`grafo`/`grafo+ia` a UI exibe a seção "Sugerido por Aurum AI".
+   * Camada automática (Phase 6 / 06-06): `via` indica se o determinístico venceu
+   * (`deterministico`) ou o seletor automático acionou (`ia`).
+   * Phase 10-05: `grafo` quando o grafo fiscal participou.
+   * Só quando `via` é `ia`/`grafo`/`grafo+ia` a UI exibe a seção "Resultado automático".
    */
   via: ViaClassificacao | null
   candidatosIa: CandidatoIa[]

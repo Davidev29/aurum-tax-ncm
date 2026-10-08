@@ -336,7 +336,10 @@ export function orquestrarRelatorio(input: RelatorioInput): ReportAnalitico {
     : 'I';
   const elegiveisEfetivos = elegiveis.length > 0 ? [...new Set(elegiveis)] : [foco];
   const mostrarMatrizIIIV = modo === 'cnpj' && elegiveisEfetivos.includes('III') && elegiveisEfetivos.includes('V');
-  const mostrarFatorR = elegiveisEfetivos.includes('III') || elegiveisEfetivos.includes('V') || foco === 'III' || foco === 'V';
+  // Fator R SÓ quando o Anexo V está envolvido (espelha `envolveAnexoV` do motor:
+  // o cálculo só aplica o Fator R nesse caso). Anexo III puro já é III e nunca
+  // precisa do Fator R; I, II e IV tampouco.
+  const mostrarFatorR = elegiveisEfetivos.includes('V') || foco === 'V';
 
   const fatorR = calcularFatorRDetalhado(folha12, rbt12);
   const debitos = debitoCBS(receitaMes, 'cheia', cbsRef);

@@ -41,10 +41,13 @@ export interface MetadadosRelatorio {
   percentualNova: number;
   anexoMae: RelatorioProjecao['metadados']['anexoMae'];
   anexoNova: RelatorioProjecao['metadados']['anexoNova'];
+  margemEmpate?: number;
+  custoMensalNova?: number;
+  custoInicialNova?: number;
   motorVersao?: string;
 }
 
-/** Monta o envelope final a partir da série mensal (recalcula payback/economia). */
+/** Monta o envelope final a partir da série mensal (recalcula virada/payback/veredito/economia). */
 export function montarRelatorioProjecao(
   serie: LinhaCenarioMensal[],
   metadados: MetadadosRelatorio,
@@ -56,19 +59,32 @@ export function montarRelatorioProjecao(
   let paybackMes: string | null = null;
   let paybackIdx: number | null = null;
   let paybackValor: number | null = null;
+  let mesVirada: string | null = null;
+  let mesesAteVirada: number | null = null;
+  const margem = Math.max(0, Number(metadados.margemEmpate) || 0);
   const serieOrdenada = [...serie].sort((a, b) => (a.mes < b.mes ? -1 : a.mes > b.mes ? 1 : 0));
   for (let i = 0; i < serieOrdenada.length; i++) {
     const linha = serieOrdenada[i]!;
     acumulado = Math.round((acumulado + linha.economiaMes) * 100) / 100;
+    if (mesVirada === null && linha.economiaMes > 0) {
+      mesVirada = linha.mes;
+      mesesAteVirada = i + 1;
+    }
     if (paybackMes === null && acumulado > 0) {
       paybackMes = linha.mes;
       paybackIdx = i + 1;
       paybackValor = acumulado;
     }
   }
+  const veredito =
+    Math.abs(acumulado) <= margem && margem > 0
+      ? 'empate-tecnico'
+      : acumulado > 0
+        ? 'compensa'
+        : 'nao-compensa';
   return {
     serieMensal: serieOrdenada,
-    payback: { mes: paybackMes, mesesAtePayback: paybackIdx, valorAcumuladoNoPayback: paybackValor },
+    payback: { mes: paybackMes, mesesAtePayback: paybackIdx, valorAcumuladoNoPayback: paybackValor, mesVirada, mesesAteVirada, veredito },
     economiaTotal: acumulado,
     alertas: emitirAlertasFiscais(serieOrdenada),
     insightsSugeridos: [],
@@ -78,7 +94,10 @@ export function montarRelatorioProjecao(
       percentualNova: metadados.percentualNova,
       anexoMae: metadados.anexoMae,
       anexoNova: metadados.anexoNova,
-      motorVersao: metadados.motorVersao ?? 'simples-projection v1 + calc-engine v3',
+      custoMensalNova: metadados.custoMensalNova,
+      custoInicialNova: metadados.custoInicialNova,
+      margemEmpate: margem,
+      motorVersao: metadados.motorVersao ?? 'simples-projection v2 + calc-engine v3',
     },
   };
 }

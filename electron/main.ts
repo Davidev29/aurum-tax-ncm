@@ -25,18 +25,7 @@ import { existsSync, promises as fsp } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { autoUpdater } from 'electron-updater'
-import {
-  buscarViaIa,
-  classificarViaIa,
-  conversarViaIa,
-  encerrarIaService,
-  grafoConsultarViaGrafo,
-  iniciarIaService,
-  observarModelo,
-  pararObservarModelo,
-  registrarUsoGrafoViaGrafo,
-  statusIa,
-} from './ia/ia-service.cjs'
+import { grafoConsultar, registrarUso } from './ia/grafo-service.cjs'
 
 /** URL do servidor Vite, definida pelo script `dev:electron` (cross-env). */
 const URL_DEV = process.env.VITE_DEV_SERVER_URL ?? ''
@@ -408,39 +397,42 @@ function registrarIpc(): void {
   })
 
   // -----------------------------------------------------------------------
-  // IA offline (Phase 6 / IA-05 — tracer 06-05)
+  // Busca local determinística (grafo fiscal — RAG lexical + 2-hops).
+  // O worker LLM foi removido: sem `ia:classificar`, `ia:buscar`,
+  // `ia:conversar` ou `ia:status`. A classificação é 100% local e
+  // determinística (Top-20 lexical + seletor ancorado + resolvedor).
   // -----------------------------------------------------------------------
-
-  /**
-   * `ia:classificar` — sugere um NCM via worker `utilityProcess` isolado (AI-first:
-   * exige o modelo real; sem modelo responde `ok:false`, nunca mock silencioso).
-   * Delega ao `ia-service`.
-   */
-  ipcMain.handle(
-    'ia:classificar',
-    async (
-      _evento,
-      descricao: string,
-      candidatos?: { codigo: string; descricao: string }[],
-    ) => classificarViaIa(descricao, candidatos),
-  )
-
-  /** `ia:buscar` — Top-k RAG lexical via worker (para a tela DebugIA). */
-  ipcMain.handle('ia:buscar', async (_evento, consulta: string, k?: number) =>
-    buscarViaIa(consulta, typeof k === 'number' ? k : 5),
-  )
 
   /**
    * `ia:grafo` — consulta o grafo fiscal local (Phase 10-02 / GRAFO-02):
    * FTS + expansão 2-hops com caminho auditável. Sem `.lbug` responde
    * `{ ok:false, fallback:'lexical' }` (o renderer cai no lexical atual).
+   * Rota direta ao `grafo-service` (sem worker).
    */
   ipcMain.handle(
     'ia:grafo',
     async (
       _evento,
       args?: { texto?: string; consulta?: string; k?: number; anoReferencia?: number; modoVetor?: 'hibrido' | 'fts-puro' },
-    ) => grafoConsultarViaGrafo(args ?? {}),
+    ) => {
+      try {
+        const a = args ?? {}
+        const texto = String(a.texto ?? a.consulta ?? '')
+        // Fail-closed: texto vazio nunca consulta (o renderer cai no lexical).
+        if (!texto.trim()) return { ok: false, fallback: 'lexical', erro: 'texto vazio' }
+        return await grafoConsultar(
+          {
+            texto: String(a.texto ?? a.consulta ?? ''),
+            k: Number(a.k) > 0 ? Number(a.k) : 5,
+            ...(a.anoReferencia !== undefined && a.anoReferencia !== null ? { anoReferencia: Number(a.anoReferencia) } : {}),
+            ...(a.modoVetor === 'fts-puro' ? { modoVetorForcado: 'fts-puro' } : {}),
+          },
+          { app },
+        )
+      } catch (erro) {
+        return { ok: false, fallback: 'lexical', erro: mensagemDeErro(erro) }
+      }
+    },
   )
 
   /**
@@ -450,22 +442,14 @@ function registrarIpc(): void {
    */
   ipcMain.handle(
     'ia:grafo-uso',
-    async (_evento, args?: { tipo?: string; termo?: string | null; codigo?: string | null; emitente?: string | null; peso?: number }) =>
-      registrarUsoGrafoViaGrafo(args ?? {}),
+    async (_evento, args?: { tipo?: string; termo?: string | null; codigo?: string | null; emitente?: string | null; peso?: number }) => {
+      try {
+        return await registrarUso(args ?? {}, { app })
+      } catch (erro) {
+        return { ok: false, erro: mensagemDeErro(erro) }
+      }
+    },
   )
-
-  /** `ia:conversar` — conversa livre via Qwen3 real (IA-06, exige modelo; sem modelo `ok:false`). */
-  ipcMain.handle(
-    'ia:conversar',
-    async (
-      _evento,
-      pergunta: string,
-      opts?: { sistema?: string; historico?: { papel: string; texto: string }[]; think?: boolean; maxTokens?: number; temperature?: number },
-    ) => conversarViaIa(pergunta, opts ?? {}),
-  )
-
-  /** `ia:status` — estado do worker (`desligado`/`mock`/`modelo`/`erro` AI-first). */
-  ipcMain.handle('ia:status', () => statusIa())
 }
 
 /** Extrai texto das notas de release (string | array de releases). */
@@ -763,23 +747,6 @@ if (!instanciaUnica) {
       criarMenu()
       await criarJanela()
       configurarAtualizador()
-      // IA offline (06-05): spawn do worker isolado; falha aqui não impede
-      // a UI — o service degrada para mock e sinaliza no `ia:status`.
-      // Troca automática: `observarModelo` vigia `recursos-ia/modelo/` e
-      // recarrega o worker sozinho quando o .gguf muda (sem reiniciar).
-      iniciarIaService(app)
-        .then((s) => {
-          if (!s.pronto) console.warn(`[ia] worker indisponível: ${s.erro ?? 'motivo desconhecido'}`)
-          else console.log(`[ia] worker pronto (modo=${s.modo})`)
-          try {
-            observarModelo(app)
-          } catch (erro) {
-            console.warn(`[ia] sem troca automática de modelo: ${mensagemDeErro(erro)}`)
-          }
-        })
-        .catch((erro) => {
-          console.warn(`[ia] falha ao iniciar worker: ${mensagemDeErro(erro)}`)
-        })
     })
     .catch((erro) => {
       console.error(`Falha ao iniciar o Aurum Tax NCM: ${mensagemDeErro(erro)}`)
@@ -794,17 +761,6 @@ if (!instanciaUnica) {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
-})
-
-// IA offline (06-05): o worker `utilityProcess` deve morrer com o app —
-// kill síncrono de segurança, sem órfãos (critério do tracer).
-app.on('before-quit', () => {
-  try {
-    pararObservarModelo()
-  } catch (_) {
-    // vigia já parada
-  }
-  encerrarIaService()
 })
 
 export {}

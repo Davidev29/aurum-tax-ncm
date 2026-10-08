@@ -2,7 +2,7 @@
  * Assistente de instalação local — primeira execução do Aurum Tax NCM.
  *
  * Wizard em 6 passos com transições elásticas (framer-motion spring):
- *   0. Apresentação da Aurinha (mascote se apresenta + apresenta o sistema)
+ *   0. Apresentação do sistema (o que faz + 100% local)
  *   1. Boas-vindas (o que é + 100% local sem nuvem + o que vou perguntar)
  *   2. Contrato e identificação (nome, CPF/CNPJ, e-mail + checkbox de aceite)
  *   3. Sua empresa — CNPJ com consulta BrasilAPI + fallback manual offline
@@ -26,7 +26,7 @@ import { TEMA_KEY } from '@/domain/constants'
 import { norm } from '@/domain/services/format'
 import { useSessao } from '@/store/sessao'
 import { toast } from '@/store/ui'
-import { CABECA, CORPO, PALETA } from './pet-sprite'
+import { EscudoAurum } from './Marca'
 
 const PASSOS = ['Apresentação', 'Boas-vindas', 'Contrato', 'Sua empresa', 'Emitente', 'Pronto'] as const
 
@@ -51,64 +51,18 @@ function aplicarTemaEscolhido(tema: TemaEscolha): void {
   }
 }
 
-/* ------------------------- Aurinha se apresentando ------------------------ */
+/* ------------------------- apresentação do sistema ------------------------ */
 
-const FALA_AURINHA =
-  'Oi! Eu sou a Aurinha, sua farejadora fiscal! Vou te guiar na Reforma Tributária — NCM, IBS/CBS e XML sem mistério. Vamos configurar tudo em menos de 1 minuto?'
+const FALA_APRESENTACAO =
+  'Bem-vindo ao Aurum Tax NCM — classificador fiscal da Reforma Tributária. NCM, IBS/CBS e XML sem mistério, 100% local na sua máquina. Vamos configurar tudo em menos de 1 minuto?'
 
-function SpriteAurinha({ tamanho = 104 }: { tamanho?: number }) {
-  const px = (linhas: string[], oy = 0) => {
-    const els: React.ReactNode[] = []
-    linhas.forEach((linha, dy) => {
-      ;[...linha].forEach((ch, dx) => {
-        if (ch === '.' || ch === ' ') return
-        const cor = PALETA[ch]
-        if (!cor) return
-        els.push(
-          <rect key={`${dy}-${dx}`} x={dx} y={oy + dy} width={1.04} height={1.04} fill={cor} />,
-        )
-      })
-    })
-    return <g shapeRendering="crispEdges">{els}</g>
-  }
-  return (
-    <svg width={tamanho} height={Math.round((tamanho * 29) / 26)} viewBox="0 0 26 29" role="img" aria-label="Aurinha, a mascote">
-      {px(CORPO, 16)}
-      {px(CABECA, 0)}
-    </svg>
-  )
-}
-
-/** Efeito máquina de escrever para a fala da Aurinha. */
-function useTypewriter(texto: string, ativo: boolean, velocidade = 22): string {
-  const [n, setN] = useState(ativo ? 0 : texto.length)
-  useEffect(() => {
-    if (!ativo) {
-      setN(texto.length)
-      return
-    }
-    setN(0)
-    const t = window.setInterval(() => {
-      setN((v) => {
-        if (v >= texto.length) {
-          window.clearInterval(t)
-          return v
-        }
-        return v + 1
-      })
-    }, velocidade)
-    return () => window.clearInterval(t)
-  }, [texto, ativo, velocidade])
-  return texto.slice(0, n)
-}
-
-function AurinhaApresentacao({ reduzir }: { reduzir: boolean }) {
-  const fala = useTypewriter(FALA_AURINHA, !reduzir)
+function ApresentacaoSistema({ reduzir }: { reduzir: boolean }) {
+  const fala = useTypewriter(FALA_APRESENTACAO, !reduzir)
   return (
     <div className="flex flex-col items-center gap-3 text-center">
       <motion.div
-        initial={reduzir ? false : { scale: 0, rotate: -12 }}
-        animate={{ scale: 1, rotate: 0 }}
+        initial={reduzir ? false : { scale: 0 }}
+        animate={{ scale: 1 }}
         transition={reduzir ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 14 }}
         className="relative"
       >
@@ -117,16 +71,7 @@ function AurinhaApresentacao({ reduzir }: { reduzir: boolean }) {
           transition={reduzir ? undefined : { duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
           className="grid place-items-center rounded-3xl border border-amber-200 bg-gradient-to-b from-amber-50 to-white p-4 shadow-card dark:border-amber-900 dark:from-amber-950/40 dark:to-slate-900"
         >
-          <SpriteAurinha />
-          {/* aceno */}
-          <motion.span
-            aria-hidden="true"
-            className="absolute -right-1 top-6 text-2xl"
-            animate={reduzir ? undefined : { rotate: [0, 18, -8, 14, 0] }}
-            transition={reduzir ? undefined : { duration: 1.6, repeat: Infinity, repeatDelay: 1.2 }}
-          >
-            👋
-          </motion.span>
+          <EscudoAurum tamanho={104} />
         </motion.div>
         {/* sombra elástica */}
         {!reduzir ? (
@@ -144,10 +89,10 @@ function AurinhaApresentacao({ reduzir }: { reduzir: boolean }) {
         aria-live="polite"
       >
         <span aria-hidden="true" className="absolute -top-2 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 border-l border-t border-[var(--line)] bg-[var(--surface-2)]" />
-        <strong className="font-black text-brand-700 dark:text-aurum-300">Aurinha ✨</strong>
+        <strong className="font-black text-brand-700 dark:text-aurum-300">Aurum Tax NCM ✨</strong>
         <p className="mt-1 min-h-[3.5rem]">
           {fala}
-          {!reduzir && fala.length < FALA_AURINHA.length ? <span className="animate-pulse">▍</span> : null}
+          {!reduzir && fala.length < FALA_APRESENTACAO.length ? <span className="animate-pulse">▍</span> : null}
         </p>
       </div>
 
@@ -177,6 +122,29 @@ function AurinhaApresentacao({ reduzir }: { reduzir: boolean }) {
       </motion.div>
     </div>
   )
+}
+
+/** Efeito máquina de escrever para a fala de apresentação. */
+function useTypewriter(texto: string, ativo: boolean, velocidade = 22): string {
+  const [n, setN] = useState(ativo ? 0 : texto.length)
+  useEffect(() => {
+    if (!ativo) {
+      setN(texto.length)
+      return
+    }
+    setN(0)
+    const t = window.setInterval(() => {
+      setN((v) => {
+        if (v >= texto.length) {
+          window.clearInterval(t)
+          return v
+        }
+        return v + 1
+      })
+    }, velocidade)
+    return () => window.clearInterval(t)
+  }, [texto, ativo, velocidade])
+  return texto.slice(0, n)
 }
 
 /* ------------------------------ assistente -------------------------------- */
@@ -440,7 +408,7 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
               transition={reduzir ? { duration: 0.15 } : TRANSICAO_ELASTICA}
               className="modal-scroll scroll-elegante min-h-[16rem] px-5 py-4 text-xs leading-relaxed"
             >
-              {passo === 0 ? <AurinhaApresentacao reduzir={reduzir} /> : null}
+              {passo === 0 ? <ApresentacaoSistema reduzir={reduzir} /> : null}
 
               {passo === 1 ? (
                 <div className="space-y-3">
@@ -790,7 +758,7 @@ export function AssistenteInstalacao({ onConcluido }: { onConcluido: () => void 
           </div>
           {passo < ultimo ? (
             <Btn variante="primary" onClick={avancar}>
-              {passo === 0 ? 'Prazer, Aurinha! →' : passo === 1 ? 'Começar →' : 'Continuar →'}
+              {passo === 0 ? 'Conhecer o sistema →' : passo === 1 ? 'Começar →' : 'Continuar →'}
             </Btn>
           ) : (
             <Btn variante="primary" carregando={salvando} onClick={() => void concluir()}>

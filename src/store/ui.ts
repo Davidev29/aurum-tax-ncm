@@ -26,8 +26,6 @@ export type ViewId =
   | 'produtos'
   | 'auxiliares'
   | 'legislacao'
-  | 'aurum'
-  | 'debugia'
 
 export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = {
   calculadora: {
@@ -69,16 +67,6 @@ export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = 
   legislacao: {
     titulo: 'Legislação',
     subtitulo: 'Leia as normas dentro do sistema — base federal, decretos, RICMS-CE e portais',
-  },
-  aurum: {
-    titulo: 'Aurum AI',
-    subtitulo: 'Converse com a IA — NCM/NBS, cálculos e relatórios com RAG nativo',
-  },
-  // View oculta de diagnóstico (Phase 6 / IA-05): fora da paridade SPEC das
-  // 7 telas e do menu lateral — acessível só por `Ctrl+Shift+D`.
-  debugia: {
-    titulo: 'Diagnóstico IA',
-    subtitulo: 'Worker offline · candidatos RAG · decisão validada · taxa_uso_ia',
   },
 }
 

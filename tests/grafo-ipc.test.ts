@@ -1,26 +1,21 @@
 /**
- * GRAFO-02 — Runtime no worker + IPC (`ia:grafo`).
+ * GRAFO-02 — Runtime direto no processo principal (`ia:grafo`).
  *
  *   (a) sem `.lbug` → `{ ok:false, fallback:'lexical' }` (fail-closed);
  *   (b) com o grafo real, "carne bovina" acha NCM 02... (02102000 + similares)
  *       com caminho auditável;
  *   (c) expansão 2-hops retorna CCT + Anexo (+ Artigo quando curado);
  *   (d) consulta quente <50ms (ou <500ms em CI);
- *   (e) overlay nasce vazio e corrompido recupera (base intacta);
- *   (f) worker `ia-worker.cjs` responde ao comando `grafo` via fork;
- *   (g) `ia-service.grafoConsultarViaGrafo` sem worker cai no direto (main).
+ *   (e) overlay nasce vazio e corrompido recupera (base intacta).
+ *
+ * Sem worker LLM: o `main.ts` chama `grafoConsultar` direto (sem fork).
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { fork, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 // @ts-expect-error — módulo CJS do Electron (sem tipos; importado pelo runtime)
 import * as grafo from '@/../electron/ia/grafo-service.cjs'
-// @ts-expect-error — módulo CJS do Electron (sem tipos; importado pelo runtime)
-import * as iaService from '@/../electron/ia/ia-service.cjs'
-
-const ROOT = process.cwd()
 const ENV_GRAFO = process.env.AURUM_GRAFO_DIR
 const ENV_USERDATA = process.env.AURUM_GRAFO_USERDATA
 
@@ -56,20 +51,24 @@ describe('grafo-ipc — fallback sem .lbug', () => {
     expect(r.fallback).toBe('lexical')
   })
 
-  it('(a2) AURUM_GRAFO_DIR vazio contamina inclusive o caminho via ia-service', async () => {
+  it('(a2) AURUM_GRAFO_DIR vazio contamina inclusive o caminho direto do main', async () => {
     const vazio = mkTmp('aurum-grafo-vazio-')
     process.env.AURUM_GRAFO_DIR = vazio
-    const r = await iaService.grafoConsultarViaGrafo({ texto: 'carne bovina', k: 5 })
+    grafo._limparCache()
+    const r = await grafo.grafoConsultar({ texto: 'carne bovina', k: 5 }, {})
     expect(r.ok).toBe(false)
     expect(r.fallback).toBe('lexical')
   })
 
-  it('(a3) texto vazio também é fail-closed, sem throw', async () => {
+  it('(a3) texto vazio é resposta honesta vazia, sem throw', async () => {
+    // Serviço direto: texto sem tokens → ok:true com 0 candidatos (o
+    // chamador segue no lexical). A guarda fail-closed de texto vazio
+    // (`ok:false` + `fallback:'lexical'`) mora no canal `ia:grafo` do main.
     const r = await grafo.grafoConsultar({ texto: '   ' }, {})
     expect(r.ok === true ? r.candidatos : r.fallback).toBeDefined()
-    const v = await iaService.grafoConsultarViaGrafo({ texto: '' })
-    expect(v.ok).toBe(false)
-    expect(v.fallback).toBe('lexical')
+    const v = await grafo.grafoConsultar({ texto: '' }, {})
+    expect(v.ok).toBe(true)
+    expect(v.candidatos).toEqual([])
   })
 })
 
@@ -108,9 +107,18 @@ describe('grafo-ipc — consulta real (FTS + 2-hops)', () => {
   it('(d) consulta quente <50ms local (<500ms em CI)', async () => {
     await grafo.grafoConsultar({ texto: 'aquecimento', k: 5 }, {})
     const limite = process.env.CI ? 500 : 50
-    const r = await grafo.grafoConsultar({ texto: 'carne bovina', k: 5 }, {})
-    expect(r.ok).toBe(true)
-    expect(r.tempoMs).toBeLessThan(limite)
+    // Mediana de 5 amostras: a consulta quente é estável (~20ms); a mediana
+    // absorve pausas pontuais de GC/CPU sob carga paralela sem mascarar
+    // regressão real (uma mediana estourada = degradação sistemática).
+    const amostras: number[] = []
+    for (let i = 0; i < 5; i++) {
+      const r = await grafo.grafoConsultar({ texto: 'carne bovina', k: 5 }, {})
+      expect(r.ok).toBe(true)
+      expect(r.candidatos.length).toBeGreaterThan(0)
+      amostras.push(r.tempoMs)
+    }
+    amostras.sort((a, b) => a - b)
+    expect(amostras[Math.floor(amostras.length / 2)]).toBeLessThan(limite)
   })
 })
 
@@ -146,73 +154,5 @@ describe('grafo-ipc — overlay de aprendizado (GRAFO-08)', () => {
     expect(depois.candidatos.map((c: { codigo: string }) => c.codigo)).toEqual(
       antes.candidatos.map((c: { codigo: string }) => c.codigo),
     )
-  })
-})
-
-describe('grafo-ipc — worker + ia-service', () => {
-  function forkWorker(): Promise<ChildProcess> {
-    return new Promise((resolve, reject) => {
-      const filho = fork(path.join(ROOT, 'electron', 'ia', 'ia-worker.cjs'), [], {
-        stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
-      })
-      const timer = setTimeout(() => {
-        try { filho.kill() } catch { /* ignora */ }
-        reject(new Error('timeout esperando "pronto" do worker'))
-      }, 15000)
-      filho.once('message', (msg: unknown) => {
-        const m = (msg ?? {}) as { cmd?: string }
-        if (m.cmd === 'pronto') {
-          clearTimeout(timer)
-          resolve(filho)
-        }
-      })
-      filho.once('error', (e) => {
-        clearTimeout(timer)
-        reject(e)
-      })
-    })
-  }
-
-  function rpcFilho(filho: ChildProcess, cmd: string, carga: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
-    return new Promise((resolve, reject) => {
-      const id = Math.floor(Math.random() * 1e9)
-      const timer = setTimeout(() => {
-        filho.off('message', aoMsg)
-        reject(new Error(`timeout no comando "${cmd}"`))
-      }, 15000)
-      const aoMsg = (msg: unknown) => {
-        const m = (msg ?? {}) as { id?: number }
-        if (m.id === id) {
-          clearTimeout(timer)
-          filho.off('message', aoMsg)
-          resolve(m as Record<string, unknown>)
-        }
-      }
-      filho.on('message', aoMsg)
-      filho.send({ id, cmd, ...carga })
-    })
-  }
-
-  it('(f) worker responde ao comando `grafo` com candidatos + caminho', async () => {
-    const filho = await forkWorker()
-    try {
-      const init = await rpcFilho(filho, 'init', { mock: true })
-      expect(init.ok).toBe(true)
-      const r = await rpcFilho(filho, 'grafo', { texto: 'carne bovina', k: 3 })
-      expect(r.ok).toBe(true)
-      const cands = r.candidatos as { codigo: string; caminho: string[] }[]
-      expect(Array.isArray(cands) && cands.length).toBeGreaterThan(0)
-      expect(cands[0].codigo.replace(/\D/g, '')).toMatch(/^02/)
-      expect(cands[0].caminho.length).toBeGreaterThanOrEqual(3)
-    } finally {
-      try { filho.send({ id: -1, cmd: 'encerrar' }) } catch { /* ignora */ }
-      setTimeout(() => { try { filho.kill() } catch { /* ignora */ } }, 500)
-    }
-  }, 30000)
-
-  it('(g) ia-service sem worker cai no direto e acha o grafo real', async () => {
-    const r = await iaService.grafoConsultarViaGrafo({ texto: 'carne bovina', k: 3 })
-    expect(r.ok).toBe(true)
-    expect(r.candidatos[0].codigo.replace(/\D/g, '')).toMatch(/^02/)
   })
 })

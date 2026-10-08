@@ -94,6 +94,27 @@ describe('relatório analítico — motor determinístico', () => {
     expect(r.dueloFoco.anexo).toBe('V');
   });
 
+  it('Anexo III puro NUNCA exige Fator R (manual e CNPJ); Anexo V puro exige', () => {
+    const manualIII = orquestrarRelatorio(
+      inputBase({
+        empresa: { origem: 'MANUAL', razaoSocial: 'Contribuinte — cálculo manual', cnpj: null },
+        contexto: { modo: 'manual', anexoSelecionado: 'III', anexosElegiveis: ['III'] },
+      }),
+    );
+    expect(manualIII.contexto.mostrarFatorR).toBe(false);
+    const cnpjIII = orquestrarRelatorio(
+      inputBase({ contexto: { modo: 'cnpj', anexoSelecionado: 'III', anexosElegiveis: ['III'] } }),
+    );
+    expect(cnpjIII.contexto.mostrarFatorR).toBe(false);
+    const manualV = orquestrarRelatorio(
+      inputBase({
+        empresa: { origem: 'MANUAL', razaoSocial: 'Contribuinte — cálculo manual', cnpj: null },
+        contexto: { modo: 'manual', anexoSelecionado: 'V', anexosElegiveis: ['V'] },
+      }),
+    );
+    expect(manualV.contexto.mostrarFatorR).toBe(true);
+  });
+
   it('memória do híbrido fecha: DAS − CBS = reduzido; débitos − créditos = CBS; soma = total', () => {
     const r = orquestrarRelatorio(inputBase());
     for (const ax of ['I', 'III', 'V'] as const) {

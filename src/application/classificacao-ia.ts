@@ -1,26 +1,25 @@
 /**
- * Gate determinístico → modelo real Aurum AI — Phase 6 / IA-05 (tracer 06-05).
+ * Gate determinístico → seletor automático local — classificação 100%
+ * determinística (sem modelo de linguagem).
  *
- * AI-FIRST no Electron: a decisão do fallback VEM do GGUF real
- * (`window.aurum.ia.classificar`); sem modelo ou IPC quebrado, falha FECHADA
- * com erro explícito — nunca fallback silencioso para o seletor local.
- * Sem bridge (web/testes), o seletor local responde com `mock:true`.
+ * A decisão do fallback VEM do seletor local ancorado
+ * (`selecionarAurumAILocal`, com `mock:true`): RAG lexical + ficha absoluta
+ * + resolvedor oficial. O worker LLM foi removido — sem IPC, sem modelo.
  *
- * A Aurum AI é camada SUPERIOR, nunca substituta:
+ * O seletor automático é camada SUPERIOR, nunca substituta:
  * 1. `classificarPorDescricao()` roda primeiro (tokenização + RGI +
  *    `buscarNomenclaturaPorTexto`). Se devolve `ncm_provavel` com confiança
- *    `alta`, retorna direto com `via: 'deterministico'` — o worker IA nem é
+ *    `alta`, retorna direto com `via: 'deterministico'` — o seletor nem é
  *    chamado (bypass provado em 06-09).
- * 2. Senão (`null` ou confiança `baixa`/`media`), monta o Top-15 RAG,
+ * 2. Senão (`null` ou confiança `baixa`/`media`), monta o Top-20 RAG,
  *    enriquece cada candidato com a **ficha absoluta** (nomenclatura +
- *    hierarquia + vínculos + capítulo in natura/art.135 + vigência), pede ao
- *    worker (`window.aurum.ia.classificar` no Electron; seletor Aurum AI local
- *    fora do Electron) e valida a escolha com `resolverClassificacoes`
- *    — nenhuma saída IA chega à UI sem o resolvedor (princípio 2).
+ *    hierarquia + vínculos + capítulo in natura/art.135 + vigência), decide
+ *    pelo seletor local e valida a escolha com `resolverClassificacoes`
+ *    — nenhuma saída chega à UI sem o resolvedor (princípio 2).
  * 3. Falha segura: `NÃO SEI` → `codigoEscolhido: null`, sem código
  *    fictício (princípio 3). NÃO SEI vale SÓ sem lastro oficial (zero
- *    candidatos ou overlap zero); com correspondência na base oficial, a IA
- *    sugere hipótese provisória baixa ancorada (a verificar), nunca 0% seco.
+ *    candidatos ou overlap zero); com correspondência na base oficial, o
+ *    seletor sugere hipótese provisória baixa ancorada (a verificar), nunca 0% seco.
  */
 import {
   classificarPorDescricao,
@@ -33,7 +32,7 @@ import {
   resolverClassificacoes,
 } from '@/infrastructure/base/classificacao-repo'
 import { buscarNoDicionarioComercial } from '@/domain/constants/dicionario-comercial'
-import { bridge, type CandidatoIa } from '@/infrastructure/bridge'
+import type { CandidatoIa } from '@/infrastructure/bridge'
 import { LIMIAR_NAO_SEI } from '@/domain/aurum-ai'
 import {
   ehVerboProvavel,
@@ -247,7 +246,7 @@ async function selecionarAurumAILocal(
     // bruto sem citar obra não puxa cap. 73/84.
     try {
       const qNorm = normalizarBusca(descricao)
-      const falaAnimal = /(frango|franga|galinha|galo|pintinho|ave|aves|chester|peru|pato|ganso|codorna|boi|bovin|vaca|suin|porco|cavalo|ovelha|cabrito|coelho|peixe|camarao)/.test(qNorm)
+      const falaAnimal = /(frango|franga|galinha|galo|pintinho|ave|aves|chester|peru|pato|ganso|codorna|avestruz|ema|boi|bovin|vaca|suin|porco|cavalo|egua|potro|ovelha|carneiro|cordeiro|cabra|bode|cabrito|coelho|lebre|jacare|repteis|serpente|cobra|tartaruga|papagaio|arara|periquito|gaviao|falcao|macaco|sagui|primata|abelha|ovo|ovos|gema|figado|lingua|moela|peixe|camarao)/.test(qNorm)
       const falaVivo = /(^| )vivo( |$)|viva|vivos|vivas/.test(qNorm) || /(^| )vivo( |$)/.test(normalizarBusca(descricao))
       const falaVacina = /(vacina|virus|doenca|medicamento|farmaco|soro|antinfeccioso)/.test(qNorm)
       const codLimpo = String(c.codigo).replace(/\D+/g, '')
@@ -475,9 +474,10 @@ async function selecionarAurumAILocal(
 }
 
 /**
- * Classifica com gate: determinístico primeiro, IA só no fallback.
- * `chamouWorker` (saída) indica se o worker foi acionado — usado pelo teste
+ * Classifica com gate: determinístico primeiro, seletor automático no fallback.
+ * `aoWorker` (saída) indica se o fallback foi acionado — usado pelo teste
  * de bypass determinístico (06-09) e pela métrica `taxa_uso_ia`.
+ * (Nome histórico: hoje não há worker; `true` = usou o seletor automático.)
  */
 export async function classificarComIa(
   entrada: EntradaDescricao,
@@ -612,7 +612,7 @@ export async function classificarComIa(
   // Fusão: grafo primeiro, dedupe por código. Sem grafo → lexical intacto.
   const candidatos: CandidatoIa[] = fundirCandidatosGrafoLexical(respostaGrafo, lexicais, trilhaGrafo)
   const usouGrafo = trilhaGrafo.usouGrafo
-  const viaBase: ViaClassificacao = usouGrafo ? (bridge?.ia ? 'grafo+ia' : 'grafo') : 'ia'
+  const viaBase: ViaClassificacao = usouGrafo ? 'grafo' : 'ia'
 
   let escolha: { codigo: string; confianca: number; motivo: string; ficha: FichaAbsoluta | null; veredito: VereditoAurumAI | null } = {
     codigo: 'NÃO SEI',
@@ -621,53 +621,11 @@ export async function classificarComIa(
     ficha: null,
     veredito: null,
   }
-  let mock = true
+  const mock = true
   if (candidatos.length) {
-    if (bridge?.ia) {
-      // AI-first no Electron: a decisão VEM do modelo real. Sem modelo
-      // (`ok:false`) ou IPC quebrado, falha FECHADA com erro explícito —
-      // nunca fallback silencioso para o seletor local.
-      const r = await bridge.ia.classificar(contextoRico || entrada.descricao, candidatos).catch((e) => {
-        throw new Error(`Modelo IA obrigatório indisponível: ${e instanceof Error ? e.message : String(e)}`)
-      })
-      if (!r.ok) {
-        throw new Error(`Modelo IA obrigatório indisponível: ${r.erro}`)
-      }
-      mock = r.mock
-      if (r.codigo === 'NÃO SEI') {
-        // Pensamento criterioso com os dados do sistema: o worker real
-        // recusou, mas a base oficial TEM candidatos. Em vez de 0% seco, a
-        // Aurum AI reavalia o Top com o seletor ancorado (ficha absoluta +
-        // vínculo + capítulo + vigência) — nem que demore instantes, a
-        // decisão provisória usa tudo que o sistema já leu.
-        try {
-          const segundaOpiniao = await selecionarAurumAILocal(contextoRico || entrada.descricao, candidatos, trilhaGrafo)
-          if (segundaOpiniao.codigo !== 'NÃO SEI') {
-            escolha = {
-              ...segundaOpiniao,
-              motivo: `${r.motivo}/segunda-opiniao-${segundaOpiniao.motivo}`,
-            }
-          } else {
-            const fichaTopo = await montarFichaAbsoluta(candidatos[0].codigo).catch(() => null)
-            escolha = { codigo: 'NÃO SEI', confianca: 0, motivo: r.motivo, ficha: fichaTopo, veredito: fichaTopo ? analisarFichaAbsoluta(fichaTopo) : null }
-          }
-        } catch {
-          const fichaTopo = await montarFichaAbsoluta(candidatos[0].codigo).catch(() => null)
-          escolha = { codigo: 'NÃO SEI', confianca: 0, motivo: r.motivo, ficha: fichaTopo, veredito: fichaTopo ? analisarFichaAbsoluta(fichaTopo) : null }
-        }
-      } else {
-        // Mesmo com worker real, a ficha absoluta é lida aqui (precisão
-        // máxima): o worker escolhe entre candidatos, a Aurum AI valida e
-        // calibra com o conjunto absoluto antes do resolvedor.
-        const ficha = await montarFichaAbsoluta(r.codigo).catch(() => null)
-        const veredito = ficha ? analisarFichaAbsoluta(ficha) : null
-        let confianca = Math.max(0, Math.min(1, Number(r.confianca) || 0))
-        if (veredito?.exigeVerificacao && confianca > 0.6) confianca = 0.6
-        escolha = { codigo: r.codigo, confianca: Math.round(confianca * 100) / 100, motivo: r.motivo, ficha, veredito }
-      }
-    } else {
-      escolha = await selecionarAurumAILocal(contextoRico || entrada.descricao, candidatos, trilhaGrafo)
-    }
+    // Seletor automático local (determinístico): RAG lexical + ficha absoluta
+    // + vínculo + capítulo + vigência. Sem modelo, sem IPC.
+    escolha = await selecionarAurumAILocal(contextoRico || entrada.descricao, candidatos, trilhaGrafo)
   }
 
   // Segunda chance ortográfica: se a primeira tentativa deu NÃO SEI e o
@@ -695,34 +653,14 @@ export async function classificarComIa(
           candidatos2.push({ codigo: acerto.ncm, descricao: descricaoPin, score: 999 })
         }
         if (candidatos2.length) {
-          // AI-first: com bridge (Electron), a segunda chance também é do
-          // modelo real; sem bridge (web/testes), seletor local.
-          if (bridge?.ia) {
-            const r2 = await bridge.ia.classificar(textoCorrigido, candidatos2).catch(() => null)
-            if (r2 && r2.ok && r2.codigo !== 'NÃO SEI') {
-              const ficha2 = await montarFichaAbsoluta(r2.codigo).catch(() => null)
-              const veredito2 = ficha2 ? analisarFichaAbsoluta(ficha2) : null
-              let confianca2 = Math.max(0, Math.min(1, Number(r2.confianca) || 0))
-              if (veredito2?.exigeVerificacao && confianca2 > 0.6) confianca2 = 0.6
-              mock = r2.mock
-              escolha = {
-                codigo: r2.codigo,
-                confianca: Math.round(confianca2 * 100) / 100,
-                motivo: `${r2.motivo}/correcao-ortografica(${correcoes.join(',')})`,
-                ficha: ficha2,
-                veredito: veredito2,
-              }
-              candidatos.push(...candidatos2.filter((c) => !candidatos.some((x) => x.codigo === c.codigo)))
+          // Segunda chance sempre pelo seletor local (determinístico).
+          const escolha2 = await selecionarAurumAILocal(textoCorrigido, candidatos2, trilhaGrafo)
+          if (escolha2.codigo !== 'NÃO SEI') {
+            escolha = {
+              ...escolha2,
+              motivo: `${escolha2.motivo}/correcao-ortografica(${correcoes.join(',')})`,
             }
-          } else {
-            const escolha2 = await selecionarAurumAILocal(textoCorrigido, candidatos2, trilhaGrafo)
-            if (escolha2.codigo !== 'NÃO SEI') {
-              escolha = {
-                ...escolha2,
-                motivo: `${escolha2.motivo}/correcao-ortografica(${correcoes.join(',')})`,
-              }
-              candidatos.push(...candidatos2.filter((c) => !candidatos.some((x) => x.codigo === c.codigo)))
-            }
+            candidatos.push(...candidatos2.filter((c) => !candidatos.some((x) => x.codigo === c.codigo)))
           }
         }
       }

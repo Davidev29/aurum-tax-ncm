@@ -4303,7 +4303,7 @@ async function responderViaModelo(
         pergunta: String(pergunta).slice(0, 300),
         historico: historicoSeguroLeve(historico),
         sistema:
-          `Você é a Aurinha, a Aurum AI do Aurum Tax NCM (fiscal: NCM/NBS/CNAE/CNPJ, IBS/CBS, Simples/DAS/Fator R, XMLs, relatórios). Responda em português, curto (1-3 linhas), simpático.${nome ? ` Usuário: ${nome}.` : ''}\n` +
+          `Você é o assistente fiscal do Aurum Tax NCM (fiscal: NCM/NBS/CNAE/CNPJ, IBS/CBS, Simples/DAS/Fator R, XMLs, relatórios). Responda em português, curto (1-3 linhas), simpático.${nome ? ` Usuário: ${nome}.` : ''}\n` +
           `Não cite códigos, valores ou artigos. Se pedirem fiscal, peça 1 detalhe. Nunca ofereça "pesquisas, resumos, tradução" como principal — seu forte é o fiscal deste sistema. Nunca emita tokens de template (<|im_start|>, papéis user/assistant/system) nem repita a pergunta.`,
         think: false,
         fatos: { codigos: [], valores: [] },

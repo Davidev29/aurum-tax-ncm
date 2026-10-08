@@ -1,10 +1,12 @@
 /**
  * Motor de janela deslizante da RBT12 (Etapa 3 — implementado).
  *
- * Regras oficiais (não negociar):
- * - RBT12(t) = soma(R[m]) para m em [t-12, t-1] (nunca inclui o próprio mês).
+ * Regras oficiais — LC 123/2006, art. 18 (não negociar):
+ * - RBT12(t) = soma(R[m]) para m em [t-12, t-1] (NUNCA inclui o próprio
+ *   mês: a competência em curso só entra na RBT12 a partir do mês seguinte).
  * - Empresa nova (< 12 meses): RBT12 = (soma desde abertura / meses) × 12.
- * - 1º mês de empresa nova sem histórico: RBT12 = receita do mês × 12.
+ * - 1º mês de empresa nova sem histórico (exceção à regra acima):
+ *   RBT12 = receita do mês × 12.
  *
  * PURA: sem I/O, sem rede, sem banco. Erros explícitos, sem engolir exceção.
  */
@@ -72,8 +74,11 @@ export function projetarRBT12Rolling(params: ParamsJanelaRBT12): ItemJanelaRBT12
       const janela = fila.slice(-12);
       rbt12 = janela.reduce((s, m) => s + m.receita, 0);
     } else {
-      // Regime proporcional: média desde abertura × 12.
-      const soma = fila.reduce((s, m) => s + m.receita, 0);
+      // Regime proporcional: média desde abertura × 12. A base é SEMPRE os
+      // últimos `mesesAbertosEmT` meses (nunca o histórico inteiro quando ele
+      // for maior que a idade da empresa).
+      const base = mesesAbertosEmT > 0 ? fila.slice(-mesesAbertosEmT) : [];
+      const soma = base.reduce((s, m) => s + m.receita, 0);
       if (mesesAbertosEmT <= 0) {
         // 1º mês sem histórico: RBT12 = receita do mês × 12.
         rbt12 = atual.receita * 12;
@@ -83,7 +88,9 @@ export function projetarRBT12Rolling(params: ParamsJanelaRBT12): ItemJanelaRBT12
     }
 
     // Rastreabilidade da janela (para auditoria da série).
-    const janelaEfetiva = ehEmpresaNova ? [...fila] : fila.slice(-12);
+    const janelaEfetiva = ehEmpresaNova
+      ? (mesesAbertosEmT > 0 ? fila.slice(-mesesAbertosEmT) : [])
+      : fila.slice(-12);
     const mesEntrando = janelaEfetiva.length > 0 ? janelaEfetiva[janelaEfetiva.length - 1]!.mes : null;
     // Mês que saiu vs. janela do período anterior (apenas regime cheio a partir do 2º mês).
     // Fila pré-push tem L itens; janela atual = [L-12, L-1], anterior = [L-13, L-2] → saiu = fila[L-13].

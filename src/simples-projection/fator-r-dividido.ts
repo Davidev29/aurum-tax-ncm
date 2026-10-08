@@ -24,8 +24,10 @@ export type RotuloEmpresaFatorR = 'mae' | 'nova' | 'unificado';
 export interface DiagnosticoFatorREmpresa {
   rotulo: RotuloEmpresaFatorR;
   anexo: AnexoSimplesId;
-  /** false quando o anexo não usa Fator R (I, II, IV) — diagnóstico dispensado. */
+  /** false quando o anexo não usa Fator R (I, II, IV) ou a atividade é III puro — diagnóstico dispensado. */
   aplicaFatorR: boolean;
+  /** Por que dispensado (só quando aplicaFatorR = false). */
+  dispensa?: 'anexo-sem-fator-r' | 'iii-puro';
   folha12: number;
   /** RBT12 projetado do mês (ou do cenário unificado). */
   rbt12p: number;
@@ -45,15 +47,22 @@ export function folhaNecessaria28(rbt12p: number): number {
   return round2(Math.max(0, Number(rbt12p) || 0) * FATOR_R_LIMIAR);
 }
 
+function suiDispensa(anexoUsaFatorR: boolean, sujeitaFatorR: boolean): 'anexo-sem-fator-r' | 'iii-puro' {
+  return anexoUsaFatorR && !sujeitaFatorR ? 'iii-puro' : 'anexo-sem-fator-r';
+}
+
 export function diagnosticarFatorREmpresa(
   rotulo: RotuloEmpresaFatorR,
   anexo: AnexoSimplesId,
   folha12: number,
   rbt12p: number,
+  /** false = Anexo III puro (atividade não sujeita ao Fator R) — dispensa o diagnóstico. Default true. */
+  sujeitaFatorR = true,
 ): DiagnosticoFatorREmpresa {
   const folha = Math.max(0, Number(folha12) || 0);
   const rbt = Math.max(0, Number(rbt12p) || 0);
-  const aplicaFatorR = anexo === 'III' || anexo === 'V';
+  const anexoUsaFatorR = anexo === 'III' || anexo === 'V';
+  const aplicaFatorR = anexoUsaFatorR && sujeitaFatorR;
   const fr = fatorR(folha, rbt);
   const atinge28 = fr.indice >= FATOR_R_LIMIAR;
   const deficitFolha = aplicaFatorR && rbt > 0 && !atinge28 ? round2(folhaNecessaria28(rbt) - folha) : 0;
@@ -61,6 +70,7 @@ export function diagnosticarFatorREmpresa(
     rotulo,
     anexo,
     aplicaFatorR,
+    dispensa: aplicaFatorR ? undefined : suiDispensa(anexoUsaFatorR, sujeitaFatorR),
     folha12: round2(folha),
     rbt12p: round2(rbt),
     indice: round2(fr.indice * 10000) / 10000,
@@ -108,6 +118,9 @@ export interface ConfigAnaliseFatorR {
   anexoNova: AnexoSimplesId;
   folha12Mae: number;
   folha12Nova: number;
+  /** false = atividade III puro (não sujeita ao Fator R). Default true. */
+  sujeitaFatorRMae?: boolean;
+  sujeitaFatorRNova?: boolean;
   /** true quando algum anexo envolvido é o IV (CPP patronal por fora do DAS). */
   envolveAnexoIV?: boolean;
 }
@@ -122,13 +135,14 @@ export function analisarFatorRSerie(
 ): AnaliseFatorR {
   const linhas: LinhaFatorRMensal[] = (serie ?? []).map((l) => ({
     mes: l.mes,
-    mae: diagnosticarFatorREmpresa('mae', cfg.anexoMae, cfg.folha12Mae, l.rbt12Mae),
-    nova: diagnosticarFatorREmpresa('nova', cfg.anexoNova, cfg.folha12Nova, l.rbt12Nova),
+    mae: diagnosticarFatorREmpresa('mae', cfg.anexoMae, cfg.folha12Mae, l.rbt12Mae, cfg.sujeitaFatorRMae ?? true),
+    nova: diagnosticarFatorREmpresa('nova', cfg.anexoNova, cfg.folha12Nova, l.rbt12Nova, cfg.sujeitaFatorRNova ?? true),
     unificado: diagnosticarFatorREmpresa(
       'unificado',
       cfg.anexoMae,
       (Number(cfg.folha12Mae) || 0) + (Number(cfg.folha12Nova) || 0),
       l.rbt12Ref,
+      cfg.sujeitaFatorRMae ?? true,
     ),
   }));
 

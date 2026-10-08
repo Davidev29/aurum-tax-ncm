@@ -5,12 +5,10 @@ import { AssistenteInstalacao } from '@/ui/TermoAceite';
 import { lerAceite } from '@/domain/contrato';
 import { useUi } from '@/store/ui';
 import { Calculadora } from '@/pages/Calculadora';
-import { AurumChat } from '@/pages/AurumChat';
 import { SimplesNacional } from '@/simples/page';
 import { Consulta } from '@/pages/Consulta';
 import { ConsultaServicos } from '@/pages/ConsultaServicos';
 import { ConsultaCnaes } from '@/pages/ConsultaCnaes';
-import { DebugIA } from '@/pages/DebugIA';
 import { Lote } from '@/pages/Lote';
 import { NfeXml } from '@/pages/NfeXml';
 import { NfeXmlPolida } from '@/pages/NfeXmlPolida';
@@ -44,9 +42,6 @@ export function App() {
 
   let pagina: ReactNode;
   switch (view) {
-    case 'aurum':
-      pagina = <AurumChat />;
-      break;
     case 'simples':
       pagina = <SimplesNacional />;
       break;
@@ -78,9 +73,6 @@ export function App() {
       break;
     case 'legislacao':
       pagina = <Legislacao />;
-      break;
-    case 'debugia':
-      pagina = <DebugIA />;
       break;
     default:
       pagina = <Calculadora />;

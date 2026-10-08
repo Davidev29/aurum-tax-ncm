@@ -17,12 +17,50 @@ divisão de faturamento entre empresa mãe e nova empresa.
 | Arquivo | Papel |
 |---|---|
 | `types.ts` | Contratos de entrada/saída (fonte canônica). |
-| `janela-rbt12.ts` | `projetarRBT12Rolling` — RBT12 deslizante (Etapa 3). |
-| `cenario-dividido.ts` | `simularCenarioDividido` — orquestrador mãe/nova (Etapa 4). |
-| `entrada.ts` | `prepararEntradaProjecao` — valida manual/CNPJ (Etapa 5). |
+| `janela-rbt12.ts` | `projetarRBT12Rolling` — RBT12 deslizante. |
+| `cenario-dividido.ts` | `simularCenarioDividido` — orquestrador mãe/nova (v2: split 0–100%, virada, veredito, custo inicial, margem de empate). |
+| `baseline.ts` | Baseline mês atual = 09, `periodoReferencia`, `distribuirRTB12` (igual/crescente/sazonal), `validarRTB12`. |
+| `persistencia.ts` | `salvarRTB12`/`carregarRTB12` por CNPJ/período (localStorage). |
+| `simular-segregacao.ts` | `simularSegregacao` — envelope `POST /projecoes/simular-segregacao`. |
+| `SimuladorSegregacao.tsx` | `<SimuladorSegregacao />` reutilizável: veredito + RBT12 (linhas) + DAS empilhado + área acumulada + timeline + tabela com memória de cálculo. |
+| `NumeroAnimado.tsx` | Contagem animada 400ms (respeita reduced-motion). |
+| `store.ts` | `useProjecaoDividida` — wizard 5 etapas, modos RTB12 manual/automático, slider 0–100%, toggle única↔segregada. |
+| `ModalDivisao.tsx` | Wizard animado em 5 passos (framer-motion 300–500ms ease-in-out). |
+| `entrada.ts` | `prepararEntradaProjecao` — valida manual/CNPJ. |
 | `relatorio.ts` | `montarRelatorioProjecao`, `emitirAlertasFiscais` — envelope final. |
 | `ferramentas.ts` | `specsFerramentasProjecao`, `listarFerramentasProjecaoParaModelo`, `executarFerramentaProjecao`. |
 | `index.ts` | Barrel público. |
+
+## Fluxo animado (5 etapas)
+
+```
+1 RTB12 — automático (só o total; 👁 revela a distribuição) | manual (botão
+  Preencher abre modal-irmão mês a mês) + receita da competência em curso
+  (semeia a projeção) — cabeçalho "Período: MM/AAAA → MM/AAAA (12m antes do
+  início, exclui o mês em curso)"
+  → 2 Receita total projetada (semeada pela tela 1; mensal | global)
+  → 3 Divisão (slider 0–100% + anexos + folha quando III/V + segregação por
+  anexo + KPIs ao vivo)
+  → 4 Custos & Fator R (mensal + abertura única + margem + folha condicional
+  + meses de atividade mãe/nova)
+  → 5 Resultado (<SimuladorSegregacao /> + toggle Empresa única ↔ Segregada)
+```
+
+Etapa atual do stepper usa `.borda-cintilante` (gradiente cônico animado,
+padrão do sistema em `src/index.css`); concluídas ficam verdes.
+
+## Endpoint `POST /projecoes/simular-segregacao`
+
+Payload: `{ mesInicio, receitaTotalMensal[], percentualNova 0–1, mae{anexoId,folha12,historico12,mesesAtividade?}, nova{...}, custoMensalNova?, custoInicialNova?, margemEmpate? }`.
+Response: `{ ok, dados: RelatorioProjecao } | { ok: false, erro }` — ver `simular-segregacao.ts`.
+`RelatorioProjecao`: `serieMensal[]` (RBT12/faixa/nominal/efetiva/DAS por empresa + `economiaBrutaMes`/`custoMes`/`economiaMes`/`economiaAcumulada`), `payback { mesVirada, mesesAteVirada, mes, mesesAtePayback, veredito }`, `economiaTotal`, `alertas`, `analiseFatorR`, `analiseRetorno`, `metadados`.
+
+## Estados de UX
+
+- Loading: cálculo é síncrono (`useMemo`) — sem skeleton; animações de transição cobrem o feedback.
+- Vazio: sem receita → aviso "Informe receitas válidas" + botão Continuar bloqueado com toast.
+- Erro: motor lança erro explícito → `relatorio = null` → cartão tracejado instrutivo (nunca número inventado).
+- Erro RTB12 = 0 → toast + alerta vermelho; mês zerado isolado → alerta âmbar (sazonalidade?).
 
 ## Fluxo (texto)
 
@@ -31,23 +69,32 @@ input manual/CNPJ
   → prepararEntradaProjecao (valida; CNPJ via buscarCnpj existente; nunca inventa)
   → ParamsCenarioDividido
   → simularCenarioDividido
-      ├─ fatiar receita total por percentualNova
+      ├─ fatiar receita total por percentualNova (0–100%)
       ├─ projetarRBT12Rolling ×3 (mãe, nova, referência-unificada)
       ├─ calcularConvencional ×3 por mês (motor existente: faixa/alíquota/DAS)
-      ├─ economiaMes = DAS_ref − (DAS_mãe + DAS_nova) − custoMensalNova
-      ├─ economiaAcumulada + payback (1º mês acumulado > 0)
+      ├─ economiaBruta = DAS_ref − (DAS_mãe + DAS_nova); custoMes = mensal (+ abertura no mês 1)
+      ├─ economiaMes = bruta − custo; economiaAcumulada (soma)
+      ├─ virada = 1º mês economiaMes > 0; payback = 1º mês acumulado > 0
+      ├─ veredito = compensa | nao-compensa | empate-tecnico (|econ| ≤ margem, margem > 0)
       └─ alertas (sublimite 3.6M, 4.8M, Fator R, empresa nova, consolidação)
   → RelatorioProjecao { serieMensal, payback, economiaTotal, alertas, insightsSugeridos: [] }
   → LLM preenche insights (motor nunca gera texto qualitativo)
 ```
 
-## Regras fiscais aplicadas
+## Regras fiscais aplicadas (LC 123/2006, art. 18)
 
-- `RBT12(t) = soma(R[m])`, m em [t−12, t−1] — nunca inclui o próprio mês.
-- Empresa nova (< 12m): `(soma desde abertura / meses) × 12`; 1º mês sem histórico: `receita × 12`.
+- `RBT12(t) = soma(R[m])`, m em [t−12, t−1] — nunca inclui a competência em
+  curso; cada competência só entra na RBT12 a partir do mês seguinte.
+- O início da projeção é a competência em curso (mês atual dinâmico); o
+  histórico cobre os 12 meses anteriores ("Atual − 1" para trás).
+- Empresa nova (< 12m): `(soma desde abertura / meses) × 12`; 1º mês sem histórico: `receita × 12`. A base proporcional usa só os últimos N meses (N = idade).
+- Segregação intra-empresa: com `composicao` (ex. 60% I + 40% III), a RBT12
+  TOTAL define a faixa em cada tabela; cada parcela usa sua alíquota efetiva
+  e o DAS é a soma. Sem composição = 100% no anexo principal.
 - Sublimite R$ 3,6M → alerta `SUBLIMITE_3_6M`; limite R$ 4,8M → `DESENQUADRAMENTO_4_8M`.
-- Fator R = folha12 / RBT12; ≥ 28% → Anexo III senão V (alerta `FATOR_R_TROCA_ANEXO`).
-- Baseline "unificado": tudo na mãe (anexo/histórico da mãe + total). `rba` omitido (= rbt12, comportamento do motor).
+- Fator R = folha12 / RBT12; ≥ 28% → Anexo III senão V (alerta `FATOR_R_TROCA_ANEXO`). Só para atividades sujeitas — Anexo III puro dispensa cálculo, folha e diagnóstico (`dispensarFatorR`). Campos de folha só aparecem para anexos III/V sujeitos.
+- Encargos do pró-labore: INSS 11% (teto RGPS) + IRPF tabela mensal 2026; CPP patronal por fora só no Anexo IV. Agregado Σ mensal no painel de carga fiscal.
+- Baseline "unificado": tudo na mãe (anexo/histórico/composição da mãe + total). `rba` omitido (= rbt12, comportamento do motor).
 - Aviso permanente `CONSOLIDACAO_RECEITA_GRUPO`: valide sublimite consolidado com contador.
 
 ## Exemplo de uso

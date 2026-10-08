@@ -73,7 +73,7 @@ export const SPECS_FERRAMENTAS_PROJECAO: SpecFerramentaProjecao[] = [
     parametros: {
       mesInicio: { type: 'string', description: `Primeiro mês. ${MES_RE_DESC}`, obrigatorio: true, exemplo: '2026-01' },
       receitaTotalMensal: { type: 'array', description: `Receita TOTAL a fatiar. ${SERIE_DESC}`, obrigatorio: true },
-      percentualNova: { type: 'number', description: 'Fração 0 < p < 1 destinada à nova (ex. 0.3).', obrigatorio: true, exemplo: '0.3' },
+      percentualNova: { type: 'number', description: 'Fração 0 ≤ p ≤ 1 destinada à nova (ex. 0.3). 0 e 1 válidos (extremos).', obrigatorio: true, exemplo: '0.3' },
       anexoMae: { type: 'string', description: 'Anexo da mãe: I, II, III, IV ou V.', obrigatorio: true, exemplo: 'III' },
       anexoNova: { type: 'string', description: 'Anexo da nova: I, II, III, IV ou V.', obrigatorio: true, exemplo: 'III' },
       folha12Mae: { type: 'number', description: 'Folha 12m da mãe (Fator R).', exemplo: '400000' },
@@ -141,21 +141,35 @@ export async function executarFerramentaProjecao(
         const a = args as Record<string, never>;
         const maeHist = (a as { historicoMae12?: never }).historicoMae12;
         const novaHist = (a as { historicoNova12?: never }).historicoNova12;
+        const num = (v: unknown, fb: number): number => {
+          const n = Number(v);
+          return Number.isFinite(n) ? n : fb;
+        };
+        const histMaeLen = Array.isArray(maeHist as unknown) ? (maeHist as unknown as unknown[]).length : 0;
+        const mesesMae = (args as { mesesAtividadeMae?: unknown }).mesesAtividadeMae;
         const dados = simularCenarioDividido({
           mesInicio: (args as { mesInicio: string }).mesInicio,
           receitaTotalMensal: (args as { receitaTotalMensal: never }).receitaTotalMensal as never,
-          percentualNova: Number((args as { percentualNova: unknown }).percentualNova),
+          percentualNova: num((args as { percentualNova: unknown }).percentualNova, NaN),
           mae: {
             anexoId: (args as { anexoMae: never }).anexoMae as never,
-            folha12: Number((args as { folha12Mae?: unknown }).folha12Mae ?? 0),
+            folha12: num((args as { folha12Mae?: unknown }).folha12Mae, 0),
             historico12: (maeHist ?? []) as never,
+            mesesAtividade: mesesMae === undefined ? histMaeLen : num(mesesMae, histMaeLen),
+            composicao: (args as { composicaoMae?: never }).composicaoMae as never,
+            dispensarFatorR: Boolean((args as { dispensarFatorRMae?: unknown }).dispensarFatorRMae),
           },
           nova: {
             anexoId: (args as { anexoNova: never }).anexoNova as never,
-            folha12: Number((args as { folha12Nova?: unknown }).folha12Nova ?? 0),
+            folha12: num((args as { folha12Nova?: unknown }).folha12Nova, 0),
             historico12: (novaHist ?? []) as never,
+            mesesAtividade: num((args as { mesesAtividadeNova?: unknown }).mesesAtividadeNova, 0),
+            composicao: (args as { composicaoNova?: never }).composicaoNova as never,
+            dispensarFatorR: Boolean((args as { dispensarFatorRNova?: unknown }).dispensarFatorRNova),
           },
-          custoMensalNova: Number((args as { custoMensalNova?: unknown }).custoMensalNova ?? 0),
+          custoMensalNova: num((args as { custoMensalNova?: unknown }).custoMensalNova, 0),
+          custoInicialNova: num((args as { custoInicialNova?: unknown }).custoInicialNova, 0),
+          margemEmpate: num((args as { margemEmpate?: unknown }).margemEmpate, 0),
         });
         return { ok: true, ferramenta: nome, dados };
       }

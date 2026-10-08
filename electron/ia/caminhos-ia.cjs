@@ -1,12 +1,10 @@
 'use strict'
 
 /**
- * caminhos-ia.cjs — Resolução central de caminhos dos artefatos IA (06-07 / IA-07).
+ * caminhos-ia.cjs — Resolução central de caminhos dos artefatos de busca.
  *
- * Regra única, usada pelo main (`ia-service.cjs`, bundlado em
- * `electron/dist/main.js`) e pelo worker (`ia-worker.cjs`, copiado para
- * `electron/dist/` — NUNCA bundlado, pois `utilityProcess.fork()` exige um
- * arquivo real):
+ * Regra única, usada pelo main (bundlado em `electron/dist/main.js`) e pelo
+ * `grafo-service.cjs`:
  *
  *   - Dev (`app.isPackaged === false` ou heurística fora do asar):
  *     `<raiz-do-projeto>/recursos-ia/...`
@@ -16,13 +14,13 @@
  *     candidatos em ordem e registra `console.warn` (nunca lança).
  *
  * Módulo sem estado e sem dependências além de `node:fs`/`node:path`, para
- * funcionar identicamente bundlado (main) e copiado (worker). O esbuild
+ * funcionar identicamente bundlado (main) e copiado. O esbuild
  * (`electron/esbuild.mjs`) copia este arquivo para `electron/dist/` junto ao
- * worker; o `require('./caminhos-ia.cjs')` do worker resolve no `dist/`.
+ * grafo-service; o `require('./caminhos-ia.cjs')` resolve no `dist/`.
  *
  * Deliberadamente FORA do pacote (ver `extraResources`):
- *   - `recursos-ia/modelo/*.gguf` — ausente offline (modo mock 06-05);
- *   - `recursos-ia/embedding/*` — pesos ainda não adquiridos (06-03 pendente).
+ *   - `recursos-ia/modelo/*.gguf` — modelo LLM não embarcado (instalador
+ *     leve; classificação 100% determinística).
  */
 
 const fs = require('node:fs')

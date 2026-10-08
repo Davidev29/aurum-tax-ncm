@@ -1,21 +1,22 @@
 /**
- * after-pack-ia.cjs — Hook `afterPack` do electron-builder (06-07 / IA-07).
+ * after-pack-ia.cjs — Hook `afterPack` do electron-builder.
  *
  * Registrado em `package.json` → `build.afterPack`. O electron-builder o
  * invoca com um contexto `{ appOutDir, outDir, arch, packager, ... }` após
  * empacotar cada alvo.
  *
- * O que verifica:
- *   1. Worker copiado (`electron/dist/ia-worker.cjs` + `caminhos-ia.cjs` +
- *      `perfil-modelo.cjs` [camada de compatibilidade]) — FALHA se ausente.
+ * O que verifica (classificação 100% determinística, sem LLM):
+ *   1. Grafo copiado (`electron/dist/grafo-service.cjs` + `caminhos-ia.cjs`)
+ *      — FALHA se ausente.
  *   2. Índice lexical RAG + `.manifest-hash` — FALHA se ausentes.
- *   3. Base `ncm-para-ia.json` (06-02) + `CHECKSUMS.txt` — FALHA se ausentes.
- *   4. GGUF em `recursos-ia/modelo/*.gguf` — OBRIGATÓRIO (AI-first; FALHA se
- *      ausente). AGNÓSTICO: qualquer nome `*.gguf` vale (trocar o arquivo =
- *      trocar o modelo; ver `electron/ia/perfil-modelo.cjs` + `modelo.json`).
+ *   3. Base `ncm-para-ia.json` + `CHECKSUMS.txt` — FALHA se ausentes.
+ *   4. Grafo fiscal + manifesto — FALHA se ausentes.
  *   5. Se `appOutDir/resources/` já existir, confere que `extraResources`
  *      (`recursos-ia/...`) aterrissou — AVISA se não (não falha: layout varia
  *      por alfo NSIS/DMG/AppImage).
+ *
+ * O modelo LLM (`recursos-ia/modelo/*.gguf`) NÃO é embarcado de propósito
+ * (instalador leve) — presença/ausência aqui é só informativa.
  *
  * Sem dependências (só `node:`). Nunca exige rede. Falhas duras lançam
  * `Error` (reprovam o pack); pendências offline viram `AVISO` no log.
@@ -27,13 +28,9 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const GGUF_LEGADO = 'Qwen3.5-2B-Q4_K_M.gguf'
-
 /** Checagens duras: `[relativo-à-raiz, descrição]`. */
 const OBRIGATORIOS = [
-  ['electron/dist/ia-worker.cjs', 'worker IA copiado pelo esbuild'],
-  ['electron/dist/caminhos-ia.cjs', 'módulo de caminhos IA copiado pelo esbuild'],
-  ['electron/dist/perfil-modelo.cjs', 'camada de compatibilidade do modelo (copiada pelo esbuild)'],
+  ['electron/dist/caminhos-ia.cjs', 'módulo de caminhos copiado pelo esbuild'],
   ['electron/dist/grafo-service.cjs', 'runtime do grafo fiscal 10-02 (copiado pelo esbuild)'],
   ['recursos-ia/dados-brutos/ncm-para-ia.json', 'base unificada 06-02 (2335 NCMs)'],
   ['recursos-ia/indice-ncm/indice-lexical.json', 'índice lexical RAG (fallback 06-03)'],
@@ -90,19 +87,14 @@ async function afterPackIa(contexto = {}) {
     }
   }
 
-  // GGUF: OBRIGATÓRIO em produção (AI-first, modelo embutido nativo).
-  // AGNÓSTICO: qualquer `*.gguf` em recursos-ia/modelo/ vale — trocar o
-  // arquivo = trocar o modelo (camada de compatibilidade resolve o perfil).
-  // Sem nenhum .gguf o instalador sairia sem IA real — falha o pack.
+  // Modelo LLM: NÃO embarcado de propósito (instalador leve, classificação
+  // determinística). Presença de *.gguf é só informativa (uso futuro).
   const ggufs = listarGgufsModelo(raiz)
   if (!ggufs.length) {
-    falhas.push(
-      'recursos-ia/modelo/*.gguf — modelo IA embutido obrigatório (AI-first); coloque qualquer .gguf em recursos-ia/modelo/ antes do dist',
-    )
-    console.error('[afterPack:ia] FALTA: recursos-ia/modelo/*.gguf (modelo IA embutido obrigatório)')
+    console.log('[afterPack:ia] ok: sem modelo LLM embarcado (instalador leve — classificação determinística)')
   } else {
     for (const g of ggufs) {
-      console.log(`[afterPack:ia] ok: recursos-ia/modelo/${g.arquivo} (${tamanho(g.abs)} bytes)`)
+      console.log(`[afterPack:ia] info: recursos-ia/modelo/${g.arquivo} (${tamanho(g.abs)} bytes) presente mas NÃO embarcado (ver extraResources)`)
     }
   }
 
@@ -144,8 +136,6 @@ async function afterPackIa(contexto = {}) {
     )
   }
   for (const [rel, oQue] of [
-    ['electron/dist/ia-worker.cjs', null],
-    ['electron/dist/modelo-seguro.cjs', 'helper de leitura cifrada em memória'],
     ['electron/dist/main.js', 'processo principal ofuscado (build completa)'],
     ['electron/dist/preload.cjs', 'preload ofuscado (build completa)'],
   ]) {
@@ -154,7 +144,7 @@ async function afterPackIa(contexto = {}) {
       if (oQue) console.warn(`[afterPack:ia] AVISO: ${rel} ausente (${oQue}; rode "node electron/esbuild.mjs").`)
       continue
     }
-    if (rel.endsWith('ia-worker.cjs') || rel.endsWith('main.js') || rel.endsWith('preload.cjs')) {
+    if (rel.endsWith('main.js') || rel.endsWith('preload.cjs')) {
       let conteudo = ''
       try {
         conteudo = fs.readFileSync(abs, 'utf8')
@@ -202,32 +192,15 @@ async function afterPackIa(contexto = {}) {
     }
   } catch { /* best-effort */ }
 
-  // Artefatos deliberadamente EXCLUÍDOS do instalador: confirma que o
-  // `extraResources` não os puxa por acidente via glob amplo.
-  // Modelo GGUF: EMBUTIDO nativamente via extraResources (package.json —
-  // qualquer *.gguf + modelo.json do diretório recursos-ia/modelo/).
+  // Modelo LLM deliberadamente EXCLUÍDO do instalador (instalador leve,
+  // classificação determinística): confirma que o `extraResources` não o
+  // puxa por acidente via glob amplo.
   const ggufsEmb = listarGgufsModelo(raiz)
   for (const g of ggufsEmb) {
     console.log(
-      `[afterPack:ia] ok: modelo embutido nativamente (${tamanho(g.abs)} bytes -> resources/recursos-ia/modelo/${g.arquivo})`,
+      `[afterPack:ia] ok: modelo local NÃO embarcado (${tamanho(g.abs)} bytes em recursos-ia/modelo/${g.arquivo} — fica só no dev)`,
     )
   }
-  for (const rel of ['recursos-ia/embedding']) {
-    const abs = path.join(raiz, rel)
-    let conteudo = []
-    try {
-      conteudo = fs.existsSync(abs) ? fs.readdirSync(abs).filter((f) => f !== '.gitkeep') : []
-    } catch {
-      conteudo = []
-    }
-    if (conteudo.length) {
-      console.warn(
-        `[afterPack:ia] AVISO: ${rel}/ contém ${conteudo.length} arquivo(s) local(is) ` +
-          `(${conteudo.slice(0, 3).join(', ')}) — NÃO embarcados (ver extraResources no package.json).`,
-      )
-    }
-  }
-
   // Confere o destino empacotado quando disponível (layout varia por alvo).
   const appOutDir = contexto.appOutDir
   if (appOutDir) {

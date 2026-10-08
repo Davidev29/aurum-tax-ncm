@@ -108,7 +108,7 @@ function verificarBase() {
 }
 
 function verificarIA() {
-  console.log('\n[2/5] IA offline embutida (recursos-ia/)')
+  console.log('\n[2/5] Busca local embutida (recursos-ia/)')
   const baseIa = path.join(RAIZ, 'recursos-ia', 'dados-brutos', 'ncm-para-ia.json')
   const indice = path.join(RAIZ, 'recursos-ia', 'indice-ncm', 'indice-lexical.json')
   const hashFile = path.join(RAIZ, 'recursos-ia', 'indice-ncm', '.manifest-hash')
@@ -140,8 +140,9 @@ function verificarIA() {
     if (!fs.existsSync(path.join(conDir, f))) fail(`conhecimento/${f} ausente`)
   }
   if (fs.existsSync(path.join(conDir, 'dicionario.json'))) ok('conhecimento curado ok (5+ JSONs)')
-  // GGUF: obrigatório (qualquer *.gguf — modelo agnóstico), com SHA
-  // conferido quando houver linha correspondente em CHECKSUMS.txt.
+  // Modelo LLM: NÃO embarcado (instalador leve, classificação 100%
+  // determinística). Se um *.gguf estiver presente (uso futuro), valida
+  // tamanho + SHA como antes; ausente é o estado esperado.
   const dirModelo = path.join(RAIZ, 'recursos-ia', 'modelo')
   let ggufs = []
   try {
@@ -151,11 +152,11 @@ function verificarIA() {
   } catch { ggufs = [] }
   const gguf = ggufs[0] ?? path.join(RAIZ, 'recursos-ia', 'modelo', 'modelo.gguf')
   if (!ggufs.length || !fs.existsSync(gguf)) {
-    fail('GGUF ausente em recursos-ia/modelo/*.gguf — instalador sairia SEM IA real')
+    ok('sem modelo LLM embarcado (instalador leve — classificação determinística)')
   } else {
     const bytes = fs.statSync(gguf).size
     if (bytes < 50 * 1024 * 1024) fail(`GGUF pequeno demais (${bytes} bytes — corrompido?)`)
-    else ok(`GGUF: ${path.basename(gguf)} (${(bytes / 1024 / 1024).toFixed(1)} MB)`)
+    else ok(`GGUF local (NÃO embarcado): ${path.basename(gguf)} (${(bytes / 1024 / 1024).toFixed(1)} MB)`)
     if (fs.existsSync(checksums)) {
       const txt = fs.readFileSync(checksums, 'utf8')
       const base = path.basename(gguf)
@@ -249,10 +250,10 @@ function verificarSaidas() {
   const jsRenderer = fs.existsSync(assets) ? fs.readdirSync(assets).filter((f) => f.endsWith('.js')) : []
   if (!jsRenderer.length) fail('dist/assets/*.js ausentes')
   else ok(`renderer: ${jsRenderer.length} chunk(s) JS`)
-  for (const f of ['main.js', 'preload.cjs', 'ia-worker.cjs', 'caminhos-ia.cjs', 'modelo-seguro.cjs', 'perfil-modelo.cjs', 'grafo-service.cjs']) {
+  for (const f of ['main.js', 'preload.cjs', 'caminhos-ia.cjs', 'grafo-service.cjs']) {
     if (!fs.existsSync(path.join(RAIZ, 'electron', 'dist', f))) fail(`electron/dist/${f} ausente (rode build:electron)`)
   }
-  if (!falhas.length) ok('electron/dist/ ok (main+preload+IA)')
+  if (!falhas.length) ok('electron/dist/ ok (main+preload+grafo)')
 }
 
 function verificarOfuscacao() {
@@ -278,7 +279,7 @@ function verificarOfuscacao() {
       alvos.push(path.join(assets, f))
     }
   }
-  for (const f of ['main.js', 'preload.cjs', 'ia-worker.cjs']) {
+  for (const f of ['main.js', 'preload.cjs']) {
     const p = path.join(RAIZ, 'electron', 'dist', f)
     if (fs.existsSync(p)) alvos.push(p)
   }
@@ -291,7 +292,7 @@ function verificarOfuscacao() {
   }
   if (legiveis.length) {
     fail(`${legiveis.length} JS SEM ofuscação (legível p/ reversão): ${legiveis.slice(0, 4).join(', ')} — rode node scripts/ofuscar-build.cjs`)
-  } else ok(`ofuscação presente em ${alvos.length} arquivo(s) JS (renderer + electron + IA)`)
+  } else ok(`ofuscação presente em ${alvos.length} arquivo(s) JS (renderer + electron)`)
 }
 
 async function main() {

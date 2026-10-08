@@ -14,7 +14,6 @@ import { useSessao } from '@/store/sessao'
 import { useUi, VIEW_META, type ViewId } from '@/store/ui'
 import { Btn, Icone, Toasts, type NomeIcone } from './kit'
 import { MarcaSidebar } from './Marca'
-import { PetAurum } from './PetAurum'
 import { FundoGlobal } from './FundoGlobal'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CURVA, Pagina, presetTransicao, useMovimentoReduzido } from './motion'
@@ -23,10 +22,6 @@ import { ModaisGlobais } from '@/modais/globais'
 
 /** Grupos do menu lateral — a ordem e os ícones espelham o sistema anterior. */
 const NAV: { secao?: string; itens: { id: ViewId; icone: NomeIcone; rotulo: string }[] }[] = [
-  {
-    secao: 'Inteligência',
-    itens: [{ id: 'aurum', icone: 'aurum', rotulo: 'Aurum AI' }],
-  },
   {
     secao: 'Trabalho',
     itens: [
@@ -210,13 +205,6 @@ function Sidebar() {
           ))}
         </nav>
 
-        {/* Aurinha, a pet oficial da Aurum Bit: cantinho entre o menu e o
-            rodapé. `aria-hidden` parcial — o botão interno tem seu próprio
-            rótulo acessível. */}
-        <div className="shrink-0 border-t border-[var(--line)] px-2 pt-1">
-          <PetAurum recolhida={ehDesktop && recolhida} />
-        </div>
-
         <div className="sidebar-rodape shrink-0 border-t border-[var(--line)] px-4 py-3 text-[10px] leading-relaxed text-slate-400">
           <div className="sidebar-rodape-detalhe">
             <a
@@ -319,21 +307,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       if (acao === 'tema') alternarTema()
     })
   }, [abrirModal, alternarTema])
-
-  // Diagnóstico IA (06-05): `Ctrl+Shift+D` alterna a view oculta `debugia`.
-  // Registrado aqui (sempre montado) para funcionar de qualquer tela.
-  useEffect(() => {
-    const aoTeclar = (e: KeyboardEvent) => {
-      const mod = e.ctrlKey || e.metaKey
-      if (mod && e.shiftKey && (e.key === 'D' || e.key === 'd')) {
-        e.preventDefault()
-        const atual = useUi.getState().view
-        useUi.getState().trocarView(atual === 'debugia' ? 'calculadora' : 'debugia')
-      }
-    }
-    window.addEventListener('keydown', aoTeclar)
-    return () => window.removeEventListener('keydown', aoTeclar)
-  }, [])
 
   return (
     <div className="flex h-dvh min-h-0 w-full overflow-hidden text-[var(--ink)]">

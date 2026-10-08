@@ -1,16 +1,16 @@
 /**
- * Tela **Consulta NCM** — busca unificada com **resposta única da Aurum AI**.
+ * Tela **Consulta NCM** — busca unificada com **resposta automática única**.
  *
- * Um único input orquestra 3 workers em paralelo (fan-out por intenção):
+ * Um único input orquestra 3 frentes em paralelo (fan-out por intenção):
  * - dígitos (≥2) → **Base oficial · número** (`sugerirNomenclatura` +
  *   `resolverClassificacoes` quando 8 dígitos);
  * - texto (≥2 chars) → **Base oficial · por nome** (`buscarNomenclaturaPorTexto`);
- * - frase expressiva → **✨ Aurum AI · resposta** (`classificarPorDescricao` /
+ * - frase expressiva → **✨ busca automática · resposta** (`classificarPorDescricao` /
  *   fallback `classificarComIA`).
  *
- * Para não confundir, há UM protagonista por intenção (preferindo a IA no
+ * Para não confundir, há UM protagonista por intenção (preferindo a busca no
  * texto): entrada numérica exata ancora no painel oficial; entrada textual
- * mostra a resposta da IA em destaque (borda animada ouro) e rebaixa as
+ * mostra a resposta automática em destaque (borda animada ouro) e rebaixa as
  * listas oficiais para alternativas compactas/colapsáveis. Escolher qualquer
  * resultado ancora no painel oficial (0/1/N + regra geral).
  *
@@ -23,7 +23,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Classificacao } from '@/domain/entities'
-import { NOME_IA, fmtConfiancaAurumAI, nivelDeConfianca } from '@/domain/aurum-ai'
+import { fmtConfiancaAurumAI, nivelDeConfianca } from '@/domain/aurum-ai'
 import { fmtMoeda, fmtNcm, MASK, norm } from '@/domain/services/format'
 import { detectarIntencaoConsulta } from '@/domain/services/detector-consulta'
 import { normalizarBusca, tokensRelevantes } from '@/domain/services/busca-texto'
@@ -34,7 +34,7 @@ import { useConsulta } from '@/store/consulta'
 import { toast, useUi } from '@/store/ui'
 import { type BloqueioSistema } from '@/ui/cartoes'
 import { CartaoEnxuto, CartaoForaDeEscopo } from '@/ui/consulta-enxuta'
-import { BarraConfiancaAurumAI, CarregandoAurumAI, IconeAurumPremium, MolduraAurumAI, SeloAurumAI, StatusAurumAI } from '@/ui/aurum-ai'
+import { BarraConfiancaAurumAI, CarregandoAurumAI, IconeAurumPremium, MolduraAurumAI, StatusAurumAI } from '@/ui/aurum-ai'
 import {
   BotaoDetalhePremium,
   ModalAuditoriaIA,
@@ -51,13 +51,20 @@ import {
 } from '@/ui/skeleton'
 import { SUGGEST_LIMITS } from '@/domain/constants'
 import type { ResultadoBuscaTexto } from '@/infrastructure/base/classificacao-repo'
+import {
+  buscarNomenclaturaPorTexto,
+  resolverPorPrefixo,
+  sugerirNomenclatura,
+} from '@/infrastructure/base/classificacao-repo'
 import { VALOR_BASE_IA } from '@/infrastructure/ia/classificacao-ia-repo'
 import { bloqueiosParaCcts } from '@/application/cff-sync'
 
-/** Debounce do fan-out leve (prefixo NCM + nome) — 3 s para o usuário digitar sem travar. */
-const DEBOUNCE_RAPIDO = 3000
-/** Debounce da predição assistiva (worker mais caro) — 3 s, mesma janela do leve. */
-const DEBOUNCE_DESCRICAO = 3000
+/** Fan-out leve (prefixo + nome): ~350 ms — sugestão acompanha a digitação. */
+const DEBOUNCE_RAPIDO = 350
+/** Predição assistiva (RAG + lexical + grafo): ~900 ms após parar de digitar. */
+const DEBOUNCE_DESCRICAO = 900
+/** Dropdown instantâneo sob o input: ~220 ms, só leitura (não commita store). */
+const DEBOUNCE_QUICK = 220
 
 export function Consulta() {
   const codigo = useConsulta((s) => s.codigo)
@@ -113,6 +120,14 @@ export function Consulta() {
   const [ativoTexto, setAtivoTexto] = useState(-1)
   const listaTextoRef = useRef<HTMLDivElement>(null)
   const timers = useRef<number[]>([])
+  // Dropdown instantâneo (texto ou número): leitura direta, sem commitar store.
+  const [quickNum, setQuickNum] = useState<{ codigo: string; codigoOriginal: string; descricao: string; dataFim?: string | null }[]>([])
+  const [quickTxt, setQuickTxt] = useState<ResultadoBuscaTexto[]>([])
+  const [quickFam, setQuickFam] = useState<{ prefixo: string; totalVigentes: number; unanime: boolean; cst: string | null; cClassTrib: string | null } | null>(null)
+  const [quickAtivo, setQuickAtivo] = useState(-1)
+  const [quickAberto, setQuickAberto] = useState(false)
+  const quickSeq = useRef(0)
+  const wrapBuscaRef = useRef<HTMLDivElement>(null)
 
   const intencao = useMemo(() => detectarIntencaoConsulta(entrada), [entrada])
   const mostrarExata = intencao.deveBuscarExato
@@ -143,11 +158,11 @@ export function Consulta() {
     }
   }, [entradaStore, entrada])
 
-  // Fan-out com duplo debounce de 3 s: leve (prefixo/nome/exato) e pesado
-  // (predição assistiva). O input visual continua instantâneo (estado local);
-  // só a BUSCA espera 3 s após a última tecla. Enter/Buscar força imediato.
-  // Campo é BUSCA, não escolha: esvaziar o input limpa a tela na hora
-  // (invalida fan-outs pendentes) e aguarda a nova consulta.
+  // Fan-out com duplo debounce curto: leve (~350 ms: prefixo/nome/exato) e
+  // pesado (~900 ms: predição RAG + lexical + grafo). O input visual continua
+  // instantâneo (estado local); só a BUSCA espera após a última tecla.
+  // Enter/Buscar força imediato. Campo é BUSCA, não escolha: esvaziar o input
+  // limpa a tela na hora (invalida fan-outs pendentes) e aguarda a nova consulta.
   useEffect(() => {
     for (const t of timers.current) window.clearTimeout(t)
     timers.current = []
@@ -185,6 +200,83 @@ export function Consulta() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entrada, destinacao, composicao, usoDescricao])
 
+  // Dropdown instantâneo: a cada tecla (texto OU número) sugere sem commitar.
+  // Número → prefixo oficial + evidência de família (unanimidade, vigentes);
+  // texto → top-8 por nome. Só leitura: Enter continua pesquisando.
+  useEffect(() => {
+    const atual = entrada.trim()
+    if (atual.length < 2) {
+      setQuickNum([])
+      setQuickTxt([])
+      setQuickFam(null)
+      setQuickAberto(false)
+      setQuickAtivo(-1)
+      return
+    }
+    const seq = ++quickSeq.current
+    const t = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const inten = detectarIntencaoConsulta(atual)
+          let nums: typeof quickNum = []
+          let txts: typeof quickTxt = []
+          let fam: typeof quickFam = null
+          if (inten.deveBuscarExato && inten.digitos.length >= 2) {
+            try {
+              nums = (await sugerirNomenclatura(inten.digitos, 8)) as typeof quickNum
+            } catch {
+              nums = []
+            }
+            // Evidência de família: prefixo 2–7 dígitos agrega filhos/vigência.
+            if (inten.digitos.length >= 2 && inten.digitos.length <= 7) {
+              try {
+                const r = await resolverPorPrefixo(inten.digitos)
+                if (r && seq === quickSeq.current) {
+                  fam = {
+                    prefixo: r.prefixo,
+                    totalVigentes: r.totalVigentes,
+                    unanime: r.unanime,
+                    cst: r.cst,
+                    cClassTrib: r.cClassTrib,
+                  }
+                }
+              } catch {
+                fam = null
+              }
+            }
+          }
+          if (inten.deveBuscarNome) {
+            try {
+              txts = await buscarNomenclaturaPorTexto(atual, 8)
+            } catch {
+              txts = []
+            }
+          }
+          if (seq !== quickSeq.current) return
+          setQuickNum(nums)
+          setQuickTxt(txts)
+          setQuickFam(fam)
+          setQuickAberto(nums.length > 0 || txts.length > 0 || fam != null)
+          setQuickAtivo(-1)
+        } catch {
+          /* dropdown nunca quebra a digitação */
+        }
+      })()
+    }, DEBOUNCE_QUICK)
+    return () => window.clearTimeout(t)
+  }, [entrada])
+
+  // Fecha o dropdown ao clicar fora do campo.
+  useEffect(() => {
+    const aoClicar = (e: MouseEvent) => {
+      if (wrapBuscaRef.current && !wrapBuscaRef.current.contains(e.target as Node)) {
+        setQuickAberto(false)
+      }
+    }
+    document.addEventListener('mousedown', aoClicar)
+    return () => document.removeEventListener('mousedown', aoClicar)
+  }, [])
+
   // Permitido × negado por DFe (tabela CFF local) para os cClassTribs exibidos.
   useEffect(() => {
     const ccts = [...new Set(resultados.map((r) => r.classificacao.cClassTrib).filter(Boolean))]
@@ -211,6 +303,11 @@ export function Consulta() {
     ultimoCommit.current = ''
     setEntradaLocal('')
     setAtivoTexto(-1)
+    setQuickNum([])
+    setQuickTxt([])
+    setQuickFam(null)
+    setQuickAberto(false)
+    setQuickAtivo(-1)
     limpar()
     if (anunciar) toast('Consulta limpa.', 'warn')
     window.requestAnimationFrame(() => document.getElementById('busca-unificada')?.focus())
@@ -225,6 +322,7 @@ export function Consulta() {
     // Nova busca invalida qualquer destaque anterior: nada fica "marcado"
     // sem o usuário escolher explicitamente (clique).
     setAtivoTexto(-1)
+    setQuickAberto(false)
     for (const t of timers.current) window.clearTimeout(t)
     timers.current = []
     ultimoCommit.current = entrada
@@ -235,28 +333,65 @@ export function Consulta() {
     const fmt = c
     ultimoCommit.current = fmt
     setEntradaLocal(fmt)
+    setQuickAberto(false)
     void escolherUnificada(c)
   }
   const aoEscolherTexto = (c: string) => {
     const fmt = c
     ultimoCommit.current = fmt
     setEntradaLocal(fmt)
+    setQuickAberto(false)
     void escolherUnificada(c)
+  }
+
+  // Itens unificados do dropdown (família + números + textos) para ↑↓/Enter.
+  const quickItens: { codigo: string; rotulo: string }[] = [
+    ...(quickFam && quickFam.unanime && quickFam.cst
+      ? [{ codigo: `fam:${quickFam.prefixo}`, rotulo: `Família ${quickFam.prefixo}` }]
+      : []),
+    ...quickNum.map((n) => ({ codigo: n.codigo, rotulo: n.codigoOriginal })),
+    ...quickTxt.filter((r) => !quickNum.some((n) => n.codigo === r.codigo)).map((r) => ({ codigo: r.codigo, rotulo: r.codigo })),
+  ]
+  const escolherQuick = (codigo: string) => {
+    if (codigo.startsWith('fam:')) {
+      // Família: pesquisa o prefixo (o painel oficial agrega filhos/hipótese).
+      submeter()
+      return
+    }
+    aoEscolher(codigo)
   }
 
   const aoTecla = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      // Campo é BUSCA, não escolha: Enter SEMPRE pesquisa o texto atual.
-      // Escolher um NCM é só por clique explícito (nunca automático).
+      // Dropdown aberto + item destacado = escolhe; senão pesquisa o texto.
+      if (quickAberto && quickAtivo >= 0 && quickItens[quickAtivo]) {
+        e.preventDefault()
+        escolherQuick(quickItens[quickAtivo].codigo)
+        return
+      }
       e.preventDefault()
       submeter()
-    } else if (e.key === 'ArrowDown' && resultadosTexto.length) {
+    } else if (e.key === 'ArrowDown' && (quickAberto ? quickItens.length : resultadosTexto.length)) {
       e.preventDefault()
-      setAtivoTexto((a) => Math.min(a + 1, resultadosTexto.length - 1))
-    } else if (e.key === 'ArrowUp' && resultadosTexto.length) {
+      if (quickAberto && quickItens.length) {
+        setQuickAtivo((a) => Math.min(a + 1, quickItens.length - 1))
+      } else {
+        setAtivoTexto((a) => Math.min(a + 1, resultadosTexto.length - 1))
+      }
+    } else if (e.key === 'ArrowUp' && (quickAberto ? quickItens.length : resultadosTexto.length)) {
       e.preventDefault()
-      setAtivoTexto((a) => (a <= 0 ? -1 : a - 1))
+      if (quickAberto && quickItens.length) {
+        setQuickAtivo((a) => (a <= 0 ? -1 : a - 1))
+      } else {
+        setAtivoTexto((a) => (a <= 0 ? -1 : a - 1))
+      }
     } else if (e.key === 'Escape') {
+      if (quickAberto) {
+        e.preventDefault()
+        setQuickAberto(false)
+        setQuickAtivo(-1)
+        return
+      }
       e.preventDefault()
       limparTudo()
     }
@@ -287,14 +422,14 @@ export function Consulta() {
 
   /**
    * Protagonista da resposta (evita os 4 blocos empilhados que confundiam):
-   * - número exato → o painel oficial reina; a IA vira coadjuvante colapsada;
-   * - texto/frase → a ✨ Aurum AI responde primeiro (borda animada ouro); a
+   * - número exato → o painel oficial reina; a busca vira coadjuvante colapsada;
+   * - texto/frase → a ✨ busca automática responde primeiro (borda animada ouro); a
    *   base oficial aparece abaixo como alternativa compacta.
    */
   const ehExatoNumerico = intencao.deveClassificarExato
   const prioridadeIA = !ehExatoNumerico && mostrarDescricao
-  // Painel oficial ancorado a partir da IA (ex.: "Classificar oficialmente"):
-  // mantém a borda animada para deixar claro que foi a IA que classificou.
+  // Painel oficial ancorado a partir da busca (ex.: "Classificar oficialmente"):
+  // mantém a borda animada para deixar claro que foi a busca que classificou.
   const digitosEntrada = norm(entrada)
   const origemIAOficial =
     digitosEntrada.length === 8 &&
@@ -310,29 +445,99 @@ export function Consulta() {
             <span className="text-lg">🔍</span> Consulta por NCM
           </h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Digite o NCM, o nome do produto ou descreva com suas palavras — a ✨ Aurum AI
+            Digite o NCM, o nome do produto ou descreva com suas palavras — a ✨ busca automática
             responde primeiro no texto; o número exato valida na base oficial abaixo.
-            A busca aguarda 3 s após você parar de digitar (Enter busca na hora).
+            Sugestões aparecem enquanto digita (↑↓ navega, Enter escolhe ou pesquisa).
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <div className="field-wrap min-w-[220px] flex-1">
+            <div ref={wrapBuscaRef} className="field-wrap min-w-[220px] flex-1">
               <span className="field-icon">🔍</span>
               <Texto
                 grande
                 id="busca-unificada"
                 autoComplete="off"
                 spellCheck={false}
-                placeholder="0201.10.00 · queijo mozarela · boi vivo Nelore para reprodução…"
+                placeholder="0201.10.00 · queijo mozarela · jacaré vivo · ovo de codorna…"
                 value={entrada}
                 onChange={(e) => {
                   setEntradaLocal(e.target.value)
                   // Nova digitação nunca herda destaque da busca anterior.
                   setAtivoTexto(-1)
+                  setQuickAberto(true)
+                }}
+                onFocus={() => {
+                  if (quickNum.length || quickTxt.length || quickFam) setQuickAberto(true)
                 }}
                 onKeyDown={aoTecla}
-                aria-label="Busca unificada: NCM, nome do produto ou descrição. Enter pesquisa, escolher é só por clique."
+                role="combobox"
+                aria-expanded={quickAberto}
+                aria-controls="sugestoes-instantaneas"
+                aria-activedescendant={quickAtivo >= 0 ? `quick-item-${quickAtivo}` : undefined}
+                aria-label="Busca unificada: NCM, nome do produto ou descrição. Sugestões enquanto digita, Enter pesquisa."
               />
+              {quickAberto && (quickNum.length > 0 || quickTxt.length > 0 || quickFam) ? (
+                <div id="sugestoes-instantaneas" role="listbox" aria-label="Sugestões instantâneas" className="sugg sugg--glass">
+                  {quickFam ? (
+                    <div className="sugg-familia" title={quickFam.unanime ? `Família unânime ${quickFam.cst}/${quickFam.cClassTrib}` : 'Família com enquadramentos divergentes'}>
+                      <span aria-hidden="true">🧬</span>
+                      <span>
+                        Família {quickFam.prefixo} · {quickFam.totalVigentes} vigente(s)
+                        {quickFam.unanime && quickFam.cst ? (
+                          <> · <strong className="font-mono">{quickFam.cst}/{quickFam.cClassTrib}</strong> unânime</>
+                        ) : (
+                          <> · enquadramentos divergentes</>
+                        )}
+                      </span>
+                    </div>
+                  ) : null}
+                  {quickNum.map((n, i) => {
+                    const idx = (quickFam?.unanime && quickFam.cst ? 1 : 0) + i
+                    return (
+                      <button
+                        key={`qn-${n.codigo}`}
+                        id={`quick-item-${idx}`}
+                        type="button"
+                        role="option"
+                        aria-selected={idx === quickAtivo}
+                        className={`sugg-item${idx === quickAtivo ? ' is-active' : ''}`}
+                        onMouseEnter={() => setQuickAtivo(idx)}
+                        onClick={() => escolherQuick(n.codigo)}
+                        title={`Classificar ${n.codigoOriginal} oficialmente`}
+                      >
+                        <span className="font-mono text-xs font-black text-brand-700 dark:text-aurum-200">{fmtNcm(n.codigo)}</span>
+                        <span className="min-w-0 flex-1 truncate text-xs text-slate-600 dark:text-slate-300">{n.descricao}</span>
+                        <span className="sugg-selo">🔢 número</span>
+                      </button>
+                    )
+                  })}
+                  {quickTxt
+                    .filter((r) => !quickNum.some((n) => n.codigo === r.codigo))
+                    .map((r, j) => {
+                      const idx = (quickFam?.unanime && quickFam.cst ? 1 : 0) + quickNum.length + j
+                      return (
+                        <button
+                          key={`qt-${r.codigo}`}
+                          id={`quick-item-${idx}`}
+                          type="button"
+                          role="option"
+                          aria-selected={idx === quickAtivo}
+                          className={`sugg-item${idx === quickAtivo ? ' is-active' : ''}`}
+                          onMouseEnter={() => setQuickAtivo(idx)}
+                          onClick={() => escolherQuick(r.codigo)}
+                          title={`Classificar ${fmtNcm(r.codigo)} oficialmente`}
+                        >
+                          <span className="font-mono text-xs font-black text-brand-700 dark:text-aurum-200">{fmtNcm(r.codigo)}</span>
+                          <span className="min-w-0 flex-1 truncate text-xs text-slate-600 dark:text-slate-300">
+                            <Destacar texto={r.descricao} termo={entrada} />
+                          </span>
+                          <span className="sugg-selo">📝 nome</span>
+                        </button>
+                      )
+                    })}
+                  <div className="sugg-dica">↑↓ navega · Enter escolhe ou pesquisa · clique classifica oficialmente</div>
+                </div>
+              ) : null}
             </div>
             <Btn variante="primary" onClick={submeter}>
               Buscar
@@ -353,7 +558,7 @@ export function Consulta() {
             {classificando ? (
               <span className="flex items-center gap-1.5 font-semibold text-brand-600 dark:text-aurum-200" role="status" aria-live="polite">
                 <IconeAurumPremium tamanho="sm" />
-                {NOME_IA} pensando…
+                Buscando…
                 <span className="aurum-ai-pensando-pontos" aria-hidden="true">
                   <span className="aurum-ai-pensando-ponto" />
                   <span className="aurum-ai-pensando-ponto" />
@@ -386,7 +591,7 @@ export function Consulta() {
           <details id="refino-predicao" className="mt-3 text-xs text-slate-500 dark:text-slate-400">
             <summary className="cursor-pointer font-semibold">
               <span className="inline-flex items-center gap-1.5">
-                <IconeAurumPremium tamanho="sm" /> Refinar resposta da IA (destinação, composição, uso — opcional)
+                <IconeAurumPremium tamanho="sm" /> Refinar resposta (destinação, composição, uso — opcional)
               </span>
             </summary>
             <div className="mt-2 grid gap-2 sm:grid-cols-3">
@@ -428,10 +633,10 @@ export function Consulta() {
                 onClick={() => void classificarDescricao({ descricao: entrada, destinacao, composicao, uso: usoDescricao })}
               >
                 <span className="inline-flex items-center gap-1.5">
-                  <IconeAurumPremium tamanho="sm" /> Perguntar à {NOME_IA}
+                  <IconeAurumPremium tamanho="sm" /> Classificar descrição
                 </span>
               </Btn>
-              <span className="text-[11px]">A IA reavalia sozinha 3 s após parar de digitar; o botão força com o refino atual.</span>
+              <span className="text-[11px]">A busca reavalia sozinha 3 s após parar de digitar; o botão força com o refino atual.</span>
             </div>
           </details>
         </div>
@@ -443,21 +648,21 @@ export function Consulta() {
           <Vazio
             icone="🔍"
             titulo="Busque por número, nome ou descrição"
-            texto="Ex.: 0201.10.00 (valida na base oficial) · queijo mozarela (a ✨ Aurum AI responde primeiro) · boi vivo Nelore para reprodução (a IA cruza descrição + vigência)."
+            texto="Ex.: 0201.10.00 (valida na base oficial) · queijo mozarela (a ✨ busca automática responde primeiro) · boi vivo Nelore para reprodução (o sistema cruza descrição + vigência)."
           />
         </Entrada>
       ) : (
         <Revelar className="mt-6 space-y-4">
           {/* UMA resposta protagonista por vez — resto colapsado. */}
           {prioridadeIA ? (
-            <section aria-label={`Resposta da ${NOME_IA}`} className="space-y-3">
+            <section aria-label="Resposta automática" className="space-y-3">
               <h3 className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 <span className="inline-flex items-center gap-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200">
-                  <IconeAurumPremium tamanho="sm" /> Resposta da {NOME_IA}
+                  <IconeAurumPremium tamanho="sm" /> Resposta automática
                 </span>
                 {via === 'deterministico' ? (
                   <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black normal-case text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                    determinístico · sem worker
+                    determinístico
                   </span>
                 ) : null}
                 {classificando ? (
@@ -476,21 +681,9 @@ export function Consulta() {
             </section>
           ) : null}
 
-          {/* Painel oficial (0/1/N) — herói no número exato. */}
+          {/* Painel oficial (0/1/N) — herói no número exato (sem cabeçalho duplicado acima). */}
           {mostrarExata && intencao.deveClassificarExato ? (
             <section aria-label="Classificação oficial pela base" className="space-y-3">
-              <h3 className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <span className="rounded bg-brand-100 px-1.5 py-0.5 text-brand-700 dark:bg-aurum-500/15 dark:text-aurum-200">
-                  🔢 {prioridadeIA || origemIAOficial ? 'Classificação oficial' : 'Exato · via número'}
-                </span>
-                {origemIAOficial ? (
-                  <>
-                    <SeloAurumAI variante="compacto" />
-                    <span className="font-semibold normal-case">ancorada na sugestão da IA</span>
-                  </>
-                ) : null}
-                {carregando ? <span>Classificando…</span> : null}
-              </h3>
               {carregando ? (
                 <SecaoCarregando titulo="Classificando NCM…">
                   <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50/60 p-2 dark:border-slate-800 dark:bg-slate-950/40">
@@ -555,12 +748,12 @@ export function Consulta() {
             </details>
           ) : null}
 
-          {/* Número exato digitado junto de texto: a IA vira coadjuvante colapsada. */}
+          {/* Número exato digitado junto de texto: a busca vira coadjuvante colapsada. */}
           {!prioridadeIA && mostrarDescricao ? (
             <details className="rounded-xl border border-violet-200 bg-violet-50/40 px-3 py-2 text-xs text-slate-600 dark:border-violet-900 dark:bg-violet-950/20 dark:text-slate-300">
               <summary className="cursor-pointer font-bold">
                 <span className="inline-flex items-center gap-1.5">
-                  <IconeAurumPremium tamanho="sm" /> Ver resposta da {NOME_IA} para este texto
+                  <IconeAurumPremium tamanho="sm" /> Ver resposta automática para este texto
                 </span>
               </summary>
               <div className="mt-2">
@@ -577,7 +770,7 @@ export function Consulta() {
             <Vazio
               icone="⌨️"
               titulo="Continue digitando para ver a resposta"
-              texto="Com 2+ dígitos validamos o número · com letras, a ✨ Aurum AI responde primeiro · a base oficial confirma abaixo."
+              texto="Com 2+ dígitos validamos o número · com letras, a ✨ busca automática responde primeiro · a base oficial confirma abaixo."
             />
           ) : null}
         </Revelar>
@@ -627,7 +820,7 @@ function PainelExato({
   nomenclatura: ReturnType<typeof useConsulta.getState>['nomenclatura']
   regraGeral: boolean
   bloqueios: Record<string, BloqueioSistema[]>
-  /** Borda animada ouro: este painel foi ancorado a partir da sugestão da IA. */
+  /** Borda animada ouro: este painel foi ancorado a partir do resultado automático. */
   destaqueIA?: boolean
   onSalvar: (c: Classificacao) => void
   onAddCalc: (cl: Classificacao) => void
@@ -652,26 +845,6 @@ function PainelExato({
   }
   return (
     <>
-      {nomenclatura ? (
-        <div className="rounded-2xl border border-brand-200 bg-gradient-to-r from-brand-50 to-white p-3 dark:border-aurum-900 dark:from-brand-950/40 dark:to-slate-900">
-          <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-wide text-brand-600 dark:text-aurum-200">
-            <span>NCM {nomenclatura.codigoOriginal}</span>
-            {nomenclatura.dataFim ? (
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-800 dark:bg-red-950/60 dark:text-red-200">
-                ⛔ Extinto em {nomenclatura.dataFim}
-              </span>
-            ) : (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
-                ✓ Vigente
-              </span>
-            )}
-          </div>
-          <div className="mt-0.5 text-sm font-semibold text-brand-900 dark:text-brand-100">
-            {nomenclatura.descricao}
-          </div>
-        </div>
-      ) : null}
-
       {!regraGeral && resultados.length > 1 ? (
         <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
           <strong>⚡ {resultados.length} classificações possíveis</strong> para este NCM — compare abaixo.
@@ -708,14 +881,14 @@ function PainelExato({
   )
 }
 
-/* ------------------------------ resposta única da Aurum AI (herói) -- */
+/* ------------------------------ resposta única automática (herói) -- */
 
 /**
- * **✨ Resposta da Aurum AI**: UM bloco protagonista que funde a predição
+ * **✨ Resposta automática**: UM bloco protagonista que funde a predição
  * assistiva (`sugestao`) e a decisão validada do fallback (`via === 'ia'`).
  * A decisão validada tem precedência; a predição aparece quando o
- * determinístico venceu sem worker. Tudo dentro da `MolduraAurumAI` (borda
- * animada ouro) para deixar claro que **foi a IA que classificou**.
+ * determinístico venceu sem seletor. Tudo dentro da `MolduraAurumAI` (borda
+ * animada ouro) para deixar claro que **foi a busca automática que classificou**.
  */
 function SecaoRespostaIA({
   entrada,
@@ -775,7 +948,7 @@ function SecaoRespostaIA({
               <span className="aurum-ai-pensando-ponto" />
               <span className="aurum-ai-pensando-ponto" />
             </span>
-            Reavaliando com a {NOME_IA}…
+            Reavaliando…
           </div>
         ) : null}
         <MolduraAurumAI detalhe="decisão validada pela base oficial">
@@ -817,7 +990,7 @@ function SecaoRespostaIA({
   if (!sugestao) {
     return (
       <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/40">
-        Descreva com mais contexto (ex.: “vivo”, “para plantio”, “com sal”) para a {NOME_IA}{' '}
+        Descreva com mais contexto (ex.: “vivo”, “para plantio”, “com sal”) para a busca automática{' '}
         sugerir o NCM — sempre ancorada na nomenclatura vigente.
       </div>
     )
@@ -939,7 +1112,7 @@ function ConteudoSugestao({
             .map((a) => ({ codigo: a, titulo: a, subtitulo: 'Hipótese confrontada' })),
         ]}
         codigoPreferido={sugestao.ncm_provavel}
-        subtitulo={`A ${NOME_IA} confrontou ${alternativas.length + (sugestao.ncm_provavel ? 1 : 0)} hipótese(s) — a preferida está com selo + linha espectro.`}
+        subtitulo={`A busca automática confrontou ${alternativas.length + (sugestao.ncm_provavel ? 1 : 0)} hipótese(s) — a preferida está com selo + linha espectro.`}
         onEscolher={(codigo) => onEscolherAlternativa?.(codigo)}
       />
       <ModalRaciocinioIA
@@ -955,7 +1128,7 @@ function ConteudoSugestao({
   )
 }
 
-/* --------------------------------- sugerido por Aurum AI (fallback 06-06) -- */
+/* --------------------------------- resultado automático (fallback 06-06) -- */
 
 /**
  * Conteúdo da decisão validada do fallback (`via === 'ia'`): herói comportado
@@ -1000,7 +1173,7 @@ function RespostaIaValidada({
       className="space-y-2"
       role="status"
       aria-live="polite"
-      aria-label={`${NOME_IA} · sugestão com confiança ${nivel} ${fmtConfiancaAurumAI(confianca)}`}
+      aria-label={`Resultado automático · confiança ${nivel} ${fmtConfiancaAurumAI(confianca)}`}
     >
       <div className="flex flex-wrap items-center gap-2">
         <BarraConfiancaAurumAI valor={confianca} compact />
@@ -1045,7 +1218,7 @@ function RespostaIaValidada({
               tam="sm"
               onClick={() => {
                 void usarSugestaoIa()
-                toast(`Sugestão da ${NOME_IA} enviada para classificação oficial.`, 'ok')
+                toast('Resultado enviado para classificação oficial.', 'ok')
               }}
             >
               Classificar {fmtNcm(codigoIa)} oficialmente
@@ -1098,7 +1271,7 @@ function RespostaIaValidada({
               subtitulo: c.descricao,
             }))}
             codigoPreferido={codigoIa}
-            subtitulo={`A ${NOME_IA} avaliou ${top.length} pista(s) — “${fmtNcm(codigoIa)}” foi a referência preferida (selo + linha espectro).`}
+            subtitulo={`A busca automática avaliou ${top.length} pista(s) — “${fmtNcm(codigoIa)}” foi a referência preferida (selo + linha espectro).`}
             onEscolher={(codigo) => void escolher(codigo)}
           />
           <ModalSimulacaoIA
@@ -1153,7 +1326,7 @@ function RespostaIaValidada({
                           Boost de uso local: <span className="font-mono font-bold">uso_local +{Number(boostValorGrafo) || 0}</span> (teto 0.3, TTL 90d — só reordena).
                         </p>
                       ) : null}
-                      <p className="mt-1 text-[11px] text-slate-500">Relatório IA cita: {caminhoGrafo.join(' → ')}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">Relatório cita: {caminhoGrafo.join(' → ')}</p>
                     </div>
                   ) : null}
                   {grafoCypher ? (
@@ -1174,7 +1347,7 @@ function RespostaIaValidada({
           {top.length ? (
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
               <strong>
-                {NOME_IA} encontrou {top.length} correspondência(s) na base oficial — confira a melhor pista abaixo.
+                Encontradas {top.length} correspondência(s) na base oficial — confira a melhor pista abaixo.
               </strong>{' '}
               Para cravar o NCM, descreva com 1–2 detalhes (material, uso, estado) ou toque numa pista para
               classificar oficialmente.
@@ -1193,8 +1366,8 @@ function RespostaIaValidada({
             </div>
           ) : (
             <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">
-              <strong>{NOME_IA} sem decisão segura — e prefiro ser honesto a chutar.</strong>{' '}
-              Não encontrei nenhuma referência na base oficial para essa descrição. Para me ajudar a acertar:
+              <strong>Sem decisão segura — melhor refinar do que chutar.</strong>{' '}
+              Não encontrei nenhuma referência na base oficial para essa descrição. Para acertar:
               1) descreva o produto com 1–2 detalhes (material, uso, estado);
               2) ou use a busca por nome com sinônimos do vocabulário oficial.
               <div className="mt-2">
@@ -1268,7 +1441,7 @@ function RespostaIaValidada({
             codigoPreferido={codigoIa}
             subtitulo={
               top.length
-                ? `A ${NOME_IA} avaliou ${top.length} correspondência(s) da base oficial — toque para classificar oficialmente.`
+                ? `A busca automática avaliou ${top.length} correspondência(s) da base oficial — toque para classificar oficialmente.`
                 : `Nenhuma correspondência na base oficial para essa descrição.`
             }
             onEscolher={(codigo) => void escolher(codigo)}

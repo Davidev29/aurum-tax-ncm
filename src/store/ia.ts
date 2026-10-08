@@ -1,25 +1,21 @@
 /**
- * Store da IA offline — Phase 6 / IA-05 (tracer 06-05).
+ * Store da busca automática — observabilidade da classificação determinística.
  *
- * Estado observável do worker (`utilityProcess`) e da última decisão:
- * `status` do worker, candidatos RAG, decisão validada, `via`
- * (`deterministico` = caminho primário venceu; `ia` = fallback acionado) e
- * a métrica `taxa_uso_ia` (meta <30% — IA como camada superior, nunca
- * substituta do determinístico).
+ * Guarda a última decisão do seletor (RAG lexical + grafo + resolvedor),
+ * o snapshot do grafo fiscal e as métricas `taxa_uso_ia` / `taxa_uso_grafo`.
+ * Sem worker LLM: não há estado de modelo, apenas contadores e snapshots.
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { CandidatoIa, StatusIaBridge } from '@/infrastructure/bridge'
+import type { CandidatoIa } from '@/infrastructure/bridge'
 import type { SugestaoNcmJson } from '@/application/classificacao-inteligente'
 
 export type ViaClassificacao = 'deterministico' | 'ia' | 'grafo' | 'grafo+ia'
 
-export type StatusWorkerIa = 'desligado' | 'carregando' | 'pronto' | 'erro'
-
 /** Modo de retrieval do grafo fiscal (Phase 10-03 / GRAFO-03). */
 export type ModoVetorGrafo = 'hnsw' | 'fts-puro'
 
-/** Decisão auditável exibida na DebugIA (snapshot por inferência). */
+/** Decisão auditável (snapshot por inferência). */
 export interface DecisaoIa {
   descricao: string
   via: ViaClassificacao
@@ -36,13 +32,6 @@ export interface DecisaoIa {
 }
 
 interface IaState {
-  status: StatusWorkerIa
-  modo: StatusIaBridge['modo']
-  mock: boolean
-  erro: string | null
-  /** Arquivo .gguf efetivo (só o nome) + troca automática ativa. */
-  modeloArquivo: string | null
-  observandoModelo: boolean
   candidatos: CandidatoIa[]
   ultimaDecisao: DecisaoIa | null
   historico: DecisaoIa[]
@@ -56,9 +45,8 @@ interface IaState {
   /** Contadores da métrica `taxa_uso_grafo = consultasGrafo / totalGrafo`. */
   totalConsultasGrafo: number
   consultasGrafo: number
-  setConexao: (s: Pick<IaState, 'status' | 'modo' | 'mock' | 'erro'> & Partial<Pick<IaState, 'modeloArquivo' | 'observandoModelo'>>) => void
   registrarDecisao: (d: DecisaoIa) => void
-  /** Snapshot da última consulta ao grafo (`via:grafo`, DebugIA). */
+  /** Snapshot da última consulta ao grafo (`via:grafo`). */
   setGrafoSnapshot: (s: Pick<IaState, 'graphPaths' | 'cypher'> & Partial<Pick<IaState, 'modoVetor'>>) => void
   /** Contabiliza uma consulta ao grafo (`usou` = respondeu `ok:true`). */
   registrarUsoGrafo: (usou: boolean) => void
@@ -70,12 +58,6 @@ const MAX_HISTORICO = 20
 export const useIa = create<IaState>()(
   persist(
     (set) => ({
-      status: 'desligado',
-      modo: 'desligado',
-      mock: true,
-      erro: null,
-      modeloArquivo: null,
-      observandoModelo: false,
       candidatos: [],
       ultimaDecisao: null,
       historico: [],
@@ -86,8 +68,6 @@ export const useIa = create<IaState>()(
       cypher: null,
       totalConsultasGrafo: 0,
       consultasGrafo: 0,
-
-      setConexao: (s) => set(s),
 
       registrarDecisao: (d) =>
         set((s) => ({
@@ -122,7 +102,7 @@ export const useIa = create<IaState>()(
     }),
     {
       name: 'aurum-ia-grafo',
-      // Só o observável do grafo persiste (status do worker é volátil).
+      // Só o observável do grafo persiste.
       partialize: (s) => ({
         modoVetor: s.modoVetor,
         graphPaths: s.graphPaths,
@@ -134,7 +114,7 @@ export const useIa = create<IaState>()(
   ),
 )
 
-/** Fração de consultas que acionaram o fallback IA (meta <30%). */
+/** Fração de consultas que acionaram o fallback automático (meta <30%). */
 export function taxaUsoIa(total: number, viaIa: number): number {
   if (total <= 0) return 0
   return Math.round((viaIa / total) * 1000) / 10

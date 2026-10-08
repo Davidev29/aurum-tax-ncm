@@ -53,6 +53,10 @@ export type SinalFiscal =
   | 'INSTRUMENTO_OTICA'
   | 'ESTADO_CORTE'
   | 'ESTADO_CONSERVACAO'
+  | 'ANIMAL_SILVESTRE'
+  | 'ANIMAL_DOMESTICO'
+  | 'OVOS_DERIVADOS'
+  | 'PARTE_ANIMAL'
 
 export interface AnaliseDescricao {
   /** Texto combinado (descrição + contexto), normalizado. */
@@ -150,6 +154,14 @@ const REGRAS_SINAL: { sinal: SinalFiscal; gatilhos: string[]; capitulos: string[
   // de 8 dígitos é chute — o sinal força o refino antes do ranque.
   { sinal: 'ESTADO_CORTE', gatilhos: ['pedaco', 'pedacos', 'cortada', 'cortado', 'cortadas', 'cortados', 'carcaca', 'carcacas', 'desossada', 'desossado', 'desossadas', 'desossados', 'miudeza', 'miudezas', 'quarto', 'quartos', 'perna', 'pernas', 'pe', 'asa', 'coxa', 'sobrecoxa', 'inteiro', 'inteira', 'parte', 'partes'], capitulos: ['02', '03'] },
   { sinal: 'ESTADO_CONSERVACAO', gatilhos: ['congelada', 'congelado', 'congeladas', 'congelados', 'refrigerada', 'refrigerado', 'refrigeradas', 'refrigerados', 'resfriada', 'resfriado', 'resfriadas', 'resfriados', 'fresca', 'fresco', 'frescas', 'frescos'], capitulos: ['02', '03'] },
+  // --- preditivo animal (RAG + lexical + grafo): silvestre × doméstico,
+  // ovos e partes. Cada família tem capítulo próprio (01 vivo · 02 carne ·
+  // 0407 ovos · 0206/0210/05 partes) — o sinal ancora o desempate antes
+  // do resolvedor, sem inventar NCM.
+  { sinal: 'ANIMAL_SILVESTRE', gatilhos: ['jacare', 'jacares', 'repteis', 'reptil', 'serpente', 'cobra', 'cobras', 'tartaruga', 'jabuti', 'lagarto', 'iguana', 'papagaio', 'papagaios', 'arara', 'araras', 'periquito', 'calopsita', 'cacatua', 'psitaciforme', 'gaviao', 'falcao', 'coruja', 'aguia', 'rapina', 'macaco', 'sagui', 'primata', 'avestruz', 'ema', 'abelha', 'camelo', 'lhama'], capitulos: ['01', '02'] },
+  { sinal: 'ANIMAL_DOMESTICO', gatilhos: ['cavalo', 'cavalos', 'egua', 'potro', 'asinino', 'muar', 'mula', 'ovelha', 'carneiro', 'cordeiro', 'ovino', 'cabra', 'bode', 'cabrito', 'caprina', 'coelho', 'lebre', 'pato', 'peru', 'ganso', 'codorna', 'galinha', 'frango', 'chester'], capitulos: ['01', '02'] },
+  { sinal: 'OVOS_DERIVADOS', gatilhos: ['ovo', 'ovos', 'gema', 'clara', 'incubacao', 'incubar', 'postura', 'poedeira', 'chocadeira'], capitulos: ['04'] },
+  { sinal: 'PARTE_ANIMAL', gatilhos: ['figado', 'lingua', 'coracao', 'moela', 'rim', 'rabo', 'mocoto', 'dobradinha', 'bucho', 'tripa', 'miudeza', 'pe', 'asa', 'coxa', 'fatia'], capitulos: ['02', '05', '16'] },
   // --- contexto preditivo v2: químicos / plásticos / madeira / máquinas / instrumentos ---
   // Cada sinal novo carrega capítulos prioritários para o desempate + perguntas
   // de refino. Gatilhos já normalizados (sem acento) e expandidos via
@@ -300,6 +312,20 @@ export function analisarDescricao(entrada: EntradaDescricao): AnaliseDescricao {
       ambiguidades.push('Carne sem corte declarado (carcaça x peças x desossada / inteiro x pedaços) — a subposição depende do corte. Informe: carcaça inteira, peças com osso, desossada ou em pedaços?')
     }
   }
+  // Preditivo animal: silvestre × doméstico e ovos × partes decidem a família
+  // (01 vivo · 02 carne · 0407 ovos · 0206/05 miudezas). Sem o estado, o NCM
+  // de 8 dígitos é chute — vira pergunta + trava a confiança em média.
+  const ehAnimal = (sinais as string[]).includes('ANIMAL_SILVESTRE') || (sinais as string[]).includes('ANIMAL_DOMESTICO') || sinais.includes('VIVO')
+  if (ehAnimal && !(sinais as string[]).includes('PARTE_ANIMAL') && !(sinais as string[]).includes('OVOS_DERIVADOS')) {
+    if (!sinais.includes('VIVO') && !sinais.includes('CARNE') && !sinais.includes('ABATE')) {
+      ambiguidades.push('Animal sem estado declarado (vivo x carne/corte x ovo) — a família muda (cap. 01 vivo · cap. 02 carne · 0407 ovos). Informe: vivo, abatido (qual corte/conservação?) ou ovo?')
+    }
+  }
+  if ((sinais as string[]).includes('OVOS_DERIVADOS') && !(sinais as string[]).includes('PARTE_ANIMAL')) {
+    if (!/incub|postura|poedeira|consumo|galinha|codorna|pata|gansa/.test(textoNormalizado)) {
+      ambiguidades.push('Ovo sem finalidade/espécie (incubação x consumo; galinha x codorna) — a subposição 0407 depende disso. Informe a espécie e se é para incubação ou consumo.')
+    }
+  }
 
   const capitulosPrioritarios = [
     ...new Set(
@@ -358,6 +384,19 @@ export function perguntasComplementares(analise: AnaliseDescricao): string[] {
   }
   if (analise.sinais.includes('VIVO') && !analise.sinais.includes('REPRODUTOR') && !analise.sinais.includes('ABATE')) {
     perguntas.push('O animal está vivo? Qual a destinação — reprodução (raça pura?), abate/frigorífico ou outro uso?')
+  }
+  // Preditivo animal: espécie + estado fecham a família (silvestre × doméstico).
+  if ((analise.sinais as string[]).includes('ANIMAL_SILVESTRE')) {
+    perguntas.push('É animal silvestre — qual a espécie (jacaré, papagaio/arara, avestruz, abelha?) e o estado: vivo, carne (qual corte?) ou ovo? Silvestre vivo vai ao cap. 01 (ex.: 0106.20 répteis · 0106.32 psitaciformes); carne de réptil ao 0208.50.')
+  }
+  if ((analise.sinais as string[]).includes('ANIMAL_DOMESTICO') && !(analise.sinais as string[]).includes('VIVO') && !(analise.sinais as string[]).includes('CARNE')) {
+    perguntas.push('Qual o estado do animal — vivo (reprodução? qual espécie: cavalo, ovelha, coelho?), carne (fresca, refrigerada ou congelada?) ou ovo?')
+  }
+  if ((analise.sinais as string[]).includes('OVOS_DERIVADOS')) {
+    perguntas.push('O ovo é de qual espécie (galinha, codorna, pata?) e para que fim — incubação/eclosão ou consumo? (Ex.: galinha p/ incubação 0407.11 x p/ consumo 0407.21; outros 0407.29.)')
+  }
+  if ((analise.sinais as string[]).includes('PARTE_ANIMAL')) {
+    perguntas.push('Qual a parte e de qual animal — fígado, língua, coração, moela, rabo? (Ex.: fígado bovino 0206.22 · língua 0206.21 · miudezas frescas 0206.10.) Informe também se está fresca, refrigerada ou congelada.')
   }
   // Funil animal: sem corte/conservação, pede o estado antes de cravar 8 dígitos.
   if ((analise.sinais as string[]).includes('CARNE') && !(analise.sinais as string[]).includes('VIVO')) {

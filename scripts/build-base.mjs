@@ -905,6 +905,21 @@ async function gatilhoGrafo(manifest) {
       };
       escrever('MANIFEST.json', manifest);
       console.log('   grafo: MANIFEST.json carimbado com o resumo do grafo.');
+      // Phase 10-04: vetores SEMPRE após rebuild do grafo. Sem isso o
+      // índice vetorial dessincroniza (aliases novos fora do cosine) e o
+      // runtime cai p/ FTS-puro pelo guarda `hashGrafo`. `--hash` de
+      // propósito: build determinístico e offline (p/ vetores reais, rode
+      // `node scripts/gerar-embeddings.mjs` manualmente com rede). Nunca falha.
+      try {
+        execFileSync(
+          process.execPath,
+          [path.join(PROJECT_ROOT, 'scripts', 'gerar-embeddings.mjs'), '--hash'],
+          { stdio: 'inherit', cwd: PROJECT_ROOT },
+        );
+        console.log('   vetores: regenerados após o rebuild do grafo.');
+      } catch (errVet) {
+        console.log(`   vetores: gatilho ignorado (${String(errVet.message).split('\n')[0]}). Runtime usa FTS-puro até a próxima geração.`);
+      }
     }
   } catch (err) {
     console.log(`   grafo: gatilho ignorado (${String(err.message).split('\n')[0]}). Build da base preservado.`);

@@ -24,9 +24,11 @@ export function useOpcoesAux(tipo: TipoAux): RegistroAux[] {
 }
 
 const BOTAO_ADD =
-  'grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-brand-300 bg-brand-50 ' +
-  'text-sm font-bold text-brand-700 transition hover:bg-brand-100 dark:border-aurum-800 ' +
-  'dark:bg-brand-950/40 dark:text-brand-300'
+  'grid h-8 w-8 shrink-0 place-items-center rounded-lg border ' +
+  'border-[color-mix(in_srgb,var(--color-aurum-500)_35%,var(--line))] bg-[color-mix(in_srgb,var(--surface-2)_82%,transparent)] ' +
+  'text-sm font-bold text-brand-700 shadow-[inset_0_1px_0_rgb(255_255_255/0.5),0_8px_20px_-12px_rgb(22_35_58/0.25)] ' +
+  'backdrop-blur-md transition hover:border-[var(--color-aurum-500)] hover:shadow-[0_10px_26px_-12px_rgb(154_119_31/0.45)] ' +
+  'dark:text-aurum-200 dark:shadow-[inset_0_1px_0_rgb(234_215_158/0.12),0_10px_24px_-12px_rgb(0_0_0/0.6)]'
 
 /** Select + botão “＋” que abre o cadastro rápido da tabela correspondente. */
 export function SelectAux({

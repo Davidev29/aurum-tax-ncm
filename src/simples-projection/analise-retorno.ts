@@ -17,7 +17,7 @@
  */
 import { round2 } from './pro-labore';
 
-export type StatusRetorno = 'lucro-imediato' | 'payback-horizonte' | 'sem-payback' | 'prejuizo';
+export type StatusRetorno = 'lucro-imediato' | 'payback-horizonte' | 'sem-payback' | 'prejuizo' | 'empate-tecnico';
 
 export interface EntradaSerieRetorno {
   mes: string;
@@ -39,6 +39,9 @@ export interface AnaliseRetorno {
   /** 1-based: em qual mês o acumulado cruzou zero (null quando nunca). */
   mesesParaRetorno: number | null;
   mesPayback: string | null;
+  /** Primeiro mês com economia mensal > 0. */
+  mesVirada?: string | null;
+  mesesAteVirada?: number | null;
   economiaTotal: number;
   economiaMediaMensal: number;
   /** Economia bruta de DAS (sem descontar o custo da nova empresa). */
@@ -54,10 +57,12 @@ export interface AnaliseRetorno {
 /**
  * Classifica o retorno a partir da série líquida mensal.
  * `custoMensalNova` serve apenas para decompor bruto × custos no resumo.
+ * `margemEmpate` (R$): |economiaTotal| ≤ margem ⇒ `empate-tecnico`.
  */
 export function analisarRetorno(
   serie: EntradaSerieRetorno[],
   custoMensalNova: number,
+  margemEmpate = 0,
 ): AnaliseRetorno {
   const linhas = Array.isArray(serie) ? serie : [];
   const custo = Math.max(0, Number(custoMensalNova) || 0);
@@ -67,6 +72,8 @@ export function analisarRetorno(
       status: 'prejuizo',
       mesesParaRetorno: null,
       mesPayback: null,
+      mesVirada: null,
+      mesesAteVirada: null,
       economiaTotal: 0,
       economiaMediaMensal: 0,
       totalEconomiaBrutaDAS: 0,
@@ -84,6 +91,7 @@ export function analisarRetorno(
   let melhor: ExtremoRetorno | null = null;
   let pior: ExtremoRetorno | null = null;
   let primeiroCruzamentoIdx: number | null = null;
+  let viradaIdx: number | null = null;
 
   for (let i = 0; i < linhas.length; i++) {
     const l = linhas[i]!;
@@ -93,14 +101,18 @@ export function analisarRetorno(
     if (l.economiaMes < 0) mesesNegativos += 1;
     if (!melhor || l.economiaMes > melhor.valor) melhor = { mes: l.mes, valor: l.economiaMes };
     if (!pior || l.economiaMes < pior.valor) pior = { mes: l.mes, valor: l.economiaMes };
+    if (viradaIdx === null && l.economiaMes > 0) viradaIdx = i;
     if (primeiroCruzamentoIdx === null && l.economiaAcumulada > 0) primeiroCruzamentoIdx = i;
   }
 
   const economiaTotal = linhas[linhas.length - 1]!.economiaAcumulada;
   const totalCustos = round2(custo * linhas.length);
+  const margem = Math.max(0, Number(margemEmpate) || 0);
 
   let status: StatusRetorno;
-  if (primeiroCruzamentoIdx === 0 && linhas.every((l) => l.economiaAcumulada > 0)) {
+  if (Math.abs(round2(economiaTotal)) <= margem && margem > 0) {
+    status = 'empate-tecnico';
+  } else if (primeiroCruzamentoIdx === 0 && linhas.every((l) => l.economiaAcumulada > 0)) {
     status = 'lucro-imediato';
   } else if (primeiroCruzamentoIdx !== null) {
     status = 'payback-horizonte';
@@ -114,6 +126,8 @@ export function analisarRetorno(
     status,
     mesesParaRetorno: primeiroCruzamentoIdx === null ? null : primeiroCruzamentoIdx + 1,
     mesPayback: primeiroCruzamentoIdx === null ? null : linhas[primeiroCruzamentoIdx]!.mes,
+    mesVirada: viradaIdx === null ? null : linhas[viradaIdx]!.mes,
+    mesesAteVirada: viradaIdx === null ? null : viradaIdx + 1,
     economiaTotal: round2(economiaTotal),
     economiaMediaMensal: round2(economiaTotal / linhas.length),
     totalEconomiaBrutaDAS: round2(totalEconomiaBrutaDAS),

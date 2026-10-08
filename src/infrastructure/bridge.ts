@@ -33,7 +33,7 @@ export interface VersaoApp {
   empacotado: boolean
 }
 
-/** Candidato NCM oferecido ao worker IA (Top-5 RAG no fluxo real). */
+/** Candidato NCM oferecido pelo RAG lexical (Top-20 no fluxo real). */
 export interface CandidatoIa {
   codigo: string
   descricao: string
@@ -60,71 +60,8 @@ export interface CandidatoIa {
   viaGrafo?: boolean
 }
 
-/** Decisão do worker IA (`NÃO SEI` sob baixa similaridade/confiança). */
-export interface SucessoIaBridge {
-  ok: true
-  codigo: string
-  confianca: number
-  motivo: string
-  /** AI-first: `false` em produção (modelo real). `true` só fora do Electron/testes. */
-  mock: boolean
-  candidatos?: CandidatoIa[]
-  ms?: number
-  ramMB?: number
-  /** Presente quando o main respondeu sem worker vivo (legado, `AURUM_AI_FIRST=0`). */
-  fallback?: string
-  erro?: string
-}
-
-/** Falha fechada AI-first: sem modelo real, sem decisão (nunca mock silencioso). */
-export interface FalhaIaBridge {
-  ok: false
-  mock: false
-  erro: string
-  cmd?: string
-  candidatos?: CandidatoIa[]
-  ms?: number
-}
-
-export type ResultadoIaBridge = SucessoIaBridge | FalhaIaBridge
-
-/** Estado do worker IA (canal `ia:status`). `erro` = AI-first sem modelo real. */
-export interface PerfilModeloIa {
-  familia: string
-  templateChat: string
-  contextSize: number
-  arquivo?: string | null
-}
-
-export interface StatusIaBridge {
-  pronto: boolean
-  mock: boolean
-  modo: 'desligado' | 'mock' | 'modelo' | 'erro'
-  modelPath: string | null
-  /** Perfil da camada de compatibilidade (família/template/parâmetros). */
-  perfil?: PerfilModeloIa | null
-  /** Troca automática de modelo ativa (vigia de recursos-ia/modelo/). */
-  observandoModelo?: boolean
-  /** ISO da última troca automática detectada (ou null). */
-  ultimaTrocaModelo?: string | null
-  workerPath: string | null
-  pid: number | null
-  erro: string | null
-}
-
-/** Ponte da IA offline (worker `utilityProcess` via processo principal). */
+/** Ponte da busca local (grafo fiscal via processo principal). */
 export interface IaBridge {
-  classificar(descricao: string, candidatos?: CandidatoIa[]): Promise<ResultadoIaBridge>
-  buscar(consulta: string, k?: number): Promise<{ ok: boolean; candidatos: CandidatoIa[]; erro?: string }>
-  status(): Promise<StatusIaBridge>
-  /**
-   * Conversa livre (IA-06, Qwen3 real). `ok:false` quando sem modelo —
-   * o renderer cai no template determinístico (fail-closed).
-   */
-  conversar?(
-    pergunta: string,
-    opts?: { sistema?: string; historico?: { papel: string; texto: string }[]; think?: boolean; maxTokens?: number; temperature?: number },
-  ): Promise<{ ok: boolean; texto?: string; motivo?: string; erro?: string; mock?: boolean }>
   /**
    * Grafo fiscal local (Phase 10-02 / GRAFO-02): FTS + expansão 2-hops com
    * caminho auditável (`via:grafo` em 10-05). Sem `.lbug` → `ok:false` +
@@ -248,9 +185,9 @@ export interface AurumBridge {
   /** Empilha um ouvinte e devolve a desinscrição. */
   onAtualizacao(cb: (evento: EventoAtualizacao) => void): () => void
   /**
-   * IA offline (Phase 6 / IA-05). Só existe no Electron — fora dele
-   * (`window.aurum` ausente) o fluxo usa o fallback local em
-   * `src/application/classificacao-ia.ts`.
+   * Busca local (grafo fiscal via processo principal). Só existe no
+   * Electron — fora dele (`window.aurum` ausente) o fluxo usa o Top-20
+   * lexical em `src/application/classificacao-ia.ts`.
    */
   ia: IaBridge
 }

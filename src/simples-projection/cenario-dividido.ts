@@ -1,5 +1,5 @@
 /**
- * Orquestrador de cenário dividido mãe/nova (Etapa 4 — implementado).
+ * Orquestrador de cenário dividido mãe/nova (Etapa 4 — implementado + upgrade v2).
  *
  * Consome APENAS os exports públicos de `@/simples/calculo`:
  * `calcularConvencional` e `fatorR`. PROIBIDO reimplementar
@@ -7,15 +7,23 @@
  *
  * Baseline "unificado": tudo na mãe (anexo da mãe, RBT12 rolante do total
  * sobre o histórico da mãe). Economia do mês =
- * DAS_ref − (DAS_mãe + DAS_nova) − custoMensalNova.
+ * DAS_ref − (DAS_mãe + DAS_nova) − custoMes.
+ * custoMes = custoMensalNova (+ custoInicialNova rateado no mês 1).
+ *
+ * v2: percentual 0..1 (extremos válidos), mês de virada (1ª economia mensal
+ * > 0), payback (1º acumulado > 0) e veredito compensa / não-compensa /
+ * empate-técnico (|economia| ≤ margemEmpate).
  */
 import { calcularConvencional, fatorR } from '@/simples/calculo';
 import { ANEXOS_SIMPLES, RBT12_MAX, SUBLIMITE } from '@/simples/tabelas';
+import { calcularDASegregado, normalizarComposicao } from './das-segregado';
 import { projetarRBT12Rolling } from './janela-rbt12';
 import { analisarFatorRSerie } from './fator-r-dividido';
 import { analisarRetorno } from './analise-retorno';
 import type {
   AlertaFiscal,
+  ConfigEmpresaCenario,
+  DetalheParcelaMes,
   MesReceita,
   ParamsCenarioDividido,
   RelatorioProjecao,
@@ -30,9 +38,9 @@ function validarConfigCenario(params: ParamsCenarioDividido): void {
   if (!Array.isArray(params.receitaTotalMensal) || params.receitaTotalMensal.length === 0) {
     throw new Error('receitaTotalMensal vazia: informe a receita TOTAL projetada mês a mês em ordem cronológica.');
   }
-  if (!(params.percentualNova > 0) || !(params.percentualNova < 1)) {
+  if (!(params.percentualNova >= 0) || !(params.percentualNova <= 1) || !Number.isFinite(params.percentualNova)) {
     throw new Error(
-      `percentualNova inválido (${String(params.percentualNova)}): use fração 0 < p < 1 (ex. 0.3 = 30% na nova).`,
+      `percentualNova inválido (${String(params.percentualNova)}): use fração 0 ≤ p ≤ 1 (ex. 0.3 = 30% na nova).`,
     );
   }
   for (const lado of ['mae', 'nova'] as const) {
@@ -51,6 +59,23 @@ function validarConfigCenario(params: ParamsCenarioDividido): void {
   const custo = params.custoMensalNova ?? 0;
   if (!Number.isFinite(custo) || custo < 0) {
     throw new Error('custoMensalNova inválido: use número >= 0.');
+  }
+  for (const lado of ['mae', 'nova'] as const) {
+    const comp = params[lado].composicao;
+    if (comp !== undefined && comp !== null) {
+      if (!Array.isArray(comp) || comp.length === 0) {
+        throw new Error(`"${lado}.composicao" vazia: omita o campo (mono-anexo) ou informe [{ anexoId, percentual }].`);
+      }
+      normalizarComposicao(comp); // valida percentuais (lança se inválido)
+    }
+  }
+  const custoInicial = params.custoInicialNova ?? 0;
+  if (!Number.isFinite(custoInicial) || custoInicial < 0) {
+    throw new Error('custoInicialNova inválido: use número >= 0.');
+  }
+  const margem = params.margemEmpate ?? 0;
+  if (!Number.isFinite(margem) || margem < 0) {
+    throw new Error('margemEmpate inválida: use número >= 0.');
   }
 }
 
@@ -74,6 +99,56 @@ export function simularCenarioDividido(params: ParamsCenarioDividido): Relatorio
   validarConfigCenario(params);
   const { mesInicio, receitaTotalMensal, percentualNova, mae, nova } = params;
   const custoMensalNova = params.custoMensalNova ?? 0;
+  const custoInicialNova = params.custoInicialNova ?? 0;
+  const margemEmpate = params.margemEmpate ?? 0;
+  const compMae = mae.composicao?.length ? normalizarComposicao(mae.composicao) : null;
+  const compNova = nova.composicao?.length ? normalizarComposicao(nova.composicao) : null;
+
+  /**
+   * Apura UMA empresa num mês: mono-anexo (1 chamada ao motor) ou segregado
+   * (1 chamada por parcela, RBT12 total em cada tabela, DAS somado).
+   * Retorna faixa/alíquota da maior parcela para exibição + detalhe auditável.
+   */
+  const apurarEmpresa = (
+    cfg: ConfigEmpresaCenario,
+    comp: Array<{ anexoId: ConfigEmpresaCenario['anexoId']; percentual: number }> | null,
+    rbt12: number,
+    receita: number,
+  ): {
+    das: number;
+    faixa: number;
+    aliquotaEfetiva: number;
+    aliquotaNominal?: number;
+    parcelaDeduzir?: number;
+    detalhe?: DetalheParcelaMes[];
+  } => {
+    if (!comp) {
+      const conv = calcularConvencional({ anexoId: cfg.anexoId, rbt12, receitaMes: receita });
+      const tab = ANEXOS_SIMPLES[cfg.anexoId].faixas.find((f) => f.faixa === conv.faixa);
+      return {
+        das: conv.das,
+        faixa: conv.faixa,
+        aliquotaEfetiva: conv.aliquotaEfetiva,
+        aliquotaNominal: tab?.aliquotaNominal,
+        parcelaDeduzir: tab?.parcelaDeduzir,
+      };
+    }
+    const parcelas = comp.map((c) => ({
+      anexoId: c.anexoId,
+      receitaMes: Math.round(receita * c.percentual * 100) / 100,
+    }));
+    const seg = calcularDASegregado(rbt12, parcelas);
+    const maior = seg.parcelas.reduce((a, b) => (b.receitaMes >= a.receitaMes ? b : a), seg.parcelas[0]!);
+    const tabMaior = ANEXOS_SIMPLES[maior.anexoId].faixas.find((f) => f.faixa === maior.faixa);
+    return {
+      das: seg.das,
+      faixa: maior.faixa,
+      aliquotaEfetiva: receita > 0 ? seg.das / receita : 0,
+      aliquotaNominal: tabMaior?.aliquotaNominal,
+      parcelaDeduzir: tabMaior?.parcelaDeduzir,
+      detalhe: seg.parcelas,
+    };
+  };
 
   const split = fatiarReceita(receitaTotalMensal, percentualNova);
 
@@ -103,24 +178,30 @@ export function simularCenarioDividido(params: ParamsCenarioDividido): Relatorio
   let paybackMes: string | null = null;
   let paybackIdx: number | null = null;
   let paybackValor: number | null = null;
+  let mesVirada: string | null = null;
+  let mesesAteVirada: number | null = null;
 
   for (let i = 0; i < receitaTotalMensal.length; i++) {
     const total = receitaTotalMensal[i]!;
     const rMae = janelaMae[i]!;
     const rNova = janelaNova[i]!;
     const rRef = janelaRef[i]!;
-    // Motor existente — única fonte de alíquota/ƒaixa/DAS (nunca recalculado aqui).
-    const convMae = calcularConvencional({ anexoId: mae.anexoId, rbt12: rMae.rbt12, receitaMes: split.mae[i]!.receita });
-    const convNova = calcularConvencional({ anexoId: nova.anexoId, rbt12: rNova.rbt12, receitaMes: split.nova[i]!.receita });
-    const convRef = calcularConvencional({
-      anexoId: mae.anexoId,
-      rbt12: rRef.rbt12,
-      receitaMes: total.receita,
-    });
+    // Motor existente — única fonte de alíquota/faixa/DAS (nunca recalculado aqui).
+    // Composição presente ⇒ DAS segregado por anexo (RBT12 total em cada tabela).
+    const apMae = apurarEmpresa(mae, compMae, rMae.rbt12, split.mae[i]!.receita);
+    const apNova = apurarEmpresa(nova, compNova, rNova.rbt12, split.nova[i]!.receita);
+    // Baseline unificado: mesma mistura de atividades da mãe, tudo nela.
+    const apRef = apurarEmpresa(mae, compMae, rRef.rbt12, total.receita);
 
-    const economiaMes =
-      Math.round((convRef.das - (convMae.das + convNova.das) - custoMensalNova) * 100) / 100;
+    const custoMes =
+      Math.round((custoMensalNova + (i === 0 ? custoInicialNova : 0)) * 100) / 100;
+    const economiaBruta = Math.round((apRef.das - (apMae.das + apNova.das)) * 100) / 100;
+    const economiaMes = Math.round((economiaBruta - custoMes) * 100) / 100;
     economiaAcumulada = Math.round((economiaAcumulada + economiaMes) * 100) / 100;
+    if (mesVirada === null && economiaMes > 0) {
+      mesVirada = total.mes;
+      mesesAteVirada = i + 1;
+    }
     if (paybackMes === null && economiaAcumulada > 0) {
       paybackMes = total.mes;
       paybackIdx = i + 1;
@@ -129,9 +210,10 @@ export function simularCenarioDividido(params: ParamsCenarioDividido): Relatorio
 
     // Detalhe da faixa (nominal + dedução) apenas para exibição da
     // progressividade — lido da tabela oficial, nunca recalculado.
-    const faixaMaeTab = ANEXOS_SIMPLES[mae.anexoId].faixas.find((f) => f.faixa === convMae.faixa);
-    const faixaNovaTab = ANEXOS_SIMPLES[nova.anexoId].faixas.find((f) => f.faixa === convNova.faixa);
-    const faixaRefTab = ANEXOS_SIMPLES[mae.anexoId].faixas.find((f) => f.faixa === convRef.faixa);
+    // (Com segregação: dados da maior parcela; o detalhe integral vai em `detalhe*`.)
+    const faixaMaeTab = !compMae ? ANEXOS_SIMPLES[mae.anexoId].faixas.find((f) => f.faixa === apMae.faixa) : undefined;
+    const faixaNovaTab = !compNova ? ANEXOS_SIMPLES[nova.anexoId].faixas.find((f) => f.faixa === apNova.faixa) : undefined;
+    const faixaRefTab = !compMae ? ANEXOS_SIMPLES[mae.anexoId].faixas.find((f) => f.faixa === apRef.faixa) : undefined;
 
     serieMensal.push({
       mes: total.mes,
@@ -141,21 +223,26 @@ export function simularCenarioDividido(params: ParamsCenarioDividido): Relatorio
       rbt12Mae: rMae.rbt12,
       rbt12Nova: rNova.rbt12,
       rbt12Ref: rRef.rbt12,
-      faixaMae: convMae.faixa,
-      faixaNova: convNova.faixa,
-      faixaRef: convRef.faixa,
-      aliquotaEfetivaMae: convMae.aliquotaEfetiva,
-      aliquotaEfetivaNova: convNova.aliquotaEfetiva,
-      aliquotaEfetivaRef: total.receita > 0 ? convRef.das / total.receita : 0,
-      aliquotaNominalMae: faixaMaeTab?.aliquotaNominal,
-      aliquotaNominalNova: faixaNovaTab?.aliquotaNominal,
-      aliquotaNominalRef: faixaRefTab?.aliquotaNominal,
-      parcelaDeduzirMae: faixaMaeTab?.parcelaDeduzir,
-      parcelaDeduzirNova: faixaNovaTab?.parcelaDeduzir,
-      parcelaDeduzirRef: faixaRefTab?.parcelaDeduzir,
-      dasMae: convMae.das,
-      dasNova: convNova.das,
-      dasUnificadoReferencia: convRef.das,
+      faixaMae: apMae.faixa,
+      faixaNova: apNova.faixa,
+      faixaRef: apRef.faixa,
+      aliquotaEfetivaMae: apMae.aliquotaEfetiva,
+      aliquotaEfetivaNova: apNova.aliquotaEfetiva,
+      aliquotaEfetivaRef: total.receita > 0 ? apRef.das / total.receita : 0,
+      aliquotaNominalMae: apMae.aliquotaNominal ?? faixaMaeTab?.aliquotaNominal,
+      aliquotaNominalNova: apNova.aliquotaNominal ?? faixaNovaTab?.aliquotaNominal,
+      aliquotaNominalRef: apRef.aliquotaNominal ?? faixaRefTab?.aliquotaNominal,
+      parcelaDeduzirMae: apMae.parcelaDeduzir ?? faixaMaeTab?.parcelaDeduzir,
+      parcelaDeduzirNova: apNova.parcelaDeduzir ?? faixaNovaTab?.parcelaDeduzir,
+      parcelaDeduzirRef: apRef.parcelaDeduzir ?? faixaRefTab?.parcelaDeduzir,
+      dasMae: apMae.das,
+      dasNova: apNova.das,
+      dasUnificadoReferencia: apRef.das,
+      detalheMae: apMae.detalhe,
+      detalheNova: apNova.detalhe,
+      detalheRef: apRef.detalhe,
+      economiaBrutaMes: economiaBruta,
+      custoMes,
       economiaMes,
       economiaAcumulada,
     });
@@ -184,12 +271,14 @@ export function simularCenarioDividido(params: ParamsCenarioDividido): Relatorio
     }
   }
 
-  // Fator R: confere 1x por empresa (folha fixa) contra o último RBT12.
+  // Fator R: alerta pontual por empresa (folha fixa × último RBT12) +
+  // diagnóstico mensal completo em `analiseFatorR` (déficit e pró-labore).
+  // Empresa dispensada (III puro) não é verificada.
   for (const [rotulo, cfg, janela] of [
     ['mãe', mae, janelaMae],
     ['nova', nova, janelaNova],
   ] as const) {
-    if (cfg.anexoId === 'III' || cfg.anexoId === 'V') {
+    if ((cfg.anexoId === 'III' || cfg.anexoId === 'V') && !cfg.dispensarFatorR) {
       const ultimo = janela[janela.length - 1]!;
       const fr = fatorR(cfg.folha12, ultimo.rbt12);
       if (fr.anexo !== cfg.anexoId) {
@@ -208,12 +297,22 @@ export function simularCenarioDividido(params: ParamsCenarioDividido): Relatorio
       'Projeção informativa: grupo econômico pode exigir consolidação de receita para fins de sublimite/desenquadramento — valide com contador.',
   });
 
+  const veredito =
+    margemEmpate > 0 && Math.abs(economiaAcumulada) <= margemEmpate
+      ? 'empate-tecnico'
+      : economiaAcumulada > 0
+        ? 'compensa'
+        : 'nao-compensa';
+
   return {
     serieMensal,
     payback: {
       mes: paybackMes,
       mesesAtePayback: paybackIdx,
       valorAcumuladoNoPayback: paybackValor,
+      mesVirada,
+      mesesAteVirada,
+      veredito,
     },
     economiaTotal: economiaAcumulada,
     alertas,
@@ -225,6 +324,8 @@ export function simularCenarioDividido(params: ParamsCenarioDividido): Relatorio
         anexoNova: nova.anexoId,
         folha12Mae: mae.folha12,
         folha12Nova: nova.folha12,
+        sujeitaFatorRMae: !mae.dispensarFatorR,
+        sujeitaFatorRNova: !nova.dispensarFatorR,
         envolveAnexoIV: mae.anexoId === 'IV' || nova.anexoId === 'IV',
       },
     ),
@@ -235,9 +336,14 @@ export function simularCenarioDividido(params: ParamsCenarioDividido): Relatorio
       percentualNova,
       anexoMae: mae.anexoId,
       anexoNova: nova.anexoId,
+      composicaoMae: compMae ?? undefined,
+      composicaoNova: compNova ?? undefined,
       folha12Mae: mae.folha12,
       folha12Nova: nova.folha12,
-      motorVersao: 'simples-projection v1 + calc-engine v3',
+      custoMensalNova,
+      custoInicialNova,
+      margemEmpate,
+      motorVersao: 'simples-projection v2 + calc-engine v3',
     },
   };
 }

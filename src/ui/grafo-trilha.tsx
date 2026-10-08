@@ -10,7 +10,6 @@
  */
 import { useState } from 'react'
 import { Modal } from './kit'
-import { NOME_IA } from '@/domain/aurum-ai'
 
 export type ProvenienciaTrilha = {
   de: string
@@ -27,7 +26,7 @@ export function BadgeViaGrafo({ via }: { via: string | null | undefined }) {
   return (
     <span
       className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
-      title={`Resposta com caminho do grafo fiscal local (multi-hop auditável) — o resolvedor validou o código. ${NOME_IA} propôs, a base oficial decidiu.`}
+      title="Resposta com caminho do grafo fiscal local (multi-hop auditável) — o resolvedor validou o código. A busca propôs, a base oficial decidiu."
       role="status"
       aria-label={rotulo}
     >

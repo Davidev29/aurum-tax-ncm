@@ -23,7 +23,7 @@ export interface NotasVersao {
   novidades: string[]
   /**
    * Aviso opcional ("quando for o caso"): mudança de cálculo, ação necessária
-   * após atualizar, observação da Aurinha. Omitido = bloco não renderiza.
+   * após atualizar. Omitido = bloco não renderiza.
    */
   comentario?: string
   /** Data da release (AAAA-MM-DD, só informativo). */
@@ -38,9 +38,8 @@ export const NOTAS_VERSAO: Record<string, NotasVersao> = {
       'Simples Nacional: DAS por Anexo I–V, Fator R e duelo Convencional × Híbrido',
       'Consulta NCM com CST, cClassTrib, redução e base legal',
       'Serviços (NBS) por código, descrição ou CNPJ',
-      'Notas Fiscais (XML) com layout Polida, apuração e relatório IA',
-      'Aurinha, a mascote assistente, na barra lateral',
-      'Aurum AI 100% offline, sem enviar dados para a nuvem',
+      'Notas Fiscais (XML) com layout Polida, apuração e relatório',
+      'Classificação automática 100% local, sem enviar dados para a nuvem',
     ],
   },
 }

@@ -1,28 +1,27 @@
 /**
- * Aurum AI — identidade, rótulos e calibragem de confiança.
+ * Busca automática — identidade, rótulos e calibragem de confiança.
  *
- * A IA chama-se **Aurum AI** em toda a superfície (Consulta, SPED, NF-e,
- * Lote, Calculadora). Este módulo centraliza o nome, os rótulos e a
- * formatação de confiança para que nenhuma tela invente variação
- * ("via IA", "Sugestão IA", "IA", "🤖" solto).
+ * A classificação é 100% determinística (RAG lexical + grafo + resolvedor).
+ * Este módulo centraliza o nome, os rótulos e a formatação de confiança
+ * para que nenhuma tela invente variação.
  *
  * Convenção:
- * - Selo curto: `SeloAurumAI` (UI) — "✨ Aurum AI" com brilho + pulso suave.
- * - Atribuição: "Sugerido por Aurum AI" — sempre que um NCM, redução ou
- *   hipótese vier da IA (nunca do determinístico).
+ * - Selo curto: `SeloAurumAI` (UI) — "✨ Resultado automático" com brilho + pulso suave.
+ * - Atribuição: "Resultado automático" — sempre que um NCM, redução ou
+ *   hipótese vier da busca (nunca digitado pelo usuário).
  * - Confiança: número 0–1 + nível `alta | media | baixa` + barra acessível.
  */
 
 export const NOME_IA = 'Aurum AI' as const
 
-/** Apelido carinhoso da mascote — a IA atende por ele no chat. */
+/** Apelido carinhoso da mascote. */
 export const APELIDO_IA = 'Aurinha' as const
 
-export const ROTULO_SUGERIDO_POR = 'Sugerido por Aurum AI' as const
+export const ROTULO_SUGERIDO_POR = 'Resultado automático' as const
 
-export const ROTULO_FALLBACK = 'Aurum AI · modelo embutido' as const
+export const ROTULO_FALLBACK = 'Busca automática · base local' as const
 
-export const ROTULO_PREDICAO = 'Predição assistiva · Aurum AI' as const
+export const ROTULO_PREDICAO = 'Predição assistiva · busca automática' as const
 
 export type NivelConfiancaIa = 'alta' | 'media' | 'baixa'
 

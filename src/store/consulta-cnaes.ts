@@ -15,7 +15,6 @@
  * `Anexo Simples —`, e a situação cai em `Depende da atividade`).
  */
 import { create } from 'zustand'
-import { SUGGEST_LIMITS } from '@/domain/constants'
 import { codigo7De, rotuloAnexoSimples } from '@/domain/services/cnae'
 import {
   ANO_REFERENCIA_PADRAO,
@@ -204,29 +203,49 @@ export const useCnaes = create<CnaesState>((set, get) => ({
 
   sugestoes: [],
   sugerirCnae: async (prefixo) => {
-    const t = String(prefixo ?? '').trim().toLowerCase()
-    if (!t) {
+    const bruto = String(prefixo ?? '').trim()
+    if (!bruto) {
       set({ sugestoes: [] })
       return
     }
     if (!get().lista.length) await get().carregarLista()
+    const t = bruto.toLowerCase()
+    const normalizar = (s: string) =>
+      String(s ?? '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+    const tn = normalizar(bruto)
     const digitos = t.replace(/\D+/g, '')
-    const achados: SugestaoCnae[] = []
+    const rank: Array<{ linha: LinhaCnae; score: number }> = []
     for (const l of get().lista) {
-      if (achados.length >= SUGGEST_LIMITS.buscaNomenclatura) break
-      const casaCodigo = digitos
-        ? l.cnae7.startsWith(digitos) || l.codigoFormatado.toLowerCase().includes(t)
-        : l.codigoFormatado.toLowerCase().includes(t)
-      const casaTexto = l.descricao.toLowerCase().includes(t)
-      if (casaCodigo || casaTexto) {
-        achados.push({
-          cnae7: l.cnae7,
-          codigoFormatado: l.codigoFormatado,
-          descricao: l.descricao,
-        })
+      let score = -1
+      if (digitos && l.cnae7 === digitos) score = 100
+      else if (digitos && l.cnae7.startsWith(digitos)) score = 80 - digitos.length * 0.5
+      else if (digitos && l.codigoFormatado.replace(/\D+/g, '').includes(digitos)) score = 60
+      else if (t && l.codigoFormatado.toLowerCase().includes(t)) score = 55
+      if (score < 0 && tn) {
+        const desc = normalizar(l.descricao)
+        if (desc === tn) score = 90
+        else if (desc.startsWith(tn)) score = 50
+        else if (desc.includes(tn)) score = 30
+        else {
+          // multi-termo: todos os termos precisam aparecer (ordem livre)
+          const termos = tn.split(/\s+/).filter((w) => w.length >= 2)
+          if (termos.length > 1 && termos.every((w) => desc.includes(w))) score = 20
+        }
       }
+      if (score >= 0) rank.push({ linha: l, score })
+      if (rank.length > 400) break
     }
-    set({ sugestoes: achados })
+    rank.sort((a, b) => b.score - a.score || a.linha.codigoFormatado.localeCompare(b.linha.codigoFormatado, 'pt-BR'))
+    set({
+      sugestoes: rank.slice(0, 8).map((r) => ({
+        cnae7: r.linha.cnae7,
+        codigoFormatado: r.linha.codigoFormatado,
+        descricao: r.linha.descricao,
+      })),
+    })
   },
 
   consulta: null,

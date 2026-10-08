@@ -9,8 +9,9 @@
  * - Responsivo: stack <lg, aside 360px em lg+, tabelas com scroll-x.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ANEXO_LABEL, type AnexoSimplesId } from './tabelas';
-import { fatorR } from './calculo';
+import { fatorR, type RegraCreditoCBS } from './calculo';
 import { orquestrarRelatorio } from './relatorio-analitico';
 import { gerarInsightsFallback } from './ia-insights';
 import { InsightsModal } from './InsightsModal';
@@ -24,7 +25,7 @@ import { useProjecaoDividida } from '@/simples-projection/store';
 import { ModalDivisao as ModalDivisaoView } from '@/simples-projection/ModalDivisao';
 import { fmtCarga, fmtCnpj, fmtMoeda, fmtNbs, parseMoeda } from '@/domain/services/format';
 import { rotuloAnexoSimples } from '@/domain/services/cnae';
-import { Btn, IconeBadge, Painel, Selecao, Texto, useAcaoTatil } from '@/ui/kit';
+import { Btn, IconeBadge, Painel, Texto, useAcaoTatil } from '@/ui/kit';
 import { Entrada, Secao } from '@/ui/motion';
 import { toast, useUi } from '@/store/ui';
 
@@ -65,6 +66,210 @@ function CampoMoeda({
       />
       {dica ? <span className="mt-0.5 block truncate text-[10px] text-slate-400" title={dica}>{dica}</span> : null}
     </label>
+  );
+}
+
+function DespesaValor({
+  valor,
+  onValor,
+}: {
+  valor: number;
+  onValor: (v: number) => void;
+}) {
+  const fmt = (v: number) => (v > 0 ? `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '');
+  const [texto, setTexto] = useState(() => fmt(valor));
+  const [foco, setFoco] = useState(false);
+  // Sincroniza quando o valor muda por fora (ex.: limpar) e o campo não está em edição.
+  useEffect(() => {
+    if (!foco) setTexto(fmt(valor));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valor, foco]);
+  return (
+    <Texto
+      mono
+      mask="moeda"
+      inputMode="decimal"
+      aria-label="Valor da despesa em reais por mês"
+      title="Valor mensal da despesa em R$ — base para o crédito de CBS"
+      className="field field-sm mono w-28 !py-1 text-right !text-[12px]"
+      placeholder="R$ 0,00"
+      value={texto}
+      onChange={(e) => {
+        setTexto(e.target.value);
+        onValor(parseMoeda(e.target.value));
+      }}
+      onFocus={() => setFoco(true)}
+      onBlur={() => {
+        setFoco(false);
+        setTexto(fmt(parseMoeda(texto)));
+      }}
+    />
+  );
+}
+
+/**
+ * Seletor custom de regra de crédito CBS — substitui o `<select>` nativo,
+ * cujo popup do SO cortava o rótulo na largura da coluna (`w-32`).
+ *
+ * Botão compacto em vidro + menu em portal (`position: fixed`, 300px) com
+ * texto completo por opção (título + detalhe), navegação por teclado
+ * (↑↓ Enter Esc) e fechamento em clique-fora/scroll. A tabela ao redor foi
+ * alargada em 20% (`min-w 420→504`, colunas `w-32→w-[154px]`).
+ */
+const OPCOES_REGRA: Array<{ id: RegraCreditoCBS; curto: string; completo: string; detalhe: string }> = [
+  { id: 'integral', curto: 'Integral · 100%', completo: 'Integral · 100% da alíquota vira crédito', detalhe: 'Aproveita 100% da CBS como crédito' },
+  { id: 'red30', curto: 'Red. 30% · 70%', completo: 'Red. 30% · 70% da alíquota vira crédito', detalhe: 'Alíquota reduzida em 30% — ex.: aluguel' },
+  { id: 'red60', curto: 'Red. 60% · 40%', completo: 'Red. 60% · 40% da alíquota vira crédito', detalhe: 'Alíquota reduzida em 60%' },
+  { id: 'zero', curto: 'Zero · 0%', completo: 'Zero · alíquota zerada — 0% de crédito', detalhe: 'Nenhum crédito gerado' },
+  { id: 'semCredito', curto: 'S/ crédito · 0%', completo: 'S/ crédito · despesa sem direito a crédito', detalhe: '0% de crédito por vedação' },
+];
+
+const LARGURA_MENU_REGRA = 300;
+
+function SeletorRegraCredito({
+  valor,
+  onChange,
+}: {
+  valor: RegraCreditoCBS;
+  onChange: (v: RegraCreditoCBS) => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [pos, setPos] = useState({ esquerda: 0, topo: 0 });
+  const [foco, setFoco] = useState(() => Math.max(0, OPCOES_REGRA.findIndex((o) => o.id === valor)));
+  const botaoRef = useRef<HTMLButtonElement>(null);
+
+  const atual = OPCOES_REGRA.find((o) => o.id === valor) ?? OPCOES_REGRA[0];
+
+  const abrir = () => {
+    const r = botaoRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const esquerda = Math.max(12, Math.min(r.right - LARGURA_MENU_REGRA, window.innerWidth - LARGURA_MENU_REGRA - 12));
+    const alturaEstimada = OPCOES_REGRA.length * 64 + 16;
+    const cabeAbaixo = r.bottom + 8 + alturaEstimada <= window.innerHeight;
+    setPos({
+      esquerda,
+      topo: cabeAbaixo ? r.bottom + 8 : Math.max(12, r.top - alturaEstimada - 8),
+    });
+    setFoco(Math.max(0, OPCOES_REGRA.findIndex((o) => o.id === valor)));
+    setAberto(true);
+  };
+
+  // Clique-fora, scroll e resize fecham (posição é snapshot do `rect`).
+  useEffect(() => {
+    if (!aberto) return;
+    const aoMousedown = (e: MouseEvent) => {
+      const alvo = e.target as HTMLElement | null;
+      if (botaoRef.current?.contains(alvo)) return;
+      if (alvo?.closest?.('[data-regra-menu]')) return;
+      setAberto(false);
+    };
+    const aoTecla = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setAberto(false);
+        botaoRef.current?.focus();
+      }
+    };
+    const fechar = () => setAberto(false);
+    document.addEventListener('mousedown', aoMousedown);
+    document.addEventListener('keydown', aoTecla);
+    window.addEventListener('scroll', fechar, true);
+    window.addEventListener('resize', fechar);
+    return () => {
+      document.removeEventListener('mousedown', aoMousedown);
+      document.removeEventListener('keydown', aoTecla);
+      window.removeEventListener('scroll', fechar, true);
+      window.removeEventListener('resize', fechar);
+    };
+  }, [aberto]);
+
+  const escolher = (id: RegraCreditoCBS) => {
+    onChange(id);
+    setAberto(false);
+    botaoRef.current?.focus();
+  };
+
+  return (
+    <>
+      <button
+        ref={botaoRef}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={aberto}
+        title="Regra de crédito: Integral 100% · Red. 30% 70% · Red. 60% 40% · Zero/Sem crédito 0%"
+        onClick={() => (aberto ? setAberto(false) : abrir())}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' && !aberto) {
+            e.preventDefault();
+            abrir();
+          }
+        }}
+        className="field field-sm select-glass flex w-[154px] items-center justify-between gap-1 !py-1 text-left text-[11px]"
+      >
+        <span className="truncate">{atual.curto}</span>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className={`shrink-0 text-aurum-600 transition-transform duration-200 dark:text-aurum-300 ${aberto ? 'rotate-180' : ''}`}
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      {aberto && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              data-regra-menu
+              role="listbox"
+              aria-label="Regra de crédito — quanto da alíquota CBS vira crédito"
+              className="regra-menu fixed z-[90]"
+              style={{ left: pos.esquerda, top: pos.topo, width: LARGURA_MENU_REGRA }}
+            >
+              {OPCOES_REGRA.map((o, i) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  role="option"
+                  aria-selected={o.id === valor}
+                  autoFocus={i === foco}
+                  className={`regra-opt ${o.id === valor ? 'is-ativo' : ''}`}
+                  onClick={() => escolher(o.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      const p = (i + 1) % OPCOES_REGRA.length;
+                      setFoco(p);
+                      document.querySelectorAll('[data-regra-menu] .regra-opt')[p]?.scrollIntoView({ block: 'nearest' });
+                      (document.querySelectorAll('[data-regra-menu] .regra-opt')[p] as HTMLElement)?.focus();
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      const p = (i - 1 + OPCOES_REGRA.length) % OPCOES_REGRA.length;
+                      setFoco(p);
+                      (document.querySelectorAll('[data-regra-menu] .regra-opt')[p] as HTMLElement)?.focus();
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      escolher(o.id);
+                    }
+                  }}
+                  onMouseEnter={() => setFoco(i)}
+                >
+                  <span className="regra-check" aria-hidden="true">{o.id === valor ? '✓' : ''}</span>
+                  <span className="min-w-0">
+                    <span className="regra-opt-titulo">{o.completo}</span>
+                    <span className="regra-opt-detalhe">{o.detalhe}</span>
+                  </span>
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
@@ -613,34 +818,41 @@ export function SimplesNacional() {
                         </div>
                         <div className="space-y-1.5">
                           <span className="field-label">Despesas (crédito CBS)</span>
+                          <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                            <strong>Valor (R$/mês):</strong> quanto a empresa gasta no mês com o item — é a base do crédito.
+                            O crédito de cada linha = valor × CBS {(s.cbsRef * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}% × fator da regra.
+                          </p>
+                          <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
+                            <strong>Regra de crédito:</strong> quanto da alíquota vira crédito — Integral 100%, Red. 30% (70%),
+                            Red. 60% (40%), Zero / S/ crédito (0%). Ex.: aluguel usa 30% da alíquota por padrão.
+                          </p>
                           <div className="overflow-x-auto rounded-lg border border-[var(--line)]">
-                            <table className="tbl tbl-compacta w-full min-w-[380px]">
+                            <table className="tbl tbl-compacta w-full min-w-[504px]">
+                              <thead>
+                                <tr className="border-b border-[var(--line)] text-left text-[10px] uppercase tracking-wide text-slate-400">
+                                  <th className="px-2 py-1 font-bold" title="Item da despesa e crédito gerado abaixo do nome">Despesa · crédito</th>
+                                  <th className="w-[154px] px-2 py-1 text-right font-bold" title="Valor mensal da despesa em R$ — base para o crédito de CBS">Valor (R$/mês)</th>
+                                  <th className="w-[154px] px-2 py-1 font-bold" title="Regra: quanto da alíquota CBS vira crédito — Integral 100%, Red. 30% 70%, Red. 60% 40%, Zero/Sem crédito 0%">Regra de crédito</th>
+                                  <th className="w-8" />
+                                </tr>
+                              </thead>
                               <tbody>
                                 {s.despesas.map((dd) => {
                                   const cred = creditoDaDespesa(dd, s.cbsRef);
                                   return (
                                     <tr key={dd.id} className="border-t border-[var(--line)] first:border-0">
-                                      <td className="max-w-[140px]">
+                                      <td className="max-w-[168px] px-2">
                                         <span className="block truncate text-[11px] font-semibold" title={dd.rotulo}>{dd.rotulo}</span>
-                                        <span className={`font-mono text-[10px] ${cred > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300'}`}>{fmtMoeda(cred)}</span>
+                                        <span className={`font-mono text-[10px] ${cred > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-300'}`} title={`Crédito = valor × CBS × fator da regra (${dd.regra})`}>{fmtMoeda(cred)} crédito</span>
                                       </td>
-                                      <td className="w-24 text-right">
-                                        <input
-                                          className="field field-sm mono w-24 !py-1 text-right"
-                                          inputMode="decimal"
-                                          value={dd.valor > 0 ? String(dd.valor).replace('.', ',') : ''}
-                                          placeholder="0"
-                                          onChange={(e) => editarDespesa(dd.id, { valor: parseMoeda(e.target.value) })}
+                                      <td className="w-[154px] px-2 text-right">
+                                        <DespesaValor valor={dd.valor} onValor={(v) => editarDespesa(dd.id, { valor: v })} />
+                                      </td>
+                                      <td className="w-[154px] px-2">
+                                        <SeletorRegraCredito
+                                          valor={dd.regra}
+                                          onChange={(v) => editarDespesa(dd.id, { regra: v })}
                                         />
-                                      </td>
-                                      <td className="w-28">
-                                        <Selecao className="!w-28 !py-1 text-[11px]" value={dd.regra} onChange={(e) => editarDespesa(dd.id, { regra: e.target.value as DespesaSimples['regra'] })}>
-                                          <option value="integral">Integral</option>
-                                          <option value="red30">Red. 30%</option>
-                                          <option value="red60">Red. 60%</option>
-                                          <option value="zero">Zero</option>
-                                          <option value="semCredito">S/ crédito</option>
-                                        </Selecao>
                                       </td>
                                       <td className="w-8 text-center">
                                         <button type="button" className="text-slate-300 transition hover:text-red-500" title="Remover" onClick={() => s.setDespesas(s.despesas.filter((x) => x.id !== dd.id))}>✕</button>
@@ -849,27 +1061,6 @@ export function SimplesNacional() {
       ) : null}
       </div>
 
-      {/* Relatório Analítico e Inteligente vive no modal (com exports no topo). */}
-      {relatorioAnalitico ? (
-        <Painel className="overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 p-3">
-            <div className="min-w-0 flex-1">
-              <h2 className="truncate text-[13px] font-black tracking-tight">Relatório Analítico e Inteligente</h2>
-              <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-                {relatorioAnalitico.contexto.mostrarMatrizIIIV
-                  ? 'Matriz III × V · Conv × Híb · Fator r · Gráficos · IA'
-                  : `Duelo Conv × Híb · Anexo ${relatorioAnalitico.dueloFoco.anexo} · Gráficos · IA`}
-              </p>
-            </div>
-            <span className="rounded-full bg-brand-100 px-2 py-px text-[10px] font-bold text-brand-700 dark:bg-aurum-500/15 dark:text-aurum-200">EXECUTIVO</span>
-          </div>
-          <div className="px-3 pb-3">
-            <Btn tam="sm" variante="primary" className="w-full" onClick={() => setInsightsAberto(true)}>
-              ✦ Abrir relatório completo ({insightsAnaliticos.length} insights) · exports no topo
-            </Btn>
-          </div>
-        </Painel>
-      ) : null}
       <DasModal aberto={dasAberto} onFechar={() => setDasAberto(false)} dados={dadosDas} />
       {relatorioAnalitico ? (
         <InsightsModal report={relatorioAnalitico} insights={insightsAnaliticos} aberto={insightsAberto} onFechar={() => setInsightsAberto(false)} />

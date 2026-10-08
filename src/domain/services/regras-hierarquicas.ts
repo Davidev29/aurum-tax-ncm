@@ -165,6 +165,18 @@ export const EXCECOES_FAMILIA: ExcecaoFamilia[] = [
     sinais: ['VIVO'],
     alerta: 'Animal vivo sem destinação (reprodução × abate): a herança por família é provisória até informar o uso.',
   },
+  {
+    id: 'ovo-sem-finalidade',
+    motivo: 'Ovo sem finalidade/espécie (incubação × consumo; galinha × codorna) — a subposição 0407 depende disso.',
+    sinais: ['OVOS_DERIVADOS'],
+    alerta: 'Ovo sem finalidade/espécie: informe se é para incubação ou consumo e a espécie (galinha, codorna, pata?) antes de aplicar o benefício da família.',
+  },
+  {
+    id: 'parte-sem-estado',
+    motivo: 'Parte/miudeza sem animal de origem ou conservação — a posição 0206/0210/05 depende disso.',
+    sinais: ['PARTE_ANIMAL'],
+    alerta: 'Parte animal sem origem/estado: informe o animal (bovino, suíno, ave?) e se está fresca, refrigerada ou congelada.',
+  },
 ]
 
 /**

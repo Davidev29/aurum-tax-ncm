@@ -22,13 +22,17 @@
  * `electron/esbuild.mjs`: nunca é bundlado nem carregado no renderer/main
  * quente — só aqui e no worker (`ia-worker.cjs`, comando `grafo`).
  *
- * Consulta (Phase 10-03 / GRAFO-03+06: 4 estágios):
- *   - (a) FTS seeds: tokens lowercase sem acento + stem, score por overlap
- *     (exato=1, stem=0.9, substring=0.7) + bônus de Termo→NCM/NBS
+ * Consulta (Phase 10-03 / GRAFO-03+06: 4 estágios; 10-04: precisão):
+ *   - (a) FTS seeds: tokens da CONSULTA sem stopwords/juridiquês
+ *     (`tokenizarConsulta`), score por overlap ponderado por IDF (raro =
+ *     diagnóstico; typo ganha o teto) + bônus de Termo→NCM/NBS
  *     (`SINONIMO_DE`, +0.25);
  *   - (b) HNSW/vetor seeds: cosine similarity sobre `vetores.json`
  *     (build `scripts/gerar-embeddings.mjs`, 384-d, NUNCA baixado em runtime;
  *     ausente → estágio pulado, `modoVetor:'fts-puro'`);
+ *     GUARDA anti-dessincronia: `hashGrafo` do vetor ≠ `hash` do grafo →
+ *     estágio pulado com `avisoVetor:'indice-desatualizado'` (o `npm run
+ *     base` regenera os vetores a cada rebuild do grafo);
  *   - (c) expansão 2-hops: `NCM→CCT→Anexo→Artigo`, `CNAE→NBS→CCT(→Anexo)`,
  *     `NBS→CCT→Anexo→Artigo` — caminho auditável por candidato + `cypher`
  *     determinístico (vai para `via:grafo` em 10-05);
@@ -106,6 +110,10 @@ const PESO_USO_PADRAO = 0.1
  * consulta (runtime) e documento (build) usam a MESMA expansão.
  * Espelha `src/domain/services/vocabulario-servicos.ts` (cluster educação).
  * O modelo real (transformers.js) captura o resto neuralmente quando há rede.
+ *
+ * CHAVES EM FORMA STEMIZADA: a expansão recebe o token JÁ com `stem`
+ * aplicado (`tokensExpandidos`, `indiceVetorFiltro`) — por isso `ingle`
+ * (de "inglês") e `france` (de "francês"), nunca as formas com `-s` final.
  */
 const PONTE_SEMANTICA_VETOR = {
   aula: ['educacao', 'ensino'],
@@ -119,12 +127,10 @@ const PONTE_SEMANTICA_VETOR = {
   professor: ['educacao', 'ensino'],
   ensino: ['educacao', 'ensino'],
   treinamento: ['educacao', 'ensino'],
-  treinamentos: ['educacao', 'ensino'],
   idioma: ['educacao', 'idioma'],
-  idiomas: ['educacao', 'idioma'],
-  ingles: ['educacao', 'idioma'],
+  ingle: ['educacao', 'idioma'],
   espanhol: ['educacao', 'idioma'],
-  frances: ['educacao', 'idioma'],
+  france: ['educacao', 'idioma'],
   online: ['online', 'internet'],
   internet: ['online', 'internet'],
   remoto: ['online', 'internet'],
@@ -154,7 +160,7 @@ let cacheGrafo = null // { caminho, mtimeMs, tamanho, nodos, arestas, indices }
 function normalizar(texto) {
   return String(texto ?? '')
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim()
     .replace(/\s+/g, ' ')
@@ -176,11 +182,57 @@ function tokenizar(texto) {
     .filter((t) => t.length >= 2)
 }
 
+/**
+ * Stopwords da CONSULTA (Phase 10-04): preposições, pronomes, verbos de
+ * pedido e juridiquês fiscal ("servico", "fornecimento", "anexo", "art"…).
+ * Espelham `STOPWORDS_BUSCA` (`src/domain/services/busca-texto.ts`),
+ * `TOKENS_JURIDIQUES_NBS` (`classificador-descricao-servicos.ts`) e
+ * `GENERICOS_HIPOTESE` (`infrastructure/base/classificacao-repo.ts`).
+ *
+ * Sem este filtro, o boilerplate tributário ("fornecimento dos serviços…",
+ * presente em milhares de descrições oficiais) empatava o score médio e
+ * gerava bônus de alias espúrio. Palavras de diagnóstico ("nacional",
+ * "simples", "exportacao", "diferimento", "isencao") ficam DE FORA de
+ * propósito. Só a consulta filtra — documentos mantêm todos os tokens.
+ */
+const STOPWORDS_CONSULTA = new Set(
+  ('o a os as um uma uns umas ao aos do da dos das no na nos nas ' +
+    'pelo pela pelos pelas num numa dum duma deste desta desse dessa ' +
+    'daquele daquela nele nela nisso disso em de por para com sem sob ' +
+    'sobre entre ate apos como quando onde qual quais quanto quantos ' +
+    'que se mais menos muito pouco algo coisa coisas este esta isto ' +
+    'esse essa isso aquele aquela aquilo meu minha seu sua nosso nossa ' +
+    'qualquer cada todo toda todos todas outro outra outros outras ' +
+    'mesmo mesma proprio propria ser estar sao foi foram sido ter tem ' +
+    'teve quer quero preciso precisa fazer achar procurar buscar saber ' +
+    'dizer favor alguem ninguem produto produtos mercadoria mercadorias ' +
+    'item itens codigo codigos ncm nbs cnae cst classificacao classificacoes ' +
+    'enquadramento tributacao tributo tributos imposto impostos aliquota ' +
+    'aliquotas lei leis complementar complementares art artigo artigos ' +
+    'inciso incisos paragrafo paragrafos alinea anexos observado observada ' +
+    'observados redacao lc servico servicos fornecimento fornecimentos ' +
+    'prestacao prestacoes atividade atividades bem bens forma geral ' +
+    'demais similar similares regime regimes beneficio beneficios reducao ' +
+    'reducoes').split(' '),
+)
+
+/** Token da consulta é stopword (forma crua ou stemizada)? */
+function ehStopword(t) {
+  return STOPWORDS_CONSULTA.has(t) || STOPWORDS_CONSULTA.has(stem(t))
+}
+
+/** Tokens da CONSULTA: `tokenizar` menos stopwords (documentos intactos). */
+function tokenizarConsulta(texto) {
+  return tokenizar(texto).filter((t) => !ehStopword(t))
+}
+
 /** Peso do melhor casamento entre token da consulta e token do documento. */
-function pesoCasamento(q, d) {
+function pesoCasamento(q, d, qs, ds) {
   if (!q || !d) return 0
   if (q === d) return 1
-  if (stem(q) === stem(d)) return 0.9
+  const sq = qs !== undefined ? qs : stem(q)
+  const sd = ds !== undefined ? ds : stem(d)
+  if (sq === sd) return 0.9
   if (q.length >= 4 && d.length >= 4 && (d.includes(q) || q.includes(d))) return 0.7
   return 0
 }
@@ -202,15 +254,24 @@ function sha256Hex(dados) {
  * Mesma função no build e na consulta — single-source desta etapa.
  */
 function tokensExpandidos(texto) {
-  const toks = tokenizar(texto).map(stem).filter((t) => t.length >= 2)
+  return expandirTokens(tokenizar(texto).map(stem).filter((t) => t.length >= 2))
+}
+
+/** Expande tokens JÁ stemizados (ponte semântica). */
+function expandirTokens(stems) {
   const out = []
-  for (const tok of toks) {
+  for (const tok of stems || []) {
     const expandidos = expandirTokenVetor(tok)
     for (let i = 0; i < expandidos.length; i++) {
       out.push({ t: expandidos[i], w: i === 0 ? 1 : 0.5 })
     }
   }
   return out
+}
+
+/** Tokens expandidos da CONSULTA (stopwords fora — menos ruído de hash). */
+function tokensExpandidosConsulta(texto) {
+  return expandirTokens(tokenizarConsulta(texto).map(stem).filter((t) => t.length >= 2))
 }
 
 /**
@@ -241,6 +302,15 @@ function calcularIdf(listas) {
  * `pesos`: Map(token→idf) do corpus (build); ausente → peso 1 (compat).
  */
 function incorporarTextoVetor(texto, dim, pesos) {
+  return incorporarListaVetor(tokensExpandidos(texto), dim, pesos)
+}
+
+/**
+ * Núcleo da vetorização sobre lista JÁ expandida (`[{ t, w }]`).
+ * A consulta usa `tokensExpandidosConsulta` (sem stopwords); documentos usam
+ * `tokensExpandidos` (íntegra — o IDF do corpus já despondera o boilerplate).
+ */
+function incorporarListaVetor(expandida, dim, pesos) {
   const d = dim && Number.isFinite(Number(dim)) && Number(dim) > 0 ? Math.floor(Number(dim)) : EMBEDDING_DIM
   const vec = new Array(d).fill(0)
   const getPeso = (t) => {
@@ -252,7 +322,7 @@ function incorporarTextoVetor(texto, dim, pesos) {
     }
     return 1
   }
-  for (const { t, w } of tokensExpandidos(texto)) {
+  for (const { t, w } of expandida || []) {
     const peso = w * getPeso(t)
     const h = crypto.createHash('sha256').update(t).digest()
     for (let j = 0; j < 8; j++) {
@@ -556,6 +626,26 @@ function construirIndices(nodos, arestas) {
     if (aliases) for (const t of aliases) for (const w of tokenizar(t)) toks.add(w)
     docTokens.set(id, [...toks])
   }
+  // Stems alinhados por índice (hot path do FTS: `stem` 1× no load, nunca
+  // por comparação — valores bit-idênticos ao cálculo sob demanda).
+  const docStems = new Map()
+  for (const [id, toks] of docTokens) docStems.set(id, toks.map(stem))
+  // IDF do FTS (Phase 10-04): token raro (diagnóstico) pesa mais que
+  // boilerplate ("servico", "carne", "de" — este último já filtrado na
+  // consulta). Mesma forma do índice lexical; piso 0.05 p/ preservar
+  // `fts>0 ⟺ match>0` (nenhum teste assera valor absoluto de score FTS).
+  const dfFts = new Map()
+  for (const toks of docTokens.values()) {
+    const unicos = new Set()
+    for (const t of toks) unicos.add(stem(t))
+    for (const t of unicos) dfFts.set(t, (dfFts.get(t) || 0) + 1)
+  }
+  const nFts = Math.max(1, docTokens.size)
+  const idfFts = new Map()
+  for (const [t, f] of dfFts) {
+    idfFts.set(t, Math.max(0.05, Math.log((nFts - f + 0.5) / (f + 0.5)) + 1))
+  }
+  const idfFtsMax = Math.max(0.05, Math.log((nFts - 0 + 0.5) / (0 + 0.5)) + 1)
   // Índice invertido p/ o pré-filtro vetorial (10-03): token expandido
   // (stem + ponte) → ids ordenados. O estágio HNSW só calcula cosine nos
   // docs que compartilham ≥1 token com a consulta — sem overlap, o cosine
@@ -602,7 +692,7 @@ function construirIndices(nodos, arestas) {
       }
     }
   }
-  return { porId, adjSaida, aliasTermo, docTokens, docTextos, termoPara, grauEntrada, grauMax, indiceVetorFiltro }
+  return { porId, adjSaida, aliasTermo, docTokens, docStems, idfFts, idfFtsMax, docTextos, termoPara, grauEntrada, grauMax, indiceVetorFiltro }
 }
 
 /** Primeira aresta de saída de `de` com um dos tipos, ou null. */
@@ -727,6 +817,7 @@ async function abrirGrafo(ctx) {
     cacheGrafo = {
       caminho: achado.caminho, mtimeMs: st.mtimeMs, tamanho: st.size,
       modo, nodos, arestas, indices,
+      hash: payload && typeof payload.hash === 'string' ? payload.hash : null,
       totalNodos: indices.porId.size, totalArestas: arestas.length,
     }
     // Overlay nasce junto (best-effort, nunca quebra a abertura).
@@ -862,18 +953,18 @@ async function grafoConsultar(args, ctx) {
     const forcarFtsPuro = args && args.modoVetorForcado === 'fts-puro'
     const g = await abrirGrafo(ctx)
     if (!g.ok) return { ok: false, fallback: 'lexical', motivo: g.motivo }
-    const qTokens = tokenizar(texto)
+    const qTokens = tokenizarConsulta(texto)
     if (!qTokens.length) {
       return {
         ok: true, candidatos: [], caminhos: [],
         cypher: montarCypher(texto, k, anoReferencia, g.modo, [], 'fts-puro'),
         tempoMs: Number(process.hrtime.bigint() / 1000000n) - t0, modo: g.modo,
-        modoVetor: 'fts-puro', embedding: null,
+        modoVetor: 'fts-puro', embedding: null, avisoVetor: null,
       }
     }
-    const { porId, docTokens, termoPara, grauEntrada, grauMax } = g.indices
+    const { porId, docTokens, docStems, idfFts, idfFtsMax, termoPara, grauEntrada, grauMax } = g.indices
 
-    // ---- (a) FTS seeds (regra 10-02 preservada) ----
+    // ---- (a) FTS seeds (regra 10-02 preservada + 10-04: stopwords + IDF) ----
     const bonus = new Map()
     for (const q of qTokens) {
       // Stopwords curtas (de/da/do/…) aparecem na tokenização de Termos
@@ -883,44 +974,66 @@ async function grafoConsultar(args, ctx) {
       if (!ligados) continue
       for (const id of ligados) bonus.set(id, (bonus.get(id) || 0) + BONUS_TERMO)
     }
+    // Peso IDF por token da consulta (raro = diagnóstico); desconhecido
+    // (typo) ganha o teto — é o que salva "parmezao" via substring.
+    const qInfo = qTokens.map((t) => {
+      const s = stem(t)
+      const w = idfFts && idfFts.has(s) ? idfFts.get(s) : (idfFtsMax || 1)
+      return { t, s, w }
+    })
+    let somaW = 0
+    for (const q of qInfo) somaW += q.w
+    if (!(somaW > 0)) somaW = Math.max(1, qInfo.length)
     const ftsMap = new Map() // id -> score FTS bruto
     for (const [id, toks] of docTokens) {
+      const stems = (docStems && docStems.get(id)) || []
       let s = 0
-      for (const q of qTokens) {
+      for (const q of qInfo) {
         let melhor = 0
-        for (const d of toks) {
-          const p = pesoCasamento(q, d)
+        for (let i = 0; i < toks.length; i++) {
+          const p = pesoCasamento(q.t, toks[i], q.s, stems[i])
           if (p > melhor) {
             melhor = p
             if (p >= 1) break
           }
         }
-        s += melhor
+        s += q.w * melhor
       }
-      const total = s / Math.max(1, qTokens.length) + (bonus.get(id) || 0)
+      const total = s / somaW + (bonus.get(id) || 0)
       if (total > 0) ftsMap.set(id, Math.round(total * 10000) / 10000)
     }
 
     // ---- (b) HNSW/vetor seeds (cosine; fail-closed sem índice) ----
     let modoVetor = 'fts-puro'
     let metaVetor = null
+    let avisoVetor = null
     const vetorMap = new Map() // id -> cosine
     if (!forcarFtsPuro) {
       const dirGrafoEfetivo = g.caminho ? path.dirname(g.caminho) : null
       const vv = carregarVetores(ctx, dirGrafoEfetivo)
-      if (vv.ok && vv.meta && vv.meta.dim === EMBEDDING_DIM) {
+      let vetoresOk = !!(vv.ok && vv.meta && vv.meta.dim === EMBEDDING_DIM)
+      // Guarda anti-dessincronia (Phase 10-04): vetores gerados contra OUTRO
+      // grafo (aliases novos fora do cosine) são ignorados com honestidade —
+      // `modoVetor:'fts-puro'` + `avisoVetor`, nunca score corrompido. Só
+      // dispara com os dois hashes presentes e divergentes (compat: índices
+      // antigos sem `hashGrafo` e minigrafos de teste seguem valendo).
+      if (vetoresOk && vv.meta.hashGrafo && g.hash && vv.meta.hashGrafo !== g.hash) {
+        vetoresOk = false
+        avisoVetor = 'indice-desatualizado'
+      }
+      if (vetoresOk) {
         const usarHash = vv.meta.modo !== 'real'
         // Vetores reais sem o modelo local NÃO podem ser consultados com
         // hash (espaços distintos) — estágio pulado, FTS-puro honesto.
         if (usarHash) {
-          const qVec = Float32Array.from(incorporarTextoVetor(texto, EMBEDDING_DIM, vv.idf || null))
+          const qVec = Float32Array.from(incorporarListaVetor(tokensExpandidosConsulta(texto), EMBEDDING_DIM, vv.idf || null))
           // Pré-filtro por overlap (só docs que compartilham token expandido;
           // sem isso o cosine hash seria ruído de colisão — e o scan cai de
           // 12k p/ centenas). Vetores `real` (densos) NÃO pré-filtram.
           const filtro = g.indices.indiceVetorFiltro
           const alvos = new Set()
           if (filtro && typeof filtro.get === 'function') {
-            for (const { t } of tokensExpandidos(texto)) {
+            for (const { t } of tokensExpandidosConsulta(texto)) {
               const lista = filtro.get(t)
               if (lista) for (const id of lista) alvos.add(id)
             }
@@ -1042,6 +1155,7 @@ async function grafoConsultar(args, ctx) {
       modo: g.modo,
       modoVetor,
       embedding: metaVetor,
+      avisoVetor,
     }
   } catch (e) {
     return { ok: false, fallback: 'lexical', motivo: String((e && e.message) || e).slice(0, 160) }
@@ -1355,10 +1469,15 @@ module.exports = {
   PONTE_SEMANTICA_VETOR,
   normalizar,
   tokenizar,
+  tokenizarConsulta,
+  STOPWORDS_CONSULTA,
   expandirTokenVetor,
+  expandirTokens,
   tokensExpandidos,
+  tokensExpandidosConsulta,
   calcularIdf,
   incorporarTextoVetor,
+  incorporarListaVetor,
   similaridadeCosseno,
   textoDocumentoVetor,
   comunidadeDoNo,

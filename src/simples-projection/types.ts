@@ -48,18 +48,43 @@ export interface ConfigEmpresaCenario {
   historico12: MesReceita[];
   /** Meses de atividade na abertura (empresa nova). Default = historico12.length. */
   mesesAtividade?: number;
+  /**
+   * true = Anexo III puro (atividade NÃO sujeita ao Fator R): dispensa o
+   * diagnóstico e o alerta de troca de anexo. Default false (sujeita).
+   */
+  dispensarFatorR?: boolean;
+  /**
+   * Segregação intra-empresa (LC 123/2006, art. 18): parcelas da receita em
+   * anexos distintos. Ausente ou vazio = 100% no `anexoId` (mono-anexo).
+   * A RBT12 TOTAL define a faixa em cada tabela; o DAS é a soma.
+   */
+  composicao?: Array<{ anexoId: AnexoSimplesId; percentual: number }>;
+}
+
+/** Detalhamento por parcela de anexo dentro de uma empresa/mês. */
+export interface DetalheParcelaMes {
+  anexoId: AnexoSimplesId;
+  receitaMes: number;
+  faixa: number;
+  aliquotaNominal?: number;
+  aliquotaEfetiva: number;
+  das: number;
 }
 
 export interface ParamsCenarioDividido {
   mesInicio: MesRef;
   /** Receita TOTAL projetada mês a mês (será fatiada por percentual). */
   receitaTotalMensal: MesReceita[];
-  /** 0..1 — fração destinada à nova empresa (mãe fica com 1 - x). */
+  /** 0..1 — fração destinada à nova empresa (mãe fica com 1 - x). 0 e 1 são válidos (extremos p/ teste). */
   percentualNova: number;
   mae: ConfigEmpresaCenario;
   nova: ConfigEmpresaCenario;
   /** Custo operacional mensal da nova empresa (para payback líquido). */
   custoMensalNova?: number;
+  /** Custo único de abertura (somado ao mês 1). Default 0. */
+  custoInicialNova?: number;
+  /** Margem de empate técnico (R$): |economia| <= margem ⇒ "Empate técnico". Default 0. */
+  margemEmpate?: number;
 }
 
 export interface LinhaCenarioMensal {
@@ -90,6 +115,14 @@ export interface LinhaCenarioMensal {
   dasMae: number;
   dasNova: number;
   dasUnificadoReferencia: number;
+  /** Parcelas por anexo (só quando há segregação intra-empresa). */
+  detalheMae?: DetalheParcelaMes[];
+  detalheNova?: DetalheParcelaMes[];
+  detalheRef?: DetalheParcelaMes[];
+  /** Economia bruta de DAS (sem descontar custos). */
+  economiaBrutaMes?: number;
+  /** Custo agregado do mês (mensal + rateio da abertura no mês 1). */
+  custoMes?: number;
   economiaMes: number;
   economiaAcumulada: number;
 }
@@ -107,10 +140,17 @@ export interface AlertaFiscal {
   mensagem: string;
 }
 
+export type VereditoSegregacao = 'compensa' | 'nao-compensa' | 'empate-tecnico';
+
 export interface PaybackInfo {
   mes: MesRef | null;
   mesesAtePayback: number | null;
   valorAcumuladoNoPayback: number | null;
+  /** Primeiro mês com economia mensal > 0 (mês de virada). */
+  mesVirada?: MesRef | null;
+  mesesAteVirada?: number | null;
+  /** Veredito financeiro com margem de empate. */
+  veredito?: VereditoSegregacao;
 }
 
 export interface RelatorioProjecao {
@@ -130,9 +170,14 @@ export interface RelatorioProjecao {
     percentualNova: number;
     anexoMae: AnexoSimplesId;
     anexoNova: AnexoSimplesId;
+    composicaoMae?: Array<{ anexoId: AnexoSimplesId; percentual: number }>;
+    composicaoNova?: Array<{ anexoId: AnexoSimplesId; percentual: number }>;
     /** Folha 12m informada (para o diagnóstico do Fator R na UI). */
     folha12Mae?: number;
     folha12Nova?: number;
+    custoMensalNova?: number;
+    custoInicialNova?: number;
+    margemEmpate?: number;
     motorVersao: string;
   };
 }

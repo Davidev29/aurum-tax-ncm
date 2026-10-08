@@ -671,7 +671,7 @@ function PainelHistorico() {
       }
       const st = useNfe.getState()
       if (escolha) setGerandoRelatorio(true)
-      else toast('A Aurum AI está conferindo suas notas na lei de hoje…', 'warn')
+      else toast('Conferindo suas notas na lei de hoje…', 'warn')
       const { prepararRelatorioNfeComIA } = await import('@/application/nfe-relatorio-ia')
       const pacote = await prepararRelatorioNfeComIA(recorte, st.ranking)
       const { carregarEmitente } = await import('@/application/emitente')
@@ -695,7 +695,7 @@ function PainelHistorico() {
         opcoes: escolha?.opcoes,
       })
       if (escolha) setModalRelatorio(false)
-      toast('PDF pronto — a Aurum AI conferiu tudo na lei de hoje.', 'ok')
+      toast('PDF pronto — notas conferidas na lei de hoje.', 'ok')
     } catch (e) {
       toast(`Erro ao gerar PDF: ${e instanceof Error ? e.message : String(e)}`, 'err')
     } finally {

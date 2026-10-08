@@ -19,10 +19,6 @@
     "ia:embeddings": "node scripts/gerar-embeddings.mjs",
     "ia:testar-indice": "node scripts/testar-indice-ia.mjs",
     "ia:validar-conhecimento": "node scripts/validar-conhecimento.mjs",
-    "ia:finetuning": "node scripts/gerar-finetuning-ncm.mjs",
-    "ia:finetuning-nbs": "node scripts/gerar-finetuning-nbs.mjs",
-    "ia:finetuning-cnae": "node scripts/gerar-finetuning-cnae.mjs",
-    "ia:finetuning-tudo": "node scripts/gerar-finetuning-ncm.mjs && node scripts/gerar-finetuning-nbs.mjs && node scripts/gerar-finetuning-cnae.mjs",
     "grafo:rebuild": "node scripts/build-grafo.mjs --forcar",
     "ia:cobertura": "node scripts/cobertura-traducao.mjs --min 8 --top 25",
     "ofuscar": "node scripts/ofuscar-build.cjs",
@@ -56,7 +52,6 @@
     "electron-updater": "^6.8.9",
     "fast-xml-parser": "^5.11.1",
     "framer-motion": "^13.4.6",
-    "node-llama-cpp": "^3.22.1",
     "pdfmake": "^0.3.11",
     "react": "^19.3.0",
     "react-chartjs-2": "^5.3.1",
@@ -150,14 +145,6 @@
         "to": "recursos-ia/CHECKSUMS.txt"
       },
       {
-        "from": "recursos-ia/modelo",
-        "to": "recursos-ia/modelo",
-        "filter": [
-          "**/*.gguf",
-          "**/*.json"
-        ]
-      },
-      {
         "from": "public/base/grafo/grafo.lbug",
         "to": "recursos-ia/grafo/grafo.lbug"
       },
@@ -183,10 +170,7 @@
       }
     ],
     "asarUnpack": [
-      "electron/dist/ia-worker.cjs",
       "electron/dist/caminhos-ia.cjs",
-      "electron/dist/modelo-seguro.cjs",
-      "electron/dist/perfil-modelo.cjs",
       "electron/dist/grafo-service.cjs",
       "dist/base/grafo/grafo.lbug"
     ],

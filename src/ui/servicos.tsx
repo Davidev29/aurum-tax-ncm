@@ -6,20 +6,20 @@
  * `ModalNcmsAnalisados`, `ModalSimulacaoIA`, `ModalAuditoriaIA`, `Btn`.
  * Novo aqui: só o cabeçalho CNAE (`FaixaCnae`) e a composição (`CartaoCnae`).
  */
-import { useState, type ReactElement } from 'react'
+import { useEffect, useState, type ReactElement, type ReactNode } from 'react'
 import type { Classificacao } from '@/domain/entities'
-import { fmtCnpj, fmtMoeda } from '@/domain/services/format'
+import { fmtCnpj, fmtMoeda, norm } from '@/domain/services/format'
 import { fmtNbs } from '@/domain/services/format'
 import { corSituacaoCnae, rotuloAnexoSimples } from '@/domain/services/cnae'
 import { descricaoHipotese } from '@/domain/services/verificacao-servicos'
 import type { HipoteseLegal } from '@/domain/services/verificacao-servicos'
 import type { AtividadeCnae } from '@/application/consultar-por-cnpj'
 import { VALOR_BASE_IA } from '@/infrastructure/ia/classificacao-ia-repo'
-import { NOME_IA, nivelDeConfianca } from '@/domain/aurum-ai'
+import { nivelDeConfianca } from '@/domain/aurum-ai'
 import { useUi } from '@/store/ui'
 import { Btn, Painel } from './kit'
 import { FaixaTributaria } from './faixa-tributaria'
-import { CartaoEnxuto, DetalhesEnxutos } from './consulta-enxuta'
+import { CartaoEnxuto } from './consulta-enxuta'
 import {
   BarraConfiancaAurumAI,
   MolduraAurumAI,
@@ -31,7 +31,8 @@ import {
   ModalNcmsAnalisados,
   ModalSimulacaoIA,
 } from './consulta-premium'
-import { PillAnexos } from './cartoes'
+import { PillAnexos, BotaoVerLegislacao } from './cartoes'
+import { LINK_LC214 } from '@/domain/constants'
 
 /* ------------------------------------------------- cabeçalho CNAE -- */
 
@@ -91,6 +92,11 @@ export function BlocoConferenciaReforma({
   coerencia: 'coerente' | 'divergente' | 'sem-base'
 }): ReactElement | null {
   if (!hipoteses.length) return null
+  // Vínculos primeiro; sem vínculo por último, em estilo fantasma — sem
+  // pílula de alerta por item. O aviso aparece uma única vez no rodapé,
+  // só quando houver hipótese sem vínculo.
+  const ordenadas = [...hipoteses].sort((a, b) => Number(b.temNbs) - Number(a.temNbs))
+  const semVinculo = ordenadas.filter((h) => !h.temNbs).length
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-950/40">
       <div className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -104,30 +110,87 @@ export function BlocoConferenciaReforma({
             divergente — conferir
           </span>
         ) : null}
+        <span className="ml-auto font-mono normal-case tracking-normal text-slate-400">
+          {ordenadas.length - semVinculo}/{ordenadas.length} com vínculo NBS
+        </span>
       </div>
       <ul className="mt-2 space-y-1.5">
-        {hipoteses.map((h) => (
-          <li key={`${h.cst}|${h.cClassTrib}`} className="text-xs text-slate-600 dark:text-slate-300">
-            <span className="font-mono font-bold text-brand-700 dark:text-aurum-200">
-              {h.cst}/{h.cClassTrib}
-            </span>{' '}
-            — {descricaoHipotese(h)}
-            {!h.temNbs ? (
-              <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800 dark:bg-amber-950/60 dark:text-amber-200">
-                sem NBS mapeado
+        {ordenadas.map((h) => (
+          <li
+            key={`${h.cst}|${h.cClassTrib}`}
+            className={`text-xs ${h.temNbs ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500'}`}
+          >
+            <span className="flex flex-wrap items-baseline gap-x-1.5">
+              <span className={`font-mono font-bold ${h.temNbs ? 'text-brand-700 dark:text-aurum-200' : ''}`}>
+                {h.cst}/{h.cClassTrib}
               </span>
-            ) : null}
-            <span className="block truncate text-[11px] text-slate-400" title={h.descricao}>
+              <span className="whitespace-normal break-words">{descricaoHipotese(h)}</span>
+              {!h.temNbs ? (
+                <span className="italic">· sem vínculo NBS na base — segue a regra geral</span>
+              ) : null}
+            </span>
+            <span className="block whitespace-normal break-words text-xs text-slate-500 dark:text-slate-400">
               {h.descricao}
             </span>
+            <BotaoVerNaLei baseLegal={h.baseLegal} urlLegislacao={h.urlLegislacao} texto={h.descricao} compacto />
           </li>
         ))}
       </ul>
-      <p className="mt-1.5 text-[11px] text-slate-400">
-        Hipótese lida da tabela oficial — vale como verificação, não como enquadramento. Sem NBS
-        vinculado na base atual, a decisão segue a regra geral até confirmação.
+      <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+        Leitura da tabela oficial — vale como verificação, não como enquadramento.
+        {semVinculo > 0 ? (
+          <> {semVinculo === 1 ? 'Uma hipótese' : `${semVinculo} hipóteses`} sem vínculo confirmado na base atual.</>
+        ) : null}
       </p>
     </div>
+  )
+}
+
+/* ------------------------------------------------- ver na lei -- */
+
+/**
+ * Botão "📖 Ver na Lei" — abre o modal de leitura **no trecho citado**.
+ *
+ * As descrições da tela de Serviços citam artigos e anexos da LC 214/2025
+ * (`Art. 130…`, `Anexo III…`); este botão resolve a âncora (`#art130`) e o
+ * modal já abre com scroll + grifo no artigo, com "Abrir em nova aba" para
+ * leitura integral. Reuso total de `BotaoVerLegislacao`/`ModalLegislacao` —
+ * nenhuma lógica fiscal nova aqui, só apresentação.
+ */
+export function BotaoVerNaLei({
+  artigo,
+  baseLegal,
+  urlLegislacao,
+  texto,
+  compacto,
+  className,
+}: {
+  /** Ex.: "Art. 130 da LC 214/2025" — vira a âncora `#art130`. */
+  artigo?: string | null
+  baseLegal?: string | null
+  urlLegislacao?: string | null
+  /** Trecho citado — exibido com marca-texto no modal. */
+  texto?: string | null
+  compacto?: boolean
+  className?: string
+}): ReactElement | null {
+  const ref = (baseLegal ?? artigo ?? '').trim()
+  const url = urlLegislacao || LINK_LC214
+  if (!ref && !urlLegislacao) return null
+  return (
+    <BotaoVerLegislacao
+      url={url}
+      titulo={artigo || baseLegal || 'LC 214/2025'}
+      referencia={ref || undefined}
+      texto={texto ?? null}
+      rotulo="Ver na Lei"
+      className={
+        className ??
+        (compacto
+          ? 'inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 underline hover:text-brand-700 dark:text-aurum-200'
+          : 'btn-detalhe-premium')
+      }
+    />
   )
 }
 
@@ -152,38 +215,109 @@ export function BlocoContextoNbs({
 }): ReactElement | null {
   const ctx = contexto ?? (codigo ? obterContextoNbs(codigo) : null)
   if (!ctx) return null
+  if (compacto) {
+    return (
+      <div className="text-[11px] text-slate-500 dark:text-slate-400" aria-label={`Contexto ${ctx.tituloCurto}`}>
+        <span className="font-semibold">{ctx.tituloCurto} · <span className="font-mono">{ctx.artigo}</span></span>{' '}
+        <BotaoVerNaLei artigo={ctx.artigo} texto={ctx.resumo} compacto />
+      </div>
+    )
+  }
   return (
     <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-2.5 text-xs text-slate-600 dark:border-violet-900 dark:bg-violet-950/20 dark:text-slate-300" aria-label={`Contexto ${ctx.tituloCurto}`}>
       <p className="font-black text-violet-900 dark:text-violet-200">
         📖 {ctx.tituloCurto} · <span className="font-mono">{ctx.artigo}</span> · −{ctx.reducaoIBS}% IBS/CBS
       </p>
       <p className="mt-1">{ctx.resumo}</p>
-      {!compacto ? (
-        <>
-          <p className="mt-1.5 font-bold">Quando se aplica:</p>
-          <ul className="list-disc space-y-0.5 pl-4">
-            {ctx.quandoSeAplica.slice(0, 4).map((q, i) => (
-              <li key={i}>{q}</li>
-            ))}
-          </ul>
-          <p className="mt-1.5 font-bold">Quando NÃO se aplica:</p>
-          <ul className="list-disc space-y-0.5 pl-4">
-            {ctx.quandoNaoSeAplica.slice(0, 3).map((q, i) => (
-              <li key={i}>{q}</li>
-            ))}
-          </ul>
-          <p className="mt-1.5 font-bold">Condições:</p>
-          <ul className="list-disc space-y-0.5 pl-4">
-            {ctx.condicoes.map((q, i) => (
-              <li key={i}>{q}</li>
-            ))}
-          </ul>
-          {ctx.nota ? (
-            <p className="mt-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-              ⚠️ {ctx.nota}
-            </p>
-          ) : null}
-        </>
+      <p className="mt-1.5 font-bold">Quando se aplica:</p>
+      <ul className="list-disc space-y-0.5 pl-4">
+        {ctx.quandoSeAplica.slice(0, 4).map((q, i) => (
+          <li key={i}>{q}</li>
+        ))}
+      </ul>
+      <p className="mt-1.5 font-bold">Quando NÃO se aplica:</p>
+      <ul className="list-disc space-y-0.5 pl-4">
+        {ctx.quandoNaoSeAplica.slice(0, 3).map((q, i) => (
+          <li key={i}>{q}</li>
+        ))}
+      </ul>
+      <p className="mt-1.5 font-bold">Condições:</p>
+      <ul className="list-disc space-y-0.5 pl-4">
+        {ctx.condicoes.map((q, i) => (
+          <li key={i}>{q}</li>
+        ))}
+      </ul>
+      {ctx.nota ? (
+        <p className="mt-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          ⚠️ {ctx.nota}
+        </p>
+      ) : null}
+      <div className="mt-2 flex flex-wrap gap-2">
+        <BotaoVerNaLei artigo={ctx.artigo} texto={ctx.resumo} />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Nome da atividade do NBS (ponte LC 116 → NBS) — para pontos da UI onde só
+ * há o código em mãos (sugestão automática, linhas preditivas). O cartão
+ * oficial (`CartaoEnxuto`) e o modal já recebem `detalheNbs` pronto e não
+ * precisam deste lookup: aqui é best-effort, nunca quebra a tela.
+ */
+export function LegendaAtividadeNbs({
+  codigo,
+  compacto,
+}: {
+  /** NBS em qualquer formato (só precisa ter 9 dígitos). */
+  codigo?: string | null
+  compacto?: boolean
+}): ReactElement | null {
+  const [legenda, setLegenda] = useState<{ lc: string; descricaoNbs: string; descricaoLc: string } | null>(null)
+  useEffect(() => {
+    const dig = norm(codigo ?? '')
+    if (dig.length !== 9) {
+      setLegenda(null)
+      return
+    }
+    let vivo = true
+    void import('@/infrastructure/base/classificacao-repo')
+      .then((m) => m.buscarLegendaNbs(dig))
+      .then((l) => {
+        if (vivo) setLegenda(l)
+      })
+      .catch(() => undefined)
+    return () => {
+      vivo = false
+    }
+  }, [codigo])
+  if (!legenda || (!legenda.descricaoNbs && !legenda.lc && !legenda.descricaoLc)) return null
+  if (compacto) {
+    return (
+      <span className="block truncate text-[11px] text-slate-500 dark:text-slate-400" title={legenda.descricaoLc || undefined}>
+        {legenda.descricaoNbs ? <span className="font-semibold">🧾 {legenda.descricaoNbs}</span> : null}
+        {legenda.descricaoNbs && legenda.lc ? <span> · </span> : null}
+        {legenda.lc ? <span>LC 116 — item {legenda.lc}</span> : null}
+      </span>
+    )
+  }
+  return (
+    <div
+      className="rounded-xl border border-brand-200/60 border-l-4 border-l-brand-500 bg-brand-50/70 px-3 py-2 dark:border-aurum-900/50 dark:border-l-aurum-400 dark:bg-brand-950/30"
+      title="Descrição do NBS — nome da atividade (ponte LC 116 → NBS)"
+    >
+      <div className="text-[10px] font-black uppercase tracking-wider text-brand-600/80 dark:text-aurum-200/70">
+        Descrição do NBS — nome da atividade
+      </div>
+      {legenda.descricaoNbs ? (
+        <p className="mt-0.5 text-[15px] font-semibold leading-relaxed text-brand-900 dark:text-brand-100">
+          {legenda.descricaoNbs}
+        </p>
+      ) : null}
+      {legenda.lc || legenda.descricaoLc ? (
+        <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400" title={legenda.descricaoLc || undefined}>
+          <span className="font-bold">LC 116{legenda.lc ? ` — item ${legenda.lc}` : ''}:</span> {legenda.descricaoLc}
+        </p>
       ) : null}
     </div>
   )
@@ -434,7 +568,7 @@ export function CartaoCnae({
       ) : null}
       {atividade.estado === 'manual-obrigatorio' ? (
         <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-          <strong>Situação “Depende da atividade”:</strong> a {NOME_IA} nunca ancora sozinha aqui. Use o
+          <strong>Situação “Depende da atividade”:</strong> a busca automática nunca ancora sozinha aqui. Use o
           modo manual com tomador e local para classificar. {atividade.motivoEstado}
         </p>
       ) : null}
@@ -461,8 +595,16 @@ export function CartaoCnae({
                       <span className="rounded-full bg-amber-200/70 px-1.5 py-0.5 text-[10px] font-black dark:bg-amber-900/50">
                         {Math.round(p.cobertura * 100)}% termos
                       </span>
+                      {p.baseLegal ? <BotaoVerNaLei baseLegal={p.baseLegal} texto={p.titulo} compacto /> : null}
                     </span>
-                    {p.tipo === 'nbs' ? <BlocoContextoNbs codigo={p.codigo} compacto /> : <BlocoContextoNbs contexto={p.contexto} compacto />}
+                    {p.tipo === 'nbs' ? (
+                      <>
+                        <LegendaAtividadeNbs codigo={p.codigo} compacto />
+                        <BlocoContextoNbs codigo={p.codigo} compacto />
+                      </>
+                    ) : (
+                      <BlocoContextoNbs contexto={p.contexto} compacto />
+                    )}
                   </li>
                 ))}
               </ul>
@@ -526,14 +668,14 @@ export function CartaoCnae({
           <ModalNcmsAnalisados
             aberto={modal === 'ncms'}
             onFechar={() => setModal(null)}
-            titulo="NBSs analisados pela Aurum AI"
+            titulo="NBSs analisados pela busca automática"
             itens={resultado.candidatos.slice(0, 8).map((c) => ({
               codigo: c.codigo,
               titulo: fmtNbs(c.codigo),
               subtitulo: c.descricao,
             }))}
             codigoPreferido={resultado.codigoEscolhido}
-            subtitulo={`A ${NOME_IA} avaliou ${resultado.candidatos.length} pista(s) para esta atividade.`}
+            subtitulo={`A busca automática avaliou ${resultado.candidatos.length} pista(s) para esta atividade.`}
           />
           <ModalSimulacaoIA
             aberto={modal === 'simulacao'}
@@ -669,12 +811,84 @@ export function ResumoConfiancaServicos({ valor }: { valor: number }): ReactElem
 export function DetalhesPerguntasServicos({ itens }: { itens: string[] }): ReactElement | null {
   if (!itens.length) return null
   return (
-    <DetalhesEnxutos titulo={`Para refinar (${itens.length})`}>
+    <DropdownElegante titulo="Para refinar" icone="💬" contagem={itens.length}>
       <ul className="list-disc space-y-1 pl-4">
         {itens.map((p, i) => (
           <li key={i}>{p}</li>
         ))}
       </ul>
-    </DetalhesEnxutos>
+    </DropdownElegante>
+  )
+}
+
+/* ------------------------------------------------- dropdown elegante -- */
+
+/**
+ * Dropdown elegante (collapsible) para listas secundárias — outras sugestões,
+ * correspondências, perguntas de refino. Mantém a tela respirável: o conteúdo
+ * secundário nasce recolhido (ou abre por `aberto`) em vez de empurrar scroll.
+ * Puro `<details>` (sem estado JS): acessível por teclado e sem custo.
+ */
+export function DropdownElegante({
+  titulo,
+  icone,
+  contagem,
+  aberto = false,
+  variante = 'slate',
+  children,
+}: {
+  titulo: string
+  icone?: string
+  contagem?: number
+  /** Aberto por padrão (ex.: quando é o único conteúdo disponível). */
+  aberto?: boolean
+  variante?: 'slate' | 'amber' | 'violet'
+  children: ReactNode
+}): ReactElement {
+  const moldura =
+    variante === 'amber'
+      ? 'border-amber-300/70 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/30'
+      : variante === 'violet'
+        ? 'border-violet-200/80 bg-violet-50/40 dark:border-violet-900 dark:bg-violet-950/20'
+        : 'border-slate-200 bg-slate-50/40 dark:border-slate-800 dark:bg-slate-950/40'
+  const selo =
+    variante === 'amber'
+      ? 'bg-amber-200/70 text-amber-900 dark:bg-amber-900/50 dark:text-amber-200'
+      : variante === 'violet'
+        ? 'bg-violet-100 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200'
+        : 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+  return (
+    <details
+      open={aberto || undefined}
+      className={`group overflow-hidden rounded-xl border ${moldura}`}
+    >
+      <summary
+        className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 marker:hidden dark:text-slate-300 [&::-webkit-details-marker]:hidden"
+        aria-label={`${titulo}${typeof contagem === 'number' ? ` (${contagem})` : ''} — expandir ou recolher`}
+      >
+        <span
+          aria-hidden="true"
+          className="inline-block text-[10px] text-slate-400 transition-transform duration-200 group-open:rotate-90"
+        >
+          ▶
+        </span>
+        {icone ? <span aria-hidden="true">{icone}</span> : null}
+        <span className="min-w-0 flex-1 truncate">{titulo}</span>
+        {typeof contagem === 'number' ? (
+          <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-black ${selo}`}>
+            {contagem}
+          </span>
+        ) : null}
+        <span className="shrink-0 text-[10px] font-semibold text-slate-400 group-open:hidden">
+          expandir
+        </span>
+        <span className="hidden shrink-0 text-[10px] font-semibold text-slate-400 group-open:inline">
+          recolher
+        </span>
+      </summary>
+      <div className="border-t border-slate-200/70 px-3 py-2.5 text-xs dark:border-slate-800">
+        {children}
+      </div>
+    </details>
   )
 }

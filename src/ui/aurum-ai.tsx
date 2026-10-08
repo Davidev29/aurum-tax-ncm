@@ -1,5 +1,5 @@
 /**
- * Aurum AI — selos, barra de confiança e painel de fontes.
+ * Selos de resultado automático — barra de confiança e painel de fontes.
  *
  * Micro-interações com visibilidade acessível:
  * - brilho ouro + pulso suave (respeita `prefers-reduced-motion`);
@@ -9,10 +9,13 @@
  */
 import type { CSSProperties, ReactNode } from 'react'
 import { useId } from 'react'
-import { fmtConfiancaAurumAI, NOME_IA, nivelDeConfianca, type NivelConfiancaIa } from '@/domain/aurum-ai'
+import { fmtConfiancaAurumAI, nivelDeConfianca, type NivelConfiancaIa } from '@/domain/aurum-ai'
+
+/** Rótulo acessível padrão dos selos de resultado automático. */
+const ROTULO_AUTO = 'Resultado automático' as const
 
 /**
- * Ícone premium da Aurum AI — brilho facetado em espectro, não emoji fixo.
+ * Ícone premium do resultado automático — brilho facetado em espectro, não emoji fixo.
  *
  * SVG inline com gradiente animado (ouro → violeta → ciano → ouro) + halo.
  * `title` acessível embutido; `aria-hidden` quando decorativo.
@@ -34,7 +37,7 @@ export function IconeAurumPremium({
       className={`aurum-ai-icone-premium aurum-ai-icone-premium--${tamanho} ${className}`}
       aria-hidden={decorativo ? 'true' : undefined}
       role={decorativo ? undefined : 'img'}
-      aria-label={decorativo ? undefined : NOME_IA}
+      aria-label={decorativo ? undefined : ROTULO_AUTO}
     >
       <svg viewBox="0 0 24 24" width={dim} height={dim} fill="none" aria-hidden="true">
         <defs>
@@ -69,8 +72,8 @@ export function IconeAurumPremium({
   )
 }
 
-/** Linha cintilante em espectro — destaque da referência preferida da IA. */
-export function LinhaPreferidaAurumAI({ rotulo = 'Referência preferida da IA' }: { rotulo?: string }) {
+/** Linha cintilante em espectro — destaque da referência preferida. */
+export function LinhaPreferidaAurumAI({ rotulo = 'Referência preferida' }: { rotulo?: string }) {
   return (
     <span className="aurum-ai-linha-preferida" role="presentation" aria-hidden="true" title={rotulo}>
       <span className="aurum-ai-linha-preferida-brilho" />
@@ -80,44 +83,44 @@ export function LinhaPreferidaAurumAI({ rotulo = 'Referência preferida da IA' }
 
 export function SeloAurumAI({
   variante = 'cheio',
-  titulo = 'Decisão assistida pela Aurum AI — validada pela base oficial',
+  titulo = 'Resultado automático — validado pela base oficial',
 }: {
   variante?: 'cheio' | 'compacto' | 'fantasma'
   titulo?: string
 }) {
   if (variante === 'compacto') {
     return (
-      <span className="aurum-ai-selo aurum-ai-selo--compacto aurum-ai-selo--espectro" title={titulo} aria-label={NOME_IA}>
-        <IconeAurumPremium tamanho="sm" /> {NOME_IA}
+      <span className="aurum-ai-selo aurum-ai-selo--compacto aurum-ai-selo--espectro" title={titulo} aria-label={ROTULO_AUTO}>
+        <IconeAurumPremium tamanho="sm" /> {ROTULO_AUTO}
       </span>
     )
   }
   if (variante === 'fantasma') {
     return (
-      <span className="aurum-ai-selo aurum-ai-selo--fantasma aurum-ai-selo--espectro" title={titulo} aria-label={NOME_IA}>
-        <IconeAurumPremium tamanho="sm" /> {NOME_IA}
+      <span className="aurum-ai-selo aurum-ai-selo--fantasma aurum-ai-selo--espectro" title={titulo} aria-label={ROTULO_AUTO}>
+        <IconeAurumPremium tamanho="sm" /> {ROTULO_AUTO}
       </span>
     )
   }
   return (
-    <span className="aurum-ai-selo aurum-ai-selo--espectro" title={titulo} aria-label={NOME_IA}>
+    <span className="aurum-ai-selo aurum-ai-selo--espectro" title={titulo} aria-label={ROTULO_AUTO}>
       <IconeAurumPremium tamanho="md" />
       <span>
-        {NOME_IA}
-        <span className="aurum-ai-selo-sub">inteligência fiscal offline</span>
+        {ROTULO_AUTO}
+        <span className="aurum-ai-selo-sub">busca lexical + resolvedor oficial</span>
       </span>
     </span>
   )
 }
 
-/** "Sugerido por Aurum AI" — atribuição obrigatória de toda hipótese/sugestão. */
+/** "Resultado automático" — atribuição obrigatória de toda hipótese do seletor. */
 export function AtribuicaoAurumAI({ detalhe }: { detalhe?: string }) {
   return (
     <span
       className="aurum-ai-atribuicao aurum-ai-atribuicao--espectro"
-      title={`Esta sugestão foi gerada pela ${NOME_IA} a partir do conjunto absoluto de dados (nomenclatura + vínculos + capítulos + vigência) e validada pelo resolvedor oficial.`}
+      title="Este resultado foi gerado pela busca automática a partir do conjunto absoluto de dados (nomenclatura + vínculos + capítulos + vigência) e validado pelo resolvedor oficial."
     >
-      <IconeAurumPremium tamanho="sm" /> Sugerido por {NOME_IA}
+      <IconeAurumPremium tamanho="sm" /> {ROTULO_AUTO}
       {detalhe ? <span className="aurum-ai-atribuicao-detalhe"> · {detalhe}</span> : null}
     </span>
   )
@@ -132,8 +135,8 @@ export function BarraConfiancaAurumAI({ valor, compact = false }: { valor: numbe
       className={`aurum-ai-confianca aurum-ai-confianca--${nivel}${compact ? ' aurum-ai-confianca--compacta' : ''}`}
       role="status"
       aria-live="polite"
-      aria-label={`${NOME_IA} · confiança ${nivel} ${fmtConfiancaAurumAI(valor)}`}
-      title={`Confiança da ${NOME_IA}: ${fmtConfiancaAurumAI(valor)} (${nivel}). Alta ≥75% · Média ≥40% · abaixo disso, a IA declara NÃO SEI em vez de chutar.`}
+      aria-label={`${ROTULO_AUTO} · confiança ${nivel} ${fmtConfiancaAurumAI(valor)}`}
+      title={`Confiança da busca automática: ${fmtConfiancaAurumAI(valor)} (${nivel}). Alta ≥75% · Média ≥40% · abaixo disso, o sistema declara NÃO SEI em vez de chutar.`}
     >
       <span className="aurum-ai-confianca-trilho" aria-hidden="true">
         <span className="aurum-ai-confianca-preenchimento" style={{ width: `${pct}%` }} />
@@ -145,12 +148,12 @@ export function BarraConfiancaAurumAI({ valor, compact = false }: { valor: numbe
   )
 }
 
-/** Fontes lidas (conjunto absoluto) — prova de que a IA leu as bases. */
+/** Fontes lidas (conjunto absoluto) — prova de que a busca leu as bases. */
 export function FontesAurumAI({ fontes }: { fontes: string[] }) {
   if (!fontes.length) return null
   return (
-    <div className="aurum-ai-fontes" aria-label={`Bases lidas pela ${NOME_IA}`}>
-      <span className="aurum-ai-fontes-titulo">Bases lidas pela {NOME_IA}:</span>
+    <div className="aurum-ai-fontes" aria-label="Bases lidas pela busca automática">
+      <span className="aurum-ai-fontes-titulo">Bases lidas:</span>
       <ul>
         {fontes.map((f, i) => (
           <li key={i}>{f}</li>
@@ -172,10 +175,11 @@ export function StatusAurumAI({ estado, children }: { estado: 'processando' | 'p
 
 /**
  * Moldura com **borda animada externa** (mesmo padrão `borda-cintilante` do
- * sistema, em ouro Aurum): identifica de relance o bloco que **foi a IA que
- * classificou**. O cabeçalho carrega SOMENTE o selo `Aurum AI` (animado);
+ * sistema, em ouro Aurum): identifica de relance o bloco que **foi a busca
+ * automática que classificou**. O cabeçalho carrega SOMENTE o selo
+ * `Resultado automático` (animado);
  * o `detalhe` vai só para o `aria-label` (acessibilidade), sem texto visual
- * extra — evita a duplicidade "Sugerido por… · modelo embutido · …".
+ * extra — evita a duplicidade "Resultado automático · …".
  * O corpo é livre e NÃO deve ter outra borda animada dentro (só a de fora).
  */
 export function MolduraAurumAI({
@@ -193,7 +197,7 @@ export function MolduraAurumAI({
       style={{ '--cor-borda': '#be9433', '--cor-brilho': '#ead79e' } as CSSProperties}
       role="status"
       aria-live="polite"
-      aria-label={`${NOME_IA} · ${detalhe}`}
+      aria-label={`${ROTULO_AUTO} · ${detalhe}`}
     >
       <div className="aurum-ai-destaque-cab">
         <SeloAurumAI variante="compacto" />
@@ -211,20 +215,20 @@ const ETAPAS_PENSANDO = [
 ] as const
 
 /**
- * Loading animado **enquanto a IA está pensando**: estrela pulsante + pontos em
+ * Loading animado **enquanto a busca classifica**: estrela pulsante + pontos em
  * cascata + barra ouro varrendo + etapas. Ecoa a entrada para o usuário saber
  * o que está sendo analisado. Respeita `prefers-reduced-motion` via CSS.
  */
 export function CarregandoAurumAI({ entrada }: { entrada?: string }) {
   const eco = (entrada ?? '').trim()
   return (
-    <div className="aurum-ai-pensando animate-fade-up" role="status" aria-live="polite" aria-busy="true" aria-label={`${NOME_IA} pensando…`}>
+    <div className="aurum-ai-pensando animate-fade-up" role="status" aria-live="polite" aria-busy="true" aria-label="Buscando classificação…">
       <div className="aurum-ai-pensando-cab">
         <span className="aurum-ai-pensando-estrela aurum-ai-pensando-estrela--espectro" aria-hidden="true">
           <IconeAurumPremium tamanho="md" />
         </span>
         <span>
-          {NOME_IA} pensando
+          Buscando
           <span className="aurum-ai-pensando-pontos" aria-hidden="true">
             <span className="aurum-ai-pensando-ponto" />
             <span className="aurum-ai-pensando-ponto" />
@@ -250,7 +254,7 @@ export function CarregandoAurumAI({ entrada }: { entrada?: string }) {
           </div>
         ))}
       </div>
-      <span className="sr-only">{NOME_IA} analisando sua descrição e confrontando com a base oficial…</span>
+      <span className="sr-only">Busca automática analisando sua descrição e confrontando com a base oficial…</span>
     </div>
   )
 }

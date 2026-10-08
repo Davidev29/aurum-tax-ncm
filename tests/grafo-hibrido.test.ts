@@ -160,7 +160,11 @@ describe('grafo-hibrido — (b) benchmark + (c) FTS-puro', () => {
     grafo._limparCacheVetores()
     const r = await grafo.grafoConsultar({ texto: 'carne bovina', k: 5 }, {})
     expect(r.ok).toBe(true)
-    expect(r.candidatos[0].codigo).toBe('02102000')
+    // Top-1 intencional (Phase 10-04): pin FT curadoria/0.9
+    // ("carne bovina fresca desossada" → 02013000); 02102000 segue no top-5
+    // com caminho fiscal idêntico (CCT:200003 → Anexo:I → ArtigoLC214:125).
+    expect(r.candidatos[0].codigo).toBe('02013000')
+    expect(r.candidatos.map((c: { codigo: string }) => c.codigo)).toContain('02102000')
     expect(r.tempoMs).toBeLessThan(2000)
   })
 
@@ -226,5 +230,75 @@ describe('grafo-hibrido — (d) boost com teto + (e) demote/TTL', () => {
     expect(expirada.expiradas).toBe(1)
     const vigente = grafo.calcularBoost(mk(quase), 'NBS:122051900', {})
     expect(vigente.boost).toBeCloseTo(0.2, 9)
+  })
+})
+
+describe('grafo-hibrido — (f) precisão 10-04 + guarda anti-dessincronia', () => {
+  it('stopwords não destroem recall: boilerplate acha o capítulo do queijo', async () => {
+    const r = await grafo.grafoConsultar({ texto: 'qual o NCM do produto queijo parmesao', k: 5 }, {})
+    expect(r.ok).toBe(true)
+    const cods = r.candidatos.map((c: { codigo: string }) => c.codigo)
+    expect(cods.length).toBeGreaterThan(0)
+    for (const c of cods) expect(c.replace(/\D+/g, '')).toMatch(/^04/)
+  })
+
+  it('typo tolerado (substring + idf-teto): parmezao → cap 04', async () => {
+    const r = await grafo.grafoConsultar({ texto: 'parmezao', k: 5 }, {})
+    expect(r.ok).toBe(true)
+    expect(r.candidatos.length).toBeGreaterThan(0)
+    expect(r.candidatos[0].codigo.replace(/\D+/g, '')).toMatch(/^04/)
+  })
+
+  it('pin FT decide: semente de milho para plantio → top-1 10051000', async () => {
+    const r = await grafo.grafoConsultar({ texto: 'semente de milho para plantio', k: 5 }, {})
+    expect(r.ok).toBe(true)
+    expect(r.candidatos[0].codigo).toBe('10051000')
+  })
+
+  it('só-boilerplate é vazio honesto: "servico" → [] sem throw', async () => {
+    const r = await grafo.grafoConsultar({ texto: 'servico', k: 5 }, {})
+    expect(r.ok).toBe(true)
+    expect(r.candidatos).toEqual([])
+  })
+
+  function montarMiniGrafoComHash(hashGrafo: string | null, hashVetor: string | null): string {
+    const dir = mkTmp('aurum-grafo-hash-')
+    const payload: Record<string, unknown> = {
+      formato: 'grafo-portatil',
+      versao: 'grafo-v1',
+      nodos: NODOS_MINI,
+      arestas: ARESTAS_MINI,
+    }
+    if (hashGrafo) payload.hash = hashGrafo
+    fs.writeFileSync(path.join(dir, 'grafo.lbug.json'), JSON.stringify(payload))
+    const gv = gerarVetores(NODOS_MINI, ARESTAS_MINI, {})
+    const doc: Record<string, unknown> = {
+      formato: 'vetores-grafo-v1',
+      modelo: 'hash-fallback',
+      modeloAlvo: 'x',
+      dim: 384,
+      modo: 'hash-fallback',
+      idf: gv.idf,
+      vetores: gv.vetores,
+    }
+    if (hashVetor) doc.hashGrafo = hashVetor
+    fs.writeFileSync(path.join(dir, 'vetores.json'), JSON.stringify(doc))
+    return dir
+  }
+
+  it('hashGrafo divergente → fts-puro + aviso; igual → hnsw', async () => {
+    const velho = montarMiniGrafoComHash('grafo-AAA', 'grafo-BBB')
+    const r = await grafo.grafoConsultar({ texto: 'aula de ingles online', k: 5 }, { dirGrafo: velho })
+    expect(r.ok).toBe(true)
+    expect(r.modoVetor).toBe('fts-puro')
+    expect(r.avisoVetor).toBe('indice-desatualizado')
+    expect(r.candidatos).toEqual([])
+
+    const novo = montarMiniGrafoComHash('grafo-AAA', 'grafo-AAA')
+    const r2 = await grafo.grafoConsultar({ texto: 'aula de ingles online', k: 5 }, { dirGrafo: novo })
+    expect(r2.ok).toBe(true)
+    expect(r2.modoVetor).toBe('hnsw')
+    expect(r2.avisoVetor).toBeNull()
+    expect(r2.candidatos.map((c: { codigo: string }) => c.codigo)).toContain('122051900')
   })
 })

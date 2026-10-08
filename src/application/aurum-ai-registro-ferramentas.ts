@@ -176,7 +176,7 @@ export const REGISTRO_FERRAMENTAS: SpecFerramenta[] = [
     parametros: {
       mesInicio: { tipo: 'string', descricao: 'Primeiro mês projetado (YYYY-MM).', obrigatorio: true, exemplo: '2026-01' },
       receitaTotalMensal: { tipo: 'string', descricao: 'Receita TOTAL mês a mês a fatiar (JSON de [{mes,receita}]).', obrigatorio: true, exemplo: '[{"mes":"2026-01","receita":120000}]' },
-      percentualNova: { tipo: 'number', descricao: 'Fração 0 < p < 1 para a nova (ex. 0.3).', obrigatorio: true, exemplo: '0.3' },
+      percentualNova: { tipo: 'number', descricao: 'Fração 0 ≤ p ≤ 1 para a nova (ex. 0.3).', obrigatorio: true, exemplo: '0.3' },
       anexoMae: { tipo: 'string', descricao: 'Anexo da mãe: I–V.', obrigatorio: true, exemplo: 'III' },
       anexoNova: { tipo: 'string', descricao: 'Anexo da nova: I–V.', obrigatorio: true, exemplo: 'III' },
       folha12Mae: { tipo: 'number', descricao: 'Folha 12m da mãe (Fator R).', exemplo: '400000' },
