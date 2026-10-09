@@ -25,7 +25,7 @@
 
 ◈ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ◈
 
-**Versão `1.0.0` · `10` views · `161` suítes Vitest · `1.798` casos · `typecheck` limpo**
+**Versão `1.0.0` · `10` views · `171` suítes Vitest · `1.933` casos · `typecheck` limpo (app + electron)**
 
 *Estado auditado em **08/10/2026** a partir da árvore de trabalho (branch `main`).*
 
@@ -44,10 +44,10 @@
 | Sinal | Valor real (árvore de trabalho) |
 |---|---|
 | 🖥️ Views no menu | **10** — Calculadora · Simples Nacional · Consulta NCM · Serviços (NBS) · Consulta de CNAEs · Classificação em lote · Notas Fiscais (XML) · Produtos · Tabelas auxiliares · Legislação |
-| 🧪 Testes | **161 arquivos** · **1.798 casos** — `npm test` → **tudo passando** · `npm run typecheck` limpo |
-| ✅ Tipos | `npm run typecheck` (`tsc --noEmit`) — **limpo** |
+| 🧪 Testes | **171 arquivos** · **1.933 casos** — `npm test` → **tudo passando** · `npm run typecheck` limpo (app + electron) |
+| ✅ Tipos | `npm run typecheck` (`tsc --noEmit` + `tsc -p tsconfig.electron.json`) — **limpo** |
 | 📦 Instaladores locais | `release/` com `Setup 1.0.0` + `Portátil 1.0.0` (ignorado no git, gerado por `npm run dist:win`) |
-| 🗄️ Base embutida | `public/base/` versionada: `reforma.json` 1,5 MB · `nomenclatura.json` 2,8 MB · `classificacoes-consolidadas.json` 1,7 MB · `cnae-nbs.json` 1,3 MB · grafo `grafo.lbug` 6,1 MB · `vetores.json` 12 MB |
+| 🗄️ Base embutida | `public/base/` versionada: `reforma.json` 1,5 MB · `nomenclatura.json` 2,8 MB · `classificacoes-consolidadas.json` 1,7 MB · `cnae-nbs.json` 1,3 MB · `parametros.json` (IBS 19 + CBS 9 de referência, editável) · grafo `grafo.lbug` 6,1 MB · `vetores.json` 12 MB (versionado p/ busca local; não empacotado no instalador) |
 | 📥 Formatos de entrada | **XML de NF-e/NFC-e** (modelo 55/65) + **CSV/XLSX de lote** (`COD/SKU; NOME; NCM; CFOP; CST; PIS; COFINS`) |
 
 ### ◆ Arquitetura em uma figura
@@ -76,19 +76,19 @@ flowchart LR
 
 | Módulo | O que faz (hoje) |
 |---|---|
-| 🧮 **Calculadora** | Cesta com produtos salvos ou NCM manual, qtd/valor editáveis, base + IBS + CBS + total + carga efetiva em tempo real. Alíquotas de referência editáveis (padrão IBS 19% + CBS 9%). Redução congelada no momento da adição |
-| 🧾 **Simples Nacional** | Passo 1: Anexo manual **ou** CNPJ → 1 CNAE (“Qual usar?”). Passo 2: RBT12 + receita (+ folha se Anexo V/Fator R + RBA opcional + comparador híbrido opcional). Passo 3: cálculo com skeleton → slide-in. Saída: DAS + repartição por tributo + trava ISS 5% + Fator R + sublimite em 4 cenários + duelo Conv × Híb + **Relatório Analítico e Inteligente** (10 cenários, matriz III×V em CNPJ dual, memória do híbrido, gap de folha) + exports CSV/JSON/PDF premium |
+| 🧮 **Calculadora** | Cesta com produtos salvos ou NCM manual, qtd/valor editáveis, base + IBS + CBS + total + carga efetiva em tempo real. Alíquotas de referência editáveis via `public/base/parametros.json` (padrão IBS 19% + CBS 9%, estimativa LC 214/2025 — confirmar no ato vigente). Redução congelada no momento da adição |
+| 🧾 **Simples Nacional** | Passo 1: Anexo manual **ou** CNPJ → 1 CNAE (“Qual usar?”). Passo 2: RBT12 + receita (+ folha se Anexo V/Fator R + RBA opcional + comparador híbrido opcional). Passo 3: cálculo com skeleton → slide-in. Saída: DAS-guia (sem ICMS/ISS/IBS fora do sublimite, LC 123) × total + trava ISS 5% + Fator R + sublimite em 4 cenários + duelo Conv × Híb **na base da guia** + **Relatório Analítico e Inteligente** (10 cenários, matriz III×V em CNPJ dual, memória do híbrido, gap de folha) + exports CSV/JSON/PDF premium |
 | ✂️ **Projeção dividida v2** *(dentro do Simples, só via CNPJ)* | Wizard em **5 etapas** (RTB12 → receita → divisão → custos & Fator R → resultado). Receita 12 meses ou global, slider 0–100%, anexos/folhas/custo mensal + abertura única + pró-labore (INSS/IRPF), segregação por anexo, recálculo ao vivo (faixa, alíquota efetiva, DAS unificado × dividido, economia líquida, virada, payback, veredito), gráficos + tabela mensal + exports CSV/JSON + persistência por CNPJ/período em `localStorage` |
-| 🔍 **Consulta NCM** | 8 dígitos (com/sem ponto), fan-out número/nome/busca local, N cards (CST · cClassTrib, % redução, anexo oficial, base legal, documentos), observações legais automáticas (arts. 127/128/135/137/158/261/275–289/308), **herança por família** (SH6 ≥ 60%, SH4 ≥ 75%, capítulo ≥ 95%) com carimbo de confiança, **2ª opção de diferimento** no Anexo IX condicional (CST 515, 0%), simulador editável, deep-link na legislação |
+| 🔍 **Consulta NCM** | 8 dígitos (com/sem ponto), fan-out número/nome/busca local, N cards (CST · cClassTrib, % redução, anexo oficial, base legal, documentos), observações legais automáticas (arts. 127/128/135/137/158/261/275–289/308), **herança por família** (SH6 ≥ 60%, SH4 ≥ 75%, capítulo ≥ 95%) com carimbo de confiança, **2ª opção de diferimento** no Anexo IX condicional (CST 515, 0%), 🛡 **tributação integral como última opção de segurança** (anexada quando o NCM tem 2+ vínculos, nunca sugerida como provável), simulador editável, deep-link na legislação |
 | 🧰 **Serviços (NBS) + CNAEs** | NBS manual (9 dígitos) + descrição livre + CNPJ → CNAEs → NBS. Base viva (1.090 CNAEs + 122 vínculos NBS), resolvedor próprio (regra geral `000/000001` fora da base), busca textual, ponte CNAE→NBS, `CartaoCnae`/`FaixaCnae`, trilha de auditoria. Tela dedicada **Consulta de CNAEs** com regra do Simples + benefício da Reforma |
-| 📁 **Classificação em lote** | CSV/XLSX (`COD/SKU; NOME; NCM; CFOP; CST; PIS; COFINS`), pills (classificadas · regra geral · múltiplas opções · inválidos), `<select>` por linha, revisão determinística, salvamento idempotente como produtos, modelo CSV para download |
-| 🧾 **NF-e XML (2 layouts)** | `NfeXmlPolida` (padrão: veredito → ação → 5 abas, zero canvas, count-up, `localStorage['xml-layout']`) + `NfeXml` clássica (Chart.js). Hero executivo, entradas × saídas, quarentena, ranking de fornecedores, top produtos/NCM/CFOP/CST, confronto Antigo × Novo, evolução mensal, apuração **assistida** (crédito **efetivo** do XML abate o saldo; estimativa via NCM é informativa), bloco **Naturezas da operação**, selo **CEST/ST** (1.010 registros, “sujeito a ST”), relatório + modal, XMLs arquivados em `%APPDATA%/Aurum Tax NCM/xml/<cnpj>/<chave>.xml` |
+| 📁 **Classificação em lote** | CSV/XLSX (`COD/SKU; NOME; NCM; CFOP; CST; PIS; COFINS`), pills (classificadas · regra geral · múltiplas opções · inválidos), `<select>` por linha, 🛡 tributação integral como última opção de segurança, revisão determinística, salvamento idempotente como produtos, modelo CSV para download |
+| 🧾 **NF-e XML (2 layouts)** | `NfeXmlPolida` (padrão: veredito → ação → 5 abas, zero canvas, count-up, `localStorage['xml-layout']`, memo único da apuração) + `NfeXml` clássica (Chart.js via registro central). Hero executivo, entradas × saídas, quarentena, ranking de fornecedores, top produtos/NCM/CFOP/CST, confronto Antigo × Novo, evolução mensal, apuração **assistida** (crédito **efetivo** do XML abate o saldo; estimativa via NCM é informativa), bloco **Naturezas da operação**, selo **CEST/ST** (1.010 registros, “sujeito a ST”), prioridade vigente **base oficial › manual › regra do produto (SKU+empresa) › 1ª oficial/regra geral**, **conferência do XML** por produto, **escolha de tributação** entre as regras oficiais do NCM (salva como reclassificação manual e propaga), relatório + modal, XMLs arquivados em `%APPDATA%/Aurum Tax NCM/xml/<cnpj>/<chave>.xml` |
 | 📦 **Produtos & 🏢 Empresas** | Multi-empresa (CNPJ, razão social, fantasia, lote), produtos vinculados à empresa ativa, filtro rápido, paginação, exports CSV/JSON/PDF, idempotência em importações repetidas |
 | 📚 **Tabelas auxiliares** | 8 listas editáveis via `AUX_META`: CST IBS/CBS, cClassTrib, NCM vigente, vínculo NCM×Classificação, CFOP, CST ICMS, CST PIS/COFINS (+ CNAE). Criar/editar/excluir com validação |
 | ⚖️ **Legislação** | LC 214/2025 + Decreto 12.955/2026 + Res. CGIBS 6/2026 + RICMS-CE + portais, leitura in-app via `ModalLegislacao`, deep-link `#art128` etc. |
 | 🖨️ **Emitente timbrado** | Razão social, CNPJ, logo, cor, rodapé — cabeçalho de todos os PDFs + modal de preview |
-| 🔄 **Atualização e bases** | GitHub Releases (Configurações → Atualização, com snapshot pré-update do banco). Bases embutidas renovadas a cada release. Complementos online: Siscomex + CFF + BrasilAPI (com fallback manual). Backup/restauração JSON das 27 tabelas (KEK e resumos fora por construção), idempotente, com validação prévia e snapshot pré-restore |
-| 🌙 **UX** | Tema claro/escuro, responsivo, sidebar recolhível (desktop) / drawer (móvel), transições em carrossel com respeito a `prefers-reduced-motion`, toasts 3,4 s, skeleton/count-up, aceite local no primeiro uso, fundo global animado |
+| 🔄 **Atualização e bases** | GitHub Releases públicas (Configurações → Atualização, com snapshot pré-update do banco). Bases embutidas renovadas a cada release. Complementos online: Siscomex + CFF + BrasilAPI (com fallback manual). Backup/restauração JSON das 27 tabelas (KEK e resumos fora por construção), idempotente, com validação prévia, manifesto por tabela, bloqueio de backup parcial sem confirmação, transação tudo-ou-nada e snapshot pré-restore |
+| 🌙 **UX** | Tema claro/escuro, responsivo, sidebar recolhível (desktop) / drawer (móvel), transições em carrossel com respeito a `prefers-reduced-motion`, toasts 3,4 s, skeleton/count-up + barreira de erro por view (`ErroFatal`, sem tela em branco), code-splitting por tela, fundo global animado |
 | ✨ **Tour guiado** | Abre 1x após a instalação e quando quiser no botão **✨ Guia** do topo. 10 passos (um por menu), 100% informativo: quadro animado com miniatura do menu lateral, cursor em loop clicando no item do passo e prévia viva de cada módulo — sem navegar sozinho |
 
 ---
@@ -123,7 +123,7 @@ npm run typecheck
 npm test
 ```
 
-> O `predev` mata a porta 5173, regenera a base (`npm run base`) e compila o main do Electron. Acesse **http://127.0.0.1:5173**.
+> O `predev` mata a porta 5173 e regenera a base (`npm run base`); o main do Electron compila no `dev:electron`/`build`. Acesse **http://127.0.0.1:5173**.
 
 ### 3 · Gerar o instalador
 
@@ -279,14 +279,14 @@ projeção        = RBT12(t) = Σ R[m], m ∈ [t−12, t−1]; nova < 12m usa m�
 |---|---|
 | `npm run dev` | Vite (127.0.0.1:5173) + Electron lado a lado |
 | `npm run dev:web` | Só Vite no navegador |
-| `npm run build` | `base` + `tsc` + Vite + Electron + ofuscar + verificar |
+| `npm run build` | `db:generate` + `base:completa` + `typecheck` (app + electron) + Vite + Electron + ofuscar + verificar |
 | `npm run base` / `base:completa` | Gera a base embutida (+ índice lexical, validação do conhecimento) |
 | `npm run grafo:rebuild` / `grafo:avaliar` | Reconstrói o grafo fiscal (`scripts/build-grafo.mjs --forcar`) / avalia o recall do grafo |
 | `npm run ia:indice` / `ia:testar-indice` / `ia:validar-conhecimento` / `ia:cobertura` | Pipeline de busca local (índice lexical, teste top-k, curadoria, cobertura PT↔EN) |
 | `npm run ofuscar` / `verificar` | Ofusca o build / valida o build |
-| `npm run typecheck` / `npm test` | Tipos / Vitest (`vitest run`) |
-| `npm run db:generate` / `db:push` | Regenera o client Prisma + DDL embarcado (após editar `prisma/schema.prisma`) / aplica o schema no banco de dev |
-| `npm run dist` / `dist:win` / `dist:mac` | Instaladores via electron-builder |
+| `npm run typecheck` / `npm test` | Tipos app + electron (`tsc --noEmit` + `tsc -p tsconfig.electron.json`) / Vitest (`vitest run`) |
+| `npm run db:generate` / `db:push` | Regenera o client Prisma via `scripts/prisma-generate.cjs` + DDL embarcado (após editar `prisma/schema.prisma`) / aplica o schema no banco de dev |
+| `npm run dist` / `dist:win` / `dist:mac` / `dist:linux` | Instaladores via electron-builder (NSIS + Portable / DMG + ZIP / AppImage) |
 | `npm run icon` | Gera `build/icon.ico` a partir do SVG |
 
 ### Estrutura (poda atual)
@@ -298,9 +298,9 @@ aurum-tax-ncm/
 │   └── ia/              # grafo fiscal local (grafo-service.cjs + caminhos-ia.cjs)
 ├── src/
 │   ├── App.tsx          # shell com 10 views
-│   ├── pages/           # 14 arquivos para 10 views: Calculadora, Consulta, ConsultaServicos,
+│   ├── pages/           # 15 arquivos para 10 views: Calculadora, Consulta, ConsultaServicos,
 │   │                    #  ConsultaCnaes, Lote, NfeXml, NfeXmlPolida (+ NfeNatureza,
-│   │                    #  NfePendentes, NfeCalendarioAnual, ModalRelatorioNfe), Produtos, Auxiliares, Legislacao
+│   │                    #  NfeConferenciaProdutos, NfePendentes, NfeCalendarioAnual, ModalRelatorioNfe), Produtos, Auxiliares, Legislacao
 │   ├── simples/         # módulo Simples isolado (tabelas, calculo, store, page,
 │   │                    #  DasModal, relatorio-analitico, exports, ia-insights)
 │   ├── simples-projection/ # projeção dividida v2 (camada aditiva sobre simples/):
@@ -309,17 +309,20 @@ aurum-tax-ncm/
 │   │                    #  analise-retorno, pro-labore, persistencia) + UI
 │   │                    #  (store, ModalDivisao, SimuladorSegregacao, ControleSplit,
 │   │                    #  ResultadoDividido, NumeroAnimado, export, ferramentas)
-│   ├── domain/          # entidades, constants, capitulos, legislacao, seeds
+│   ├── domain/          # entidades, constants (inclui `parametros.ts`, espelho de `public/base/parametros.json`), capitulos, legislacao, seeds
 │   │   └── services/    # cálculo, classificação NCM/NBS, busca-texto, CNAE/CNPJ,
 │   │                    #  CEST, hierarquia fiscal, vocabulários, preditivo…
+│   │   └── simples/     # núcleo fiscal do Simples (nucleo, creditos, validacao) — matemática isolada das planilhas
 │   ├── application/     # casos de uso (produtos, empresas, lote, backup, CFF/Siscomex,
 │   │                    #  NFe insights/relatório/apuração, Simples, reclassificação,
+│   │                    #  log com rotação (`log-rotacao.ts`, 5 MiB × 3 gerações, com scrub de PII),
 │   │                    #  assistente por templates aurum-ai-*.ts)
 │   ├── infrastructure/  # SQLite/Prisma, base, parsers (lote/NFe), CFOP/curadoria, PDF/CSV,
 │   │                    #  CFF/Siscomex/BrasilAPI, bridge IPC
 │   ├── store/           # Zustand (ui com 10 ViewId, sessão, calculadora, consulta,
 │   │                    #  lote, nfe, produtos, base, ia (só observabilidade), dialogo, fundo, novidades…)
 │   ├── ui/              # Layout, kit, Marca, ModalLegislacao, motion,
+│   │                    #  ErroFatal (barreira por view/global) + chart-registry (Chart.js central),
 │   │                    #  consulta-enxuta/premium, servicos, cartoes, cest,
 │   │                    #  diferimento-opcoes, grafo-trilha, aurum-ai (selos/UI)…
 │   └── modais/          # globais (empresas/config/emitente/backup…), pagina
@@ -327,10 +330,10 @@ aurum-tax-ncm/
 ├── bases-fonte/         # JSONs-fonte oficiais + vivos (ver tabela abaixo)
 ├── scripts/             # build-base, build-grafo, gerar-indice-ia (lexical),
 │                        #  cobertura, ofuscar, verificar, after-pack…
-├── tests/               # 161 suítes · 1.798 casos (tudo passando)
+├── tests/               # 171 suítes · 1.933 casos (tudo passando)
 ├── docs/                # SPEC, arquitetura, diagnósticos, manuais (.docx fora do installer)
 ├── public/base/         # base JSON embutida versionada + MANIFEST + grafo
-├── build/               # icon.ico/png, LICENCA.rtf/txt (NSIS PT-BR)
+├── build/               # icon.ico/png/icns, LICENCA.rtf/txt (NSIS PT-BR; icns p/ mac, png p/ linux)
 └── release/             # instaladores gerados (ignorado no git)
 ```
 
@@ -342,13 +345,13 @@ Arquitetura: **React + Clean Architecture** — `domain` (regras puras) → `app
 - **Front:** React 19, Vite 8 (`base: './'` p/ file://), TailwindCSS 4, Zustand 5, Framer Motion, Chart.js
 - **Dados:** SQLite via Prisma 6 — 27 tabelas em `aurum.db` (`%APPDATA%`), Prisma no processo main + IPC, validação de domínio em toda escrita, seed transacional por lote, snapshot pré-restore, `integrity_check` + quarentena no boot. XLSX (SheetJS), pdfmake, fast-xml-parser
 - **Busca local:** léxico + sinônimos curados + dicionário comercial + grafo fiscal local (FTS + 2-hops + PageRank, com fallback lexical idêntico) + resolvedor oficial como única verdade. O assistente Aurum AI responde por templates validados — todo número exibido vem do motor (IBS/CBS, DAS, RBT12)
-- **Qualidade:** TypeScript strict, Vitest + SQLite/Prisma (banco por arquivo), esbuild, ofuscação + verificação de build
+- **Qualidade:** TypeScript strict, Vitest + SQLite/Prisma (banco por arquivo), esbuild, ofuscação + verificação de build, CI no GitHub Actions (`typecheck` + `vitest --coverage`)
 
 ### Dados / base tributária
 
 - `public/base/` carrega a base embutida gerada por `npm run base` (NCM × CST × cClassTrib + nomenclatura vigente + NBS + CNAE + `MANIFEST.json`).
 - Para atualizar: **Configurações → Importação da base** (`NCM + tabelasAuxiliares` ou `Nomenclaturas`). Só entram vínculos com NCM de 8 dígitos; o resto é descartado com aviso.
-- Backup: **Configurações → Backup** exporta o banco (27 tabelas + emitente) em JSON; restauração idempotente com validação prévia e snapshot pré-restore.
+- Backup: **Configurações → Backup** exporta o banco (27 tabelas + emitente) em JSON; restauração idempotente com validação prévia, manifesto por tabela, bloqueio de backup parcial sem confirmação, transação tudo-ou-nada e snapshot pré-restore.
 
 ### Onde baixar as bases oficiais
 
@@ -371,10 +374,10 @@ Coloque os arquivos em `bases-fonte/` com os nomes exatos e rode `npm run base` 
 Não para o uso diário. Só legislação externa, sync Siscomex/CFF/BrasilAPI e verificação de atualização usam rede — tudo com fallback offline/manual.
 
 **Meus dados saem da máquina?**
-Não. Todo o processamento é local (SQLite no processo main do Electron). Não há backend, não há telemetria, nada é enviado para nuvem. As únicas chamadas de rede são opt-in com fallback manual: legislação externa, sync Siscomex/CFF/BrasilAPI e verificação de atualização.
+Não. Todo o processamento é local (SQLite no processo main do Electron). Não há backend, não há telemetria, nada é enviado para nuvem. As únicas chamadas de rede são opt-in com fallback manual: legislação externa, sync Siscomex/CFF/BrasilAPI e verificação de atualização. Os logs locais (`logs/*.jsonl`, com rotação e remoção de PII) também nunca saem da máquina.
 
 **E se meu NCM tiver 2 classificações?**
-Na Consulta você vê os N cards; no Lote você escolhe no select. No XML o sistema usa a primeira da base — troque manualmente no Lote se precisar. Itens do Anexo IX condicional mostram ainda a **2ª opção de diferimento** (CST 515, 0%) por operação.
+Na Consulta você vê os N cards; no Lote você escolhe no select. No XML o sistema respeita a prioridade **base oficial › manual › regra do produto (SKU+empresa) › 1ª oficial/regra geral** — se você já salvou uma regra para aquele SKU naquela empresa (ou usou a **escolha de tributação**), ela vale; senão, usa a primeira da base. A 🛡 **tributação integral aparece como última opção de segurança**, nunca como provável. Itens do Anexo IX condicional mostram ainda a **2ª opção de diferimento** (CST 515, 0%) por operação.
 
 **Posso usar no navegador sem instalar?**
 Sim: `npm run dev:web` ou sirva `dist/` após `npm run build`. O Electron adiciona janela nativa, menu e instalador.
