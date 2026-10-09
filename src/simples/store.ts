@@ -225,19 +225,19 @@ export function etapa1Pronta(s: Pick<SimplesState, 'modo' | 'escolheuAnexo' | 'c
 }
 
 /**
- * Excesso de sublimite estadual (R$ 3,6M) a partir dos valores do passo 1.
- * RBA default = RBT12 quando o usuário não informa outra.
+ * Excesso de sublimite estadual (R$ 3,6M) — 100% automático pelo RBT12.
+ * Sem botão/RBA manual: RBA efetiva = RBT12 sempre.
  */
 export function sublimiteEstourado(s: Pick<SimplesState, 'rbt12' | 'rba' | 'usarRba'>): boolean {
   const rbt = Number(s.rbt12) || 0;
   if (!(rbt > 0)) return false;
-  const rba = s.usarRba ? Number(s.rba) || 0 : rbt;
+  const rba = rbaEfetiva(s);
   return excedeSublimite(rbt, rba);
 }
 
-/** RBA efetiva do cálculo (passo 1). */
+/** RBA efetiva do cálculo — automática: sempre o RBT12 (sem RBA manual). */
 export function rbaEfetiva(s: Pick<SimplesState, 'rbt12' | 'rba' | 'usarRba'>): number {
-  return s.usarRba ? Number(s.rba) || 0 : Number(s.rbt12) || 0;
+  return Number(s.rbt12) || 0;
 }
 
 /**
@@ -328,7 +328,7 @@ export const useSimples = create<SimplesState>((set, get) => ({
       anexoId: anexoEfetivo,
       rbt12: s.rbt12,
       receitaMes: s.receitaMes,
-      rba: s.usarRba ? s.rba : s.rbt12,
+      rba: rbaEfetiva(s),
       aliqRefICMS: s.aliqRefICMS,
       aliqRefISS: s.aliqRefISS,
     });

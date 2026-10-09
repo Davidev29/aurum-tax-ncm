@@ -17,7 +17,7 @@ import { orquestrarRelatorio } from './relatorio-analitico';
 import { gerarInsightsFallback } from './ia-insights';
 import { InsightsModal } from './InsightsModal';
 import { exportarRelatorioAnaliticoPDF } from './export-relatorio-analitico';
-import { creditoDaDespesa, envolveAnexoV, etapa1Pronta, normalizarListaAnexosSimples, preverAnexoFatorR, rbaEfetiva, refsForaDoAnexo, sublimiteEstourado, useSimples, type DespesaSimples } from './store';
+import { creditoDaDespesa, envolveAnexoV, etapa1Pronta, normalizarListaAnexosSimples, preverAnexoFatorR, refsForaDoAnexo, sublimiteEstourado, useSimples, type DespesaSimples } from './store';
 import { tributoSTDoAnexo } from './segregacao-st';
 import { calcularSegregado, pseudoConvDoSegregado, somaParcelas, anexoEfetivoParcela, type ParcelaSegEntrada } from './segregacao-receita';
 import { EMITENTE_PADRAO } from '@/domain/entities';
@@ -308,39 +308,57 @@ function Passo({ n, titulo, desc, feito }: { n: string; titulo: string; desc: st
   );
 }
 
-function Stepper({ etapa, onIr, podeIr3 }: { etapa: 1 | 2 | 3; onIr: (n: 1 | 2 | 3) => void; podeIr3: boolean }) {
+function Stepper({ etapa, onIr, podeIr3, carregando }: { etapa: 1 | 2 | 3; onIr: (n: 1 | 2 | 3) => void; podeIr3: boolean; carregando?: boolean }) {
   const itens = [
     { n: '1', rotulo: 'Valores' },
     { n: '2', rotulo: 'Anexo' },
     { n: '3', rotulo: 'Resultado' },
   ];
   return (
-    <ol className="flex items-center gap-1 px-3 py-2 sm:gap-2" aria-label="Etapas">
+    <div className="flex justify-center border-b border-[var(--line)] px-3 py-2.5">
+    <ol className="flex w-full max-w-[560px] items-center justify-center gap-1 sm:gap-2" aria-label="Etapas" aria-busy={carregando ? true : undefined}>
       {itens.map((it, i) => {
         const idx = (i + 1) as 1 | 2 | 3;
         const ativo = idx === etapa;
         const feito = idx < etapa || (idx === 3 && podeIr3 && !ativo);
         const bloqueado = idx === 3 && !podeIr3;
+        const carregandoEste = carregando && idx === 3;
         return (
           <li key={it.n} className="flex min-w-0 flex-1 items-center gap-1.5">
             <button
               type="button"
               onClick={() => onIr(idx)}
-              disabled={bloqueado}
+              disabled={bloqueado || carregandoEste}
               aria-current={ativo ? 'step' : undefined}
-              title={bloqueado ? 'Calcule para ver o resultado' : `Ir para ${it.rotulo}`}
-              className={`btn-press flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-1 py-0.5 text-left transition-all duration-200 ${bloqueado ? 'min-h-[44px] cursor-not-allowed opacity-50' : 'min-h-[44px] hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+              title={carregandoEste ? 'Calculando…' : bloqueado ? 'Calcule para ver o resultado' : `Ir para ${it.rotulo}`}
+              className={`btn-press flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-1 py-0.5 text-center transition-all duration-200 ${bloqueado || carregandoEste ? 'min-h-[44px] cursor-not-allowed opacity-60' : 'min-h-[44px] hover:bg-slate-100 dark:hover:bg-slate-800'}`}
             >
-              <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[13px] font-black ${feito ? 'bg-emerald-600 text-white' : ativo ? 'bg-brand-700 text-white' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
-                {feito ? '✓' : it.n}
+              <span className={`relative grid h-7 w-7 shrink-0 place-items-center rounded-full text-[13px] font-black transition-all duration-200 ${feito && !carregandoEste ? 'bg-emerald-600 text-white' : ativo || carregandoEste ? 'bg-brand-700 text-white shadow-md ring-2 ring-brand-700/30' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+                {carregandoEste ? (
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/50 border-t-white" aria-hidden="true" />
+                ) : ativo ? (
+                  <>
+                    <span className="animate-pulse-soft" aria-hidden="true">{it.n}</span>
+                    <span className="absolute inset-0 animate-ping rounded-full bg-brand-700/20" aria-hidden="true" />
+                  </>
+                ) : feito ? (
+                  '✓'
+                ) : (
+                  it.n
+                )}
               </span>
-              <span className={`truncate text-[13px] ${ativo ? 'font-black' : 'font-semibold text-slate-600 dark:text-slate-300'}`}>{it.rotulo}</span>
+              <span className={`truncate text-center text-[13px] ${ativo ? 'font-black' : 'font-semibold text-slate-600 dark:text-slate-300'}`}>{it.rotulo}</span>
             </button>
-            {i < itens.length - 1 ? <span className="h-px min-w-3 flex-1 bg-[var(--line)]" aria-hidden="true" /> : null}
+            {i < itens.length - 1 ? (
+              <span className="relative h-px min-w-3 flex-1 overflow-hidden bg-[var(--line)]" aria-hidden="true">
+                {ativo || carregando ? <span className="absolute inset-0 animate-pulse-soft bg-gradient-to-r from-transparent via-brand-500/60 to-transparent" /> : null}
+              </span>
+            ) : null}
           </li>
         );
       })}
     </ol>
+    </div>
   );
 }
 
@@ -397,9 +415,8 @@ export function SimplesNacional() {
   const pronta1 = etapa1Pronta(s);
   /** Passo 1 concluído: RBT12 + receita do mês informados (antes do anexo). */
   const valoresOk = s.rbt12 > 0 && s.receitaMes > 0;
-  /** Sublimite estadual detectado já no passo 1 (RBT12/RBA > R$ 3,6M). */
+  /** Sublimite estadual detectado já no passo 1 (automático: RBT12 > R$ 3,6M). */
   const estouradoPasso1 = sublimiteEstourado(s);
-  const rbaPasso1 = rbaEfetiva(s);
   const comFolha = envolveAnexoV(s);
   // Folha também quando a segregação envolve o Anexo V (Fator R só se
   // calcula sobre o V — III puro já é III, sem decisão).
@@ -427,12 +444,12 @@ export function SimplesNacional() {
     if (resto > 0) parcelas.push({ anexoId: segRestoAnexo, receitaMes: resto, st: false, resto: true, escolhido: s.anexoId });
     try {
       // Folha compartilhada: vale p/ todas as parcelas (Fator R no V).
-      return calcularSegregado(s.rbt12, parcelas, s.usarRba ? s.rba : s.rbt12, s.folha12, { aliqRefICMS: s.aliqRefICMS, aliqRefISS: s.aliqRefISS });
+      return calcularSegregado(s.rbt12, parcelas, s.rbt12, s.folha12, { aliqRefICMS: s.aliqRefICMS, aliqRefISS: s.aliqRefISS });
     } catch {
       return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s.segAtivo, s.convencional, s.segParcelas, segSoma, s.receitaMes, s.rbt12, s.usarRba, s.rba, s.folha12, segRestoAnexo, s.aliqRefICMS, s.aliqRefISS]);
+  }, [s.segAtivo, s.convencional, s.segParcelas, segSoma, s.receitaMes, s.rbt12, s.folha12, segRestoAnexo, s.aliqRefICMS, s.aliqRefISS]);
   // Base de exibição: segregado (pseudo-conv) ou convencional único.
   // A ST já vem deduzida por parcela dentro do segregado — sem ajuste global.
   const convBase = useMemo(
@@ -549,12 +566,12 @@ export function SimplesNacional() {
         anexoId: anexoEff,
         rbt12: s.rbt12,
         receitaMes: s.receitaMes,
-        rba: s.usarRba ? s.rba : s.rbt12,
+        rba: s.rbt12,
       });
     } catch {
       return null;
     }
-  }, [s.rbt12, s.receitaMes, s.usarRba, s.rba, estouradoPasso1, anexosEfetivosRefs, s.anexoId]);
+  }, [s.rbt12, s.receitaMes, estouradoPasso1, anexosEfetivosRefs, s.anexoId]);
   const podeVisualizar = pronta1 && s.rbt12 > 0 && s.receitaMes > 0 && segValida && !gerando;
   const mostrando = s.relatorioVisivel && s.convencional;
   // Resultado em tela cheia na etapa 3; skeleton breve durante o "pensar".
@@ -581,7 +598,7 @@ export function SimplesNacional() {
         competencia: new Date().toISOString().slice(0, 7),
         exercicioReferencia: new Date().getFullYear(),
         rbt12: s.rbt12,
-        rba: s.usarRba ? s.rba : s.rbt12,
+        rba: s.rbt12,
         receitaMes: s.receitaMes,
         folha12: s.folha12,
         cbsRef: s.cbsRef,
@@ -596,7 +613,7 @@ export function SimplesNacional() {
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mostrando, s.modo, s.empresaNome, s.cnpj, s.cnaeEscolhido, s.opcoes, s.rbt12, s.receitaMes, s.folha12, s.cbsRef, s.despesas, s.usarRba, s.rba, s.convencional, segResultado, s.aliqRefICMS, s.aliqRefISS],
+    [mostrando, s.modo, s.empresaNome, s.cnpj, s.cnaeEscolhido, s.opcoes, s.rbt12, s.receitaMes, s.folha12, s.cbsRef, s.despesas, s.convencional, segResultado, s.aliqRefICMS, s.aliqRefISS],
   );
   const insightsAnaliticos = useMemo(
     () => (relatorioAnalitico ? gerarInsightsFallback(relatorioAnalitico) : []),
@@ -701,7 +718,7 @@ export function SimplesNacional() {
           rbt12: s.rbt12,
           receitaMes: s.receitaMes,
           folha12: s.folha12,
-          rba: s.usarRba ? s.rba : s.rbt12,
+          rba: s.rbt12,
           cbsRef: s.cbsRef,
           conv: convExib,
           hib: hibExib ?? s.hibrido,
@@ -758,7 +775,7 @@ export function SimplesNacional() {
             ))}
           </div>
           ) : null}
-          <Stepper etapa={etapa} onIr={irPara} podeIr3={!!mostrando} />
+          <Stepper etapa={etapa} onIr={irPara} podeIr3={!!mostrando} carregando={gerando} />
 
           {etapa !== 3 ? (
           <div className="space-y-5 p-6 sm:p-8" key={`${s.modo}-${etapa}`}>
@@ -782,19 +799,10 @@ export function SimplesNacional() {
                   </span>
                 ) : <span className="text-[13px] text-slate-600">RBT12 define</span>}
               >
-                <label className="flex cursor-pointer items-center gap-2 text-[13px] font-semibold">
-                  <input type="checkbox" className="h-4 w-4 accent-brand-700" checked={s.usarRba} onChange={(e) => { s.set({ usarRba: e.target.checked }); s.tocarEntrada(); }} />
-                  RBA do ano diferente do RBT12
-                </label>
-                {s.usarRba ? (
-                  <div className="animate-fade-up mt-2">
-                    <CampoMoeda rotulo="RBA — acumulada no ano" valor={s.rba} onValor={(v) => { s.set({ rba: v }); s.tocarEntrada(); }} dica="Só quando a receita do ano difere do RBT12" />
-                  </div>
-                ) : null}
                 <p className="mt-1.5 text-[13px] leading-relaxed text-slate-600 dark:text-slate-300">
                   {estouradoPasso1
-                    ? `RBT12 ${fmtMoeda(s.rbt12)}${s.usarRba ? ` · RBA ${fmtMoeda(rbaPasso1)}` : ''} acima de ${fmtMoeda(SUBLIMITE)}: ICMS/ISS/IBS saem da guia DAS e o híbrido é ativado sozinho.`
-                    : `Abaixo de ${fmtMoeda(SUBLIMITE)}: tudo dentro da guia DAS.`}
+                    ? `RBT12 ${fmtMoeda(s.rbt12)} acima de ${fmtMoeda(SUBLIMITE)} (automático): ICMS/ISS/IBS saem da guia DAS e o híbrido é ativado sozinho.`
+                    : `Abaixo de ${fmtMoeda(SUBLIMITE)}: tudo dentro da guia DAS (automático pelo RBT12).`}
                 </p>
               </SubCard>
               <SubCard
@@ -1165,8 +1173,8 @@ export function SimplesNacional() {
                   <div className="mt-2 space-y-2">
                     <p className={`rounded-xl px-2.5 py-1.5 text-[13px] leading-relaxed ${estouradoPasso1 ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-slate-50 text-slate-600 dark:bg-slate-950/40 dark:text-slate-300'}`}>
                       {estouradoPasso1
-                        ? `Sublimite estourado na etapa 1 (RBT12 ${fmtMoeda(s.rbt12)}${s.usarRba ? ` · RBA ${fmtMoeda(rbaPasso1)}` : ''} > ${fmtMoeda(SUBLIMITE)}). Para ajustar, volte à etapa 1 — aqui se informa só a alíquota de fora.`
-                        : `Dentro do sublimite (${fmtMoeda(SUBLIMITE)}). Para informar RBA, volte à etapa 1.`}
+                        ? `Sublimite estourado automaticamente (RBT12 ${fmtMoeda(s.rbt12)} > ${fmtMoeda(SUBLIMITE)}). Aqui se informa só a alíquota de fora.`
+                        : `Dentro do sublimite (${fmtMoeda(SUBLIMITE)}) — apuração automática pelo RBT12.`}
                     </p>
                     {estouradoPasso1 && (mostraRefICMS || mostraRefISS) ? (
                       <div className="animate-fade-up space-y-2 rounded-xl border border-amber-200 bg-amber-50/50 p-2.5 dark:border-amber-900 dark:bg-amber-950/20">
@@ -1360,9 +1368,9 @@ export function SimplesNacional() {
             </div>
           ) : mostrando ? (
             <div className="animate-slide-in space-y-3" key={`${s.convencional!.anexoId}-${convExib!.das}-${segResultado?.deducaoST ?? 0}-${segResultado?.das ?? 0}`}>
-              {/* MEMÓRIA lado a lado (mesma altura): base | desmembramentos + fechamento */}
-              <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-[1fr_1fr]">
-              <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white dark:bg-slate-900">
+              {/* MEMÓRIA: base sempre; desmembramento só quando segregado (dinâmico). Mesma altura na linha. */}
+              <div className={`grid grid-cols-1 items-stretch gap-4 ${segResultado ? 'lg:grid-cols-[1fr_1fr]' : ''}`}>
+              <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-white dark:bg-slate-900">
                 <div className="border-b border-[var(--line)] px-4 py-3">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="text-xl font-extrabold tracking-tight">Memória de cálculo</h3>
@@ -1388,7 +1396,7 @@ export function SimplesNacional() {
                     </p>
                   ) : null}
                 </div>
-                <dl className="space-y-2.5 px-4 py-4 text-[13px] leading-relaxed">
+                <dl className="flex-1 space-y-2.5 px-4 py-4 text-[13px] leading-relaxed">
                   <div className="flex items-center justify-between gap-3">
                     <dt className="shrink-0 text-slate-600">Receita 12 meses</dt>
                     <dd className="font-mono font-black">{fmtMoeda(s.rbt12)}</dd>
@@ -1405,8 +1413,10 @@ export function SimplesNacional() {
                   ) : null}
                   <div className="flex items-center justify-between gap-3">
                     <dt className="shrink-0 text-slate-600">Alíquota aplicada</dt>
-                    <dd className="font-mono font-bold text-brand-700 dark:text-aurum-200" title={segResultado ? 'Média ponderada = DAS total ÷ receita total (cada parcela tem a sua abaixo)' : undefined}>
-                      {segResultado ? `${fmtCarga(segResultado.aliquotaMedia * 100)} · média ponderada` : fmtCarga(convBase!.aliquotaEfetiva * 100)}
+                    <dd className="font-mono font-bold text-brand-700 dark:text-aurum-200" title={segResultado ? 'Média ponderada da GUIA = guia ÷ receita (ICMS/ISS/IBS do sublimite fora, regime normal)' : convBase!.excedeSublimite ? 'Alíquota da guia DAS (sem ICMS/ISS/IBS do sublimite, regime normal)' : undefined}>
+                      {segResultado
+                        ? `${fmtCarga((segResultado.receitaMes > 0 ? segResultado.dasGuia / segResultado.receitaMes : 0) * 100)} · média ponderada${segResultado.excedeSublimite ? ' (guia)' : ''}`
+                        : `${fmtCarga((convBase!.aliquotaEfetivaGuia ?? convBase!.aliquotaEfetiva) * 100)}${convBase!.excedeSublimite ? ' (guia)' : ''}`}
                     </dd>
                   </div>
                   <div className="flex items-start justify-between gap-3 border-t border-[var(--line)] pt-2.5">
@@ -1419,12 +1429,13 @@ export function SimplesNacional() {
                   </div>
                 </dl>
               </div>
-              <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white dark:bg-slate-900">
+              {segResultado ? (
+              <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-white dark:bg-slate-900">
                 <div className="border-b border-[var(--line)] px-4 py-3">
                   <h3 className="text-xl font-extrabold tracking-tight">Desmembramentos e fechamento</h3>
                 </div>
                 {segResultado ? (
-                  <div className="px-4 py-3">
+                  <div className="flex-1 px-4 py-3">
                     <p className="mb-2 text-[13px] font-bold uppercase tracking-wider text-slate-600">Desmembramentos no faturamento mensal</p>
                     <div className="space-y-2">
                       {segResultado.parcelas.map((d, idx) => (
@@ -1445,7 +1456,7 @@ export function SimplesNacional() {
                           </div>
                           <div className="mt-0.5 flex flex-wrap items-center justify-between gap-2 font-mono text-[13px] text-slate-600">
                             <span>Receita {fmtMoeda(d.receitaMes)}</span>
-                            <span>{d.faixa}ª faixa · {fmtCarga(d.aliquotaEfetiva * 100)}</span>
+                            <span>{d.faixa}ª faixa · {fmtCarga(((d.receitaMes > 0 ? d.dasGuia / d.receitaMes : d.aliquotaEfetiva)) * 100)}{d.excedeSublimite ? ' (guia)' : ''}</span>
                           </div>
                         </div>
                       ))}
@@ -1495,8 +1506,11 @@ export function SimplesNacional() {
                   )}
                 </div>
               </div>
+              ) : null}
               </div>
-              <div className="calc-hero simples-hero overflow-hidden rounded-2xl lg:sticky lg:top-4">
+              {/* Guia + gráficos lado a lado no desktop, mesma altura e contidos. */}
+              <div className="grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+              <div className="calc-hero simples-hero relative z-0 isolate flex h-full min-w-0 scroll-mt-4 flex-col overflow-hidden rounded-2xl">
                 <div className="px-4 pb-4 pt-4" role="status" aria-live="polite">
                   <div className="flex items-center justify-between gap-2">
                     <span className="calc-hero-rotulo truncate">DAS · {segResultado ? `Segregado ${segResultado.anexos.join(' + ')}` : `${ANEXO_LABEL[convBase!.anexoId]} · ${convBase!.faixa}ª faixa`}{stResumo ? ` · ST ${stResumo.tributo}` : ''}</span>
@@ -1527,9 +1541,9 @@ export function SimplesNacional() {
                     </div>
                   ) : null}
                   <div className="mt-0.5 flex items-center justify-between gap-2 text-[13px] text-white/75">
-                    <span className="truncate">CBS {fmtMoeda(convBase!.cbsDentroDAS)}</span>
+                    <span className="truncate">CBS {fmtMoeda(convBase!.cbsDentroDAS)}{convBase!.excedeSublimite ? ` · guia ${(convBase!.aliquotaEfetivaGuia * 100).toFixed(2)}% (carga total ${(convBase!.aliquotaEfetiva * 100).toFixed(2)}%)` : ''}</span>
                     <span className="shrink-0 rounded-full bg-aurum-400/25 px-1.5 py-px font-mono font-bold text-aurum-200">
-                      {fmtCarga(convBase!.aliquotaEfetiva * 100)}
+                      {fmtCarga((convBase!.aliquotaEfetivaGuia ?? convBase!.aliquotaEfetiva) * 100)}
                     </span>
                   </div>
                   <div className="mt-2">
@@ -1545,7 +1559,7 @@ export function SimplesNacional() {
                     />
                   </div>
                 </div>
-                <div className="space-y-1.5 bg-white px-4 py-3.5 text-sm leading-relaxed dark:bg-slate-900">
+                <div className="flex-1 space-y-1.5 bg-white px-4 py-3.5 text-sm leading-relaxed dark:bg-slate-900">
                   {reparticaoVisiveis.map((t) => {
                     const dedST = deducaoSTPorTributo[t as 'ICMS' | 'ISS'] ?? 0;
                     const ehST = dedST > 0;
@@ -1620,7 +1634,8 @@ export function SimplesNacional() {
                 </div>
               </div>
 
-              <div key={`graf-${segResultado?.dasGuia ?? 0}-${stResumo?.deducao ?? 0}`} className={segResultado ? 'animate-fade-up' : undefined}>
+              <div className="relative z-0 isolate flex h-full min-w-0 flex-col space-y-3">
+              <div key={`graf-${segResultado?.dasGuia ?? 0}-${stResumo?.deducao ?? 0}`} className={`relative z-0 isolate min-w-0 flex-1 scroll-mt-4 overflow-hidden rounded-2xl ${segResultado ? 'animate-fade-up' : ''}`}>
                 <LimiteErroGrafico>
                   <GraficosDAS
                     final={repExib!}
@@ -1659,6 +1674,8 @@ export function SimplesNacional() {
                   </div>
                 </Painel>
               ) : null}
+              </div>
+              </div>
 
               <div className="flex flex-wrap gap-1.5">
                 <Btn tam="sm" className="flex-1" onClick={() => { const p = payload(); if (p) exportarSimplesCSV(p); }}>CSV</Btn>
