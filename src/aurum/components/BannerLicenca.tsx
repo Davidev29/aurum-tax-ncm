@@ -1,11 +1,11 @@
 /**
- * Banner da licença (graça/offline) + selo do cabeçalho.
+ * Banner da licença (graça/offline).
  *
  * Renderizado pelo `Layout` acima do conteúdo: em `GRACE` avisa o vencimento
- * e o bloqueio de excluir/exportar/trocar titular; offline mostra o modo
- * offline permitido. Exibe SEMPRE `keyMasked` (`••••-WXYZ`), nunca a chave.
+ * e o bloqueio de excluir/exportar/trocar titular, levando às Configurações →
+ * Conta. Exibe SEMPRE `keyMasked` (`••••-WXYZ`), nunca a chave.
  */
-import { useUi } from '@/store/ui';
+import { abrirContaEmConfig } from '../conta-nav';
 import { diasParaVencer } from '../gate';
 import { useLicenca } from '../store';
 
@@ -21,7 +21,6 @@ export function BannerLicenca() {
   const estado = useLicenca((s) => s.estado);
   const gate = useLicenca((s) => s.gate);
   const online = useLicenca((s) => s.online);
-  const trocarView = useUi((s) => s.trocarView);
   if (!estado) return null;
 
   if (gate.motivo === 'GRACE') {
@@ -35,7 +34,7 @@ export function BannerLicenca() {
           <strong>Assinatura vencida — período de graça até {fmtData(estado.grace_until)}.</strong>{' '}
           Excluir, exportar e trocar a empresa ativa estão bloqueados. Licença {estado.keyMasked ?? '••••-????'}.
         </div>
-        <button type="button" onClick={() => trocarView('faturas')} className="btn btn-press btn-primary btn-sm">
+        <button type="button" onClick={() => abrirContaEmConfig()} className="btn btn-press btn-primary btn-sm">
           Ver faturas / Renovar
         </button>
       </div>
@@ -55,27 +54,4 @@ export function BannerLicenca() {
   }
 
   return null;
-}
-
-/** Selo compacto do cabeçalho: licença mascarada + dias restantes. */
-export function SeloLicenca() {
-  const estado = useLicenca((s) => s.estado);
-  const gate = useLicenca((s) => s.gate);
-  const trocarView = useUi((s) => s.trocarView);
-  if (!estado) return null;
-  const dias = diasParaVencer(estado);
-  const tom = gate.motivo === 'GRACE'
-    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-    : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300';
-  return (
-    <button
-      type="button"
-      onClick={() => trocarView('faturas')}
-      className={`pill ${tom} cursor-pointer`}
-      title={`Licença ${estado.keyMasked ?? '••••-????'} — ver conta e faturas`}
-    >
-      {gate.motivo === 'GRACE' ? '⏳ Graça' : '✓ Licenciado'} · {estado.keyMasked ?? '••••-????'}
-      {dias !== null && dias >= 0 && dias <= 30 ? ` · ${dias}d` : ''}
-    </button>
-  );
 }

@@ -21,8 +21,8 @@ import { DialogoGlass } from './dialogos'
 import { ModaisGlobais } from '@/modais/globais'
 import { TourGuiado } from './TourGuiado'
 import { reabrirTour } from '@/store/tutorial'
-// AURUM-GATE: banner/selo da licença (módulo `src/aurum/`).
-import { BannerLicenca, SeloLicenca } from '@/aurum/components/BannerLicenca'
+// AURUM-GATE: banner da licença (módulo `src/aurum/`).
+import { BannerLicenca } from '@/aurum/components/BannerLicenca'
 import { podeAcaoSensivel } from '@/aurum/guards'
 
 /** Grupos do menu lateral — a ordem e os ícones espelham o sistema anterior. */
@@ -49,11 +49,6 @@ const NAV: { secao?: string; itens: { id: ViewId; icone: NomeIcone; rotulo: stri
   {
     secao: 'Referência',
     itens: [{ id: 'legislacao', icone: 'documento', rotulo: 'Legislação' }],
-  },
-  // AURUM-GATE: conta & faturas (licenciamento — fora do core fiscal).
-  {
-    secao: 'Conta',
-    itens: [{ id: 'faturas', icone: 'moeda', rotulo: 'Conta & Faturas' }],
   },
 ]
 
@@ -361,8 +356,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
               )}
             </div>
             <ChipEmpresa />
-            {/* AURUM-GATE: selo da licença → Conta & Faturas. */}
-            <SeloLicenca />
             <button
               type="button"
               onClick={() => reabrirTour()}

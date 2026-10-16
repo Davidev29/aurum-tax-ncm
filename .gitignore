@@ -5,6 +5,8 @@ dist-ssr/
 release/
 electron/dist/
 *.local
+# Config real do build (ver .env.example) — nunca versionar.
+.env
 
 # Logs
 logs/*

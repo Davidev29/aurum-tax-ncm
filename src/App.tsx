@@ -21,8 +21,6 @@ const NfeXmlPolida = lazy(() => import('@/pages/NfeXmlPolida').then((m) => ({ de
 const Produtos = lazy(() => import('@/pages/Produtos').then((m) => ({ default: m.Produtos })));
 const Auxiliares = lazy(() => import('@/pages/Auxiliares').then((m) => ({ default: m.Auxiliares })));
 const Legislacao = lazy(() => import('@/pages/Legislacao').then((m) => ({ default: m.Legislacao })));
-// AURUM-GATE: tela de conta/faturas do módulo de licenciamento.
-const FaturasView = lazy(() => import('@/aurum/pages/Faturas').then((m) => ({ default: m.Faturas })));
 
 /**
  * Troca de views do shell. Cada página é pura apresentação sobre as stores.
@@ -121,10 +119,6 @@ export function App() {
       break;
     case 'legislacao':
       pagina = <Legislacao />;
-      break;
-    // AURUM-GATE: conta & faturas (licenciamento — fora do core fiscal).
-    case 'faturas':
-      pagina = <FaturasView />;
       break;
     default:
       pagina = <Calculadora />;

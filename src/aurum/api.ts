@@ -10,8 +10,8 @@
  *     para o chamador decidir pelo cache);
  *   - a chave integral só sai no corpo de `activate-by-key` e nunca é logada.
  */
-import { CANAL_ACESSO, CHECKOUT_POLL_MS, CHECKOUT_TETO_MS, HTTP_TIMEOUT_MS, LOTE_ACESSO_MAX, lerApiBase, lerLicBase } from './config';
-import type { ActivationResult, CheckoutCriado, CheckoutStatus, Fatura } from './types';
+import { CANAL_ACESSO, CHECKOUT_POLL_MS, CHECKOUT_TETO_MS, HTTP_TIMEOUT_MS, LOTE_ACESSO_MAX, urlAuth, urlConta, urlNest } from './config';
+import type { ActivationResult, CheckoutCriado, CheckoutStatus, Fatura, Plano } from './types';
 
 /** Chave `AURUM-XXXX-XXXX-XXXX` (sem I/O/O/0/1 para evitar confusão). */
 export const REGEX_CHAVE = /^AURUM-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
@@ -45,14 +45,6 @@ export class ErroAurum extends Error {
     this.code = code;
     if (status !== undefined) this.status = status;
   }
-}
-
-function urlApi(caminho: string): string {
-  return `${lerApiBase()}${caminho}`;
-}
-
-function urlLic(caminho: string): string {
-  return `${lerLicBase()}${caminho}`;
 }
 
 interface OpcaoChamada {
@@ -144,9 +136,9 @@ function validarActivation(v: unknown): ActivationResult {
   };
 }
 
-/** Login da conta → Bearer de `/api/me/*`. */
+/** Login da conta → Bearer de `/me/*` (BFF do portal). */
 export async function loginConta(email: string, senha: string): Promise<{ token: string }> {
-  const r = await chamar<{ token?: unknown }>(urlApi('/api/auth/login'), {
+  const r = await chamar<{ token?: unknown }>(urlAuth('/auth/login'), {
     corpo: { email: email.trim(), password: senha },
   });
   if (!r || typeof r.token !== 'string' || !r.token) {
@@ -155,14 +147,27 @@ export async function loginConta(email: string, senha: string): Promise<{ token:
   return { token: r.token };
 }
 
-/** Ativação por conta (tentar SEMPRE primeiro — item 2 da spec). */
+/**
+ * Redefinição de senha — envia o link para o e-mail
+ * (`POST /api/auth/password/forgot`). Não revela se a conta existe
+ * (o servidor responde 200 nos dois casos).
+ */
+export async function solicitarRedefinicaoSenha(email: string): Promise<void> {
+  const limpo = email.trim();
+  if (!/.+@.+\..+/.test(limpo)) throw new ErroAurum('RESPOSTA_INVALIDA', 'Informe um e-mail válido.');
+  await chamar<unknown>(urlAuth('/auth/password/forgot'), {
+    corpo: { email: limpo },
+  });
+}
+
+/** Ativação por conta (tentar SEMPRE primeiro — filtra `productId` exato). */
 export async function ativarPorConta(args: {
   token: string;
   productId?: string;
   appInstanceId: string;
   label: string;
 }): Promise<ActivationResult> {
-  const r = await chamar<unknown>(urlApi('/api/me/licenses/activate'), {
+  const r = await chamar<unknown>(urlConta('/licenses/activate'), {
     token: args.token,
     corpo: {
       ...(args.productId ? { productId: args.productId } : {}),
@@ -185,7 +190,7 @@ export async function ativarPorChave(args: {
     throw new ErroAurum('KEY_INVALID', 'Formato inválido — use AURUM-XXXX-XXXX-XXXX.');
   }
   // A chave integral sai SÓ neste corpo; nenhum log a registra (ver store).
-  const r = await chamar<unknown>(urlLic('/v1/licenses/activate-by-key'), {
+  const r = await chamar<unknown>(urlNest('/licenses/activate-by-key'), {
     ...(args.token ? { token: args.token } : {}),
     corpo: { key: chave, app_instance_id: args.appInstanceId, label: args.label },
   });
@@ -209,7 +214,7 @@ export interface ResultadoValidacao {
  * `5xx`/timeout → `ErroAurum('REDE'|'SERVIDOR')` e o chamador MANTÉM o estado.
  */
 export async function validarLicenca(licenseId: string, deviceHash: string, token?: string | null): Promise<ResultadoValidacao> {
-  const r = await chamar<Record<string, unknown>>(urlLic(`/v1/licenses/${encodeURIComponent(licenseId)}/validate`), {
+  const r = await chamar<Record<string, unknown>>(urlNest(`/licenses/${encodeURIComponent(licenseId)}/validate`), {
     ...(token ? { token } : {}),
     corpo: { device_hash: deviceHash },
   });
@@ -245,7 +250,7 @@ export async function checkAcesso(args: {
     featureCode: args.featureCode,
     channel: CANAL_ACESSO,
   });
-  const r = await chamar<{ allow?: unknown }>(urlLic(`/v1/access/check?${q.toString()}`), {
+  const r = await chamar<{ allow?: unknown }>(urlNest(`/access/check?${q.toString()}`), {
     ...(args.token ? { token: args.token } : {}),
   });
   return { allow: r.allow !== false, origem: 'rede' };
@@ -260,7 +265,7 @@ export async function checkAcessoLote(args: {
 }): Promise<Record<string, boolean>> {
   const codigos = [...new Set(args.featureCodes)].slice(0, LOTE_ACESSO_MAX);
   if (!codigos.length) return {};
-  const r = await chamar<{ results?: Record<string, unknown> }>(urlLic('/v1/access/check-batch'), {
+  const r = await chamar<{ results?: Record<string, unknown> }>(urlNest('/access/check-batch'), {
     ...(args.token ? { token: args.token } : {}),
     corpo: {
       ownerType: 'CUSTOMER',
@@ -275,9 +280,9 @@ export async function checkAcessoLote(args: {
   return out;
 }
 
-/** Faturas da conta (`GET /api/me/invoices` — lista/baixa). */
+/** Faturas da conta (`GET {BFF}/invoices` — lista/baixa). */
 export async function listarFaturas(token: string): Promise<Fatura[]> {
-  const r = await chamar<{ invoices?: unknown; items?: unknown }>(urlApi('/api/me/invoices'), { token });
+  const r = await chamar<{ invoices?: unknown; items?: unknown }>(urlConta('/invoices'), { token });
   const lista = Array.isArray(r.invoices) ? r.invoices : Array.isArray(r.items) ? r.items : [];
   return (lista as Array<Record<string, unknown>>).map((f) => ({
     id: String(f.id ?? ''),
@@ -298,10 +303,42 @@ export interface ItemCheckout {
   planId: string;
 }
 
-/** Abre checkout (`POST /api/me/checkout` → `{ asaasUrl }`). */
+/**
+ * Planos do produto (`GET {Nest}/products/:productCode/plans`).
+ * O checkout exige `p.id === planId && ACTIVE` — por isso só ACTIVE volta.
+ */
+export async function listarPlanos(productCode: string, token?: string | null): Promise<Plano[]> {
+  const r = await chamar<unknown>(urlNest(`/products/${encodeURIComponent(productCode)}/plans`), {
+    ...(token ? { token } : {}),
+  });
+  const bruta: unknown[] = Array.isArray(r)
+    ? r
+    : Array.isArray((r as { plans?: unknown }).plans)
+      ? (r as { plans: unknown[] }).plans
+      : Array.isArray((r as { items?: unknown }).items)
+        ? (r as { items: unknown[] }).items
+        : [];
+  return (bruta as Array<Record<string, unknown>>)
+    .filter((p) => {
+      if (typeof p.status === 'string') return p.status.toUpperCase() === 'ACTIVE';
+      if (typeof p.active === 'boolean') return p.active;
+      if (typeof p.isActive === 'boolean') return p.isActive;
+      return true;
+    })
+    .map((p) => ({
+      id: String(p.id ?? ''),
+      ...(typeof p.name === 'string' || typeof p.nome === 'string' ? { nome: String(p.nome ?? p.name) } : {}),
+      ...(typeof p.price === 'number' || typeof p.preco === 'number' ? { preco: Number(p.preco ?? p.price) } : {}),
+      ...(typeof p.currency === 'string' || typeof p.moeda === 'string' ? { moeda: String(p.moeda ?? p.currency) } : {}),
+      ...(typeof p.interval === 'string' || typeof p.intervalo === 'string' ? { intervalo: String(p.intervalo ?? p.interval) } : {}),
+    }))
+    .filter((p) => p.id);
+}
+
+/** Abre checkout (`POST {BFF}/checkout` → `{ asaasUrl }`). */
 export async function criarCheckout(token: string, items: ItemCheckout[], orderId?: string): Promise<CheckoutCriado> {
   const r = await chamar<{ checkoutId?: unknown; id?: unknown; status?: unknown; asaasUrl?: unknown; paymentUrl?: unknown }>(
-    urlApi('/api/me/checkout'),
+    urlConta('/checkout'),
     { token, corpo: { items, ...(orderId ? { orderId } : {}) } },
   );
   const checkoutId = typeof r.checkoutId === 'string' ? r.checkoutId : typeof r.id === 'string' ? r.id : '';
@@ -310,10 +347,10 @@ export async function criarCheckout(token: string, items: ItemCheckout[], orderI
   return { checkoutId, status: typeof r.status === 'string' ? r.status : 'PENDING', ...(asaasUrl ? { asaasUrl } : {}) };
 }
 
-/** Estado do checkout (`GET /api/me/checkout?id=`). */
+/** Estado do checkout (`GET {BFF}/checkout?id=`). */
 export async function obterCheckout(token: string, checkoutId: string): Promise<CheckoutStatus> {
   const r = await chamar<{ checkoutId?: unknown; id?: unknown; status?: unknown; paidAt?: unknown }>(
-    urlApi(`/api/me/checkout?id=${encodeURIComponent(checkoutId)}`), { token },
+    urlConta(`/checkout?id=${encodeURIComponent(checkoutId)}`), { token },
   );
   return {
     checkoutId: typeof r.checkoutId === 'string' ? r.checkoutId : checkoutId,

@@ -65,7 +65,7 @@ export interface ResultadoGate {
 /** Ações sensíveis bloqueadas no modo degradado. */
 export type AcaoSensivel = 'excluir' | 'exportar' | 'trocar-titular';
 
-/** Fatura de `GET /api/me/invoices`. */
+/** Fatura de `GET {BFF}/invoices`. */
 export interface Fatura {
   id: string;
   numero?: string;
@@ -79,11 +79,20 @@ export interface Fatura {
   linhaDigitavel?: string;
 }
 
-/** Checkout Asaas (`POST /api/me/checkout` → poll `GET /api/me/checkout?id=`). */
+/** Checkout Asaas (`POST {BFF}/checkout` → poll `GET {BFF}/checkout?id=`). */
 export interface CheckoutCriado {
   checkoutId: string;
   status: string;
   asaasUrl?: string;
+}
+
+/** Plano do produto (`GET {Nest}/products/:productCode/plans` — só ACTIVE elegível). */
+export interface Plano {
+  id: string;
+  nome?: string;
+  preco?: number;
+  moeda?: string;
+  intervalo?: string;
 }
 
 export type StatusCheckout = 'PENDING' | 'PAID' | 'EXPIRED' | 'CANCELLED' | string;

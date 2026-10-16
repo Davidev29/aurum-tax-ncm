@@ -1,21 +1,24 @@
 /**
  * Tela de faturas — lista/baixa + checkout Asaas + renovação (item 5).
  *
- *   - `GET /api/me/invoices` lista com download (PDF/boleto);
- *   - `POST /api/me/checkout { items:[{productCode,planId}], orderId }` gera a
- *     cobrança; com `asaasUrl`, abre o navegador e faz poll de
- *     `GET /api/me/checkout?id=` até `PAID` → re-ativa (`renovar()`);
+ *   - `GET {BFF}/invoices` lista com download (PDF/boleto);
+ *   - renovação: `productCode` vem do build; `planId` é o UUID do plano —
+ *     fixo via build (`VITE_AURUM_PLAN_ID`) ou escolhido em
+ *     `GET {Nest}/products/:code/plans` (só ACTIVE);
+ *   - `POST {BFF}/checkout { items:[{productCode,planId}] }` gera a cobrança;
+ *     com `asaasUrl`, abre o navegador e faz poll de `GET {BFF}/checkout?id=`
+ *     até `PAID` → re-ativa (`renovar()`);
  *   - `PENDING` nunca libera: o gate só muda após `PAID` + re-activate.
  * Sem sessão (deslogado), orienta entrar primeiro — não toca no core.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ErroAurum, aguardarPagamento, criarCheckout, listarFaturas } from '../api';
-import { produtoPadrao } from '../config';
+import { ErroAurum, aguardarPagamento, criarCheckout, listarFaturas, listarPlanos } from '../api';
+import { codigoProduto, planoPadrao } from '../config';
 import { useLicenca } from '../store';
 import { abrirUrlExterna, lerSessao } from '../storage';
-import { Btn, Campo, Painel, Pill, Texto, Vazio } from '@/ui/kit';
+import { Btn, Campo, Painel, Pill, Selecao, Vazio } from '@/ui/kit';
 import { useUi } from '@/store/ui';
-import type { Fatura } from '../types';
+import type { Fatura, Plano } from '../types';
 
 function fmtValor(f: Fatura): string {
   if (typeof f.valor !== 'number') return '—';
@@ -53,9 +56,14 @@ export function Faturas() {
   const [erro, setErro] = useState<string | null>(null);
   const [semSessao, setSemSessao] = useState(false);
 
-  const [productCode, setProductCode] = useState(produtoPadrao());
-  const [planId, setPlanId] = useState('');
-  const [orderId, setOrderId] = useState('');
+  // Produto/plano vêm do build ou da lista oficial — nunca digitados à mão.
+  const planoFixo = planoPadrao();
+
+  const productCode = codigoProduto();
+  const [planId, setPlanId] = useState(planoFixo);
+  const [planos, setPlanos] = useState<Plano[]>([]);
+  const [carregandoPlanos, setCarregandoPlanos] = useState(false);
+  const [erroPlanos, setErroPlanos] = useState<string | null>(null);
   const [pagando, setPagando] = useState(false);
   const [aguardando, setAguardando] = useState<string | null>(null);
   const canceladoRef = useRef(false);
@@ -86,6 +94,32 @@ export function Faturas() {
     };
   }, [carregar, email]);
 
+  // Sem plano fixo no build: lista os ACTIVE em `GET /v1/products/:code/plans`.
+  useEffect(() => {
+    if (planoFixo) return;
+    let vivo = true;
+    setCarregandoPlanos(true);
+    setErroPlanos(null);
+    void (async () => {
+      try {
+        const sessao = await lerSessao().catch(() => null);
+        const lista = await listarPlanos(productCode, sessao?.token ?? null);
+        if (!vivo) return;
+        setPlanos(lista);
+        // Pré-seleciona o primeiro para renovar em 1 toque.
+        if (lista.length > 0) setPlanId((atual) => atual || lista[0].id);
+        if (lista.length === 0) setErroPlanos('Nenhum plano ativo para este produto — fale com o suporte.');
+      } catch (e) {
+        if (vivo) setErroPlanos(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (vivo) setCarregandoPlanos(false);
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [planoFixo, productCode]);
+
   const abrirCobranca = (f: Fatura) => {
     const url = f.boletoUrl ?? f.pdfUrl;
     if (!url) {
@@ -98,7 +132,7 @@ export function Faturas() {
   /** Checkout → navegador → poll até PAID → re-activate. */
   const pagarRenovar = async () => {
     if (!planId.trim()) {
-      toast('Informe o plano (planId).', 'warn');
+      toast('Escolha um plano para gerar a cobrança.', 'warn');
       return;
     }
     setPagando(true);
@@ -112,8 +146,7 @@ export function Faturas() {
       }
       const criado = await criarCheckout(
         sessao.token,
-        [{ productCode: productCode.trim() || produtoPadrao(), planId: planId.trim() }],
-        orderId.trim() || undefined,
+        [{ productCode, planId: planId.trim() }],
       );
       if (criado.asaasUrl) {
         await abrirUrlExterna(criado.asaasUrl);
@@ -172,21 +205,33 @@ export function Faturas() {
       </Painel>
 
       <Painel className="p-4">
-        <h3 className="mb-1 text-sm font-bold">💳 Renovar / assinar</h3>
-        <p className="mb-3 text-xs text-slate-500">
-          Gera a cobrança (Asaas), abre o navegador e confirma o pagamento sozinho — ao compensar, a licença reativa sem tocar nos seus dados.
-        </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Campo label="Código do produto">
-            <Texto value={productCode} onChange={(e) => setProductCode(e.target.value)} className="font-mono text-xs" />
-          </Campo>
-          <Campo label="Plano (planId)" obrigatorio>
-            <Texto value={planId} onChange={(e) => setPlanId(e.target.value)} placeholder="ex.: anual-pj" className="font-mono text-xs" />
-          </Campo>
-          <Campo label="Pedido (orderId, opcional)">
-            <Texto value={orderId} onChange={(e) => setOrderId(e.target.value)} placeholder="(gerado sozinho)" className="font-mono text-xs" />
-          </Campo>
-        </div>
+        <h3 className="mb-1 text-sm font-bold">💳 Renovar assinatura</h3>
+        {planoFixo ? (
+          <p className="mb-3 text-xs text-slate-500">
+            Plano <strong className="font-mono">{planoFixo}</strong> · {productCode} — geramos a cobrança, abrimos o pagamento e confirmamos sozinhos. Ao compensar, a licença reativa sem tocar nos seus dados.
+          </p>
+        ) : (
+          <div className="mb-3 max-w-sm">
+            <Campo label="Plano" obrigatorio dica={`Planos ativos de ${productCode} (via API).`}>
+              {carregandoPlanos ? (
+                <p className="py-2 text-xs text-slate-400">Carregando planos…</p>
+              ) : erroPlanos ? (
+                <p className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+                  {erroPlanos}
+                </p>
+              ) : (
+                <Selecao value={planId} onChange={(e) => setPlanId(e.target.value)}>
+                  <option value="">Escolher plano…</option>
+                  {planos.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome ?? p.id}{typeof p.preco === 'number' ? ` — ${p.preco.toLocaleString('pt-BR', { style: 'currency', currency: p.moeda ?? 'BRL' })}` : ''}{p.intervalo ? ` / ${p.intervalo}` : ''}
+                    </option>
+                  ))}
+                </Selecao>
+              )}
+            </Campo>
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Btn variante="primary" carregando={pagando} onClick={() => void pagarRenovar()}>
             {aguardando ? 'Aguardando pagamento…' : pagando ? 'Gerando…' : 'Gerar cobrança'}

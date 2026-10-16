@@ -14,7 +14,7 @@
  * — nunca é persistida nem logada (erros usam `••••-WXYZ`).
  */
 import { create } from 'zustand';
-import { BACKOFF_INICIAL_MS, BACKOFF_TETO_MS, REVALIDAR_MS, lerApiBase, lerLicBase, produtoPadrao, salvarBases } from './config';
+import { BACKOFF_INICIAL_MS, BACKOFF_TETO_MS, REVALIDAR_MS, produtoPadrao } from './config';
 import { ErroAurum, ativarPorChave, ativarPorConta, loginConta, validarLicenca } from './api';
 import { avaliarGate, estadoDeActivation, paraMs } from './gate';
 import { limparEstado, limparSessao, lerEstado, lerSessao, obterAppInstanceId, salvarEstado, salvarSessao } from './storage';
@@ -30,16 +30,15 @@ export interface EstadoLicencaStore {
   online: boolean;
   ultimaRevalidacao: number | null;
   boot: () => Promise<void>;
-  loginConta: (email: string, senha: string, opts?: { productId?: string; label?: string }) => Promise<{ precisaChave: boolean }>;
-  ativarComChave: (key: string, opts?: { label?: string }) => Promise<void>;
+  /** Conta primeiro: resolve `productId`/`label` por baixo dos panos. */
+  loginConta: (email: string, senha: string) => Promise<{ precisaChave: boolean }>;
+  /** Fallback por chave (só após `ACCOUNT_NO_LICENSE`). */
+  ativarComChave: (key: string) => Promise<void>;
   renovar: () => Promise<void>;
   revalidar: () => Promise<void>;
   sair: () => Promise<void>;
   /** Apaga a licença local (troca de licença/revogação) — mantém a conta. */
   limparLicenca: () => Promise<void>;
-  definirBases: (apiBase: string, licBase?: string) => void;
-  apiBase: string;
-  licBase: string;
 }
 
 const GATE_INICIAL: ResultadoGate = { decisao: 'DENY', motivo: 'NO_LICENSE', bloquearSensiveis: true, limparSessao: false };
@@ -79,8 +78,6 @@ export const useLicenca = create<EstadoLicencaStore>((set, get) => ({
   email: null,
   online: proximoOnline(),
   ultimaRevalidacao: null,
-  apiBase: lerApiBase(),
-  licBase: lerLicBase(),
 
   boot: async () => {
     if (get().booted) return;
@@ -108,7 +105,7 @@ export const useLicenca = create<EstadoLicencaStore>((set, get) => ({
     }
   },
 
-  loginConta: async (email, senha, opts) => {
+  loginConta: async (email, senha) => {
     set({ carregando: true, erro: null });
     try {
       const { token } = await loginConta(email, senha);
@@ -116,13 +113,12 @@ export const useLicenca = create<EstadoLicencaStore>((set, get) => ({
       await salvarSessao(sessao);
       set({ email: sessao.email });
       const appInstanceId = await obterAppInstanceId();
-      const label = opts?.label?.trim() || rotuloDispositivo();
       try {
         const ativ = await ativarPorConta({
           token,
-          productId: opts?.productId?.trim() || produtoPadrao(),
+          productId: produtoPadrao(),
           appInstanceId,
-          label,
+          label: rotuloDispositivo(),
         });
         const estado = estadoDeActivation(ativ, appInstanceId);
         await salvarEstado(estado);
@@ -146,14 +142,13 @@ export const useLicenca = create<EstadoLicencaStore>((set, get) => ({
     }
   },
 
-  ativarComChave: async (key, opts) => {
+  ativarComChave: async (key) => {
     set({ carregando: true, erro: null });
     try {
       const sessao = await lerSessao().catch(() => null);
       const appInstanceId = await obterAppInstanceId();
-      const label = opts?.label?.trim() || rotuloDispositivo();
       // key integral só neste escopo — nenhum log a registra.
-      const ativ = await ativarPorChave({ token: sessao?.token ?? null, key, appInstanceId, label });
+      const ativ = await ativarPorChave({ token: sessao?.token ?? null, key, appInstanceId, label: rotuloDispositivo() });
       const estado = estadoDeActivation(ativ, appInstanceId);
       await salvarEstado(estado);
       backoffMs = BACKOFF_INICIAL_MS;
@@ -275,11 +270,6 @@ export const useLicenca = create<EstadoLicencaStore>((set, get) => ({
   limparLicenca: async () => {
     await limparEstado().catch(() => undefined);
     set({ estado: null, gate: GATE_INICIAL, ultimaRevalidacao: null });
-  },
-
-  definirBases: (apiBase, licBase) => {
-    salvarBases(apiBase, licBase);
-    set({ apiBase: lerApiBase(), licBase: lerLicBase() });
   },
 }));
 
