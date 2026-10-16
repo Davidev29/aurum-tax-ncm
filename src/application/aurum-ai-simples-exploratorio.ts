@@ -439,7 +439,7 @@ export function orquestrarTodosAnexos(e: EntradaExploratoria): ResultadoExplorat
       anexo: id,
       nome: ANEXOS_SIMPLES[id].nome,
       faixa: conv.faixa,
-      aliquotaEfetiva: conv.aliquotaEfetiva,
+      aliquotaEfetiva: conv.aliquotaEfetivaGuia ?? conv.aliquotaEfetiva,
       das: conv.dasGuia ?? conv.das,
       cbsDentroDAS: conv.cbsDentroDAS,
       dasReduzido: hib.dasReduzido,

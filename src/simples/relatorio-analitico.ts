@@ -20,6 +20,8 @@ import {
   calcularConvencional,
   calcularHibrido,
   debitoCBS,
+  excedeSublimite,
+  rbaNormalizada,
   round2,
   type RegraCreditoCBS,
   type ResultadoConvencional,
@@ -279,6 +281,7 @@ function montarCenario(
   const faixa = anexo.faixas.find((f) => f.faixa === conv.faixa);
   // Duelo na MESMA base: a guia DAS (sem ICMS/ISS/IBS do sublimite).
   // O fora é igual nos dois regimes e aparece à parte (foraSublimite).
+  // A alíquota exibida é a da GUIA (dasGuia/receita) — sem o fora.
   const guiaConv = conv.dasGuia ?? conv.das;
   const totalPagar = regime === 'CONVENCIONAL' ? guiaConv : (hib?.total ?? guiaConv);
   return {
@@ -288,7 +291,7 @@ function montarCenario(
     faixa: conv.faixa,
     aliquotaNominal: faixa?.aliquotaNominal ?? 0,
     parcelaDeduzir: faixa?.parcelaDeduzir ?? 0,
-    aliquotaEfetiva: conv.aliquotaEfetiva,
+    aliquotaEfetiva: conv.aliquotaEfetivaGuia ?? conv.aliquotaEfetiva,
     dasTotal: regime === 'CONVENCIONAL' ? guiaConv : null,
     cbsDentroDas: conv.cbsDentroDAS,
     dasReduzidoSemCbs: regime === 'HIBRIDO' ? (hib?.dasReduzido ?? null) : null,
@@ -319,7 +322,7 @@ function montarCenario(
 export function orquestrarRelatorio(input: RelatorioInput): ReportAnalitico {
   const rbt12 = Number(input.rbt12) || 0;
   const receitaMes = Number(input.receitaMes) || 0;
-  const rba = Number(input.rba) || 0;
+  const rba = rbaNormalizada(rbt12, input.rba);
   const folha12 = Number(input.folha12) || 0;
   const cbsRef = Number(input.cbsRef) || 0;
 
@@ -485,7 +488,8 @@ export function orquestrarRelatorio(input: RelatorioInput): ReportAnalitico {
 
   const excedeRbt = rbt12 > 3_600_000;
   const excedeRba = rba > 3_600_000;
-  const cenarioRef = convPorAnexo.get('III')?.cenario ?? 1;
+  const cenarioRef = convPorAnexo.get(foco)?.cenario ?? convPorAnexo.get('III')?.cenario ?? 1;
+  const guiaSemFora = [...convPorAnexo.values()].some((c) => c.excedeSublimite) || excedeSublimite(rbt12, rba);
 
   const base: Omit<ReportAnalitico, 'hash' | 'reportId' | 'geradoEm'> = {
     motorVersao: MOTOR_VERSAO,
@@ -503,7 +507,7 @@ export function orquestrarRelatorio(input: RelatorioInput): ReportAnalitico {
       sublimiteAnual: 3_600_000,
       excedeSublimiteRbt12: excedeRbt,
       excedeSublimiteRba: excedeRba,
-      guiaSemFora: (convPorAnexo.get('III')?.excedeSublimite ?? false) || excedeRbt || excedeRba,
+      guiaSemFora,
       regraDas: REGRA_DAS_LABEL[cenarioRef] ?? `Cenário ${cenarioRef}`,
     },
     fatorR,

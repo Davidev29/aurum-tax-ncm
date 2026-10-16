@@ -158,6 +158,36 @@ export interface DbPonte {
   transacao?(ops: import('@/infrastructure/db/db-protocolo').DbOp[]): Promise<unknown[]>
 }
 
+/** Sessão da conta Aurumbit guardada no cofre do main (Bearer de `/api/me/*`). */
+export interface SessaoContaPonte {
+  token: string
+  email: string
+  obtidoEm: number
+}
+
+/**
+ * Cofre da licença no processo main (canais `aurum:*`).
+ * Opcional: só existe no Electron com o canal registrado. Fora dele o
+ * `src/aurum/storage.ts` cai no `localStorage` (dev web, sem cofre do SO).
+ * A chave integral `AURUM-…` NUNCA trafega nem persiste por aqui.
+ */
+export interface LicencaPonte {
+  /** UUIDv4 gerado 1× e persistido (identidade do app neste dispositivo). */
+  instanciaId(): Promise<{ id: string }>
+  /** Estado pós-ativação ou `null` (instalação limpa). */
+  ler(): Promise<{ estado: import('@/aurum/types').LicencaEstado | null }>
+  /** Persiste o estado (valida forma + trava anti-chave no main). */
+  salvar(estado: import('@/aurum/types').LicencaEstado): Promise<{ ok: boolean }>
+  /** Apaga o estado (revogação/troca de licença). */
+  limpar(): Promise<{ ok: boolean }>
+  /** Token da conta ou `null` (deslogado). */
+  sessaoLer(): Promise<{ sessao: SessaoContaPonte | null }>
+  /** Guarda o Bearer da conta no cofre. */
+  sessaoSalvar(sessao: SessaoContaPonte): Promise<{ ok: boolean }>
+  /** Logout (401, revogação, troca de conta). */
+  sessaoLimpar(): Promise<{ ok: boolean }>
+}
+
 /** Eventos do auto-updater repassados pelo processo principal. */
 export type EventoAtualizacao =
   | { tipo: 'verificando' }
@@ -208,6 +238,17 @@ export interface AurumBridge {
   instalarAtualizacao(): Promise<{ ok: boolean }>
   /** Empilha um ouvinte e devolve a desinscrição. */
   onAtualizacao(cb: (evento: EventoAtualizacao) => void): () => void
+  /**
+   * Cofre Aurumbit (canais `aurum:*` — safeStorage no main). Opcional: só
+   * existe no Electron com o canal registrado. Fora dele o módulo
+   * `src/aurum/storage.ts` usa `localStorage` (dev web, sem cofre do SO).
+   */
+  licenca?: LicencaPonte
+  /**
+   * Abre URL HTTPS no navegador (checkout Asaas, `/dashboard/sistemas`).
+   * Opcional: fora do Electron cai em `window.open`.
+   */
+  abrirUrl?(url: string): Promise<{ ok: boolean }>
   /**
    * Busca local (grafo fiscal via processo principal). Só existe no
    * Electron — fora dele (`window.aurum` ausente) o fluxo usa o Top-20

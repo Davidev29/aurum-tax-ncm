@@ -1,8 +1,10 @@
 /**
  * Estado do tour guiado — abre 1x após a instalação + sob demanda.
  *
- * Tour 100% informativo: o modal nunca navega sozinho — o usuário aprende
- * onde fica cada menu pelo quadro animado e navega por conta própria.
+ * Tour informativo com CTA real: cada passo oferece "Experimentar agora"
+ * (fecha o tour e navega ao menu). O progresso é linear (10 passos em
+ * 3 trilhas); `visitados` marca os já vistos para o contador do stepper.
+ * `animar` pausa as animações de ambiente sem depender só do SO.
  *
  * - `deveAbrirAposInstalacao()`: primeira execução (sem carimbo) → auto-abre.
  * - `abrir() / fechar() / concluir()`: controle via botão "Guia" no header.
@@ -26,37 +28,49 @@ function carimbar(): void {
   }
 }
 
+function comVisitado(lista: number[], n: number): number[] {
+  return lista.includes(n) ? lista : [...lista, n]
+}
+
 interface TutorialState {
   aberto: boolean
   passo: number
+  /** Pausa/retoma as animações de ambiente do guia. */
+  animar: boolean
+  /** Passos já visitados nesta sessão (stepper + contador). */
+  visitados: number[]
   abrir: (passo?: number) => void
   fechar: () => void
   concluir: () => void
   irPasso: (n: number) => void
   proximo: (total: number) => void
   anterior: () => void
+  alternarAnimacao: () => void
 }
 
 export const useTutorial = create<TutorialState>((set, get) => ({
   aberto: false,
   passo: 0,
+  animar: true,
+  visitados: [],
 
-  abrir: (passo = 0) => set({ aberto: true, passo }),
+  abrir: (passo = 0) => set({ aberto: true, passo, visitados: comVisitado(get().visitados, passo) }),
   fechar: () => set({ aberto: false }),
   concluir: () => {
     carimbar()
     set({ aberto: false, passo: 0 })
   },
-  irPasso: (n) => set({ passo: Math.max(0, n) }),
+  irPasso: (n) => set((s) => ({ passo: Math.max(0, n), visitados: comVisitado(s.visitados, Math.max(0, n)) })),
   proximo: (total) => {
     const { passo } = get()
     if (passo + 1 >= total) {
       get().concluir()
       return
     }
-    set({ passo: passo + 1 })
+    get().irPasso(passo + 1)
   },
   anterior: () => set((s) => ({ passo: Math.max(0, s.passo - 1) })),
+  alternarAnimacao: () => set((s) => ({ animar: !s.animar })),
 }))
 
 /** Primeira execução (tour nunca visto)? */

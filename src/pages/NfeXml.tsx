@@ -551,21 +551,46 @@ function PainelHistorico() {
         <Item><CartaoStat rotulo="Carga média" valor={fmtCarga(tot.carga)} /></Item>
       </Lista>
 
-      <Painel className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h3 className="flex items-center gap-2 text-sm font-bold">
-            <IconeBadge nome="nota" tom="brand" tamanho="sm" />
-            Relatório das notas
-          </h3>
-          <p className="mt-1 pl-8 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-            Monte o PDF sob medida: produtos, lojas que geram crédito, Simples,
-            período, compras/vendas e conta final.
-          </p>
-        </div>
-        <Btn variante="primary" className="shrink-0" onClick={() => setModalRelatorio(true)}>
-          📕 Gerar relatório
-        </Btn>
-      </Painel>
+      <Secao>
+        <Painel className="overflow-hidden p-0">
+          <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <h3 className="flex items-center gap-2 text-sm font-bold">
+                <IconeBadge nome="caixa" tom="brand" />
+                Cadastro de produtos
+              </h3>
+              <p className="mt-1 pl-9 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                Confere os itens das <strong>{notas.length} nota(s) filtrada(s)</strong> como na
+                importação em lote (produtos com mais de uma regra exigem a sua escolha),
+                depois cria os que faltam no cadastro e atualiza preço/quantidade.
+                Nada é salvo sem a sua revisão.
+                {preparandoConf && progressoConf ? <span className="block font-bold">{progressoConf}</span> : null}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Btn onClick={() => setModalRelatorio(true)}>📕 PDF</Btn>
+              <Btn onClick={() => exportarCsv(notas)} disabled={!notas.length}>📊 CSV</Btn>
+              <Btn
+                title="Recalcular as notas filtradas pela classificação vigente (base oficial › manual › regra do produto › regra geral) — use após salvar regras ou uma reclassificação manual"
+                carregando={acaoReaplicar.carregando}
+                onClick={acaoReaplicar.executar}
+                disabled={!notas.length}
+              >
+                {acaoReaplicar.carregando ? 'Reaplicando…' : '↻ Reaplicar vigentes'}
+              </Btn>
+              <Btn
+                variante="primary"
+                title="Abre a conferência dos produtos (igual ao lote): com mais de uma regra, você escolhe antes de salvar"
+                carregando={acaoConferir.carregando || preparandoConf}
+                onClick={acaoConferir.executar}
+                disabled={!notas.length}
+              >
+                {acaoConferir.carregando || preparandoConf ? 'Conferindo…' : '📦 Conferir e vincular produtos'}
+              </Btn>
+            </div>
+          </div>
+        </Painel>
+      </Secao>
 
       <Secao id="xml-filtros">
         <Filtros />
@@ -587,11 +612,10 @@ function PainelHistorico() {
       </Secao>
 
       <Secao>
-        <IndicadoresXml notas={notas} />
-      </Secao>
-
-      <Secao>
-        <ComparativoMensal notas={notas} />
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 xl:items-start [&>*]:min-w-0">
+          <IndicadoresXml notas={notas} />
+          <ComparativoMensal notas={notas} />
+        </div>
       </Secao>
 
       <Secao>
@@ -601,47 +625,6 @@ function PainelHistorico() {
       <Secao>
         <DistribuicaoReforma notas={notas} />
       </Secao>
-
-      {notas.length ? (
-        <Secao>
-        <Painel className="overflow-hidden p-0">
-          <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
-            <div className="min-w-0">
-              <h3 className="flex items-center gap-2 text-sm font-bold">
-                <IconeBadge nome="caixa" tom="brand" />
-                Cadastro de produtos
-              </h3>
-              <p className="mt-1 pl-9 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-                Confere os itens das <strong>{notas.length} nota(s) filtrada(s)</strong> como na
-                importação em lote (produtos com mais de uma regra exigem a sua escolha),
-                depois cria os que faltam no cadastro e atualiza preço/quantidade.
-                Nada é salvo sem a sua revisão.
-                {preparandoConf && progressoConf ? <span className="block font-bold">{progressoConf}</span> : null}
-              </p>
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Btn onClick={() => setModalRelatorio(true)}>📕 PDF</Btn>
-              <Btn onClick={() => exportarCsv(notas)}>📊 CSV</Btn>
-              <Btn
-                title="Recalcular as notas filtradas pela classificação vigente (base oficial › manual › regra do produto › regra geral) — use após salvar regras ou uma reclassificação manual"
-                carregando={acaoReaplicar.carregando}
-                onClick={acaoReaplicar.executar}
-              >
-                {acaoReaplicar.carregando ? 'Reaplicando…' : '↻ Reaplicar vigentes'}
-              </Btn>
-              <Btn
-                variante="primary"
-                title="Abre a conferência dos produtos (igual ao lote): com mais de uma regra, você escolhe antes de salvar"
-                carregando={acaoConferir.carregando || preparandoConf}
-                onClick={acaoConferir.executar}
-              >
-                {acaoConferir.carregando || preparandoConf ? 'Conferindo…' : '📦 Conferir e vincular produtos'}
-              </Btn>
-            </div>
-          </div>
-        </Painel>
-        </Secao>
-      ) : null}
 
       <Secao>
       <div className="grid grid-cols-1 gap-4 lg:h-[340px] lg:grid-cols-3 lg:items-stretch">
@@ -2905,7 +2888,7 @@ function IndicadoresXml({ notas }: { notas: NotaXml[] }) {
     { rotulo: 'Conferência XML', valor: ind.qtdComXml ? `${ind.qtdComXml - ind.qtdDivergentes}/${ind.qtdComXml}` : '—', sub: ind.qtdDivergentes ? `${ind.qtdDivergentes} leitura(s) diferente(s)` : 'todas com a mesma leitura' },
   ]
   return (
-    <Painel className="overflow-hidden p-0">
+    <Painel className="flex h-full flex-col overflow-hidden p-0">
       <div className="border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
         <h3 className="flex items-center gap-2 text-sm font-bold">
           <IconeBadge nome="moeda" tom="brand" />
@@ -2915,7 +2898,7 @@ function IndicadoresXml({ notas }: { notas: NotaXml[] }) {
           Tickets, cargas efetivas e conferência — calculados sobre o filtro atual
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-3 p-4 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid flex-1 grid-cols-2 content-start gap-2.5 p-4 md:grid-cols-3">
         {cards.map((c) => (
           <div key={c.rotulo} className="rounded-xl bg-slate-50 p-3 dark:bg-slate-950/40">
             <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{c.rotulo}</div>
@@ -2940,7 +2923,7 @@ function ComparativoMensal({ notas }: { notas: NotaXml[] }) {
   if (!notas.length || !evo.length) return null
   const labels = evo.map((p) => p.rotulo)
   return (
-    <Painel className="overflow-hidden p-0">
+    <Painel className="flex h-full flex-col overflow-hidden p-0">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-gradient-to-r from-brand-50/80 to-white px-5 py-3.5 dark:border-slate-800 dark:from-brand-950/30 dark:to-slate-900">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-bold">
@@ -2964,9 +2947,9 @@ function ComparativoMensal({ notas }: { notas: NotaXml[] }) {
           ))}
         </div>
       </div>
-      <div className="p-4">
+      <div className="min-h-72 flex-1 p-4">
         {modo === 'tabela' ? (
-          <div className="overflow-x-auto">
+          <div className="max-h-72 overflow-auto">
             <table className="tbl w-full">
               <thead>
                 <tr>
@@ -2993,7 +2976,7 @@ function ComparativoMensal({ notas }: { notas: NotaXml[] }) {
             </table>
           </div>
         ) : modo === 'linha' ? (
-          <div className="h-72">
+          <div className="relative h-72">
             <Line
               data={{
                 labels,
@@ -3028,7 +3011,7 @@ function ComparativoMensal({ notas }: { notas: NotaXml[] }) {
             />
           </div>
         ) : (
-          <div className="h-72">
+          <div className="relative h-72">
             <Bar
               data={{
                 labels,

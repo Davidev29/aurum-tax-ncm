@@ -26,6 +26,8 @@ export type ViewId =
   | 'produtos'
   | 'auxiliares'
   | 'legislacao'
+  // AURUM-GATE: view da camada de licenciamento (não é regra de negócio).
+  | 'faturas'
 
 export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = {
   calculadora: {
@@ -67,6 +69,11 @@ export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = 
   legislacao: {
     titulo: 'Legislação',
     subtitulo: 'Leia as normas dentro do sistema — base federal, decretos, RICMS-CE e portais',
+  },
+  // AURUM-GATE: conta, licença e faturas (módulo `src/aurum/`).
+  faturas: {
+    titulo: 'Conta & Faturas',
+    subtitulo: 'Licença, cobranças e renovação da assinatura',
   },
 }
 

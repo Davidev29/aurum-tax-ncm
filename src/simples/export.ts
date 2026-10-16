@@ -41,7 +41,12 @@ export function csvSimples(p: PayloadSimples): string {
     ['Receita do mês', p.receitaMes.toFixed(2)],
     ['Folha 12m', p.folha12.toFixed(2)],
     ['RBA', p.rba.toFixed(2)],
-    ['Alíquota efetiva', (p.conv.aliquotaEfetiva * 100).toFixed(4) + '%'],
+    ...(p.conv.excedeSublimite
+      ? [
+          ['Alíquota efetiva (guia DAS, sem ICMS/ISS/IBS do sublimite)', ((p.conv.aliquotaEfetivaGuia ?? p.conv.dasGuia / Math.max(1, p.receitaMes)) * 100).toFixed(4) + '%'],
+          ['Alíquota efetiva (carga total, guia + fora)', (p.conv.aliquotaEfetiva * 100).toFixed(4) + '%'],
+        ] as unknown[][]
+      : [['Alíquota efetiva', (p.conv.aliquotaEfetiva * 100).toFixed(4) + '%']] as unknown[][]),
     ...(p.seg?.ativo ? [
       ['Anexos segregados (efetivos)', p.seg.anexos.join(' + ')],
       ...p.seg.parcelas.map((d) => [`${d.resto ? 'Restante' : 'Parcela'} Anexo ${d.anexoCalculado}${d.anexoCalculado !== d.escolhido ? ` (escolhido ${d.escolhido})` : ''} — receita`, d.receitaMes.toFixed(2)]),
@@ -65,14 +70,15 @@ export function csvSimples(p: PayloadSimples): string {
       ['DAS final (guia)', p.st.dasFinal.toFixed(2)],
     ] as unknown[][] : []),
     ['CBS dentro do DAS', p.conv.cbsDentroDAS.toFixed(2)],
-    ['IRPJ', p.conv.reparticao.IRPJ.toFixed(2)],
-    ['CSLL', p.conv.reparticao.CSLL.toFixed(2)],
-    ['CBS repartição', p.conv.reparticao.CBS.toFixed(2)],
-    ['IBS', p.conv.reparticao.IBS.toFixed(2)],
-    ['CPP', p.conv.reparticao.CPP.toFixed(2)],
-    ['ICMS', p.conv.reparticao.ICMS.toFixed(2)],
-    ['IPI', p.conv.reparticao.IPI.toFixed(2)],
-    ['ISS', p.conv.reparticao.ISS.toFixed(2)],
+    ...(p.conv.excedeSublimite ? [['Repartição abaixo = SOMENTE a guia DAS (ICMS/ISS/IBS do sublimite fora, regime normal)']] as unknown[][] : []),
+    ['IRPJ', (p.conv.reparticaoGuia ?? p.conv.reparticao).IRPJ.toFixed(2)],
+    ['CSLL', (p.conv.reparticaoGuia ?? p.conv.reparticao).CSLL.toFixed(2)],
+    ['CBS repartição', (p.conv.reparticaoGuia ?? p.conv.reparticao).CBS.toFixed(2)],
+    ['IBS', (p.conv.reparticaoGuia ?? p.conv.reparticao).IBS.toFixed(2)],
+    ['CPP', (p.conv.reparticaoGuia ?? p.conv.reparticao).CPP.toFixed(2)],
+    ['ICMS', (p.conv.reparticaoGuia ?? p.conv.reparticao).ICMS.toFixed(2)],
+    ['IPI', (p.conv.reparticaoGuia ?? p.conv.reparticao).IPI.toFixed(2)],
+    ['ISS', (p.conv.reparticaoGuia ?? p.conv.reparticao).ISS.toFixed(2)],
   ];
   if (p.hib) {
     linhas.push(

@@ -8,6 +8,8 @@
  * handler aqui quando é montada e remove ao desmontar.
  */
 import type { ViewId } from '@/store/ui'
+// AURUM-GATE: exportação é ação sensível (bloqueada em graça/DENY).
+import { podeAcaoSensivel } from '@/aurum/guards'
 
 type Exportador = () => void | Promise<void>
 
@@ -26,6 +28,8 @@ export function registrarExportador(view: ViewId, fn: Exportador): () => void {
 
 /** Dispara a exportação de PDF da view ativa (menu nativo Ctrl+E). */
 export function dispararExportacao(view: ViewId): void {
+  // AURUM-GATE: sem licença válida (ou em graça), não exporta.
+  if (!podeAcaoSensivel('exportar')) return
   const fn = exportadores.get(view)
   if (fn) void fn()
 }

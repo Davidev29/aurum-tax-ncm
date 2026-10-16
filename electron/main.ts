@@ -28,6 +28,7 @@ import { pathToFileURL } from 'node:url'
 import { autoUpdater } from 'electron-updater'
 import type * as TipoGrafo from './ia/grafo-service.cjs'
 import { caminhoBanco, copiarBanco, prepararBanco, registrarIpcDb } from './main/db'
+import { registrarIpcAurum } from './main/aurum-licenca'
 
 /**
  * Grafo fiscal (Phase 10-02): carregado com `require` preguiçoso porque o
@@ -166,6 +167,13 @@ function registrarIpc(): void {
     registrarIpcDb(ipcMain, app)
   } catch (erro) {
     console.error(`[db] canal indisponível: ${erro instanceof Error ? erro.message : String(erro)}`)
+  }
+  // Cofre Aurumbit (licença/conta): identidade 1× + estado + sessão no
+  // safeStorage (DPAPI/Keychain/Keystore). Sem ele não há login nem gate.
+  try {
+    registrarIpcAurum(ipcMain, app)
+  } catch (erro) {
+    console.error(`[aurum] canal indisponível: ${erro instanceof Error ? erro.message : String(erro)}`)
   }
   /** `base:ler` — conteúdo UTF-8 de um arquivo relativo ao diretório base. */
   ipcMain.handle('base:ler', async (_evento, caminhoRelativo: string) => {

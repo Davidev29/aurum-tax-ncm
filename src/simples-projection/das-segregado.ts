@@ -10,7 +10,7 @@
  *
  * PURA: sem I/O, sem rede, sem banco.
  */
-import { calcularConvencional } from '@/simples/calculo';
+import { calcularConvencional, rbaNormalizada } from '@/simples/calculo';
 import { ANEXOS_SIMPLES, type AnexoSimplesId } from '@/simples/tabelas';
 
 export interface ParcelaAnexo {
@@ -47,7 +47,7 @@ export function calcularDASegregado(
     throw new Error('parcelas vazias: informe ao menos { anexoId, receitaMes }.');
   }
   const rbt = Math.max(0, Number(rbt12Total) || 0);
-  const rba = opts?.rba == null ? rbt : Math.max(0, Number(opts.rba) || 0);
+  const rba = rbaNormalizada(rbt, opts?.rba);
   const det: DetalheParcelaAnexo[] = parcelas.map((p) => {
     const conv = calcularConvencional({
       anexoId: p.anexoId,

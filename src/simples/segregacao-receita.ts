@@ -20,7 +20,7 @@
  *
  * PURA: consome `calcularConvencional` + `calcularST`. Sem I/O.
  */
-import { calcularConvencional, fatorR, round2, type ForaSublimite, type Reparticao, type ResultadoConvencional } from './calculo';
+import { calcularConvencional, fatorR, rbaNormalizada, round2, type ForaSublimite, type Reparticao, type ResultadoConvencional } from './calculo';
 import { calcularST, tributoSTDoAnexo, type TributoST } from './segregacao-st';
 import { SUBLIMITE, type AnexoSimplesId } from './tabelas';
 
@@ -171,7 +171,8 @@ export function calcularSegregado(
   // Sublimite: o excesso (RBA−3,6M) é ÚNICO e rateado entre as parcelas
   // pro-rata à receita (maior absorve o resíduo). Repetir o RBA integral
   // em cada parcela contaria o excedente N vezes (ex.: −R$ 81,65 no cen. 4).
-  const rbaNum = rba == null ? rbt : Number(rba) || 0;
+  // RBA omitida/zerada = RBT12 (sublimite dinâmico pelo RBT12).
+  const rbaNum = rbaNormalizada(rbt, rba);
   const excessoTotal = Math.max(0, rbaNum - SUBLIMITE);
   const recTotal = validas.reduce((a, p) => a + p.receitaMes, 0);
   const excDistribuivel = Math.min(excessoTotal, recTotal);
@@ -339,6 +340,7 @@ export function pseudoConvDoSegregado(seg: ResultadoSegregado, base: ResultadoCo
     anexoId: base.anexoId,
     faixa: primeira?.faixa ?? base.faixa,
     aliquotaEfetiva: rec > 0 ? seg.das / rec : 0,
+    aliquotaEfetivaGuia: rec > 0 ? seg.dasGuia / rec : 0,
     aliquotaEfetivaCBS: aliqCBS,
     aliquotaEfetivaCBSFinal: aliqCBS,
     aliquotaISSBruta: rec > 0 ? seg.reparticaoBruta.ISS / rec : 0,

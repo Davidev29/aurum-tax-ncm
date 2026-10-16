@@ -21,6 +21,9 @@ import { DialogoGlass } from './dialogos'
 import { ModaisGlobais } from '@/modais/globais'
 import { TourGuiado } from './TourGuiado'
 import { reabrirTour } from '@/store/tutorial'
+// AURUM-GATE: banner/selo da licença (módulo `src/aurum/`).
+import { BannerLicenca, SeloLicenca } from '@/aurum/components/BannerLicenca'
+import { podeAcaoSensivel } from '@/aurum/guards'
 
 /** Grupos do menu lateral — a ordem e os ícones espelham o sistema anterior. */
 const NAV: { secao?: string; itens: { id: ViewId; icone: NomeIcone; rotulo: string }[] }[] = [
@@ -46,6 +49,11 @@ const NAV: { secao?: string; itens: { id: ViewId; icone: NomeIcone; rotulo: stri
   {
     secao: 'Referência',
     itens: [{ id: 'legislacao', icone: 'documento', rotulo: 'Legislação' }],
+  },
+  // AURUM-GATE: conta & faturas (licenciamento — fora do core fiscal).
+  {
+    secao: 'Conta',
+    itens: [{ id: 'faturas', icone: 'moeda', rotulo: 'Conta & Faturas' }],
   },
 ]
 
@@ -307,7 +315,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
     bridge.onMenu((acao) => {
       if (acao === 'abrir') abrirModal('config')
       if (acao === 'atualizar') abrirModal('config')
-      if (acao === 'exportar') dispararExportacao(useUi.getState().view)
+      // AURUM-GATE: exportação é ação sensível — bloqueada em graça/DENY.
+      if (acao === 'exportar') {
+        if (!podeAcaoSensivel('exportar')) return
+        dispararExportacao(useUi.getState().view)
+      }
       if (acao === 'tema') alternarTema()
     })
   }, [abrirModal, alternarTema])
@@ -349,6 +361,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
               )}
             </div>
             <ChipEmpresa />
+            {/* AURUM-GATE: selo da licença → Conta & Faturas. */}
+            <SeloLicenca />
             <button
               type="button"
               onClick={() => reabrirTour()}
@@ -400,12 +414,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
         >
           {reduzir ? (
             <div className="mx-auto w-full max-w-[1400px]">
+              {/* AURUM-GATE: banner de graça/offline. */}
+              <BannerLicenca />
               <BannerSemEmpresa />
               {children}
             </div>
           ) : (
             <AnimatePresence mode="wait" initial={false}>
               <Pagina key={view} viewKey={view} seq={seqTransicao} className="mx-auto w-full max-w-[1400px]">
+                {/* AURUM-GATE: banner de graça/offline. */}
+                <BannerLicenca />
                 <BannerSemEmpresa />
                 {children}
               </Pagina>

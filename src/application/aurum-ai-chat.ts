@@ -3476,12 +3476,13 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
     const faixaAtual = anexo.faixas.find((f) => f.faixa === conv.faixa) ?? null
     const nominal = faixaAtual?.aliquotaNominal ?? 0
     const deducao = faixaAtual?.parcelaDeduzir ?? 0
+    const aliqGuiaChat = conv.aliquotaEfetivaGuia ?? conv.aliquotaEfetiva
     return {
       texto:
         `${ctxLinha}` +
         `Alíquotas do cálculo — Anexo ${anexoId} · ${conv.faixa}ª faixa (RBT12 ${fmtMoeda(rbt12 as number)} · receita ${fmtMoeda(receita as number)}):\n` +
         `• Base (nominal): **${(nominal * 100).toFixed(2).replace('.', ',')}%** (dedução de ${fmtMoeda(deducao)})\n` +
-        `• Efetiva aplicada: **${(conv.aliquotaEfetiva * 100).toFixed(4).replace('.', ',')}%** → DAS **${fmtMoeda(guiaChat)}**${notaSubChat}\n` +
+        `• Efetiva aplicada (guia): **${(aliqGuiaChat * 100).toFixed(4).replace('.', ',')}%** → DAS **${fmtMoeda(guiaChat)}**${notaSubChat}\n` +
         `Fórmula: (${fmtMoeda(rbt12 as number)} × ${(nominal * 100).toFixed(2).replace('.', ',')}% − ${fmtMoeda(deducao)}) ÷ ${fmtMoeda(rbt12 as number)}` +
         `${blocoIntervalo}` +
         `${linhaFatorR}${blocoFatorBaixo}${avisoInferidoV}${alertaReceita}` +
@@ -3502,7 +3503,7 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
     texto:
       `${ctxLinha}` +
       `• Anexo ${anexoId} · ${conv.faixa}ª faixa · RBT12 ${fmtMoeda(rbt12 as number)} · receita ${fmtMoeda(receita as number)}\n` +
-      `• Alíquota efetiva ${(conv.aliquotaEfetiva * 100).toFixed(4)}% → DAS **${fmtMoeda(guiaChat)}**${notaSubChat} (CBS dentro do DAS: ${fmtMoeda(conv.cbsDentroDAS)})` +
+      `• Alíquota efetiva ${((conv.aliquotaEfetivaGuia ?? conv.aliquotaEfetiva) * 100).toFixed(4)}% (guia) → DAS **${fmtMoeda(guiaChat)}**${notaSubChat} (CBS dentro do DAS: ${fmtMoeda(conv.cbsDentroDAS)})` +
       `${blocoIntervalo}` +
       `${linhaFatorR}${blocoFatorBaixo}${avisoInferidoV}${alertaReceita}` +
       `${fechoComparativo}${linhaNbsSimples}` +

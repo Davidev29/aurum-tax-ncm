@@ -5,6 +5,8 @@ import { AssistenteInstalacao } from '@/ui/TermoAceite';
 import { lerAceite } from '@/domain/contrato';
 import { deveAbrirAposInstalacao, useTutorial } from '@/store/tutorial';
 import { useUi } from '@/store/ui';
+// AURUM-GATE: portão de licença no boot (módulo `src/aurum/` — sem lógica de negócio).
+import { PortaoAurum } from '@/aurum/components/PortaoAurum';
 
 // Code-splitting por view: o boot carrega só o shell; cada tela (com seu
 // chart.js pesado) vira um chunk sob demanda + Suspense com esqueleto.
@@ -19,6 +21,8 @@ const NfeXmlPolida = lazy(() => import('@/pages/NfeXmlPolida').then((m) => ({ de
 const Produtos = lazy(() => import('@/pages/Produtos').then((m) => ({ default: m.Produtos })));
 const Auxiliares = lazy(() => import('@/pages/Auxiliares').then((m) => ({ default: m.Auxiliares })));
 const Legislacao = lazy(() => import('@/pages/Legislacao').then((m) => ({ default: m.Legislacao })));
+// AURUM-GATE: tela de conta/faturas do módulo de licenciamento.
+const FaturasView = lazy(() => import('@/aurum/pages/Faturas').then((m) => ({ default: m.Faturas })));
 
 /**
  * Troca de views do shell. Cada página é pura apresentação sobre as stores.
@@ -118,11 +122,18 @@ export function App() {
     case 'legislacao':
       pagina = <Legislacao />;
       break;
+    // AURUM-GATE: conta & faturas (licenciamento — fora do core fiscal).
+    case 'faturas':
+      pagina = <FaturasView />;
+      break;
     default:
       pagina = <Calculadora />;
   }
 
   return (
+    // AURUM-GATE: o portão avalia o cofre no boot; DENY vira tela de
+    // bloqueio (login + faturas), sem tocar nas páginas do core.
+    <PortaoAurum>
     <Layout>
       {/* `key` reseta a barreira a cada troca de tela: falha numa view não
           contamina a próxima. */}
@@ -139,5 +150,6 @@ export function App() {
         />
       ) : null}
     </Layout>
+    </PortaoAurum>
   );
 }

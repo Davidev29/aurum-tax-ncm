@@ -148,10 +148,19 @@ export function cenarioSublimite(rbt12: number, rba: number): CenarioSublimite {
   return 1;
 }
 
+/** RBA efetiva do cálculo: quando omitida, zerada ou inválida, usa o RBT12.
+ * Garante o sublimite dinâmico — basta digitar RBT12 > R$ 3,6M para o
+ * ICMS/ISS/IBS saírem da guia, sem precisar informar RBA. */
+export function rbaNormalizada(rbt12: number, rba?: number | null): number {
+  const rbt = Number(rbt12) || 0;
+  const r = rba == null ? NaN : Number(rba);
+  return r > 0 ? r : rbt;
+}
+
 /** true quando há excesso de sublimite (cenários 2–4): ICMS/ISS/IBS saem da guia DAS. */
 export function excedeSublimite(rbt12: number, rba?: number): boolean {
   const rbt = Number(rbt12) || 0;
-  const rbaNum = rba == null ? rbt : Number(rba) || 0;
+  const rbaNum = rbaNormalizada(rbt, rba);
   return cenarioSublimite(rbt, rbaNum) !== 1;
 }
 
@@ -209,6 +218,12 @@ export interface ResultadoConvencional {
   faixa: number;
   cenario: CenarioSublimite;
   aliquotaEfetiva: number;
+  /**
+   * Alíquota efetiva DENTRO da guia DAS (dasGuia / receitaMes).
+   * Sem excesso de sublimite é igual a `aliquotaEfetiva`.
+   * Com excesso, exclui ICMS/ISS/IBS do sublimite (regime normal/híbrido).
+   */
+  aliquotaEfetivaGuia: number;
   aliquotaEfetivaCBS: number;
   aliquotaEfetivaCBSFinal: number;
   aliquotaISSBruta: number;
@@ -251,10 +266,11 @@ export interface ResultadoConvencional {
 
 /** Monta o bloco de sublimite zerado (cenário 1 / entrada inválida). */
 function resultadoSemSublimite(
-  base: Omit<ResultadoConvencional, 'dasGuia' | 'cargaTotal' | 'foraSublimite' | 'aliquotasFora' | 'tributosFora' | 'excedeSublimite' | 'usouReferencia' | 'reparticaoGuia'>,
+  base: Omit<ResultadoConvencional, 'dasGuia' | 'cargaTotal' | 'foraSublimite' | 'aliquotasFora' | 'tributosFora' | 'excedeSublimite' | 'usouReferencia' | 'reparticaoGuia' | 'aliquotaEfetivaGuia'>,
 ): ResultadoConvencional {
   return {
     ...base,
+    aliquotaEfetivaGuia: base.aliquotaEfetiva,
     dasGuia: base.das,
     cargaTotal: base.das,
     foraSublimite: { ...FORA_ZERADA },
@@ -294,7 +310,7 @@ function aplicarSeparacaoGuia(
 export function calcularConvencional(e: EntradaConvencional): ResultadoConvencional {  const anexo = ANEXOS_SIMPLES[e.anexoId];
   const rbt12 = Number(e.rbt12) || 0;
   const receita = Number(e.receitaMes) || 0;
-  const rba = e.rba == null ? rbt12 : Number(e.rba) || 0;
+  const rba = rbaNormalizada(rbt12, e.rba);
   const faixa = faixaDoRBT12(anexo, rbt12);
   const cenario = cenarioSublimite(rbt12, rba);
 
@@ -455,9 +471,11 @@ export function calcularConvencional(e: EntradaConvencional): ResultadoConvencio
       ibs: tributosFora.includes('IBS') ? aliqForaIBS : 0,
     };
     const { dasGuia, reparticaoGuia } = aplicarSeparacaoGuia(das, rep, tributosFora, fora, aliqs, { icms: usaRefICMS, iss: usaRefISS });
+    const aliqGuia2 = receita > 0 ? dasGuia / receita : 0;
     return {
       anexoId: e.anexoId, faixa: faixa.faixa, cenario,
       aliquotaEfetiva: receita > 0 ? das / receita : aliqTotal,
+      aliquotaEfetivaGuia: aliqGuia2,
       aliquotaEfetivaCBS: cbsBase,
       aliquotaEfetivaCBSFinal: trava.cbsFinal,
       aliquotaISSBruta: aISSb, aliquotaISSFinal: aISS, excedenteISS: trava.excedente,
@@ -521,6 +539,7 @@ export function calcularConvencional(e: EntradaConvencional): ResultadoConvencio
     return {
       anexoId: e.anexoId, faixa: faixa.faixa, cenario,
       aliquotaEfetiva: receita > 0 ? das / receita : 0,
+      aliquotaEfetivaGuia: receita > 0 ? dasGuia / receita : 0,
       aliquotaEfetivaCBS: cbsBase,
       aliquotaEfetivaCBSFinal: trava.cbsFinal,
       aliquotaISSBruta: issB, aliquotaISSFinal: trava.issFinal, excedenteISS: trava.excedente,
@@ -592,6 +611,7 @@ export function calcularConvencional(e: EntradaConvencional): ResultadoConvencio
   return {
     anexoId: e.anexoId, faixa: faixa.faixa, cenario,
     aliquotaEfetiva: receita > 0 ? das / receita : 0,
+    aliquotaEfetivaGuia: receita > 0 ? dasGuia / receita : 0,
     aliquotaEfetivaCBS: cbsBase,
     aliquotaEfetivaCBSFinal: trava.cbsFinal,
     aliquotaISSBruta: issPond, aliquotaISSFinal: trava.issFinal, excedenteISS: trava.excedente,
