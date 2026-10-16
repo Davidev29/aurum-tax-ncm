@@ -55,6 +55,29 @@ function ehBloqueioTransitório(saída) {
   return /EPERM|EBUSY|EPERM.*rename|operation not permitted/i.test(String(saída ?? ''))
 }
 
+/**
+ * PIDs de `electron.exe` ativos (qualquer origem) — só p/ diagnóstico final.
+ * O `prebuild:electron` já tenta limpar os zumbis DESTE projeto via
+ * `kill-electron.mjs`; se algum restar (ou for de outro checkout/app), o
+ * usuário fecha manualmente com o comando impresso abaixo.
+ */
+function pidsElectronAtivos() {
+  if (process.platform !== 'win32') return []
+  try {
+    const { execSync } = require('node:child_process')
+    const saída = execSync('tasklist /FI "IMAGENAME eq electron.exe" /FO CSV /NH', {
+      encoding: 'utf-8',
+      windowsHide: true,
+      timeout: 15000,
+    })
+    const pids = []
+    for (const m of String(saída).matchAll(/"electron\.exe","(\d+)"/gi)) pids.push(m[1])
+    return pids.filter((p) => Number(p) !== process.pid)
+  } catch {
+    return []
+  }
+}
+
 async function main() {
   let últimaSaída = ''
   for (let t = 1; t <= TENTATIVAS; t += 1) {
@@ -81,10 +104,13 @@ async function main() {
     break
   }
   console.error(últimaSaída.trim())
+  const zumbis = pidsElectronAtivos()
   console.error(
-    '\n[prisma-generate] FALHOU. Se o erro for EPERM/EBUSY persistente: ' +
-      'feche o app instalado/em dev (`electron.exe` zumbi prende a DLL), ' +
-      'pausie o antivírus na pasta do projeto ou rode `npm run dev` de novo.',
+    '\n[prisma-generate] FALHOU. Se o erro for EPERM/EBUSY persistente, um ' +
+      '`electron.exe` está prendendo a DLL do Prisma' +
+      (zumbis.length ? ` (ativo agora — PID ${zumbis.join(', ')})` : '') +
+      ': feche o app/em dev, pausie o antivírus na pasta do projeto, ou rode ' +
+      '`node scripts/kill-electron.mjs` e repita.',
   )
   process.exit(1)
 }

@@ -24,7 +24,13 @@ function env(nome: string): string {
     const v = (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.[nome]
     if (typeof v === 'string' && v.trim()) return v.trim()
   } catch {
-    /* fora do Vite (testes node): cai no padrão */
+    /* fora do Vite (testes node): cai no process.env abaixo */
+  }
+  try {
+    const p = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[nome]
+    if (typeof p === 'string' && p.trim()) return p.trim()
+  } catch {
+    /* sem process (navegador): cai no padrão */
   }
   return ''
 }
@@ -36,7 +42,22 @@ export function baseBff(): string {
 
 /** Nest direto p/ `/v1/*` — base JÁ inclui `/v1`. */
 export function baseApi(): string {
-  return semBarraFinal(env('VITE_AURUM_API_URL') || 'https://api.aurumbit.com/v1');
+  const base = semBarraFinal(env('VITE_AURUM_API_URL') || 'https://api.aurumbit.com/v1');
+  // No Electron empacotado o renderer é `file://` — base RELATIVA (`/v1`,
+  // que no `vite dev` cai no proxy p/ `localhost:3000`) viraria destino
+  // inválido em vez da API. Relativo só vale no dev; no pacote exige URL
+  // absoluta (via `.env`/CI) e aqui há fallback seguro p/ o padrão.
+  if (base.startsWith('/')) {
+    try {
+      const proto = typeof location !== 'undefined'
+        ? (location as { protocol?: unknown }).protocol
+        : undefined;
+      if (proto === 'file:') return 'https://api.aurumbit.com/v1';
+    } catch {
+      /* sem location (testes node): mantém o relativo p/ mock */
+    }
+  }
+  return base;
 }
 
 /** Recurso de conta: `${BFF}/licenses/activate`, `/invoices`, `/checkout`. */

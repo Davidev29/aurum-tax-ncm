@@ -320,7 +320,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }, [abrirModal, alternarTema])
 
   return (
-    <div className="flex h-dvh min-h-0 w-full overflow-hidden text-[var(--ink)]">
+    <div className="animate-fade-up flex h-dvh min-h-0 w-full overflow-hidden text-[var(--ink)]">
       {/* Skip-link: teclado/leitores pulam direto para o conteúdo. */}
       <a
         href="#conteudo"

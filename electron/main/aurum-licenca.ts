@@ -16,9 +16,11 @@
  */
 import type { App, IpcMain, IpcMainInvokeEvent } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { networkInterfaces } from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { safeStorage, shell } from 'electron'
+import { selecionarIpLocal } from '../../src/aurum/ip'
 
 /** Formato do estado persistido após a ativação (espelha `src/aurum/types.ts`). */
 export interface EstadoLicencaPersistido {
@@ -116,6 +118,20 @@ function validarSessao(v: unknown): v is SessaoContaPersistida {
   )
 }
 
+/**
+ * IPv4 local da máquina (primeiro não interno de `os.networkInterfaces()`).
+ * O backend agrupa devices por IP EXATO — sem este campo, atrás de
+ * proxy/NAT todas as máquinas parecem uma só. `null` sem rede (o chamador
+ * omite o campo `ip`). Exportado p/ testes; o renderer usa via IPC.
+ */
+export function obterIpLocalMaquina(): string | null {
+  try {
+    return selecionarIpLocal(networkInterfaces())
+  } catch {
+    return null
+  }
+}
+
 /** Registra os canais `aurum:*`. Chamado por `registrarIpc()` no `main.ts`. */
 export function registrarIpcAurum(ipcMain: IpcMain, app: App): void {
   /** `aurum:instancia-id` — UUIDv4 gerado 1× e persistido no cofre. */
@@ -128,6 +144,15 @@ export function registrarIpcAurum(ipcMain: IpcMain, app: App): void {
     const id = randomUUID()
     gravarEnvelope(caminho, { app_instance_id: id, criadoEm: Date.now() })
     return { id }
+  })
+
+  /**
+   * `aurum:ip-local` — IPv4 local da máquina (primeiro não interno via
+   * `os.networkInterfaces()`, normalizado). `null` sem rede — o renderer
+   * OMITE o campo `ip` nesse caso. Nunca loga nada, nunca lança.
+   */
+  ipcMain.handle('aurum:ip-local', (): { ip: string | null } => {
+    return { ip: obterIpLocalMaquina() }
   })
 
   /** `aurum:licenca:ler` — estado persistido ou `null` (instalação limpa). */

@@ -80,7 +80,9 @@ export function AbaContaPagamentos() {
         );
         if (!ok) return;
         await sair();
-        toast('Conta desconectada.', 'ok');
+        toast('Conta desconectada.', 'ok', 4500);
+      } catch {
+        toast('Não foi possível desconectar agora — tente de novo.', 'err', 6000);
       } finally {
         setSaindo(false);
       }

@@ -21,6 +21,11 @@ export interface ActivationResult {
   off_exp: string | number;
   token_version: number;
   status?: string;
+  /**
+   * Eco do backend: `true` = slot novo consumido, `false` = reativação da
+   * mesma máquina (mesmo IP + mesmo `app_instance_id`). Só diagnóstico.
+   */
+  deviceCreated?: boolean;
 }
 
 /** Estado persistido no cofre após ativação (item 1 da spec). */
@@ -51,7 +56,11 @@ export type MotivoGate =
   | 'OFFLINE_EXPIRED'
   | 'REVOKED'
   | 'SUSPENDED'
-  | 'TOKEN_MISMATCH';
+  | 'TOKEN_MISMATCH'
+  | 'UNKNOWN_DEVICE'
+  | 'DEVICE_BLOCKED'
+  | 'CLONE_SUSPECT'
+  | 'LICENSE_INACTIVE';
 
 export interface ResultadoGate {
   decisao: DecisaoGate;

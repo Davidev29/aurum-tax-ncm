@@ -174,6 +174,11 @@ export interface SessaoContaPonte {
 export interface LicencaPonte {
   /** UUIDv4 gerado 1× e persistido (identidade do app neste dispositivo). */
   instanciaId(): Promise<{ id: string }>
+  /**
+   * IPv4 local da máquina (primeiro não interno, resolvido no main).
+   * `{ ip: null }` sem rede — o chamador omite o campo `ip` nesse caso.
+   */
+  ipLocal(): Promise<{ ip: string | null }>
   /** Estado pós-ativação ou `null` (instalação limpa). */
   ler(): Promise<{ estado: import('@/aurum/types').LicencaEstado | null }>
   /** Persiste o estado (valida forma + trava anti-chave no main). */

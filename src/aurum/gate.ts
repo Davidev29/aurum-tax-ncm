@@ -15,7 +15,7 @@
  * operação offline, mesmo dentro da janela de graça (fail-closed).
  */
 import { GRACA_EXTRA_MS } from './config';
-import type { LicencaEstado, ResultadoGate } from './types';
+import type { LicencaEstado, MotivoGate, ResultadoGate } from './types';
 
 /** Normaliza ISO/string/number para ms epoch (`NaN` se ilegível). */
 export function paraMs(valor: string | number | undefined | null): number {
@@ -104,4 +104,54 @@ export function avaliarGate(
 export function diasParaVencer(estado: LicencaEstado | null, agora: number = Date.now()): number | null {
   if (!estado || !Number.isFinite(estado.lic_exp)) return null;
   return Math.floor((estado.lic_exp - agora) / (24 * 60 * 60 * 1000));
+}
+
+/**
+ * Classifica a negação do `validate` (`reason`/`errorCode`/`code`/`status`).
+ * NUNCA trata todo deny como genérico: cada motivo terminal vira um
+ * `MotivoGate` próprio p/ exibição amigável. `EXPIRED` também é terminal,
+ * mas a decisão final sai do relógio local (graça + 3d) — o chamador decide.
+ * `null` = motivo desconhecido (chamador usa o gate local + texto padrão).
+ */
+export function motivoDeNegacao(reason: unknown): MotivoGate | null {
+  const s = String(reason ?? '').trim().toUpperCase();
+  if (!s) return null;
+  // Ordem importa: `CLONE_SUSPECT` contém `SUSP` — checar `CLONE` antes.
+  if (s.includes('REVOK')) return 'REVOKED';
+  if (s.includes('CLONE')) return 'CLONE_SUSPECT';
+  if (s.includes('SUSP')) return 'SUSPENDED';
+  if (s.includes('TOKEN') || s.includes('TV_') || s.includes('VERSION')) return 'TOKEN_MISMATCH';
+  if (s.includes('DEVICE_BLOCKED') || (s.includes('BLOCKED') && s.includes('DEVICE'))) return 'DEVICE_BLOCKED';
+  if (s.includes('UNKNOWN_DEVICE') || (s.includes('UNKNOWN') && s.includes('DEVICE'))) return 'UNKNOWN_DEVICE';
+  if (s.includes('CLONE')) return 'CLONE_SUSPECT';
+  if (s.includes('LICENSE_INACTIVE') || (s.includes('INACTIVE') && s.includes('LICENSE'))) return 'LICENSE_INACTIVE';
+  if (s.includes('EXPIR')) return 'EXPIRED';
+  return null;
+}
+
+/**
+ * Texto amigável da negação do `validate` — um por motivo, sem jargão.
+ * Puro (sem I/O); a chave integral nunca chega aqui (só o código).
+ */
+export function textoNegacao(reason: unknown): string {
+  switch (motivoDeNegacao(reason)) {
+    case 'REVOKED':
+      return 'Esta licença foi revogada — fale com o suporte ou ative outra licença.';
+    case 'SUSPENDED':
+      return 'Licença suspensa (pagamento pendente?) — quite em Faturas ou fale com o suporte.';
+    case 'TOKEN_MISMATCH':
+      return 'Sessão dessincronizada — entre novamente para sincronizar.';
+    case 'DEVICE_BLOCKED':
+      return 'Este dispositivo foi bloqueado — fale com o suporte.';
+    case 'UNKNOWN_DEVICE':
+      return 'Este dispositivo não está vinculado a esta licença — ative novamente com a chave neste PC.';
+    case 'CLONE_SUSPECT':
+      return 'Detectamos a mesma instalação em outro local — reative com a chave neste PC ou fale com o suporte.';
+    case 'LICENSE_INACTIVE':
+      return 'Licença inativa — regularize a assinatura em Faturas.';
+    case 'EXPIRED':
+      return 'Assinatura vencida — renove em Faturas para continuar.';
+    default:
+      return 'Licença não validada pelo servidor — tente de novo em instantes.';
+  }
 }

@@ -5,10 +5,13 @@
  *   - `401` → `AUTH` (re-login, sessão limpa pelo chamador);
  *   - `404 ACCOUNT_NO_LICENSE` → único caso que libera o fallback por chave;
  *   - `409 DEVICE_LIMIT` → orientar `/dashboard/sistemas`;
+ *   - `429 RATE_LIMITED` → aguardar `Retry-After` (NUNCA retentar em loop);
  *   - `502`/timeout/rede → `REDE` (banner offline, NUNCA auto-bloqueia);
  *   - `access/check(-batch)` com `5xx`/timeout mantém estado (erro `REDE`
  *     para o chamador decidir pelo cache);
- *   - a chave integral só sai no corpo de `activate-by-key` e nunca é logada.
+ *   - a chave integral só sai no corpo de `activate-by-key` e nunca é logada;
+ *   - `activate`/`validate` levam o IPv4 local (`ip`) quando disponível —
+ *     o backend agrupa devices por IP EXATO (regra promo).
  */
 import { CANAL_ACESSO, CHECKOUT_POLL_MS, CHECKOUT_TETO_MS, HTTP_TIMEOUT_MS, LOTE_ACESSO_MAX, urlAuth, urlConta, urlNest } from './config';
 import type { ActivationResult, CheckoutCriado, CheckoutStatus, Fatura, Plano } from './types';
@@ -32,6 +35,7 @@ export type CodigoErroAurum =
   | 'KEY_INVALID'
   | 'LICENSE_INACTIVE'
   | 'DEVICE_BLOCKED'
+  | 'RATE_LIMITED'
   | 'REDE'
   | 'SERVIDOR'
   | 'RESPOSTA_INVALIDA';
@@ -39,11 +43,14 @@ export type CodigoErroAurum =
 export class ErroAurum extends Error {
   code: CodigoErroAurum;
   status?: number;
-  constructor(code: CodigoErroAurum, message: string, status?: number) {
+  /** Segundos de `Retry-After` (só em `RATE_LIMITED` com o header). */
+  retryAfterSeg?: number | null;
+  constructor(code: CodigoErroAurum, message: string, status?: number, retryAfterSeg?: number | null) {
     super(message);
     this.name = 'ErroAurum';
     this.code = code;
     if (status !== undefined) this.status = status;
+    if (retryAfterSeg !== undefined) this.retryAfterSeg = retryAfterSeg;
   }
 }
 
@@ -51,6 +58,23 @@ interface OpcaoChamada {
   token?: string | null;
   corpo?: unknown;
   metodo?: 'GET' | 'POST';
+}
+
+/** Segundos de `Retry-After` (número ou data HTTP); `null` se ausente/ilegível. */
+function lerRetryAfter(valor: string | null | undefined): number | null {
+  if (typeof valor !== 'string') return null;
+  const primeiro = valor.split(',')[0].trim();
+  if (!primeiro) return null;
+  if (/^\d+$/.test(primeiro)) {
+    const n = Number(primeiro);
+    return Number.isFinite(n) && n > 0 ? Math.min(n, 3600) : null;
+  }
+  const t = Date.parse(primeiro);
+  if (Number.isFinite(t)) {
+    const segs = Math.round((t - Date.now()) / 1000);
+    return segs > 0 ? Math.min(segs, 3600) : null;
+  }
+  return null;
 }
 
 /** `fetch` com timeout + envelope de erro padronizado (nunca auto-bloqueia). */
@@ -80,6 +104,23 @@ async function chamar<T>(url: string, op: OpcaoChamada = {}): Promise<T> {
   const msg = (corpo as { message?: unknown; erro?: unknown } | null)?.message
     ?? (corpo as { message?: unknown; erro?: unknown } | null)?.erro;
   const texto = typeof msg === 'string' && msg.trim() ? msg.trim() : `Servidor respondeu HTTP ${resposta.status}.`;
+  // `429` NUNCA é retentado em loop: o chamador aguarda `Retry-After`.
+  if (resposta.status === 429 || code === 'RATE_LIMITED') {
+    let segs: number | null = null;
+    try {
+      segs = lerRetryAfter(resposta.headers?.get('retry-after'));
+    } catch {
+      segs = null;
+    }
+    throw new ErroAurum(
+      'RATE_LIMITED',
+      segs && segs > 0
+        ? `Muitas tentativas — aguarde ~${segs}s e tente de novo.`
+        : 'Muitas tentativas — aguarde um pouco e tente de novo.',
+      429,
+      segs,
+    );
+  }
   // Mapeamento fiel da spec (códigos de corpo têm precedência sobre o status).
   if (resposta.status === 401) throw new ErroAurum('AUTH', 'Sessão expirada — entre novamente.', 401);
   if (url.includes('activate-by-key')) {
@@ -133,6 +174,8 @@ function validarActivation(v: unknown): ActivationResult {
     off_exp: offExp as string | number,
     token_version: Number(r.token_version ?? 1) || 1,
     ...(typeof r.status === 'string' ? { status: r.status } : {}),
+    // Eco do backend p/ testes/diagnóstico: `true` = slot novo, `false` = reativação.
+    ...(typeof r.deviceCreated === 'boolean' ? { deviceCreated: r.deviceCreated } : {}),
   };
 }
 
@@ -166,6 +209,8 @@ export async function ativarPorConta(args: {
   productId?: string;
   appInstanceId: string;
   label: string;
+  /** IPv4 local (`os.networkInterfaces()` no main) — omitido sem rede. */
+  ip?: string | null;
 }): Promise<ActivationResult> {
   const r = await chamar<unknown>(urlConta('/licenses/activate'), {
     token: args.token,
@@ -173,6 +218,7 @@ export async function ativarPorConta(args: {
       ...(args.productId ? { productId: args.productId } : {}),
       app_instance_id: args.appInstanceId,
       label: args.label,
+      ...(args.ip ? { ip: args.ip } : {}),
     },
   });
   return validarActivation(r);
@@ -184,6 +230,8 @@ export async function ativarPorChave(args: {
   key: string;
   appInstanceId: string;
   label: string;
+  /** IPv4 local (`os.networkInterfaces()` no main) — omitido sem rede. */
+  ip?: string | null;
 }): Promise<ActivationResult> {
   const chave = args.key.trim().toUpperCase();
   if (!REGEX_CHAVE.test(chave)) {
@@ -192,13 +240,17 @@ export async function ativarPorChave(args: {
   // A chave integral sai SÓ neste corpo; nenhum log a registra (ver store).
   const r = await chamar<unknown>(urlNest('/licenses/activate-by-key'), {
     ...(args.token ? { token: args.token } : {}),
-    corpo: { key: chave, app_instance_id: args.appInstanceId, label: args.label },
+    corpo: { key: chave, app_instance_id: args.appInstanceId, label: args.label, ...(args.ip ? { ip: args.ip } : {}) },
   });
   return validarActivation(r);
 }
 
 export interface ResultadoValidacao {
   allow: boolean;
+  /** `true` em período de graça — libera degradado (banner + sem sensíveis). */
+  degraded?: boolean;
+  /** Motivo do servidor quando `allow:false` (`reason` ou `errorCode`). */
+  reason?: string;
   code?: string;
   token_version?: number;
   status?: string;
@@ -212,14 +264,27 @@ export interface ResultadoValidacao {
 /**
  * Revalidação online (item 4): `200` sempre, corpo `allow/deny`.
  * `5xx`/timeout → `ErroAurum('REDE'|'SERVIDOR')` e o chamador MANTÉM o estado.
+ * Leva o IPv4 local (`ip`) quando disponível — o backend agrupa por IP exato.
  */
-export async function validarLicenca(licenseId: string, deviceHash: string, token?: string | null): Promise<ResultadoValidacao> {
+export async function validarLicenca(
+  licenseId: string,
+  deviceHash: string,
+  token?: string | null,
+  extra?: { ip?: string | null },
+): Promise<ResultadoValidacao> {
   const r = await chamar<Record<string, unknown>>(urlNest(`/licenses/${encodeURIComponent(licenseId)}/validate`), {
     ...(token ? { token } : {}),
-    corpo: { device_hash: deviceHash },
+    corpo: { device_hash: deviceHash, ...(extra?.ip ? { ip: extra.ip } : {}) },
   });
+  const reason = typeof r.reason === 'string'
+    ? r.reason
+    : typeof r.errorCode === 'string'
+      ? r.errorCode
+      : undefined;
   return {
     allow: r.allow === true,
+    ...(r.degraded === true ? { degraded: true as const } : {}),
+    ...(reason ? { reason } : {}),
     ...(typeof r.code === 'string' ? { code: r.code } : {}),
     ...(typeof r.token_version === 'number' ? { token_version: r.token_version } : {}),
     ...(typeof r.status === 'string' ? { status: r.status } : {}),
@@ -228,6 +293,33 @@ export async function validarLicenca(licenseId: string, deviceHash: string, toke
     ...((typeof r.off_exp === 'string' || typeof r.off_exp === 'number') ? { off_exp: r.off_exp as string | number } : {}),
     ...(typeof r.offlineToken === 'string' ? { offlineToken: r.offlineToken } : {}),
     ...(typeof r.device_hash === 'string' ? { device_hash: r.device_hash } : {}),
+  };
+}
+
+/**
+ * Refresh do JWT offline (7 dias) — `GET /v1/licenses/:id/offline-token`
+ * (público). Best-effort: o chamador (`store.revalidar`) usa quando o token
+ * atual vence em <48h e o validate não trouxe um novo. Nunca recebe a chave.
+ */
+export async function atualizarTokenOffline(
+  licenseId: string,
+  deviceHash: string,
+): Promise<{ offlineToken: string; off_exp: string | number; token_version?: number }> {
+  const q = new URLSearchParams({ device_hash: deviceHash });
+  const r = await chamar<Record<string, unknown>>(
+    urlNest(`/licenses/${encodeURIComponent(licenseId)}/offline-token?${q.toString()}`),
+    { metodo: 'GET' },
+  );
+  if (!r || typeof r.offlineToken !== 'string' || !r.offlineToken) {
+    throw new ErroAurum('RESPOSTA_INVALIDA', 'Refresh do token offline retornou resposta incompleta.');
+  }
+  if (typeof r.off_exp !== 'string' && typeof r.off_exp !== 'number') {
+    throw new ErroAurum('RESPOSTA_INVALIDA', 'Refresh do token offline retornou resposta incompleta.');
+  }
+  return {
+    offlineToken: r.offlineToken,
+    off_exp: r.off_exp,
+    ...(typeof r.token_version === 'number' ? { token_version: r.token_version } : {}),
   };
 }
 

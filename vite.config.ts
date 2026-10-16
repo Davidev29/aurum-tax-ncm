@@ -16,6 +16,21 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
+    // Teste local: o Nest roda em http://localhost:3000 sem CORS.
+    // O front usa URLs relativas em `.env.development.local`
+    // (`/v1`, `/api/me`) e o Vite repassa ao Nest sem CORS.
+    // Quando houver URL pública, basta trocar o .env (absoluto) —
+    // o proxy só atua em caminhos relativos no `vite dev`.
+    proxy: {
+      '/v1': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     outDir: 'dist',

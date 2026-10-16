@@ -267,6 +267,123 @@
       animation-duration: 1.6s;
     }
   }
+  /* Anel de carregamento da marca (`Spinner` + splash de boot): trilho no
+     filete (`--line`) com arco em ouro, mesma linguagem do `btn-spinner`
+     mas com presença de entrada do software. Tamanhos via modificador. */
+  .aurum-anel {
+    --aurum-anel-cor: var(--color-aurum-500, #be9433);
+    position: relative;
+    display: inline-block;
+    flex: none;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 9999px;
+    border: 3px solid var(--line);
+    border-top-color: var(--aurum-anel-cor);
+    animation: aurum-girar 0.9s linear infinite;
+  }
+  .aurum-anel::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    border-bottom-color: var(--color-brand-400, #6e84a6);
+    opacity: 0.7;
+    animation: aurum-girar-reverso 1.4s linear infinite;
+  }
+  .aurum-anel--sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 2px;
+  }
+  .aurum-anel--sm::after {
+    inset: 1px;
+    border-width: 1px;
+  }
+  .aurum-anel--lg {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-width: 4px;
+  }
+  .aurum-anel--lg::after {
+    inset: 6px;
+    border-width: 2px;
+  }
+  @keyframes aurum-girar {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @keyframes aurum-girar-reverso {
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+  /* Barra de progresso indeterminada (splash de boot): filete dourado que
+     varre o trilho — indica vida sem prometer porcentagem. */
+  .aurum-barra {
+    position: relative;
+    height: 0.25rem;
+    width: 11rem;
+    overflow: hidden;
+    border-radius: 9999px;
+    background: var(--line);
+  }
+  .aurum-barra::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 40%;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, transparent, var(--color-aurum-500, #be9433), transparent);
+    animation: aurum-varrer 1.3s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
+  }
+  @keyframes aurum-varrer {
+    0% {
+      left: -40%;
+    }
+    100% {
+      left: 100%;
+    }
+  }
+  /* Reticências animadas do "Verificando licença…" (splash de boot). */
+  .aurum-pontos::after {
+    content: '';
+    display: inline-block;
+    min-width: 1.2em;
+    text-align: left;
+    animation: aurum-pontos 1.2s steps(1) infinite;
+  }
+  @keyframes aurum-pontos {
+    0% {
+      content: '';
+    }
+    25% {
+      content: '.';
+    }
+    50% {
+      content: '..';
+    }
+    75% {
+      content: '...';
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .aurum-anel,
+    .aurum-anel::after {
+      animation-duration: 2.4s;
+    }
+    .aurum-barra::after {
+      animation: none;
+      left: 30%;
+    }
+    .aurum-pontos::after {
+      animation: none;
+      content: '...';
+    }
+  }
   /* Ação primária: marinho com filete de ouro — assinatura da marca. */
   .btn-primary {
     background: linear-gradient(135deg, #16233a, #2b3f63);

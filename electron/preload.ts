@@ -88,6 +88,7 @@ const aurum: AurumBridge = {
    */
   licenca: {
     instanciaId: () => ipcRenderer.invoke('aurum:instancia-id'),
+    ipLocal: () => ipcRenderer.invoke('aurum:ip-local'),
     ler: () => ipcRenderer.invoke('aurum:licenca:ler'),
     salvar: (estado: LicencaEstado) => ipcRenderer.invoke('aurum:licenca:salvar', estado),
     limpar: () => ipcRenderer.invoke('aurum:licenca:limpar'),

@@ -11,6 +11,7 @@ import { useLicenca } from '../store';
 import type { MotivoGate } from '../types';
 import { EmblemaLicenca, Login } from '../pages/Login';
 import { Faturas } from '../pages/Faturas';
+import { Toasts } from '@/ui/kit';
 
 const TEXTO_BLOQUEIO: Record<MotivoGate, { titulo: string; texto: string }> = {
   OK: { titulo: 'Licença verificada', texto: '' },
@@ -39,6 +40,22 @@ const TEXTO_BLOQUEIO: Record<MotivoGate, { titulo: string; texto: string }> = {
     titulo: 'Sessão dessincronizada',
     texto: 'Os dados locais divergem do servidor. Entre novamente para sincronizar.',
   },
+  UNKNOWN_DEVICE: {
+    titulo: 'Dispositivo não reconhecido',
+    texto: 'Este PC não está vinculado a esta licença. Ative novamente com a chave neste dispositivo — não é preciso criar conta nova.',
+  },
+  DEVICE_BLOCKED: {
+    titulo: 'Dispositivo bloqueado',
+    texto: 'Este dispositivo foi bloqueado. Fale com o suporte para liberar.',
+  },
+  CLONE_SUSPECT: {
+    titulo: 'Instalação duplicada?',
+    texto: 'Detectamos a mesma instalação em outro local. Reative com a chave neste PC ou fale com o suporte.',
+  },
+  LICENSE_INACTIVE: {
+    titulo: 'Licença inativa',
+    texto: 'A licença está inativa. Regularize a assinatura em Faturas para voltar a usar.',
+  },
 };
 
 export function TelaBloqueio() {
@@ -51,7 +68,7 @@ export function TelaBloqueio() {
   const mostraFaturas = email !== null;
 
   return (
-    <main className="flex min-h-dvh items-start justify-center overflow-y-auto bg-[var(--surface)] px-4 py-10 sm:items-center">
+    <main className="animate-fade-up flex min-h-dvh items-start justify-center overflow-y-auto bg-[var(--surface)] px-4 py-10 sm:items-center">
       <div className="w-full max-w-xl">
         <div className="mb-6 text-center">
           <div className="mb-3 flex justify-center">
@@ -105,6 +122,9 @@ export function TelaBloqueio() {
           Seus dados locais estão preservados — nada foi apagado. O app volta sozinho após a reativação.
         </p>
       </div>
+      {/* Toasts fora do `Layout`: na tela de bloqueio o `Layout` (e seu
+          `<Toasts />`) não monta — sem isto nenhum erro de ativação aparece. */}
+      <Toasts />
     </main>
   );
 }

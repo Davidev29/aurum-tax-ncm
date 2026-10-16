@@ -684,3 +684,28 @@ export function useNumeroInicial(ativo: boolean): boolean {
   }, [ativo])
   return pronto
 }
+
+/* -------------------------------------------------------- carregamento --- */
+
+/**
+ * Anel de carregamento da marca — o mesmo giro do splash de boot em tamanho
+ * de componente (trilho + arco ouro + contra-arco marinho).
+ *
+ * Uso: `<Spinner rotulo="Carregando planos…" />` ao lado do texto de espera.
+ * Para ação em botão, prefira `Btn carregando` (giro inline menor).
+ */
+export function Spinner({
+  tamanho = 'md',
+  rotulo = 'Carregando…',
+}: {
+  tamanho?: 'sm' | 'md' | 'lg'
+  /** Texto acessível anunciado às tecnologias assistivas. */
+  rotulo?: string
+}) {
+  const mod = tamanho === 'sm' ? 'aurum-anel--sm' : tamanho === 'lg' ? 'aurum-anel--lg' : ''
+  return (
+    <span className={`aurum-anel ${mod}`} role="status" aria-label={rotulo} aria-busy="true">
+      <span className="sr-only">{rotulo}</span>
+    </span>
+  )
+}

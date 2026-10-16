@@ -14,9 +14,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ErroAurum, aguardarPagamento, criarCheckout, listarFaturas, listarPlanos } from '../api';
 import { codigoProduto, planoPadrao } from '../config';
+import { notificarErro } from '../erros';
 import { useLicenca } from '../store';
 import { abrirUrlExterna, lerSessao } from '../storage';
-import { Btn, Campo, Painel, Pill, Selecao, Vazio } from '@/ui/kit';
+import { Btn, Campo, Painel, Pill, Selecao, Spinner, Vazio } from '@/ui/kit';
 import { useUi } from '@/store/ui';
 import type { Fatura, Plano } from '../types';
 
@@ -68,7 +69,7 @@ export function Faturas() {
   const [aguardando, setAguardando] = useState<string | null>(null);
   const canceladoRef = useRef(false);
 
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async (silencioso = false) => {
     setCarregando(true);
     setErro(null);
     try {
@@ -76,19 +77,21 @@ export function Faturas() {
       if (!sessao) {
         setSemSessao(true);
         setFaturas([]);
+        if (!silencioso) toast('Entre na aba Entrar para ver suas faturas.', 'warn', 4500);
         return;
       }
       setSemSessao(false);
       setFaturas(await listarFaturas(sessao.token));
     } catch (e) {
-      setErro(e instanceof Error ? e.message : String(e));
+      const m = silencioso ? null : notificarErro(e, 'faturas');
+      setErro(m ? m.mensagem : e instanceof Error ? e.message : String(e));
     } finally {
       setCarregando(false);
     }
   }, []);
 
   useEffect(() => {
-    void carregar();
+    void carregar(true);
     return () => {
       canceladoRef.current = true;
     };
@@ -108,9 +111,16 @@ export function Faturas() {
         setPlanos(lista);
         // Pré-seleciona o primeiro para renovar em 1 toque.
         if (lista.length > 0) setPlanId((atual) => atual || lista[0].id);
-        if (lista.length === 0) setErroPlanos('Nenhum plano ativo para este produto — fale com o suporte.');
+        if (lista.length === 0) {
+          const msg = 'Nenhum plano ativo para este produto — fale com o suporte.';
+          setErroPlanos(msg);
+          toast(msg, 'warn', 4500);
+        }
       } catch (e) {
-        if (vivo) setErroPlanos(e instanceof Error ? e.message : String(e));
+        if (vivo) {
+          const m = notificarErro(e, 'faturas');
+          setErroPlanos(m.mensagem);
+        }
       } finally {
         if (vivo) setCarregandoPlanos(false);
       }
@@ -123,16 +133,16 @@ export function Faturas() {
   const abrirCobranca = (f: Fatura) => {
     const url = f.boletoUrl ?? f.pdfUrl;
     if (!url) {
-      toast('Esta fatura não tem link de cobrança.', 'warn');
+      toast('Esta fatura não tem link de cobrança.', 'warn', 4500);
       return;
     }
-    void abrirUrlExterna(url).catch(() => toast('Não foi possível abrir o navegador.', 'err'));
+    void abrirUrlExterna(url).catch(() => toast('Não foi possível abrir o navegador.', 'err', 6000));
   };
 
   /** Checkout → navegador → poll até PAID → re-activate. */
   const pagarRenovar = async () => {
     if (!planId.trim()) {
-      toast('Escolha um plano para gerar a cobrança.', 'warn');
+      toast('Escolha um plano para gerar a cobrança.', 'warn', 4500);
       return;
     }
     setPagando(true);
@@ -150,23 +160,32 @@ export function Faturas() {
       );
       if (criado.asaasUrl) {
         await abrirUrlExterna(criado.asaasUrl);
-        toast('Checkout aberto no navegador — conclua o pagamento.', 'ok');
+        toast('Checkout aberto no navegador — conclua o pagamento.', 'ok', 4500);
+      } else {
+        toast('Cobrança gerada — conclua o pagamento.', 'ok', 4500);
       }
       setAguardando(criado.checkoutId);
       const pago = await aguardarPagamento(sessao.token, criado.checkoutId);
       if (canceladoRef.current) return;
       setAguardando(null);
       if (!pago) {
-        toast('Pagamento ainda pendente — o acesso libera após a confirmação.', 'warn');
+        toast('Pagamento ainda pendente — o acesso libera após a confirmação (PAID).', 'warn', 6000);
         return;
       }
       // PAID → re-activate (único caminho que libera o gate).
-      await renovar();
-      toast('Pagamento confirmado — licença reativada!', 'ok');
-      await carregar();
+      try {
+        await renovar();
+      } catch (eRen) {
+        const m = notificarErro(eRen, 'renovar');
+        setErro(`Pagamento confirmado, mas a reativação falhou: ${m.mensagem}`);
+        return;
+      }
+      toast('Pagamento confirmado — licença reativada!', 'ok', 4500);
+      await carregar(true);
     } catch (e) {
       setAguardando(null);
-      setErro(e instanceof Error ? e.message : String(e));
+      const m = notificarErro(e, 'faturas');
+      setErro(m.mensagem);
     } finally {
       setPagando(false);
     }
@@ -214,7 +233,10 @@ export function Faturas() {
           <div className="mb-3 max-w-sm">
             <Campo label="Plano" obrigatorio dica={`Planos ativos de ${productCode} (via API).`}>
               {carregandoPlanos ? (
-                <p className="py-2 text-xs text-slate-400">Carregando planos…</p>
+                <p className="flex items-center gap-2 py-2 text-xs text-slate-400">
+                  <Spinner tamanho="sm" rotulo="Carregando planos…" />
+                  Carregando planos…
+                </p>
               ) : erroPlanos ? (
                 <p className="rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
                   {erroPlanos}

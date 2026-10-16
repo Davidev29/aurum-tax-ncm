@@ -202,7 +202,7 @@ interface UiState {
   toggleRecolhida: () => void
   /** Fecha o menu móvel (usado por `Escape` e pelo fundo escuro). */
   fecharSidebar: () => void
-  toast: (texto: string, tipo?: TipoToast) => void
+  toast: (texto: string, tipo?: TipoToast, duracaoMs?: number) => void
   dismissToast: (id: number) => void
 }
 
@@ -261,17 +261,20 @@ export const useUi = create<UiState>((set, get) => ({
 
   fecharSidebar: () => set({ sidebarAberta: false }),
 
-  toast: (texto, tipo = '') => {
+  toast: (texto, tipo = '', duracaoMs = 3400) => {
     const id = ++seqToast
     set((s) => ({ toasts: [...s.toasts, { id, tipo, texto }] }))
-    window.setTimeout(() => get().dismissToast(id), 3400)
+    // Erros pedem leitura com calma (6s); o padrão segue 3400 ms da SPEC §10.
+    const ms = Number.isFinite(duracaoMs) && duracaoMs > 0 ? Math.min(duracaoMs, 15000) : 3400
+    window.setTimeout(() => get().dismissToast(id), ms)
   },
 
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 }))
 
 /** Atalho fora de componentes React. */
-export const toast = (texto: string, tipo: TipoToast = '') => useUi.getState().toast(texto, tipo)
+export const toast = (texto: string, tipo: TipoToast = '', duracaoMs?: number) =>
+  useUi.getState().toast(texto, tipo, duracaoMs)
 
 /** Aplica o tema salvo imediatamente na carga do módulo. */
 aplicarTema(temaInicial())

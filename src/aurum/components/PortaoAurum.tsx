@@ -4,34 +4,33 @@
  * Envolve o app em `App.tsx`: splash enquanto lê o cofre → `DENY` exibe a
  * tela de bloqueio (login + faturas p/ renovar) → `ALLOW`/`GRACE` libera o
  * conteúdo (a graça entra com banner via `BannerLicenca` no `Layout`).
+ *
+ * O splash respeita um tempo mínimo de exibição (marca + fade): sem ele, um
+ * boot rápido (leitura local) piscaria a tela e a entrada pareceria brusca.
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLicenca } from '../store';
+import { SplashAurum } from './SplashAurum';
 import { TelaBloqueio } from './TelaBloqueio';
 
-function Splash() {
-  return (
-    <main
-      style={{ fontFamily: 'system-ui', padding: 48, maxWidth: 480, margin: '10vh auto', textAlign: 'center' }}
-      aria-busy="true"
-      aria-label="Verificando licença"
-    >
-      <div style={{ fontSize: 40 }} aria-hidden="true">🛡</div>
-      <h1 style={{ fontSize: 18, margin: '12px 0 6px' }}>Verificando licença…</h1>
-      <p style={{ fontSize: 13, opacity: 0.7 }}>Lendo o cofre local (funciona offline até o vencimento).</p>
-    </main>
-  );
-}
+/** Tempo mínimo do splash — suficiente p/ ler a marca, curto p/ não atrasar. */
+const SPLASH_MIN_MS = 750;
 
 export function PortaoAurum({ children }: { children: React.ReactNode }) {
   const booted = useLicenca((s) => s.booted);
   const decisao = useLicenca((s) => s.gate.decisao);
+  const [tempoOk, setTempoOk] = useState(false);
 
   useEffect(() => {
     void useLicenca.getState().boot();
   }, []);
 
-  if (!booted) return <Splash />;
+  useEffect(() => {
+    const t = window.setTimeout(() => setTempoOk(true), SPLASH_MIN_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  if (!booted || !tempoOk) return <SplashAurum />;
   if (decisao === 'DENY') return <TelaBloqueio />;
   return <>{children}</>;
 }

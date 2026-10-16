@@ -5,15 +5,25 @@
  * (`src/aurum/config.ts` via `VITE_AURUM_*`) — nada manual em tela.
  * Inclui redefinição de senha ("Esqueci a senha" → link no e-mail).
  *
- * Mapa de erros (item 2 da spec):
- *   - `AUTH` (401) → "entre novamente" (sessão já limpa no store);
- *   - `ACCOUNT_NO_LICENSE` (404) → cai sozinho na aba de chave;
- *   - `DEVICE_LIMIT`/`DEVICE_CONFLICT` (409) → card com `/dashboard/sistemas`;
- *   - `REDE` (502/timeout) → aviso offline (o gate offline segue valendo).
+ * Erros (via `src/aurum/erros.ts` — TODO toast + texto inline juntos):
+ *   - validação local (e-mail vazio/inválido, senha vazia, chave incompleta)
+ *     → `warn` orientando o formato;
+ *   - `AUTH` (401) → `err` "confira e-mail/senha" (sessão já limpa no store);
+ *   - `ACCOUNT_NO_LICENSE` (404) → `warn` + cai sozinho na aba de chave;
+ *   - `DEVICE_LIMIT`/`DEVICE_CONFLICT` (409) → `warn` + card com `/dashboard/sistemas`;
+ *     (orienta a LIBERAR um slot — nunca criar conta nova, nunca retentar em loop);
+ *   - `RATE_LIMITED` (429) → `warn` + card pedindo espera (`Retry-After`);
+ *   - `REDE` (502/timeout/offline) → `warn` offline (o gate offline segue valendo);
+ *   - `LICENSE_INACTIVE`/`DEVICE_BLOCKED`/`SERVIDOR`/`RESPOSTA_INVALIDA`
+ *     → `err` com orientação;
+ *   - pós-ativação com HTTP 200 mas gate ainda `DENY` (vencida, revogada,
+ *     token offline vencido…) → `err` explicando o motivo, SEM dizer
+ *     "ativada" e SEM limpar a chave digitada.
  */
 import { useState } from 'react';
-import { ErroAurum, REGEX_CHAVE, mascararChave, solicitarRedefinicaoSenha } from '../api';
+import { REGEX_CHAVE, mascararChave, solicitarRedefinicaoSenha } from '../api';
 import { nomeProduto, urlPainelSistemas } from '../config';
+import { notificarErro, notificarPosAtivacao } from '../erros';
 import { useLicenca } from '../store';
 import { abrirUrlExterna } from '../storage';
 import { Btn, Campo, Texto } from '@/ui/kit';
@@ -73,58 +83,119 @@ export function Login() {
 
   async function entrarConta(e?: React.FormEvent) {
     e?.preventDefault();
+    if (carregando) return;
     setErro(null);
     setCodigo(null);
     setAviso(null);
+    const emailLimpo = email.trim();
+    if (!emailLimpo || !emailOk) {
+      const msg = 'Informe um e-mail válido para entrar.';
+      setErro(msg);
+      toast(msg, 'warn', 4500);
+      return;
+    }
+    if (!senha) {
+      const msg = 'Digite sua senha para entrar.';
+      setErro(msg);
+      toast(msg, 'warn', 4500);
+      return;
+    }
     try {
-      const r = await loginConta(email.trim(), senha);
+      const r = await loginConta(emailLimpo, senha);
       if (r.precisaChave) {
         setPasso('chave');
-        setAviso('Sua conta não tem licença ativa — cole sua chave abaixo para concluir.');
+        const msg = 'Sua conta não tem licença ativa — cole sua chave abaixo para concluir.';
+        setAviso(msg);
+        toast(msg, 'warn', 6000);
         return;
       }
-      toast('Licença ativada. Bom trabalho!', 'ok');
+      // HTTP 200 não basta: só comemora se o gate liberou de verdade.
+      const gate = useLicenca.getState().gate;
+      const liberado = notificarPosAtivacao(gate);
+      if (!liberado) {
+        setCodigo(gate.motivo === 'GRACE' ? null : gate.motivo);
+        setErro(
+          gate.motivo === 'GRACE'
+            ? null
+            : 'Entrada feita, mas a licença segue bloqueada — veja o aviso acima.',
+        );
+      }
     } catch (e2) {
-      setCodigo(e2 instanceof ErroAurum ? e2.code : null);
-      setErro(e2 instanceof Error ? e2.message : String(e2));
+      const m = notificarErro(e2, 'login');
+      setCodigo(m.codigo);
+      // Conta sem licença: além do toast, cai na aba de chave com orientação.
+      if (m.codigo === 'ACCOUNT_NO_LICENSE') {
+        setPasso('chave');
+        setAviso(m.mensagem);
+        setErro(null);
+        return;
+      }
+      setErro(m.mensagem);
     }
   }
 
   async function entrarChave(e?: React.FormEvent) {
     e?.preventDefault();
+    if (carregando) return;
     setErro(null);
     setCodigo(null);
     setAviso(null);
+    const chaveLimpa = chave.trim().toUpperCase();
     if (!chaveValida) {
+      const msg =
+        chaveLimpa.length === 0
+          ? 'Cole sua chave para ativar (formato AURUM-XXXX-XXXX-XXXX).'
+          : 'Chave incompleta — o formato é AURUM-XXXX-XXXX-XXXX.';
       setCodigo('KEY_INVALID');
-      setErro('Chave incompleta — o formato é AURUM-XXXX-XXXX-XXXX.');
+      setErro(msg);
+      toast(msg, 'warn', 4500);
       return;
     }
     try {
       // A chave integral vai SÓ no corpo do POST — em tela, só a máscara.
-      await ativarComChave(chave.trim());
-      setChave('');
-      toast(`Licença ${mascararChave(chave)} ativada.`, 'ok');
+      const mascara = mascararChave(chaveLimpa);
+      await ativarComChave(chaveLimpa);
+      // Só limpa o campo e comemora se o gate liberou; DENY mantém a chave
+      // digitada para correção e explica o motivo (antes: "ativada" + tela
+      // recarregada sem liberar e sem erro algum).
+      const gate = useLicenca.getState().gate;
+      const liberado = notificarPosAtivacao(gate, mascara);
+      if (liberado) {
+        setChave('');
+      } else {
+        setCodigo(gate.motivo);
+        setErro(
+          gate.motivo === 'EXPIRED' || gate.motivo === 'SUSPENDED'
+            ? 'Chave aceita, mas a assinatura precisa de renovação — veja Faturas após entrar.'
+            : 'Ativação registrada, mas a licença segue bloqueada — veja o aviso acima.',
+        );
+      }
     } catch (e2) {
-      setCodigo(e2 instanceof ErroAurum ? e2.code : null);
-      setErro(e2 instanceof Error ? e2.message : String(e2));
+      const m = notificarErro(e2, 'chave');
+      setCodigo(m.codigo);
+      setErro(m.mensagem);
     }
   }
 
   async function enviarRedefinicao(e?: React.FormEvent) {
     e?.preventDefault();
+    if (carregando) return;
     setErro(null);
     setCodigo(null);
     if (!emailOk) {
-      setErro('Informe o e-mail da conta para receber o link.');
+      const msg = 'Informe o e-mail da conta para receber o link.';
+      setErro(msg);
+      toast(msg, 'warn', 4500);
       return;
     }
     try {
       await solicitarRedefinicaoSenha(email.trim());
       setPasso('esqueci-ok');
+      toast('Link enviado — verifique seu e-mail.', 'ok', 4500);
     } catch (e2) {
-      setCodigo(e2 instanceof ErroAurum ? e2.code : null);
-      setErro(e2 instanceof Error ? e2.message : String(e2));
+      const m = notificarErro(e2, 'redefinicao');
+      setCodigo(m.codigo);
+      setErro(m.mensagem);
     }
   }
 
@@ -346,6 +417,15 @@ export function Login() {
           </div>
         ) : null}
 
+        {codigo === 'RATE_LIMITED' ? (
+          <div className="mt-4 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs leading-relaxed dark:border-amber-900 dark:bg-amber-950/30">
+            <strong>⏳ Muitas tentativas.</strong>
+            <p className="mt-1 text-amber-800 dark:text-amber-200">
+              {erro ?? 'Aguarde um pouco e tente de novo — o app não vai insistir sozinho.'}
+            </p>
+          </div>
+        ) : null}
+
         {codigo === 'REDE' ? (
           <div className="mt-4 rounded-2xl border border-slate-300 bg-slate-50 p-4 text-xs leading-relaxed dark:border-slate-700 dark:bg-slate-900">
             <strong>📴 Você está offline.</strong>
@@ -355,7 +435,7 @@ export function Login() {
           </div>
         ) : null}
 
-        {erro && codigo !== 'DEVICE_LIMIT' && codigo !== 'DEVICE_CONFLICT' && codigo !== 'REDE' ? (
+        {erro && codigo !== 'DEVICE_LIMIT' && codigo !== 'DEVICE_CONFLICT' && codigo !== 'REDE' && codigo !== 'RATE_LIMITED' ? (
           <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-xs leading-relaxed text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
             {erro}
           </p>
