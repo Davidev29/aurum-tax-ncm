@@ -63,21 +63,24 @@ export function Produtos() {
     <div className="mx-auto max-w-6xl">
       <Entrada>
       <Painel>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
-          <div className="min-w-0">
-            <h2 className="flex items-center gap-2 text-base font-bold">
-              <span className="text-lg">📦</span> Produtos cadastrados
-            </h2>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              Empresa ativa: <strong>{ativa?.razaoSocial ?? 'Todas / sem empresa'}</strong> ·{' '}
-              <span>{cache.length}</span> produtos
-            </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] p-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-brand-600 to-aurum-500 text-xl text-white shadow-card" aria-hidden="true">
+              📦
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-base font-black tracking-tight">Produtos cadastrados</h2>
+              <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
+                <strong>{ativa?.razaoSocial ?? 'Todas / sem empresa'}</strong>
+                {' · '}
+                <span className="rounded-full bg-brand-100 px-2 py-0.5 font-mono font-bold text-brand-800 dark:bg-aurum-500/15 dark:text-aurum-200">
+                  {cache.length} {cache.length === 1 ? 'produto' : 'produtos'}
+                </span>
+              </p>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Btn variante="primary" onClick={() => { setEditandoManual(null); setManualAberto(true) }}>
-              ➕ Novo produto
-            </Btn>
             <div className="field-wrap">
               <span className="field-icon">🔍</span>
               <Texto
@@ -91,8 +94,11 @@ export function Produtos() {
                 }}
               />
             </div>
-            <Btn variante="primary" onClick={() => setExportAberto(true)}>
+            <Btn variante="ghost" onClick={() => setExportAberto(true)}>
               📤 Exportar
+            </Btn>
+            <Btn variante="primary" onClick={() => { setEditandoManual(null); setManualAberto(true) }}>
+              ➕ Novo produto
             </Btn>
           </div>
         </div>
@@ -147,19 +153,20 @@ export function Produtos() {
                       </table>
                     </div>
 
-                    <div className="mt-4 flex items-center justify-between gap-3 text-[11px] text-slate-500">
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-500 dark:bg-slate-950/40">
                       <span>
-                        Mostrando {visiveis.length} de {total} produtos
+                        Mostrando <strong className="font-mono">{visiveis.length}</strong> de <strong className="font-mono">{total}</strong>
+                        {' · '}
+                        <span title="Clique na linha ou no olho para ver todos os tributos">👁 clique na linha abre o detalhe</span>
                       </span>
                       {restantes > 0 ? (
                         <Btn tam="sm" onClick={ampliarPagina}>
-                          ⬇ Carregar mais (exibindo {visiveis.length} de {total})
+                          ⬇ Carregar mais ({visiveis.length} de {total})
                         </Btn>
-                      ) : null}
+                      ) : (
+                        <span className="text-slate-400">✓ Lista completa</span>
+                      )}
                     </div>
-                    <p className="mt-2 text-[10px] text-slate-400">
-                      👁 abre todos os tributos (regime anterior, reduções e valores).
-                    </p>
                   </>
                 )}
         </div>

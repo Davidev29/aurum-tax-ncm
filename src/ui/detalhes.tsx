@@ -137,8 +137,9 @@ function Grade({ children, cols = 'grid-cols-2 md:grid-cols-4' }: { children: Re
 /* -------------------------------------------------------- produto (cadastro) --- */
 
 /**
- * Modal compacto com **todos os tributos do produto do cadastro**.
- * A lista mostra só SKU · produto · NCM · resumo Reforma · total.
+ * Modal elegante com **todos os dados do produto do cadastro**.
+ * Layout em abas (sem scroll longo): identidade + KPIs sempre visíveis,
+ * conteúdo distribuído em Reforma · Regime anterior · Valores.
  */
 export function ModalProdutoDetalhe({
   produto,
@@ -147,84 +148,192 @@ export function ModalProdutoDetalhe({
   produto: ProdutoLinha | null
   onFechar: () => void
 }) {
+  const [aba, setAba] = useState<'reforma' | 'anterior' | 'valores'>('reforma')
+
+  // Troca de produto: sempre recomeça na aba principal.
+  useEffect(() => {
+    setAba('reforma')
+  }, [produto?.id, produto?.codigo, produto?.ncm])
+
+  const anterior = (produto ?? {}) as unknown as Record<string, string>
+  const ehManual = Boolean(produto?.classificacaoManual || produto?.classificacaoSnapshot?.manual)
+  const anexo = produto?.classificacaoSnapshot?.anexo ?? null
+
   return (
     <Modal
       aberto={produto !== null}
       onFechar={onFechar}
       titulo={produto ? `${produto.codigo} · ${produto.nome}` : ''}
-      subtitulo={produto ? `NCM ${fmtNcm(produto.ncm)} · CST ${produto.cstReforma || '—'} · cClassTrib ${produto.cClassTrib || '—'}` : ''}
-      largura="max-w-lg"
-      rodape={null}
+      subtitulo={produto ? `NCM ${fmtNcm(produto.ncm)} · CST ${produto.cstReforma || '—'} · ${produto.cClassTrib || '—'}` : ''}
+      largura="max-w-2xl"
+      rodape={
+        produto ? (
+          <span className="flex w-full items-center justify-between gap-2">
+            <span className="font-mono text-[11px] font-bold text-slate-400">
+              {fmtNcm(produto.ncm)} · {fmtMoeda(produto.total)}
+            </span>
+            <Btn tam="sm" variante="primary" onClick={onFechar}>
+              Fechar
+            </Btn>
+          </span>
+        ) : null
+      }
     >
       {produto ? (
         <div className="space-y-3">
           <BlocoDiferimentoProduto produto={produto} />
-          <Secao titulo="Identificação" icone="📦">
-            <Grade cols="grid-cols-2 md:grid-cols-3">
-              <Campo rotulo="SKU" valor={produto.codigo} mono forte />
-              <Campo rotulo="NCM" valor={fmtNcm(produto.ncm)} mono />
-              <Campo rotulo="Empresa" valor={produto.empresaNome ?? 'Sem empresa'} />
-            </Grade>
-            <p className="mt-2 truncate text-xs text-slate-500" title={produto.nome}>
-              {produto.nome}
-            </p>
-          </Secao>
 
-          <Secao titulo="Reforma (LC 214/2025)" icone="💠">
-            {produto.classificacaoManual || produto.classificacaoSnapshot?.manual ? (
-              <div className="mb-2">
-                <AvisoManual
-                  compact
-                  fonteDescricao={produto.classificacaoSnapshot?.manual?.fonteDescricao}
-                  fonteUrl={produto.classificacaoSnapshot?.manual?.fonteUrl}
-                />
+          {/* Identidade + total em destaque */}
+          <div className="overflow-hidden rounded-2xl border border-[var(--line)]">
+            <div className="flex items-center gap-3 bg-gradient-to-r from-brand-700/10 via-transparent to-aurum-500/10 px-4 py-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-600 text-lg text-white shadow-card" aria-hidden="true">
+                📦
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-black" title={produto.nome}>
+                  {produto.nome}
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+                  <span className="rounded-md bg-slate-900 px-1.5 py-0.5 font-mono font-bold text-white dark:bg-slate-100 dark:text-slate-900">
+                    {produto.codigo}
+                  </span>
+                  <span className="rounded-md bg-brand-100 px-1.5 py-0.5 font-mono font-bold text-brand-800 dark:bg-aurum-500/20 dark:text-aurum-200">
+                    NCM {fmtNcm(produto.ncm)}
+                  </span>
+                  {ehManual ? <Pill cor="amber">👤 Manual</Pill> : <Pill cor="emerald">✓ Oficial</Pill>}
+                </div>
               </div>
-            ) : null}
-            <Grade cols="grid-cols-2 md:grid-cols-3">
-              <Campo rotulo="CST Reforma" valor={produto.cstReforma || '—'} mono />
-              <Campo rotulo="cClassTrib" valor={produto.cClassTrib || '—'} mono />
-              <Campo rotulo="Redução IBS" valor={fmtPct(produto.redIBS)} mono />
-              <Campo rotulo="Redução CBS" valor={fmtPct(produto.redCBS)} mono />
-              <Campo rotulo="Qtd" valor={fmtNum(produto.quantidade)} mono />
-              <Campo rotulo="Total" valor={fmtMoeda(produto.total)} mono forte />
-            </Grade>
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-500" title={produto.descClass}>
-              {produto.descClass}
-            </p>
-            {produto.baseLegal ? (
-              <p className="mt-1 text-[10px] text-slate-400" title={produto.baseLegal}>
-                Base legal: {produto.baseLegal}
+              <div className="shrink-0 text-right">
+                <div className="text-[9px] font-bold uppercase text-slate-400">Total</div>
+                <div className="font-mono text-base font-black text-brand-700 dark:text-aurum-200">
+                  {fmtMoeda(produto.total)}
+                </div>
+                <div className="font-mono text-[10px] text-slate-400">
+                  {fmtNum(produto.quantidade)} × {fmtMoeda(produto.valorUnitario)}
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-px bg-[var(--line)] md:grid-cols-4">
+              {[
+                ['CST Reforma', produto.cstReforma || '—'],
+                ['cClassTrib', produto.cClassTrib || '—'],
+                [`−${fmtPct(produto.redIBS)} / −${fmtPct(produto.redCBS)}`, 'Red. IBS/CBS'],
+                [produto.empresaNome ?? 'Sem empresa', 'Empresa'],
+              ].map(([val, rot]) => (
+                <div key={rot as string} className="bg-white px-3 py-2 dark:bg-slate-900">
+                  <div className="truncate font-mono text-xs font-black" title={val as string}>
+                    {val as string}
+                  </div>
+                  <div className="text-[9px] font-bold uppercase text-slate-400">{rot as string}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Abas compactas — quebram o scroll vertical em 3 telas curtas */}
+          <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800" role="tablist" aria-label="Detalhe do produto">
+            {(
+              [
+                ['reforma', '💠 Reforma'],
+                ['anterior', '🧾 Entrada × Saída'],
+                ['valores', '💰 Valores e info'],
+              ] as const
+            ).map(([id, rot]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={aba === id}
+                onClick={() => setAba(id)}
+                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-bold transition ${
+                  aba === id
+                    ? 'bg-white text-brand-800 shadow-card dark:bg-slate-900 dark:text-aurum-100'
+                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                }`}
+              >
+                {rot}
+              </button>
+            ))}
+          </div>
+
+          {aba === 'reforma' ? (
+            <Secao titulo="Reforma (LC 214/2025)" icone="💠">
+              {produto.classificacaoManual || produto.classificacaoSnapshot?.manual ? (
+                <div className="mb-2">
+                  <AvisoManual
+                    compact
+                    fonteDescricao={produto.classificacaoSnapshot?.manual?.fonteDescricao}
+                    fonteUrl={produto.classificacaoSnapshot?.manual?.fonteUrl}
+                  />
+                </div>
+              ) : null}
+              <Grade cols="grid-cols-2 md:grid-cols-4">
+                <Campo rotulo="CST Reforma" valor={produto.cstReforma || '—'} mono forte />
+                <Campo rotulo="cClassTrib" valor={produto.cClassTrib || '—'} mono forte />
+                <Campo rotulo="Redução IBS" valor={fmtPct(produto.redIBS)} mono />
+                <Campo rotulo="Redução CBS" valor={fmtPct(produto.redCBS)} mono />
+              </Grade>
+              <p className="mt-2 text-[11px] leading-relaxed text-slate-600 dark:text-slate-300" title={produto.descClass}>
+                {produto.descClass || '—'}
               </p>
-            ) : null}
-          </Secao>
+              {produto.baseLegal ? (
+                <p className="mt-1 text-[10px] leading-relaxed text-slate-400" title={produto.baseLegal}>
+                  Base legal: {produto.baseLegal}
+                </p>
+              ) : null}
+              {anexo ? (
+                <p className="mt-1 text-[10px] font-bold text-slate-500">
+                  📎 {anexoOficial({ resumo: { anexo } } as never) ? rotuloAnexoOficial(anexoOficial({ resumo: { anexo } } as never)) : `Anexo ${anexo}`}
+                </p>
+              ) : null}
+              <div className="mt-2">
+                <SecaoInformacoesAdicionais ncm={produto.ncm} />
+              </div>
+            </Secao>
+          ) : null}
 
-          <Secao titulo="Regime anterior — entrada" icone="📥">
-            <Grade cols="grid-cols-2 md:grid-cols-4">
-              <Campo rotulo="CFOP entrada" valor={(produto as unknown as Record<string, string>).cfopEntrada || produto.cfop || '—'} mono />
-              <Campo rotulo="CST ICMS entrada" valor={(produto as unknown as Record<string, string>).cstIcmsEntrada || produto.cstIcms || '—'} mono />
-              <Campo rotulo="PIS entrada" valor={(produto as unknown as Record<string, string>).pisEntrada || produto.pis || '—'} mono />
-              <Campo rotulo="COFINS entrada" valor={(produto as unknown as Record<string, string>).cofinsEntrada || produto.cofins || '—'} mono />
-            </Grade>
-          </Secao>
+          {aba === 'anterior' ? (
+            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+              <Secao titulo="Entrada" icone="📥">
+                <Grade cols="grid-cols-2">
+                  <Campo rotulo="CFOP" valor={anterior.cfopEntrada || produto.cfop || '—'} mono />
+                  <Campo rotulo="CST ICMS" valor={anterior.cstIcmsEntrada || produto.cstIcms || '—'} mono />
+                  <Campo rotulo="PIS" valor={anterior.pisEntrada || produto.pis || '—'} mono />
+                  <Campo rotulo="COFINS" valor={anterior.cofinsEntrada || produto.cofins || '—'} mono />
+                </Grade>
+              </Secao>
+              <Secao titulo="Saída" icone="📤">
+                <Grade cols="grid-cols-2">
+                  <Campo rotulo="CFOP" valor={anterior.cfopSaida || '—'} mono />
+                  <Campo rotulo="CST ICMS" valor={anterior.cstIcmsSaida || '—'} mono />
+                  <Campo rotulo="PIS" valor={anterior.pisSaida || '—'} mono />
+                  <Campo rotulo="COFINS" valor={anterior.cofinsSaida || '—'} mono />
+                </Grade>
+              </Secao>
+            </div>
+          ) : null}
 
-          <Secao titulo="Regime anterior — saída" icone="📤">
-            <Grade cols="grid-cols-2 md:grid-cols-4">
-              <Campo rotulo="CFOP saída" valor={(produto as unknown as Record<string, string>).cfopSaida || '—'} mono />
-              <Campo rotulo="CST ICMS saída" valor={(produto as unknown as Record<string, string>).cstIcmsSaida || '—'} mono />
-              <Campo rotulo="PIS saída" valor={(produto as unknown as Record<string, string>).pisSaida || '—'} mono />
-              <Campo rotulo="COFINS saída" valor={(produto as unknown as Record<string, string>).cofinsSaida || '—'} mono />
-            </Grade>
-          </Secao>
-
-          <SecaoInformacoesAdicionais ncm={produto.ncm} />
-
-          <Secao titulo="Valores" icone="💰">
-            <Grade cols="grid-cols-3">
-              <Campo rotulo="Qtd" valor={fmtNum(produto.quantidade)} mono />
-              <Campo rotulo="V. unit" valor={fmtMoeda(produto.valorUnitario)} mono />
-              <Campo rotulo="Total" valor={fmtMoeda(produto.total)} mono forte />
-            </Grade>
-          </Secao>
+          {aba === 'valores' ? (
+            <div className="space-y-2.5">
+              <Secao titulo="Valores" icone="💰">
+                <Grade cols="grid-cols-3">
+                  <Campo rotulo="Quantidade" valor={fmtNum(produto.quantidade)} mono />
+                  <Campo rotulo="Valor unitário" valor={fmtMoeda(produto.valorUnitario)} mono />
+                  <Campo rotulo="Total" valor={fmtMoeda(produto.total)} mono forte />
+                </Grade>
+              </Secao>
+              <Secao titulo="Cadastro" icone="🗂️">
+                <Grade cols="grid-cols-2 md:grid-cols-3">
+                  <Campo rotulo="SKU" valor={produto.codigo} mono forte />
+                  <Campo rotulo="NCM" valor={fmtNcm(produto.ncm)} mono />
+                  <Campo rotulo="Empresa" valor={produto.empresaNome ?? 'Sem empresa'} />
+                </Grade>
+                <p className="mt-2 text-xs leading-relaxed text-slate-500" title={produto.nome}>
+                  {produto.nome}
+                </p>
+              </Secao>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </Modal>
