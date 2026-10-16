@@ -150,11 +150,24 @@ export async function prepararBanco(app: App): Promise<{ ok: boolean; detalhe: s
 /**
  * Cópia de segurança do banco (pré-update / pré-restauração). Best-effort:
  * devolve o caminho do backup ou `null`.
+ *
+ * Nomes com timestamp (ms) podem colidir quando duas cópias partem no mesmo
+ * milissegundo — sem desempate, a segunda SOBRESCREVIA a primeira (dado
+ * perdido + flake no teste de rotação). Sufixo `-2`, `-3`… garante um
+ * arquivo novo por chamada. Na ordenação lexicográfica da poda, o primeiro
+ * (sem sufixo) conta como o mais novo do grupo — irrelevante na prática
+ * (mesmo ms = conteúdo quase idêntico).
  */
 export function copiarBanco(caminho: string, sufixo: string): string | null {
   try {
     if (!existsSync(caminho)) return null
-    const destino = `${caminho}.${sufixo}`
+    let destino = `${caminho}.${sufixo}`
+    if (existsSync(destino)) {
+      const base = destino.endsWith('.bak') ? destino.slice(0, -'.bak'.length) : destino
+      let n = 2
+      while (n < 1000 && existsSync(`${base}-${n}.bak`)) n += 1
+      destino = `${base}-${n}.bak`
+    }
     copyFileSync(caminho, destino)
     return destino
   } catch {
