@@ -1,22 +1,13 @@
 /**
  * Estado global de interface: navegação, tema, toasts e modais.
  *
- * Paridade com a v1 (SPEC §10): 7 views, tema por `localStorage['tema']`,
+ * Paridade com a v1 (SPEC §10): barra de menus da v1, tema por `localStorage['tema']`,
  * toast de 3400 ms com borda colorida por tipo.
- *
- * Duas responsabilidades extras, ambas de interface:
- * - `registrarLimpeza`: cada tela publica aqui o que deve ser **zerado ao
- *   sair** dela, para que um retorno nunca reabra o formulário congelado;
- * - `abrirCalc`: a fonte que alimenta o modal de cálculo (adicionar item à
- *   calculadora a partir de qualquer tela, sem navegar para ela).
  */
 import { create } from 'zustand'
 import { TEMA_KEY } from '@/domain/constants'
-import type { Classificacao } from '@/domain/entities'
-import type { ProdutoLinha } from '@/store/produtos'
 
 export type ViewId =
-  | 'calculadora'
   | 'simples'
   | 'consulta'
   | 'servicos'
@@ -28,10 +19,6 @@ export type ViewId =
   | 'legislacao'
 
 export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = {
-  calculadora: {
-    titulo: 'Calculadora Tributária',
-    subtitulo: 'Simule IBS/CBS com base nas regras cadastradas',
-  },
   simples: {
     titulo: 'Simples Nacional',
     subtitulo: 'DAS por Anexo I–V + Reforma (CBS/IBS) · manual ou por CNPJ',
@@ -87,17 +74,6 @@ export type ModalId =
   | 'previewEmitente'
   | 'detalheSped'
   | 'novidades'
-
-/**
- * Origem do item que o usuário pediu para calcular.
- *
- * O modal traduz a fonte em um item da calculadora — assim "Adicionar à
- * calculadora" funciona igualmente vindo de uma classificação (Consulta) ou
- * de um produto já cadastrado (Produtos).
- */
-export type FonteCalc =
-  | { tipo: 'classificacao'; classificacao: Classificacao }
-  | { tipo: 'produto'; produto: ProdutoLinha }
 
 /** Rotina de limpeza de uma tela, executada quando o usuário sai dela. */
 type LimpezaTela = () => void
@@ -183,8 +159,6 @@ interface UiState {
   sidebarAberta: boolean
   /** Colapso no desktop (`lg+`): fechada exibe só os ícones. */
   sidebarRecolhida: boolean
-  /** Item que está sendo levado ao modal da calculadora (`null` = fechado). */
-  fonteCalc: FonteCalc | null
   /**
    * Contador de trocas de menu — cada `trocarView` real avança 1 e o `Layout`
    * escolhe o próximo preset do carrossel (`PRESETS_TRANSICAO`), então duas
@@ -193,8 +167,6 @@ interface UiState {
   transicaoSeq: number
   /** Abre/fecha um modal (`null` fecha). */
   abrirModal: (id: ModalId | null) => void
-  /** Abre/fecha o modal da calculadora (`null` fecha). */
-  abrirCalc: (fonte: FonteCalc | null) => void
   trocarView: (v: ViewId) => void
   alternarTema: () => void
   toggleSidebar: () => void
@@ -209,13 +181,12 @@ interface UiState {
 let seqToast = 0
 
 export const useUi = create<UiState>((set, get) => ({
-  view: 'calculadora',
+  view: 'consulta',
   tema: temaInicial(),
   toasts: [],
   modal: null,
   sidebarAberta: false,
   sidebarRecolhida: recolhidaInicial(),
-  fonteCalc: null,
   transicaoSeq: 0,
 
   /**
@@ -230,7 +201,6 @@ export const useUi = create<UiState>((set, get) => ({
       view: v,
       sidebarAberta: false,
       modal: null,
-      fonteCalc: null,
       // Só avança o carrossel de animação quando a tela realmente muda.
       transicaoSeq: atual !== v ? s.transicaoSeq + 1 : s.transicaoSeq,
     }))
@@ -238,8 +208,6 @@ export const useUi = create<UiState>((set, get) => ({
   },
 
   abrirModal: (id) => set({ modal: id }),
-
-  abrirCalc: (fonte) => set({ fonteCalc: fonte }),
 
   alternarTema: () => {
     const proximo: Tema = get().tema === 'dark' ? 'light' : 'dark'

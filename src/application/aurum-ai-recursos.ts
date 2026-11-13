@@ -31,14 +31,14 @@ export const VIEWS_AURUM_AI: RecursoView[] = [
     view: 'consulta',
     rotulo: 'Consulta NCM',
     descricao: 'Busque por NCM (8 dígitos), nome do produto ou frase — a IA responde e a base oficial valida (0/1/N).',
-    acoes: ['buscar por número', 'buscar por nome', 'descrever com palavras livres', 'adicionar à calculadora', 'salvar como produto'],
+    acoes: ['buscar por número', 'buscar por nome', 'descrever com palavras livres', 'simular IBS/CBS nos cartões', 'salvar como produto'],
     navegavel: true,
   },
   {
     view: 'servicos',
     rotulo: 'Serviços (NBS)',
     descricao: 'Busque por NBS (9 dígitos), nome do serviço ou CNPJ (puxa CNAEs na Receita).',
-    acoes: ['buscar NBS manual', 'consultar por CNPJ', 'adicionar à calculadora', 'salvar como produto'],
+    acoes: ['buscar NBS manual', 'consultar por CNPJ', 'simular IBS/CBS nos cartões', 'salvar como produto'],
     navegavel: true,
   },
   {
@@ -46,13 +46,6 @@ export const VIEWS_AURUM_AI: RecursoView[] = [
     rotulo: 'Consulta de CNAEs',
     descricao: 'Busque nos 1.090 CNAEs: regra do Simples sempre (Anexo/Situação/Fator R) + NBS vinculadas com benefício da Reforma no ano de referência (2026/2027/2033).',
     acoes: ['buscar por código ou descrição', 'ver regra + NBS com ano', 'escolher NBS quando ambíguo', 'ir à Consulta NCM (bens)'],
-    navegavel: true,
-  },
-  {
-    view: 'calculadora',
-    rotulo: 'Calculadora Tributária',
-    descricao: 'Simule IBS/CBS por item com as regras cadastradas (reduções, referência IBS/CBS).',
-    acoes: ['adicionar item por NCM ou produto', 'editar qtd/valor', 'ajustar alíquotas de referência', 'revalidar'],
     navegavel: true,
   },
   {
@@ -80,7 +73,7 @@ export const VIEWS_AURUM_AI: RecursoView[] = [
     view: 'produtos',
     rotulo: 'Produtos',
     descricao: 'Produtos cadastrados por empresa — o chat cadastra de forma assistida (conferência + SIM explícito) e orienta a exportar.',
-    acoes: ['filtrar e paginar', 'exportar CSV/JSON/PDF', 'ver na consulta', 'enviar para calculadora', 'cadastrar via chat com conferência'],
+    acoes: ['filtrar e paginar', 'exportar CSV/JSON/PDF', 'ver na consulta', 'cadastrar via chat com conferência'],
     navegavel: true,
   },
   {
@@ -168,7 +161,6 @@ export function botoesCapacidades(): BotaoChat[] {
   return [
     { rotulo: '🔍 Consultar NCM', acao: 'navegar', alvo: 'consulta' },
     { rotulo: '🧾 Consultar NBS', acao: 'navegar', alvo: 'servicos' },
-    { rotulo: '🧮 Abrir Calculadora', acao: 'navegar', alvo: 'calculadora' },
     { rotulo: '💰 Simples Nacional', acao: 'navegar', alvo: 'simples' },
     { rotulo: 'Tem algum NCM de banana?', acao: 'perguntar', alvo: 'Tem algum NCM de banana?' },
     { rotulo: 'Qual o NBS para aula de inglês?', acao: 'perguntar', alvo: 'Qual o NBS para aula de inglês?' },

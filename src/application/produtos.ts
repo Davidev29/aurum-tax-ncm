@@ -11,7 +11,7 @@
  * O comportamento é configurável (`forcar`) para que a tela possa perguntar ao
  * usuário antes de sobrescrever.
  */
-import { fmtNcm, norm, parseMoeda, parseQtd, uid } from '@/domain/services/format'
+import { fmtNcm, norm, parseMoeda, parseQtd } from '@/domain/services/format'
 import { REGRA_GERAL } from '@/domain/constants'
 import type { Classificacao, ClassificacaoSnapshot, Produto } from '@/domain/entities'
 import { resolverClassificacoes } from '@/infrastructure/base/classificacao-repo'
@@ -180,7 +180,7 @@ export function validarFormularioProduto(f: {
  * Re-resolve o NCM no motor único, preservando a escolha (CST × cClassTrib)
  * quando ela continua válida; senão devolve a 1ª da lista vigente.
  * É o que impede gravar tributação divergente da Consulta para o mesmo NCM
- * (ex.: item da calculadora congelado antes de uma mudança de base).
+ * (ex.: item manual congelado antes de uma mudança de base).
  * A manual do usuário é devolvida pelo próprio resolvedor — nunca substituída.
  */
 export async function reresolverClassificacao(
@@ -202,7 +202,7 @@ export async function reresolverClassificacao(
  * @param editarId quando informado, atualiza esse registro (modo edição);
  * @param forcar   sobrescreve um SKU já existente sem pedir confirmação.
  * @param reresolver quando `true`, a classificação é re-resolvida no motor
- * antes de gravar (caminho da calculadora, cujos valores são congelados na
+ * antes de gravar (valores congelados dos itens manuais) na
  * adição). A escolha original é preservada se ainda válida; o retorno
  * indica `revalidada: true` quando a vigente diferiu.
  */
@@ -292,7 +292,7 @@ export async function excluirProduto(id: number): Promise<void> {
 
 /**
  * Atualiza **apenas** quantidade/valor unitário de um produto existente
- * (é o que a calculadora faz ao salvar — SPEC R7.11).
+ * (é o que faz ao salvar pela Consulta — SPEC R7.11).
  */
 export async function atualizarValoresProduto(
   id: number,
@@ -309,7 +309,7 @@ export async function atualizarValoresProduto(
   })
 }
 
-/** Dados de um item manual da calculadora, prontos para virar produto. */
+/** Dados de um item manual, prontos para virar produto. */
 export interface ItemManualCalc {
   ncm: string
   nome: string
@@ -501,32 +501,6 @@ export function entradaProdutoDeFormulario(
     quantidade: parseQtd(form.qtd ?? ''),
     valorUnitario: parseMoeda(form.valor ?? ''),
     classificacao,
-  }
-}
-
-/** Converte um produto em item da calculadora, com a mesma forma da v1. */
-export function produtoParaCalculadora(p: Produto) {
-  const c = p.classificacaoSnapshot ?? ({} as ClassificacaoSnapshot)
-  return {
-    uid: uid(),
-    origem: 'produto' as const,
-    produtoId: p.id ?? null,
-    codigo: p.codigo,
-    nome: p.nome,
-    ncm: p.ncm,
-    cst: p.cstReforma,
-    cClassTrib: p.cClassTrib,
-    descClass: c.classificacao || p.baseLegal || '—',
-    redIBS: Number(c.pRedIBS ?? 0),
-    redCBS: Number(c.pRedCBS ?? 0),
-    // A flag vem do motor no momento da gravação — nunca recomputada aqui.
-    // (A heurística antiga `cst === '000'` marcava como "regra geral" até
-    // vínculo oficial de tributação integral com CST 000, divergindo da
-    // tela Produtos para o mesmo NCM.)
-    regraGeral: p.regraGeral,
-    quantidade: Number(p.quantidade) || 1,
-    valorUnitario: Number(p.valorUnitario) || 0,
-    baseLegal: p.baseLegal ?? '',
   }
 }
 

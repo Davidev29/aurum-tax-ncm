@@ -1,6 +1,6 @@
 /**
  * Blocos de apresentação compartilhados pelas telas de **Consulta**,
- * **Classificação**, **Calculadora** e **SPED**.
+ * **Classificação** e **SPED**.
  *
  * Nenhum componente aqui decide regra de negócio: eles apenas *decoram*
  * um `Classificacao`/`Observacao` já resolvido pelas camadas de domínio e
@@ -20,7 +20,7 @@ import {
 } from '@/domain/services/calculo'
 import { chipCondicao, observacaoExtincaoNcm, observacaoIntegralFallback, observacaoVigenciaCct } from '@/domain/services/classificacao'
 import { fmtMoeda, parseMoeda } from '@/domain/services/format'
-import { useCalculadora } from '@/store/calculadora'
+import { useReferencia } from '@/store/referencia'
 import { Pill, Texto, type CorPill } from './kit'
 import { ModalLegislacao, type DestinoLegislacao } from './ModalLegislacao'
 
@@ -330,13 +330,12 @@ export function BotaoVerLegislacao({
 /**
  * Simulador embutido nos cartões (SPEC R7.14).
  *
- * Usa **as alíquotas de referência da Calculadora** (paridade com a v1) —
- * os relatórios, por outro lado, usam `REF_DEFAULT` fixo (correção do
- * `[BUG] L973`).
+ * Usa **as alíquotas de referência da tabela `parametros.json`** (fallback:
+ * estimativa embarcada 19/9 — ver `store/referencia.ts`).
  */
 export function SimuladorRapido({ redIBS, redCBS }: { redIBS: number; redCBS: number }) {
-  const rateIBS = useCalculadora((s) => s.rateIBS)
-  const rateCBS = useCalculadora((s) => s.rateCBS)
+  const rateIBS = useReferencia((s) => s.rateIBS)
+  const rateCBS = useReferencia((s) => s.rateCBS)
   const [texto, setTexto] = useState('')
 
   const base = parseMoeda(texto)

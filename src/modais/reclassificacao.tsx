@@ -5,7 +5,7 @@
  * ou do cartão manual (editar/remover a vigente). O usuário escolhe uma das
  * classificações existentes no sistema (auxílio), informa descrição + fonte +
  * link da legislação, e a escolha passa a valer para o NCM em TODAS as telas
- * (consulta, XML, SPED, lote, produtos, calculadora) — acima da base oficial,
+ * (consulta, XML, SPED, lote, produtos) — acima da base oficial,
  * sempre sinalizada como manual (responsabilidade do usuário, isentando o sistema).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'

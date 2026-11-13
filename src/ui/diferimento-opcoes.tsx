@@ -9,7 +9,7 @@
  * A escolha é sempre do usuário, por operação: o padrão é a tributação
  * normal (redução oficial); ao clicar no diferimento, todo o cartão passa a
  * simular com a classificação virtual diferida (faixa, avisos, simulador,
- * salvar e calculadora).
+ * salvar e relatórios).
  *
  * Apresentação pura: nenhuma regra fiscal é decidida aqui — a hipótese vem
  * de `classificacaoDiferimentoAnexoIX` (domínio).
@@ -28,7 +28,7 @@ import { fmtPct } from '@/domain/services/format'
  *
  * Devolve a classificação ATIVA (original ou virtual diferida) para o cartão
  * decorar — faixa, CST/cClassTrib, observações, simulador, salvar e
- * calculadora consomem `ativa` em vez do `cl` cru. Troca de NCM reseta para
+ * cartões e relatórios consomem `ativa` em vez do `cl` cru. Troca de código reseta para
  * a tributação normal.
  */
 export function useOpcaoTributacao(cl: Classificacao | null | undefined): {

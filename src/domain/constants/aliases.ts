@@ -42,7 +42,7 @@ export function atualizarAliasesCalculo(): void {
  * `vinculo.aliquotaIBS/CBS` da base são frações sub-1% da planilha de origem
  * (ex.: 0.0004), NÃO alíquotas cheias — alimentá-los como referência zeraria
  * o imposto. A referência cheia é parâmetro global (nota/sessão, REF_DEFAULT
- * + edição na Calculadora). Mantida apenas por compatibilidade; nenhum caminho
+ * + edição manual). Mantida apenas por compatibilidade; nenhum caminho
  * fiscal a consome.
  *
  * Se o NCM não está na base oficial (ou não tem redução), retorna { ibs: 0, cbs: 0 }
@@ -79,7 +79,7 @@ export async function aliquotasPorNcm(ncm: string): Promise<{ ibs: number; cbs: 
  * sub-1% da planilha (`vinculo.aliquotaIBS/CBS`, ex. 0.0004). Alimentar essa
  * fração como `refIBS/refCBS` zeraria o imposto com cara de conta certa.
  * Referência cheia é parâmetro global (REF_DEFAULT 19/9 + edição na
- * Calculadora). Nenhum caminho fiscal consome este objeto (0 usos em src/).
+ * da Calculadora, removida na v1.2). Nenhum caminho fiscal consome este objeto (0 usos em src/).
  */
 export const ALIQUOTAS_REF = {
   /**

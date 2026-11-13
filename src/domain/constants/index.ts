@@ -29,7 +29,7 @@ export const BANNER_KEY = 'banner_dismissed'
  * Estes percentuais DEVEM ser confrontados com o ato vigente (LC 214/2025
  * e regulamentação) antes de cada entrega fiscal — o valor histórico da
  * SPEC era 17.70/8.80 (total 26.5%). Todo cálculo do sistema usa este ponto
- * único (stores + relatórios), e a tela Calculadora permite editar por
+ * único (stores + relatórios). A antiga tela Calculadora (removida na v1.2)
  * sessão; aqui fica o carimbo exibido na UI.
  */
 export const REF_DEFAULT = { IBS: 19, CBS: 9 } as const

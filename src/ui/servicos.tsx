@@ -542,11 +542,9 @@ export function SecaoNbsCnae({ atividade }: { atividade: AtividadeCnae }): React
 export function CartaoCnae({
   atividade,
   onSalvar,
-  onAddCalc,
 }: {
   atividade: AtividadeCnae
   onSalvar: (c: Classificacao) => void
-  onAddCalc: (c: Classificacao) => void
 }): ReactElement {
   const [modal, setModal] = useState<'ncms' | 'simulacao' | 'auditoria' | null>(null)
   const resultado = atividade.resultado
@@ -631,7 +629,6 @@ export function CartaoCnae({
               cl={decisao}
               nomenclatura={null}
               onSalvar={(cl) => onSalvar(cl)}
-              onAddCalc={(cl) => onAddCalc(cl)}
             />
           </div>
           {atividade.motivoEstado ? (

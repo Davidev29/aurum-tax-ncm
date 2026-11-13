@@ -56,7 +56,6 @@ export type IntencaoChat =
 
 export type DestinoNavegar =
   | 'aurum'
-  | 'calculadora'
   | 'simples'
   | 'consulta'
   | 'servicos'
@@ -923,7 +922,7 @@ function contemSimples(n: string): boolean {
 }
 
 function extrairDestino(n: string): DestinoNavegar {
-  if (/calculadora/.test(n)) return 'calculadora'
+  if (/calculadora|simula.*(ibs|cbs|imposto)|calcular/.test(n)) return 'consulta' // simula na Consulta NCM
   if (/consulta.*nbs|servicos|nbs/.test(n)) return 'servicos'
   if (/consulta|ncm/.test(n)) return 'consulta'
   if (/simples|das/.test(n)) return 'simples'
@@ -970,7 +969,7 @@ export function detectarIntencaoChat(mensagem: unknown): AnaliseChat {
 
   // Saudação PURA: só cumprimento ("oi", "bom dia!", "oi, tudo bem?",
   // "oi aurinha", "bom dia aurinha!").
-  // Com resto intencional ("oi, me leva para a calculadora") NÃO segura —
+  // Com resto intencional ("oi, me leva para a consulta") NÃO segura —
   // continua para navegar/ajuda/fiscal abaixo.
   const saud = SAUDACOES.find((s) => {
     const limpo = n.replace(/[!?.…]+$/, '').trim()

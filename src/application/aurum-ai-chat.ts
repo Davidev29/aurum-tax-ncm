@@ -359,7 +359,7 @@ function responderNavegar(analise: AnaliseChat): RespostaChat {
   const alvo = VIEWS_AURUM_AI.find((v) => v.view === analise.destino)
   if (!alvo) {
     return {
-      texto: `Para qual tela devo te levar? Posso abrir: Consulta NCM, Serviços (NBS), Calculadora, Simples Nacional, Lote, Notas Fiscais, Produtos, Tabelas auxiliares ou Legislação.`,
+      texto: `Para qual tela devo te levar? Posso abrir: Consulta NCM, Serviços (NBS), Simples Nacional, Lote, Notas Fiscais, Produtos, Tabelas auxiliares ou Legislação.`,
       confianca: 1,
       nivel: 'alta',
       fontes: [],
@@ -2873,13 +2873,13 @@ async function finalizarCadastroProduto(
       `**Produto ${grav.status === 'atualizado' ? 'atualizado' : 'cadastrado'}:** ${r.sku} — ${r.nome}\n` +
       `• Empresa: ${empresaRotulo} · NCM ${fmtNcm(r.ncm as string)} (CST ${montada.pronta.entrada.classificacao.cst} · cClassTrib ${montada.pronta.entrada.classificacao.cClassTrib})\n` +
       `• Tributação antiga: CFOP ${r.cfop ?? '—'} · CST-ICMS ${r.cstIcms ?? '—'} · PIS ${r.pis ?? '—'} · COFINS ${r.cofins ?? '—'}\n\n` +
-      `Já está disponível em Produtos. Quer cadastrar outro ou simular o IBS/CBS dele na Calculadora?`,
+      `Já está disponível em Produtos. Quer cadastrar outro ou simular o IBS/CBS dele na Consulta NCM?`,
     confianca: 0.95, nivel: 'alta',
     fontes: ['Base de produtos do sistema', 'Vínculos oficiais da Reforma (CST × cClassTrib)'],
     sugestoes: ['Quero cadastrar um produto', `Quanto fica R$ 1.000 no NCM ${fmtNcm(r.ncm as string)}?`],
     botoes: [
       { rotulo: 'Abrir Produtos', acao: 'navegar', alvo: 'produtos' },
-      { rotulo: 'Abrir Calculadora', acao: 'navegar', alvo: 'calculadora' },
+      { rotulo: 'Abrir Consulta NCM', acao: 'navegar', alvo: 'consulta' },
     ],
     pensamento: pensar([PENSAR.entender, PENSAR.validar], `Cadastro produto: SKU ${r.sku} ${grav.status}`, Date.now() - t0),
   }
@@ -2952,7 +2952,7 @@ async function responderCalculo(pergunta: string, analise: AnaliseChat, historic
             sugestoes: ['Gera um relatório desse cálculo'],
             botoes: [
               { rotulo: 'Baixar relatório', acao: 'baixar', alvo: 'relatorio' },
-              { rotulo: 'Abrir Calculadora', acao: 'navegar', alvo: 'calculadora' },
+              { rotulo: 'Abrir Consulta NCM', acao: 'navegar', alvo: 'consulta' },
             ],
             relatorioOpcoes: {
               base: 'calculo',
@@ -3010,7 +3010,7 @@ async function responderCalculo(pergunta: string, analise: AnaliseChat, historic
     botoes: [
       { rotulo: 'Baixar relatório', acao: 'baixar', alvo: 'relatorio' },
       ...sugCalc.botoes,
-      { rotulo: 'Abrir Calculadora', acao: 'navegar', alvo: 'calculadora' },
+      { rotulo: 'Abrir Consulta NCM', acao: 'navegar', alvo: 'consulta' },
     ],
     relatorioOpcoes: {
       base: 'calculo',

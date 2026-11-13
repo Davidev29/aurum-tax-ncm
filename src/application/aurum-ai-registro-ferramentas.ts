@@ -314,13 +314,13 @@ export const REGISTRO_FERRAMENTAS: SpecFerramenta[] = [
   },
   {
     nome: 'navegarPara',
-    descricao: 'Sugere uma view do sistema com botão (Calculadora, Simples, Notas, Empresas, Produtos, Lote, Auxiliares, Legislação...).',
+    descricao: 'Sugere uma view do sistema com botão (Consulta NCM, Simples, Notas, Empresas, Produtos, Lote, Auxiliares, Legislação...).',
     dominio: 'sistema',
     leitura: true,
     parametros: {
-      destino: { tipo: 'string', descricao: 'View de destino.', obrigatorio: true, exemplo: 'Calculadora' },
+      destino: { tipo: 'string', descricao: 'View de destino.', obrigatorio: true, exemplo: 'Consulta NCM' },
     },
-    exemplos: ['navegarPara({"destino":"Calculadora"})'],
+    exemplos: ['navegarPara({"destino":"Consulta NCM"})'],
     guardrail: 'Só sugere; a troca é ato do usuário no botão.',
   },
   {

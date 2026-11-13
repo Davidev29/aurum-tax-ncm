@@ -19,7 +19,6 @@
  * - 0 vínculos → cartão de **tributação integral** (regra geral);
  * - N > 1 → aviso âmbar "possui N classificações possíveis";
  * - "Salvar como produto" abre o modal da página, nunca escreve direto;
- * - "Adicionar à calculadora" abre o **modal de cálculo**.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Classificacao } from '@/domain/entities'
@@ -31,7 +30,7 @@ import { ModalSalvarClass } from '@/modais/pagina'
 import { ModalReclassificacao } from '@/modais/reclassificacao'
 import { useBase } from '@/store/base'
 import { useConsulta } from '@/store/consulta'
-import { toast, useUi } from '@/store/ui'
+import { toast } from '@/store/ui'
 import { type BloqueioSistema } from '@/ui/cartoes'
 import { CartaoEnxuto, CartaoForaDeEscopo, CartaoMultiplo } from '@/ui/consulta-enxuta'
 import { BarraConfiancaAurumAI, CarregandoAurumAI, IconeAurumPremium, MolduraAurumAI, StatusAurumAI } from '@/ui/aurum-ai'
@@ -105,7 +104,6 @@ export function Consulta() {
   /** Camada IA (06-06): `ia` = fallback acionou; `deterministico` = primário venceu sem worker. */
   const via = useConsulta((s) => s.via)
 
-  const abrirCalc = useUi((s) => s.abrirCalc)
   const nomenclaturaBase = useBase((s) => s.status?.nomenclatura ?? 0)
   const basePronta = useBase((s) => s.pronta)
 
@@ -639,7 +637,7 @@ export function Consulta() {
               {classificando && !sugestao && via !== 'ia' && via !== 'grafo' && via !== 'grafo+ia' ? (
                 <CarregandoAurumAI entrada={entrada} />
               ) : (
-                <SecaoRespostaIA entrada={entrada} bloqueios={bloqueios} onSalvar={setParaSalvar} onAddCalc={abrirCalc} />
+                <SecaoRespostaIA entrada={entrada} bloqueios={bloqueios} onSalvar={setParaSalvar} />
               )}
             </section>
           ) : null}
@@ -663,7 +661,6 @@ export function Consulta() {
                   bloqueios={bloqueios}
                   destaqueIA={origemIAOficial}
                   onSalvar={setParaSalvar}
-                  onAddCalc={(cl) => abrirCalc({ tipo: 'classificacao', classificacao: cl })}
                   onReclassificar={() => setReclassificando(true)}
                 />
               )}
@@ -723,7 +720,7 @@ export function Consulta() {
                 {classificando && !sugestao && via !== 'ia' && via !== 'grafo' && via !== 'grafo+ia' ? (
                   <CarregandoAurumAI entrada={entrada} />
                 ) : (
-                  <SecaoRespostaIA entrada={entrada} bloqueios={bloqueios} onSalvar={setParaSalvar} onAddCalc={abrirCalc} />
+                  <SecaoRespostaIA entrada={entrada} bloqueios={bloqueios} onSalvar={setParaSalvar} />
                 )}
               </div>
             </details>
@@ -775,7 +772,6 @@ function PainelExato({
   bloqueios,
   destaqueIA = false,
   onSalvar,
-  onAddCalc,
   onReclassificar,
 }: {
   avisoInvalido: boolean
@@ -786,7 +782,6 @@ function PainelExato({
   /** Borda animada ouro: este painel foi ancorado a partir do resultado automático. */
   destaqueIA?: boolean
   onSalvar: (c: Classificacao) => void
-  onAddCalc: (cl: Classificacao) => void
   onReclassificar: () => void
 }) {
   if (avisoInvalido && !resultados.length) {
@@ -825,7 +820,6 @@ function PainelExato({
             bloqueios={bloqueios[resultados[0].classificacao.cClassTrib] ?? null}
             destaqueIA={destaqueIA}
             onSalvar={(cl) => onSalvar(cl)}
-            onAddCalc={onAddCalc}
             onReclassificar={onReclassificar}
           />
         ) : resultados.length > 1 ? (
@@ -835,7 +829,6 @@ function PainelExato({
             bloqueios={bloqueios}
             destaqueIA={destaqueIA}
             onSalvar={(cl) => onSalvar(cl)}
-            onAddCalc={onAddCalc}
             onReclassificar={onReclassificar}
           />
         ) : (
@@ -847,7 +840,6 @@ function PainelExato({
               bloqueios={bloqueios[r.classificacao.cClassTrib] ?? null}
               destaqueIA={destaqueIA}
               onSalvar={(cl) => onSalvar(cl)}
-              onAddCalc={onAddCalc}
               onReclassificar={r.manual ? onReclassificar : undefined}
             />
           ))
@@ -870,12 +862,10 @@ function SecaoRespostaIA({
   entrada,
   bloqueios,
   onSalvar,
-  onAddCalc,
 }: {
   entrada: string
   bloqueios: Record<string, BloqueioSistema[]>
   onSalvar: (c: Classificacao) => void
-  onAddCalc: ReturnType<typeof useUi.getState>['abrirCalc']
 }) {
   const sugestao = useConsulta((s) => s.sugestao)
   const classificando = useConsulta((s) => s.classificandoDescricao)
@@ -928,7 +918,7 @@ function SecaoRespostaIA({
           </div>
         ) : null}
         <MolduraAurumAI detalhe="decisão validada pela base oficial">
-          <RespostaIaValidada onSalvar={onSalvar} onAddCalc={onAddCalc} bloqueios={bloqueios} />
+          <RespostaIaValidada onSalvar={onSalvar} bloqueios={bloqueios} />
         </MolduraAurumAI>
       </div>
     )
@@ -1106,11 +1096,9 @@ function ConteudoSugestao({
  */
 function RespostaIaValidada({
   onSalvar,
-  onAddCalc,
   bloqueios,
 }: {
   onSalvar: (c: Classificacao) => void
-  onAddCalc: ReturnType<typeof useUi.getState>['abrirCalc']
   bloqueios: Record<string, BloqueioSistema[]>
 }) {
   const candidatos = useConsulta((s) => s.candidatosIa)
@@ -1177,7 +1165,6 @@ function RespostaIaValidada({
             nomenclatura={nomenclaturaIa}
             bloqueios={bloqueios[decisao.cClassTrib] ?? null}
             onSalvar={(cl) => onSalvar(cl)}
-            onAddCalc={(cl) => onAddCalc({ tipo: 'classificacao', classificacao: cl })}
           />
 
           <div className="flex flex-wrap gap-2">

@@ -190,7 +190,6 @@ export function Produtos() {
 
 function LinhaProduto({ p, semEmpresa, onDetalhe, onEditar }: { p: ProdutoLinha; semEmpresa: boolean; onDetalhe: () => void; onEditar: () => void }) {
   const trocarView = useUi((s) => s.trocarView)
-  const abrirCalc = useUi((s) => s.abrirCalc)
   const setCodigo = useConsulta((s) => s.setCodigo)
   const consultar = useConsulta((s) => s.consultar)
   const excluir = useProdutos((s) => s.excluir)
@@ -201,10 +200,6 @@ function LinhaProduto({ p, semEmpresa, onDetalhe, onEditar }: { p: ProdutoLinha;
     void consultar(codigo)
     trocarView('consulta')
   }
-
-  // Mesmo caminho da Consulta: o cálculo do item acontece no modal, sem
-  // arrastar o usuário para a tela da Calculadora.
-  const paraCalculadora = () => abrirCalc({ tipo: 'produto', produto: p })
 
   const remover = () => {
     void (async () => {
@@ -247,7 +242,6 @@ function LinhaProduto({ p, semEmpresa, onDetalhe, onEditar }: { p: ProdutoLinha;
         <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
           <Olho onClick={onDetalhe} />
           <Acao titulo="Ver na consulta" icone="🔍" onClick={ver} />
-          <Acao titulo="Enviar para a calculadora" icone="🧮" onClick={paraCalculadora} />
           <Acao titulo="Editar" icone="✏️" onClick={onEditar} />
           <Acao titulo="Excluir" icone="🗑" onClick={remover} perigo />
         </div>

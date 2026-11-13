@@ -5,7 +5,6 @@ import { useUi } from '@/store/ui';
 
 // Code-splitting por view: o boot carrega só o shell; cada tela (com seu
 // chart.js pesado) vira um chunk sob demanda + Suspense com esqueleto.
-const Calculadora = lazy(() => import('@/pages/Calculadora').then((m) => ({ default: m.Calculadora })));
 const SimplesNacional = lazy(() => import('@/simples/page').then((m) => ({ default: m.SimplesNacional })));
 const Consulta = lazy(() => import('@/pages/Consulta').then((m) => ({ default: m.Consulta })));
 const ConsultaServicos = lazy(() => import('@/pages/ConsultaServicos').then((m) => ({ default: m.ConsultaServicos })));
@@ -105,7 +104,7 @@ export function App() {
       pagina = <Legislacao />;
       break;
     default:
-      pagina = <Calculadora />;
+      pagina = <Consulta />;
   }
 
   return (

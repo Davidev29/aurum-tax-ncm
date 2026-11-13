@@ -32,7 +32,7 @@ describe('detector-chat (Aurum AI)', () => {
     expect(detectarIntencaoChat('como consultar um NCM?').intencao).toBe('ajuda')
     const nav = detectarIntencaoChat('me leva para a calculadora')
     expect(nav.intencao).toBe('navegar')
-    expect(nav.destino).toBe('calculadora')
+    expect(nav.destino).toBe('consulta')
     expect(detectarIntencaoChat('a base está pronta?').intencao).toBe('status')
   })
   it('vago sem lastro fiscal vira generico (pede esclarecimento, não RAG)', () => {
@@ -45,7 +45,7 @@ describe('detector-chat (Aurum AI)', () => {
   it('saudação com pedido não segura a intenção real', () => {
     const nav = detectarIntencaoChat('oi, me leva para a calculadora')
     expect(nav.intencao).toBe('navegar')
-    expect(nav.destino).toBe('calculadora')
+    expect(nav.destino).toBe('consulta')
     expect(detectarIntencaoChat('oi!').intencao).toBe('saudacao')
     expect(detectarIntencaoChat('bom dia!').intencao).toBe('saudacao')
   })

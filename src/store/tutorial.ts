@@ -2,7 +2,7 @@
  * Estado do tour guiado — aberto sob demanda pelo botão "Guia" no header.
  *
  * Tour informativo com CTA real: cada passo oferece "Experimentar agora"
- * (fecha o tour e navega ao menu). O progresso é linear (10 passos em
+ * (fecha o tour e navega ao menu). O progresso é linear (9 passos em
  * 3 trilhas); `visitados` marca os já vistos para o contador do stepper.
  * `animar` pausa as animações de ambiente sem depender só do SO.
  */

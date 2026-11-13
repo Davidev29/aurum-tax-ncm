@@ -35,7 +35,7 @@ describe('aurum-ai-chat (orquestrador)', () => {
   it('navegar sugere botão de ir à tela, sem "Sou a" redundante', async () => {
     const r = await responderChat('me leva para a calculadora')
     expect(r.texto).not.toContain('Sou a')
-    expect(r.botoes?.some((b) => b.acao === 'navegar' && b.alvo === 'calculadora')).toBe(true)
+    expect(r.botoes?.some((b) => b.acao === 'navegar' && b.alvo === 'consulta')).toBe(true)
   }, 15000)
 
   it('cálculo sem valor assume R$ 1.000 com aviso explícito, sem eco da pergunta', async () => {

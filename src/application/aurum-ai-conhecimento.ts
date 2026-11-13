@@ -26,7 +26,7 @@ export const CONCEITOS_AURUM_AI: VerbeteConceito[] = [
     aliases: ['ibs', 'imposto sobre bens', 'imposto bens servicos'],
     resumo:
       'O IBS substitui ICMS e ISS na Reforma (LC 214/2025). É calculado sobre a base cheia da operação, com alíquota de referência reduzida conforme o enquadramento (CST × cClassTrib) de cada NCM/NBS.',
-    ondeVer: 'Calculadora Tributária → adicione um NCM e veja IBS por item.',
+    ondeVer: 'Consulta NCM → consulte o NCM e simule o IBS/CBS nos cartões.',
   },
   {
     chave: 'cbs',
@@ -34,7 +34,7 @@ export const CONCEITOS_AURUM_AI: VerbeteConceito[] = [
     aliases: ['cbs', 'contribuicao sobre bens'],
     resumo:
       'A CBS substitui PIS/Cofins na Reforma (LC 214/2025). Segue a mesma lógica do IBS: base cheia × alíquota de referência com reduções do enquadramento. No Simples Híbrido ela é apurada por fora (débitos menos créditos).',
-    ondeVer: 'Calculadora Tributária ou Simples Nacional → regime Híbrido.',
+    ondeVer: 'Consulta NCM ou Simples Nacional → regime Híbrido.',
   },
   {
     chave: 'ncm',

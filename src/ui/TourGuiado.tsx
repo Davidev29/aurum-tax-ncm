@@ -2,7 +2,7 @@
  * Tour guiado — guia de uso do sistema, redesenho v2.
  *
  * Pós-avaliação multiagente (UX · motion · instrucional · visual/A11y):
- * - 10 passos em 3 TRILHAS por objetivo (Calcular / Organizar / Dominar);
+ * - 9 passos em 3 TRILHAS por objetivo (Calcular / Organizar / Dominar);
  * - 1 ideia por tela: promessa + onde fica + 3 micro-ações + dica-ganho;
  * - 1 ritmo de movimento (CURVA + 0.32s + stagger 0.06), 1 loop ambiente
  *   por tela, spotlight com `layoutId`, sem cursor-loop/ripple/ping/shimmer;

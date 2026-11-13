@@ -42,6 +42,22 @@ export const NOTAS_VERSAO: Record<string, NotasVersao> = {
       'Classificação automática 100% local, sem enviar dados para a nuvem',
     ],
   },
+  '1.1.0': {
+    data: '2026-11-13',
+    novidades: [
+      'Venda avulsa: sem conta, sem chave, sem ativação — o app abre direto',
+      'Sem assistente de instalação na primeira execução',
+      'Menu ✨ Guia mantido para aprender o sistema a qualquer momento',
+    ],
+  },
+  '1.2.0': {
+    data: '2026-11-13',
+    novidades: [
+      'Consulta NCM agora é a primeira tela do menu',
+      'Calculadora removida — simule IBS/CBS direto nos cartões da Consulta NCM',
+    ],
+    comentario: 'A tela Calculadora foi descontinuada; a simulação (base, IBS, CBS e carga efetiva) vive nos cartões da Consulta NCM.',
+  },
 }
 
 /** Devolve as notas de uma versão, ou `null` quando não há entrada. */

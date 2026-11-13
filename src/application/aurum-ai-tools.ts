@@ -258,7 +258,7 @@ export const PLANO_TOOL_CALLING: ToolSpec[] = [
     tool: 'navegarPara',
     quandoUsar: 'intenção navegar/capacidades/ajuda/status: sugere a view + botão.',
     inputs: ['destino (view)'],
-    exemplo: ['"me leva para a calculadora" → botão Ir para Calculadora'],
+    exemplo: ['"me leva para a consulta" → botão Ir para Consulta NCM'],
     guardrail: 'Só sugere; a troca é ato do usuário no botão. Chat nunca altera dados.',
     escreveNoSistema: false,
   },

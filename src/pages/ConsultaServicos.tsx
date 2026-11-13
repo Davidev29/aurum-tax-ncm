@@ -13,7 +13,7 @@ import { fmtCnpj, fmtNbs, MASK, norm } from '@/domain/services/format'
 import { detectarIntencaoConsulta } from '@/domain/services/detector-consulta'
 import { ModalSalvarClass } from '@/modais/pagina'
 import { useServicos } from '@/store/consulta-servicos'
-import { toast, useUi } from '@/store/ui'
+import { toast } from '@/store/ui'
 import { CartaoEnxuto } from '@/ui/consulta-enxuta'
 import {
   BarraConfiancaAurumAI,
@@ -73,7 +73,6 @@ export function ConsultaServicos() {
   const erroCnpj = useServicos((s) => s.erroCnpj)
   const consultarCnpj = useServicos((s) => s.consultarCnpj)
 
-  const abrirCalc = useUi((s) => s.abrirCalc)
   const [paraSalvar, setParaSalvar] = useState<Classificacao | null>(null)
 
   const intencao = useMemo(() => detectarIntencaoConsulta(entrada, 'nbs'), [entrada])
@@ -337,7 +336,6 @@ export function ConsultaServicos() {
                         cl={decisaoIa}
                         nomenclatura={null}
                         onSalvar={(cl) => setParaSalvar(cl)}
-                        onAddCalc={(cl) => abrirCalc({ tipo: 'classificacao', classificacao: cl })}
                       />
                       <div className="flex flex-wrap gap-2">
                         <Btn
@@ -395,7 +393,6 @@ export function ConsultaServicos() {
                         cl={r.classificacao}
                         nomenclatura={null}
                         onSalvar={(cl) => setParaSalvar(cl)}
-                        onAddCalc={(cl) => abrirCalc({ tipo: 'classificacao', classificacao: cl })}
                       />
                     ))}
                   </div>
@@ -504,7 +501,6 @@ export function ConsultaServicos() {
                     key={a.cnae7}
                     atividade={a}
                     onSalvar={setParaSalvar}
-                    onAddCalc={(c) => abrirCalc({ tipo: 'classificacao', classificacao: c })}
                   />
                 ))}
                 {!vereditoEmpresa.atividades.length ? (

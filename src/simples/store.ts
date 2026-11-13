@@ -1,6 +1,6 @@
 /**
  * Simples Nacional — store isolada (Zustand).
- * NÃO importa `@/store/calculadora`. Reusa apenas CNPJ/CNAE + UI.
+ * NÃO importa o motor de apuração da Consulta. Reusa apenas CNPJ/CNAE + UI.
  *
  * Fluxo em etapas (refino):
  * - Passo 1: escolher Anexo (manual) ou CNPJ+CNAE (automático).

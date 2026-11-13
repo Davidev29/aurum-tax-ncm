@@ -1,5 +1,5 @@
 /**
- * Simples Nacional — página isolada (novo recurso, sem impacto na Calculadora).
+ * Simples Nacional — página isolada (novo recurso, sem impacto na Consulta NCM).
  *
  * Layout em wizard (tela única) + resultado rico lado a lado no desktop:
  * - Passo 1: valores base (RBT12 + receita + folha opcional).

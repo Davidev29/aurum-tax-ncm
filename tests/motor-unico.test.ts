@@ -1,12 +1,11 @@
 /**
  * Garantia do motor único: o mesmo NCM entrega a mesma tributação em todas
- * as telas (Consulta, Lote, XML, SPED, Produtos, Calculadora).
+ * as telas (Consulta, Lote, XML, SPED, Produtos).
  *
  * Regressão dos casos em que telas divergiam:
  * - Lote decidia sozinho pelo `vinculos` crus (ignorando extinto/revogado);
- * - `produtoParaCalculadora` recomputava `regraGeral` por heurística
- *   (`cst === '000'`) em vez da flag do motor;
- * - gravação via calculadora congelava reduções antigas sem re-resolver;
+ * - `gravando via aplicação (produtos/Lote) congelava reduções antigas sem
+ *   re-resolver;
  * - a "1ª opção" de NCM com N vínculos dependia da ordem de importação.
  */
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -16,7 +15,6 @@ import { processarArquivoLote } from '@/infrastructure/parsers/lote'
 import { analisarItensNfe } from '@/infrastructure/nfe/analisar'
 import { analisarItens } from '@/infrastructure/sped/analisar'
 import {
-  produtoParaCalculadora,
   reresolverClassificacao,
   salvarProduto,
 } from '@/application/produtos'
@@ -257,21 +255,7 @@ describe('mesmo NCM, mesma tributação em todas as telas', () => {
     expect(viva).toMatchObject({ cst: '200', cClassTrib: '200038' })
   })
 
-  it('vínculo oficial com CST 000 NÃO é "regra geral" na calculadora', async () => {
-    const r = await resolverClassificacoes(NCM_CST000)
-    expect(r.regraGeral).toBe(false)
-    const item = produtoParaCalculadora({
-      id: 1, empresaId: null, codigo: 'SKU', nome: 'N', ncm: NCM_CST000,
-      cfop: '', cstIcms: '', pis: '', cofins: '', quantidade: 1, valorUnitario: 10,
-      cstReforma: '000', cClassTrib: '000002', regraGeral: false,
-      classificacaoSnapshot: {
-        codigo: NCM_CST000, codigoFormatado: NCM_CST000, cst: '000', cClassTrib: '000002',
-        descricao: 'd', baseLegal: 'b', pRedIBS: 0, pRedCBS: 0, anexo: null, classificacao: 'c',
-      },
-      baseLegal: 'b', criadoEm: '', atualizadoEm: '',
-    } as never)
-    expect(item.regraGeral).toBe(false)
-  })
+
 
   it('gravação re-resolve: escolha válida preservada, divergente corrigida', async () => {
     const r = await resolverClassificacoes(NCM_2VINC)

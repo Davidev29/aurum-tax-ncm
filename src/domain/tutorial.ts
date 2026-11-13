@@ -2,7 +2,7 @@
  * Tour guiado — conteúdo do onboarding pós-instalação.
  *
  * Redesenho v2 (pós-avaliação multiagente):
- * - 10 passos preservados (contrato menu a menu), mas agrupados em
+ * - 9 passos (um por menu), agrupados em
  *   3 TRILHAS por objetivo — Calcular / Organizar / Dominar.
  * - Cada passo tem `promessa` (em 30s…) + `resultado` (concluído quando…),
  *   linguagem de verbo + exemplo clicável, jargão glossarizado inline
@@ -28,7 +28,7 @@ export const TRILHAS_TOUR: TrilhaTour[] = [
     titulo: 'Calcular impostos',
     descricao: 'Do produto ao imposto em ~2 min',
     icone: '🧮',
-    passos: ['calculadora', 'consulta', 'simples', 'servicos'],
+    passos: ['consulta', 'simples', 'servicos'],
   },
   {
     id: 'organizar',
@@ -71,22 +71,6 @@ export interface PassoTour {
 }
 
 export const PASSOS_TOUR: PassoTour[] = [
-  {
-    id: 'calculadora',
-    menu: 'Calculadora',
-    icone: '🧮',
-    trilha: 'calcular',
-    promessa: 'Em 30 segundos: do produto ao imposto da cesta.',
-    oQueFaz: 'Monte uma cesta de produtos e veja IBS + CBS e a carga efetiva recalculando na hora.',
-    comoUsar: [
-      'Busque um produto salvo por SKU, nome ou NCM — ou use “NCM manual”.',
-      'Ajuste quantidade e valor unitário direto na lista.',
-      'Leia o Resumo: base · IBS (R$) · CBS (R$) · total · carga efetiva em %.',
-    ],
-    dica: 'As alíquotas de referência valem para todo o sistema e a redução é congelada quando o item entra na cesta.',
-    resultado: 'Você concluiu quando vê o total IBS + CBS e a carga % no Resumo.',
-    acao: 'Abrir Calculadora',
-  },
   {
     id: 'consulta',
     menu: 'Consulta NCM',
@@ -158,7 +142,7 @@ export const PASSOS_TOUR: PassoTour[] = [
     icone: '📦',
     trilha: 'organizar',
     promessa: 'Em 20 segundos: seu catálogo pronto para calcular.',
-    oQueFaz: 'Cadastre produtos por empresa (cliente), com filtro rápido e exports — alimenta Calculadora e Lote.',
+    oQueFaz: 'Cadastre produtos por empresa (cliente), com filtro rápido e exports — alimenta a Consulta e o Lote.',
     comoUsar: [
       'Filtre por SKU, nome ou NCM e pagine a lista.',
       'Edite ou exclua direto na linha; importe em massa pelo Lote.',
@@ -251,20 +235,18 @@ export function primeiroIndiceDaTrilha(trilha: TrilhaId): number {
 /** Seção do menu lateral real (espelha `Layout.tsx` > NAV) — breadcrumb "onde fica". */
 export function secaoDoPasso(id: ViewId): { secao: string; pos: number; de: number } {
   switch (id) {
-    case 'calculadora':
-      return { secao: 'Trabalho', pos: 1, de: 7 }
-    case 'simples':
-      return { secao: 'Trabalho', pos: 2, de: 7 }
     case 'consulta':
-      return { secao: 'Trabalho', pos: 3, de: 7 }
+      return { secao: 'Trabalho', pos: 1, de: 6 }
+    case 'simples':
+      return { secao: 'Trabalho', pos: 2, de: 6 }
     case 'servicos':
-      return { secao: 'Trabalho', pos: 4, de: 7 }
+      return { secao: 'Trabalho', pos: 3, de: 6 }
     case 'cnaes':
-      return { secao: 'Trabalho', pos: 5, de: 7 }
+      return { secao: 'Trabalho', pos: 4, de: 6 }
     case 'lote':
-      return { secao: 'Trabalho', pos: 6, de: 7 }
+      return { secao: 'Trabalho', pos: 5, de: 6 }
     case 'nfe':
-      return { secao: 'Trabalho', pos: 7, de: 7 }
+      return { secao: 'Trabalho', pos: 6, de: 6 }
     case 'produtos':
       return { secao: 'Dados', pos: 1, de: 2 }
     case 'auxiliares':
@@ -278,4 +260,4 @@ export function secaoDoPasso(id: ViewId): { secao: string; pos: number; de: numb
 export const TOUR_KEY = 'aurum:tour-guiado-visto'
 
 /** Versão do conteúdo do tour — bump força reexibição opcional. */
-export const TOUR_VERSAO = '2.0'
+export const TOUR_VERSAO = '3.0'

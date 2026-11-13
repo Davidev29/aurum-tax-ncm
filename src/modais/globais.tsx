@@ -30,7 +30,6 @@ import { ESTILOS_FUNDO, FREQUENCIAS_FUNDO, fmtIntervaloFundo } from '@/infrastru
 import { Area, BarraProgresso, Btn, Campo, Check, Modal, Painel, Texto, useAcaoTatil } from '@/ui/kit'
 import { ModalNovidades } from '@/ui/ModalNovidades'
 import { useNovidades } from '@/store/novidades'
-import { ModalCalculadora } from './pagina'
 
 /* ------------------------------------------------------------- empresas --- */
 
@@ -2317,7 +2316,6 @@ export function ModaisGlobais() {
       <ModalConfig aberto={modal === 'config'} onFechar={fechar} />
       <ModalAuxEdicao aberto={modal === 'auxEdit'} />
       <ModalNovidades aberto={modal === 'novidades'} onFechar={fecharNovidades} />
-      <ModalCalculadora />
     </>
   )
 }

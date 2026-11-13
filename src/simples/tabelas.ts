@@ -5,7 +5,7 @@
  * + `PLANILHA DO SIMPLES NACIONAL.xlsx` (Base_Dados, Dashboard).
  * Vigência: 2027–2028. A partir de 2029 as porcentagens mudam.
  *
- * Isolamento: este módulo NÃO importa `@/store/calculadora` nem
+ * Isolamento: este módulo NÃO importa o motor IBS/CBS
  * `@/domain/services/calculo` (motor IBS/CBS da LC 214). Matemática própria.
  */
 

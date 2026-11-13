@@ -30,7 +30,6 @@ export function CartaoEnxuto({
   bloqueios,
   destaqueIA = false,
   onSalvar,
-  onAddCalc,
   onReclassificar,
 }: {
   cl: Classificacao
@@ -39,8 +38,6 @@ export function CartaoEnxuto({
   destaqueIA?: boolean
   /** Recebe a classificação ATIVA (respeita a opção de diferimento escolhida). */
   onSalvar?: (cl: Classificacao) => void
-  /** Recebe a classificação ATIVA (respeita a opção de diferimento escolhida). */
-  onAddCalc?: (cl: Classificacao) => void
   onReclassificar?: () => void
 }): ReactElement {
   // Anexo IX condicional: o cartão ganha a 2ª opção (diferimento, 0%) e
@@ -172,9 +169,6 @@ export function CartaoEnxuto({
         {onSalvar ? (
           <Btn variante="primary" tam="sm" onClick={() => onSalvar(visivel)}>💾 Salvar</Btn>
         ) : null}
-        {onAddCalc ? (
-          <Btn tam="sm" onClick={() => onAddCalc(visivel)}>🧮 Calculadora</Btn>
-        ) : null}
         {onReclassificar ? (
           <Btn tam="sm" onClick={onReclassificar}>✋ Reclassificar</Btn>
         ) : null}
@@ -223,7 +217,6 @@ export function CartaoMultiplo({
   bloqueios,
   destaqueIA = false,
   onSalvar,
-  onAddCalc,
   onReclassificar,
 }: {
   /** Classificações oficiais do NCM (inclui o fallback integral como último). */
@@ -232,7 +225,6 @@ export function CartaoMultiplo({
   bloqueios?: Record<string, BloqueioSistema[] | null>
   destaqueIA?: boolean
   onSalvar?: (cl: Classificacao) => void
-  onAddCalc?: (cl: Classificacao) => void
   onReclassificar?: () => void
 }): ReactElement {
   const [selecionado, setSelecionado] = useState(0)
@@ -386,7 +378,6 @@ export function CartaoMultiplo({
           nomenclatura={nomenclatura}
           bloqueios={(bloqueios?.[atual.classificacao.cClassTrib] ?? null) as BloqueioSistema[] | null}
           onSalvar={onSalvar}
-          onAddCalc={onAddCalc}
           onReclassificar={atual.manual ? onReclassificar : undefined}
         />
       ) : null}
@@ -400,14 +391,12 @@ function DetalheTributacaoSelecionada({
   nomenclatura,
   bloqueios,
   onSalvar,
-  onAddCalc,
   onReclassificar,
 }: {
   cl: Classificacao
   nomenclatura?: NomenclaturaNcm | null
   bloqueios?: BloqueioSistema[] | null
   onSalvar?: (cl: Classificacao) => void
-  onAddCalc?: (cl: Classificacao) => void
   onReclassificar?: () => void
 }): ReactElement {
   const { opcao, setOpcao, ativa } = useOpcaoTributacao(cl)
@@ -455,9 +444,6 @@ function DetalheTributacaoSelecionada({
       <div className="mt-3 flex flex-wrap gap-2">
         {onSalvar ? (
           <Btn variante="primary" tam="sm" onClick={() => onSalvar(visivel)}>💾 Salvar</Btn>
-        ) : null}
-        {onAddCalc ? (
-          <Btn tam="sm" onClick={() => onAddCalc(visivel)}>🧮 Calculadora</Btn>
         ) : null}
         {onReclassificar ? (
           <Btn tam="sm" onClick={onReclassificar}>✋ Reclassificar</Btn>
