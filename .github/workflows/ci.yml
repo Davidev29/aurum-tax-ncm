@@ -19,10 +19,15 @@ env:
   # silenciosamente (template sem integrity_check). Fixamos globalmente.
   NODE_OPTIONS: --experimental-sqlite
 
+# Runner fixo (não ubuntu-latest): a garantia de "verde garantido" depende
+# de ambiente reproduzível — o pacote testado no runner é o mesmo ambiente
+# dos testes. `ubuntu-latest` migra para Ubuntu 26 sem aviso; migração de
+# imagem é decisão consciente (PR), não automática.
+
 jobs:
   test:
     name: Typecheck + Vitest (Node 22)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +51,7 @@ jobs:
 
   release-build:
     name: Release build (base → typecheck → vite → ofuscar → verificar)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     needs: test
     steps:
