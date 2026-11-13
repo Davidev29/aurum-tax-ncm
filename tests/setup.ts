@@ -51,6 +51,16 @@ function magiaSqlite(caminho: string): string {
   }
 }
 
+/** Quantos models o `prisma/schema.prisma` define (fonte da verdade do template). */
+function contarModelsSchema(): number {
+  try {
+    const schema = readFileSync(join(process.cwd(), 'prisma', 'schema.prisma'), 'utf8')
+    return (schema.match(/^model\s/gm) ?? []).length
+  } catch {
+    return 27
+  }
+}
+
 {
   const raiz = process.cwd()
   // O nome leva o hash do schema: qualquer mudança de schema invalida
@@ -105,6 +115,22 @@ function magiaSqlite(caminho: string): string {
       const r = db.prepare('PRAGMA integrity_check').get() as { integrity_check?: unknown }
       if (String(r?.integrity_check ?? '').toLowerCase() !== 'ok') {
         throw new Error('setup: template SQLite reprovou no integrity_check')
+      }
+      // Runners carregados podem liberar o `.db` com frames ainda no WAL
+      // (`wal_checkpoint(TRUNCATE)` devolvido ocupado) — o template iria para
+      // os workers com MENOS tabelas que o schema (bug visto no CI: snapshot
+      // válido com 19 de 27 tabelas). Conferimos a contagem real do schema
+      // antes de liberar; se divergir, o próprio retry recria do zero.
+      const n = (
+        db
+          .prepare(
+            "SELECT count(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma%'",
+          )
+          .get() as { n: number }
+      ).n
+      const esperado = contarModelsSchema()
+      if (Number(n) !== esperado) {
+        throw new Error(`setup: template com ${n} tabelas (esperado ${esperado} — definido por prisma/schema.prisma)`)
       }
     } finally {
       db.close()
@@ -164,17 +190,26 @@ function magiaSqlite(caminho: string): string {
             },
           )
           if (resultado.status === 0 && !resultado.error) {
-            ultimoErro = ''
-            break
+            // `db push` "sucesso" nem sempre significa template completo — exigimos
+            // a contagem real de tabelas antes de liberar (senão runners carregados
+            // liberam o template com menos tabelas e o teste de snapshot falha).
+            try {
+              finalizarTemplate()
+              ultimoErro = ''
+              break
+            } catch (e) {
+              ultimoErro = `template incompleto após db push: ${e instanceof Error ? e.message : String(e)}`
+            }
+          } else {
+            ultimoErro = [
+              typeof resultado.status === 'number' ? `status ${resultado.status}` : null,
+              resultado.error ? resultado.error.message : null,
+              resultado.stderr ? resultado.stderr.toString().trim() : null,
+              resultado.stdout ? resultado.stdout.toString().trim() : null,
+            ]
+              .filter(Boolean)
+              .join(' | ')
           }
-          ultimoErro = [
-            typeof resultado.status === 'number' ? `status ${resultado.status}` : null,
-            resultado.error ? resultado.error.message : null,
-            resultado.stderr ? resultado.stderr.toString().trim() : null,
-            resultado.stdout ? resultado.stdout.toString().trim() : null,
-          ]
-            .filter(Boolean)
-            .join(' | ')
           if (tentativa < 3) {
             Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400 * tentativa)
           }
@@ -182,7 +217,6 @@ function magiaSqlite(caminho: string): string {
         if (ultimoErro) {
           throw new Error(`setup: prisma db push falhou após 3 tentativas no template ${template}: ${ultimoErro}`)
         }
-        finalizarTemplate()
       } finally {
         try {
           rmSync(lock, { force: true })
