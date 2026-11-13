@@ -2119,7 +2119,261 @@
   }
   .sugg-item:hover,
   .sugg-item.is-active {
-    background: color-mix(in oklab, var(--color-aurum-500) 12%, transparent);
+    background: color-mix(in srgb, var(--color-aurum-500) 16%, transparent);
+  }
+
+  .sugg-item.is-active {
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--color-aurum-500) 60%, transparent);
+  }
+
+  /* -------------------------------------- card de resultado NCM (busca) -- */
+
+  .ncm-resultado {
+    position: relative;
+    display: flex;
+    gap: 0.6rem;
+    padding: 0.5rem 0.6rem 0.55rem 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: 0.8rem;
+    background: var(--surface-2);
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .ncm-resultado:hover {
+    border-color: color-mix(in srgb, var(--color-aurum-500) 55%, var(--line));
+    background: color-mix(in srgb, var(--color-aurum-500) 7%, var(--surface-2));
+  }
+
+  .ncm-resultado:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--surface-2),
+      0 0 0 4px var(--color-aurum-500);
+  }
+
+  .ncm-resultado[data-ativo='true'],
+  .ncm-resultado[aria-selected='true'] {
+    border-color: var(--color-aurum-500);
+    background: color-mix(in srgb, var(--color-aurum-500) 10%, var(--surface-2));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-aurum-500) 55%, transparent);
+  }
+
+  .ncm-resultado[data-extinto='true'] {
+    border-style: dashed;
+    opacity: 0.72;
+  }
+
+  .ncm-resultado-barra {
+    width: 3px;
+    border-radius: 9999px;
+    flex-shrink: 0;
+    background: var(--color-aurum-400, #d4af37);
+    opacity: 0.55;
+  }
+
+  .ncm-resultado[data-estado='ok'] .ncm-resultado-barra { background: #34d399; opacity: 0.9; }
+  .ncm-resultado[data-estado='multi'] .ncm-resultado-barra { background: #fbbf24; opacity: 0.95; }
+  .ncm-resultado[data-estado='extinto'] .ncm-resultado-barra { background: #f87171; opacity: 0.9; }
+  .ncm-resultado[data-estado='geral'] .ncm-resultado-barra { background: var(--ink-soft); opacity: 0.35; }
+
+  .ncm-resultado-eyebrow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.5625rem;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    min-width: 0;
+  }
+
+  .ncm-chip-familia {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 9999px;
+    padding: 0.05rem 0.4rem;
+    border: 1px solid color-mix(in srgb, var(--color-aurum-500) 40%, var(--line));
+    color: var(--ink-soft);
+    font-weight: 800;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .ncm-codigo {
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.8125rem;
+    font-weight: 900;
+    letter-spacing: -0.01em;
+    color: var(--color-brand-700, #16233a);
+    white-space: nowrap;
+  }
+
+  .dark .ncm-codigo {
+    color: var(--color-aurum-200, #e5d08a);
+  }
+
+  .ncm-resultado-linha-codigo {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.2rem;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .ncm-selo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    border-radius: 9999px;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.5625rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .ncm-selo-vigente { background: #d1fae5; color: #065f46; }
+  .ncm-selo-extinto { background: #fee2e2; color: #991b1b; }
+  .ncm-selo-ok { background: #d1fae5; color: #065f46; }
+  .ncm-selo-multi { background: #fef3c7; color: #92400e; }
+  .ncm-selo-geral { background: transparent; color: #92400e; border: 1px solid #f59e0b; }
+
+  .dark .ncm-selo-vigente { background: rgba(16, 185, 129, 0.16); color: #6ee7b7; }
+  .dark .ncm-selo-extinto { background: rgba(239, 68, 68, 0.16); color: #fca5a5; }
+  .dark .ncm-selo-ok { background: rgba(16, 185, 129, 0.16); color: #6ee7b7; }
+  .dark .ncm-selo-multi { background: rgba(245, 158, 11, 0.16); color: #fcd34d; }
+  .dark .ncm-selo-geral { background: transparent; color: #fcd34d; border-color: #b45309; }
+
+  .ncm-breadcrumb {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15rem 0.35rem;
+    list-style: none;
+    font-size: 0.625rem;
+    font-weight: 500;
+    line-height: 1.35;
+    color: var(--ink-soft);
+    min-width: 0;
+  }
+
+  .ncm-breadcrumb-seg {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .ncm-breadcrumb-sep {
+    opacity: 0.6;
+    font-weight: 400;
+  }
+
+  .ncm-breadcrumb-atual {
+    color: var(--ink);
+    font-weight: 700;
+  }
+
+  .ncm-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+    border-radius: 0.4rem;
+    border: 1px solid transparent;
+    font-size: 0.7rem;
+    line-height: 1;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+    background: transparent;
+  }
+
+  .ncm-copy-btn:hover {
+    border-color: var(--line);
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  .ncm-copy-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-aurum-500);
+  }
+
+  .ncm-copy-btn-ok {
+    color: #059669;
+  }
+
+  /* Bloco de contexto (cartão oficial). */
+
+  .ncm-contexto-eyebrow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+
+  .ncm-eyebrow-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+    max-width: 100%;
+    border-radius: 9999px;
+    border: 1px solid var(--line);
+    padding: 0.1rem 0.5rem;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ncm-eyebrow-chip-familia {
+    border-color: color-mix(in srgb, var(--color-aurum-500) 45%, var(--line));
+    color: var(--ink);
+    background: color-mix(in srgb, var(--color-aurum-500) 9%, transparent);
+  }
+
+  .ncm-contexto-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.2rem 0.6rem;
+    margin-top: 0.35rem;
+    font-size: 0.6875rem;
+    color: var(--ink-soft);
+    min-width: 0;
+  }
+
+  .ncm-contexto-meta > span {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .ncm-lista-cabecalho {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.35rem 0.75rem 0.3rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
   }
   /* Dropdown DENTRO de modal: contido na caixa do modal, nunca vazando para
      fora nem brigando com o modal empilhado de cima. O `.modal-scroll` rola

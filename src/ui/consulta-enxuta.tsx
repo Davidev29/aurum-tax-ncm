@@ -13,6 +13,7 @@ import { useEffect, useRef, useState, type ReactElement } from 'react'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
 import { LINK_LC214 } from '@/domain/constants'
 import { fmtNbs, fmtNcm, fmtPct, norm } from '@/domain/services/format'
+import { limparTextoFiscal } from '@/domain/services/texto-fiscal'
 import { observacoesFiscais } from '@/domain/services/calculo'
 import { FaixaTributaria } from './faixa-tributaria'
 import { Btn } from './kit'
@@ -21,6 +22,7 @@ import { BotaoDetalhePremium, ModalDetalheFiscal } from './consulta-premium'
 import { BotaoVerLegislacao, type BloqueioSistema } from './cartoes'
 import { AvisoIntegralFallback, PillAnexos } from './cartoes'
 import { SeletorTributacao, useOpcaoTributacao } from './diferimento-opcoes'
+import { NcmContextoNcm } from './ncm-contexto'
 
 /* ------------------------------------------------- cartão enxuto (1 por vez) -- */
 
@@ -106,22 +108,26 @@ export function CartaoEnxuto({
       <SeletorTributacao cl={cl} opcao={opcao} onChange={setOpcao} />
 
       <div className="mt-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="font-mono text-xl font-black tracking-tight text-brand-700 dark:text-aurum-200">
-            {codigoFormatado}
+        {!ehNbs && nomenclatura && norm(visivel.codigo).length === 8 ? (
+          <NcmContextoNcm nomenclatura={nomenclatura} />
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="font-mono text-xl font-black tracking-tight text-brand-700 dark:text-aurum-200">
+              {codigoFormatado}
+            </div>
+            {!ehNbs && nomenclatura ? (
+              nomenclatura.dataFim ? (
+                <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-800 dark:bg-red-950/60 dark:text-red-200">
+                  ⛔ Extinto em {nomenclatura.dataFim}
+                </span>
+              ) : (
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
+                  ✓ Vigente
+                </span>
+              )
+            ) : null}
           </div>
-          {!ehNbs && nomenclatura ? (
-            nomenclatura.dataFim ? (
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-800 dark:bg-red-950/60 dark:text-red-200">
-                ⛔ Extinto em {nomenclatura.dataFim}
-              </span>
-            ) : (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
-                ✓ Vigente
-              </span>
-            )
-          ) : null}
-        </div>
+        )}
         {!ehNbs && nomenclatura?.descricao ? (
           <div
             className="mt-2 flex items-start gap-2 rounded-xl border border-brand-200/60 border-l-4 border-l-brand-500 bg-brand-50/70 px-3 py-2 dark:border-aurum-900/50 dark:border-l-aurum-400 dark:bg-brand-950/30"
@@ -133,7 +139,7 @@ export function CartaoEnxuto({
                 Descrição do NCM pela tabela Siscomex
               </div>
               <p className="mt-0.5 text-[15px] font-semibold leading-relaxed text-brand-900 dark:text-brand-100">
-                {nomenclatura.descricao}
+                {limparTextoFiscal(nomenclatura.descricao)}
               </p>
             </div>
           </div>
@@ -303,25 +309,39 @@ export function CartaoMultiplo({
       aria-label={`${rotuloCodigo} ${codigoFormatado} — ${itens.length} tributações possíveis`}
     >
       {/* Cabeçalho único: NCM + Siscomex aparecem 1x (antes repetiam em N cartões). */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="font-mono text-xl font-black tracking-tight text-brand-700 dark:text-aurum-200">
-          {codigoFormatado}
+      {!ehNbs && nomenclatura && norm(cl0?.codigo ?? '').length === 8 ? (
+        <div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Classificação oficial
+            </span>
+            <span className="rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-black text-brand-800 dark:bg-aurum-500/15 dark:text-aurum-200">
+              {itens.length} opções
+            </span>
+          </div>
+          <NcmContextoNcm nomenclatura={nomenclatura} />
         </div>
-        {!ehNbs && nomenclatura ? (
-          nomenclatura.dataFim ? (
-            <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-800 dark:bg-red-950/60 dark:text-red-200">
-              ⛔ Extinto em {nomenclatura.dataFim}
-            </span>
-          ) : (
-            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
-              ✓ Vigente
-            </span>
-          )
-        ) : null}
-        <span className="ml-auto rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-black text-brand-800 dark:bg-aurum-500/15 dark:text-aurum-200">
-          {itens.length} opções
-        </span>
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="font-mono text-xl font-black tracking-tight text-brand-700 dark:text-aurum-200">
+            {codigoFormatado}
+          </div>
+          {!ehNbs && nomenclatura ? (
+            nomenclatura.dataFim ? (
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-800 dark:bg-red-950/60 dark:text-red-200">
+                ⛔ Extinto em {nomenclatura.dataFim}
+              </span>
+            ) : (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
+                ✓ Vigente
+              </span>
+            )
+          ) : null}
+          <span className="ml-auto rounded-full bg-brand-100 px-2 py-0.5 text-[10px] font-black text-brand-800 dark:bg-aurum-500/15 dark:text-aurum-200">
+            {itens.length} opções
+          </span>
+        </div>
+      )}
       {!ehNbs && nomenclatura?.descricao ? (
         <div
           className="mt-2 flex items-start gap-2 rounded-xl border border-brand-200/60 border-l-4 border-l-brand-500 bg-brand-50/70 px-3 py-2 dark:border-aurum-900/50 dark:border-l-aurum-400 dark:bg-brand-950/30"
@@ -333,7 +353,7 @@ export function CartaoMultiplo({
               Descrição do NCM pela tabela Siscomex
             </div>
             <p className="mt-0.5 text-[15px] font-semibold leading-relaxed text-brand-900 dark:text-brand-100">
-              {nomenclatura.descricao}
+              {limparTextoFiscal(nomenclatura.descricao)}
             </p>
           </div>
         </div>

@@ -9,7 +9,7 @@ import { SUGGEST_LIMITS } from '@/domain/constants'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
 import { interpretarEntradaNcm } from '@/domain/services/classificacao'
 import { detectarIntencaoConsulta } from '@/domain/services/detector-consulta'
-import { fmtNcm } from '@/domain/services/format'
+import { fmtNcm, MASK } from '@/domain/services/format'
 import {
   buscarNomenclaturaPorTexto,
   resolverClassificacoes,
@@ -282,7 +282,16 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
 
   escolherTexto: async (codigo) => {
     const digitos = codigo.replace(/\D+/g, '')
-    if (digitos.length !== 8) return
+    if (digitos.length !== 8) {
+      // Prefixo (2–7 dígitos): refina a busca no próprio campo — antes o
+      // clique era um no-op silencioso ("0201" não fazia nada).
+      if (digitos.length >= 2) {
+        seqSugestoes++
+        seqBuscaTexto++
+        set({ modo: 'ncm', entrada: MASK.ncm(digitos) })
+      }
+      return
+    }
     set({ modo: 'ncm', entrada: fmtNcm(digitos) })
     await get().consultar(digitos)
   },
@@ -406,7 +415,18 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
 
   escolherUnificada: async (codigo) => {
     const digitos = codigo.replace(/\D+/g, '')
-    if (digitos.length !== 8) return
+    if (digitos.length !== 8) {
+      // Prefixo (2–7 dígitos): refina a busca no próprio input — ver sugestões
+      // dos filhos (antes, clique em "0201"/"0201.10" não fazia nada).
+      if (digitos.length >= 2) {
+        seqUnificada++
+        seqBuscaTexto++
+        seqDescricao++
+        seqSugestoes++
+        set({ modo: 'ncm', entrada: MASK.ncm(digitos) })
+      }
+      return
+    }
     seqUnificada++
     seqBuscaTexto++
     seqDescricao++

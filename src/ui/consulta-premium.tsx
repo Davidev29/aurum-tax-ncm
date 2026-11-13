@@ -16,7 +16,8 @@ import { Modal, Pill } from './kit'
 import { FontesAurumAI, IconeAurumPremium, LinhaPreferidaAurumAI } from './aurum-ai'
 import { anexoOficial, observacoesFiscais } from '@/domain/services/calculo'
 import { rotuloAnexoOficial } from '@/domain/constants/tributarios'
-import { nomeCapitulo } from '@/domain/constants/capitulos'
+import { NcmBreadcrumb } from './ncm-contexto'
+import { limparTextoFiscal, fmtDataBr } from '@/domain/services/texto-fiscal'
 import { Campo, Secao, SecaoInformacoesAdicionais } from './detalhes'
 import { SeletorTributacao, useOpcaoTributacao } from './diferimento-opcoes'
 import {
@@ -259,31 +260,7 @@ export function ModalAuditoriaIA({
 
 /* -------------------------------------------------- detalhe fiscal (modal) -- */
 
-/** Remove tags HTML da nomenclatura oficial (`<i>Gallus…</i>`), entidades e excesso de espaço. */
-function limparTextoFiscal(v: unknown): string {
-  return String(v ?? '')
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')
-    .replace(/^[-–—\s]+/, '')
-    .trim()
-}
-
-/** `2025-05-05T00:00:00` / `2025-05-05` / `05/05/2025` → `05/05/2025`. Sentinela 9999 / vazio → null. */
-function fmtDataBr(v: unknown): string | null {
-  const s = String(v ?? '').trim()
-  if (!s || /9999|31\/12\/9999/i.test(s)) return null
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (m) return `${m[3]}/${m[2]}/${m[1]}`
-  const b = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
-  if (b) return `${b[1]}/${b[2]}/${b[3]}`
-  return s || null
-}
-
+/** `dd/mm/aaaa → dd/mm/aaaa` / a partir de / vigente até. */
 function vigenciaCctTexto(inicio: unknown, fim: unknown): string | null {
   const i = fmtDataBr(inicio)
   const f = fmtDataBr(fim)
@@ -342,9 +319,6 @@ export function ModalDetalheFiscal({
   const ehNbs = norm(visivel.codigo).length === 9
   const rotuloCodigo = ehNbs ? 'NBS' : 'NCM'
   const codigoFormatado = ehNbs ? fmtNbs(visivel.codigo) : fmtNcm(visivel.codigo)
-  const capNum = digitos.length >= 2 ? digitos.slice(0, 2) : ''
-  const nomeCap = capNum ? nomeCapitulo(capNum) : ''
-  const posicao = digitos.length >= 4 ? digitos.slice(0, 4) : ''
   const anexo = anexoOficial(visivel)
   // Bloco 1 (Produto/NCM) é EXCLUSIVO do produto: só a descrição Siscomex
   // (`nomenclatura.descricao`, ex.: "Outros"). Nunca cai para
@@ -479,11 +453,12 @@ export function ModalDetalheFiscal({
                 Descrição do NCM indisponível na tabela Siscomex — o enquadramento da Reforma está na seção abaixo.
               </p>
             )}
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-              {capNum ? `Cap. ${capNum}${nomeCap ? ` · ${nomeCap}` : ''}` : ''}
-              {posicao ? ` · Pos. ${posicao}` : ''}
-              {extinto && fimNcm ? ` · Extinto em ${fimNcm}` : inicioNcm ? ` · Vigente desde ${inicioNcm}` : ' · Vigente'}
-            </p>
+            <div className="mt-2">
+              <NcmBreadcrumb codigo={digitos} />
+              <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                {extinto && fimNcm ? `⛔ Extinto em ${fimNcm}` : inicioNcm ? `Vigente desde ${inicioNcm}` : 'Vigente'}
+              </p>
+            </div>
             {nomenclatura?.ato ? (
               <p className="mt-1 text-[10px] leading-relaxed text-slate-400" title={nomenclatura.ato}>
                 📎 {nomenclatura.ato}

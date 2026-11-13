@@ -25,7 +25,10 @@ import type { Classificacao } from '@/domain/entities'
 import { fmtConfiancaAurumAI, nivelDeConfianca } from '@/domain/aurum-ai'
 import { fmtMoeda, fmtNcm, MASK, norm } from '@/domain/services/format'
 import { detectarIntencaoConsulta } from '@/domain/services/detector-consulta'
-import { normalizarBusca, tokensRelevantes } from '@/domain/services/busca-texto'
+import { nomeCapitulo } from '@/domain/constants/capitulos'
+import { limparTextoFiscal } from '@/domain/services/texto-fiscal'
+import { NcmResultadoCard } from '@/ui/ncm-resultado'
+import { Destacar } from '@/ui/destacar'
 import { ModalSalvarClass } from '@/modais/pagina'
 import { ModalReclassificacao } from '@/modais/reclassificacao'
 import { useBase } from '@/store/base'
@@ -351,7 +354,7 @@ export function Consulta() {
   // Itens unificados do dropdown (família + números + textos) para ↑↓/Enter.
   const quickItens: { codigo: string; rotulo: string }[] = [
     ...(quickFam && quickFam.unanime && quickFam.cst
-      ? [{ codigo: `fam:${quickFam.prefixo}`, rotulo: `Família ${quickFam.prefixo}` }]
+      ? [{ codigo: `fam:${quickFam.prefixo}`, rotulo: `Família ${MASK.ncm(quickFam.prefixo)}` }]
       : []),
     ...quickNum.map((n) => ({ codigo: n.codigo, rotulo: n.codigoOriginal })),
     ...quickTxt.filter((r) => !quickNum.some((n) => n.codigo === r.codigo)).map((r) => ({ codigo: r.codigo, rotulo: r.codigo })),
@@ -415,6 +418,15 @@ export function Consulta() {
       ?.querySelector(`[data-indice="${ativoTexto}"]`)
       ?.scrollIntoView({ block: 'nearest' })
   }, [ativoTexto])
+
+  // Mesmo tratamento no dropdown instantâneo (quickAtivo) — antes o item
+  // ativo podia ficar escondido fora da área visível (max-height 16rem).
+  useEffect(() => {
+    if (quickAtivo < 0) return
+    document
+      .querySelector(`#quick-item-${quickAtivo}`)
+      ?.scrollIntoView({ block: 'nearest' })
+  }, [quickAtivo])
 
   const exatoPronto = intencao.deveClassificarExato && resultados.length > 0
   const algumaCarga = carregando || buscandoTexto || classificando
@@ -493,7 +505,13 @@ export function Consulta() {
                     <div className="sugg-familia" title={quickFam.unanime ? `Família unânime ${quickFam.cst}/${quickFam.cClassTrib}` : 'Família com enquadramentos divergentes'}>
                       <span aria-hidden="true">🧬</span>
                       <span>
-                        Família {quickFam.prefixo} · {quickFam.totalVigentes} vigente(s)
+                        {(() => {
+                          const digitos = norm(quickFam.prefixo)
+                          const fmt = MASK.ncm(digitos)
+                          const nivel = digitos.length === 2 ? 'Capítulo' : digitos.length === 4 ? 'Família SH4' : digitos.length === 5 || digitos.length === 6 ? 'Família SH6' : 'Item'
+                          const nome = digitos.length === 2 ? nomeCapitulo(digitos) : ''
+                          return `${nivel} ${fmt}${nome ? ` · ${nome}` : ''}`
+                        })()} · {quickFam.totalVigentes} vigente(s)
                         {quickFam.unanime && quickFam.cst ? (
                           <> · <strong className="font-mono">{quickFam.cst}/{quickFam.cClassTrib}</strong> unânime</>
                         ) : (
@@ -1469,14 +1487,22 @@ function ListaSugestaoNcm({
             <button
               key={n.codigo}
               type="button"
-              className="flex w-full cursor-pointer items-start gap-2 rounded-lg px-3 py-1.5 text-left text-xs transition hover:bg-brand-50 dark:hover:bg-brand-900/30"
+              className="flex w-full cursor-pointer items-start gap-2 rounded-lg px-3 py-1.5 text-left text-xs transition hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aurum-500 dark:hover:bg-brand-900/30"
               onClick={() => onEscolher(n.codigo)}
+              title={`${norm(n.codigo).length === 8 ? 'Classificar' : 'Ver sugestões em'} ${n.codigoOriginal}${n.dataFim ? ` — extinto em ${n.dataFim}` : ''}`}
             >
               <span className="whitespace-nowrap font-mono font-bold text-brand-700 dark:text-aurum-200">
                 {n.codigoOriginal}
               </span>
-              <span className="min-w-0 flex-1 truncate text-slate-600 dark:text-slate-300">
-                {n.descricao}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-slate-600 dark:text-slate-300">
+                  {limparTextoFiscal(n.descricao)}
+                </span>
+                {norm(n.codigo).length >= 2 ? (
+                  <span className="block truncate text-[9px] font-medium text-slate-500 dark:text-slate-400">
+                    Cap. {norm(n.codigo).slice(0, 2)} · {nomeCapitulo(norm(n.codigo).slice(0, 2))}
+                  </span>
+                ) : null}
               </span>
               {n.dataFim ? (
                 <span className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-black text-red-800 dark:bg-red-950/60 dark:text-red-200" title={`Extinto em ${n.dataFim}`}>
@@ -1501,32 +1527,6 @@ function ListaSugestaoNcm({
 }
 
 /* -------------------------------------------------------- busca por texto -- */
-
-/** Destaca as palavras que casam com o termo (insensível a acento/caixa). */
-function Destacar({ texto, termo }: { texto: string; termo: string }) {
-  const tokens = tokensRelevantes(termo)
-  if (!tokens.length) return <>{texto}</>
-  const palavras = texto.split(/(\s+)/)
-  return (
-    <>
-      {palavras.map((p, i) => {
-        if (!p.trim()) return <span key={i}>{p}</span>
-        const np = normalizarBusca(p)
-        const hit = np.length >= 2 && tokens.some((t) => np.includes(t))
-        return hit ? (
-          <mark
-            key={i}
-            className="rounded bg-amber-200/70 px-0.5 text-inherit dark:bg-amber-500/30"
-          >
-            {p}
-          </mark>
-        ) : (
-          <span key={i}>{p}</span>
-        )
-      })}
-    </>
-  )
-}
 
 function ListaResultadoTexto({
   resultados,
@@ -1575,7 +1575,7 @@ function ListaResultadoTexto({
   return (
     <div
       ref={listaRef}
-      className="max-h-72 space-y-1 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/60 p-2 dark:border-slate-800 dark:bg-slate-950/40"
+      className="max-h-96 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/60 p-2 dark:border-slate-800 dark:bg-slate-950/40"
       role="listbox"
       aria-label="Resultados da busca por nome"
     >
@@ -1586,55 +1586,19 @@ function ListaResultadoTexto({
         </div>
       ) : resultados.length ? (
         <>
-          <div className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            {resultados.length} resultado{resultados.length > 1 ? 's' : ''} — clique para classificar · Enter pesquisa o texto atual
+          <div className="ncm-lista-cabecalho" role="status" aria-live="polite">
+            <span>{resultados.length} resultado{resultados.length > 1 ? 's' : ''}</span>
+            <span className="text-slate-500 dark:text-slate-400">clique para classificar · Enter pesquisa</span>
           </div>
           {resultados.map((n, i) => (
-            <button
+            <NcmResultadoCard
               key={n.codigo}
-              type="button"
-              role="option"
-              aria-selected={i === ativo}
-              data-indice={i}
-              onClick={() => onEscolher(n.codigo)}
-              className={`flex w-full cursor-pointer items-start gap-2 rounded-lg px-3 py-1.5 text-left text-xs transition ${
-                i === ativo ? 'bg-brand-50 dark:bg-brand-900/30' : 'hover:bg-brand-50 dark:hover:bg-brand-900/30'
-              }`}
-            >
-              <span className="whitespace-nowrap font-mono font-bold text-brand-700 dark:text-aurum-200">
-                {n.codigoOriginal}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-slate-700 dark:text-slate-200">
-                  <Destacar texto={n.descricao} termo={termo} />
-                </span>
-                {n.caminho.length ? (
-                  <span className="block truncate text-[10px] text-slate-400">
-                    {n.caminho.join(' › ')}
-                  </span>
-                ) : null}
-              </span>
-              {n.totalClassificacoes > 0 ? (
-                <span
-                  className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
-                  title={`${n.totalClassificacoes} classificação(ões) na Reforma`}
-                >
-                  {n.totalClassificacoes} class.
-                </span>
-              ) : (
-                <span
-                  className="shrink-0 rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                  title="Sem vínculo específico — cai na tributação integral"
-                >
-                  regra geral
-                </span>
-              )}
-              {n.dataFim ? (
-                <span className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-black text-red-800 dark:bg-red-950/60 dark:text-red-200" title={`Extinto em ${n.dataFim}`}>
-                  ⛔
-                </span>
-              ) : null}
-            </button>
+              item={n}
+              termo={termo}
+              ativo={i === ativo}
+              indice={i}
+              onEscolher={onEscolher}
+            />
           ))}
         </>
       ) : (
