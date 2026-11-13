@@ -2,125 +2,110 @@
 
 ## Directory Tree
 
-Top 3 níveis (gerado por glob; `node_modules/`, `build/`, `dist/`, `release/`, `electron/dist/` não expandidos):
+Top 3 níveis (`node_modules/`, `build/`, `dist/`, `release/`, `electron/dist/` não expandidos):
 
 ```
-./                                     ← repo aurum-tax-ncm (raiz git, Electron + React + Vite + TS)
-├── .planning/                            ← GSD (PROJECT.md, ROADMAP.md, STATE.md, codebase/)
-├── index.html                            ← shell (#raiz, tema anti-flash, /src/main.tsx)
-├── package.json · vite.config.ts · vitest.config.ts · tsconfig.json
-├── src/ (223 arquivos)
+./                                     ← repo aurum-tax-ncm (raiz git)
+├── .planning/                            ← GSD (PROJECT/REQUIREMENTS/ROADMAP/STATE + codebase/*.md)
+├── .github/workflows/ci.yml              ← typecheck + vitest (Node 22)
+├── index.html                            ← shell (#raiz, tema anti-flash)
+├── package.json · vite.config.ts · vitest.config.ts · tsconfig.json · tsconfig.electron.json
+├── src/ (271 arquivos)
 │   ├── main.tsx · App.tsx · index.css · pdfmake.d.ts
-│   ├── pages/        ← Calculadora, AurumChat, Consulta, ConsultaServicos, ConsultaCnaes, Lote,
-│   │                     NfeXml/NfeXmlPolida, Produtos, Auxiliares, Legislacao (+ DebugIA oculta `Ctrl+Shift+D`)
-│   ├── simples/      ← módulo Simples isolado (tabelas, calculo, store, page, DasModal, relatorio-analitico…)
-│   ├── simples-projection/ ← projeção dividida (camada aditiva sobre `simples/`)
-│   ├── ui/           ← Layout, kit, cartoes, detalhes, dialogos, divergencia, opcoes, motion,
-│   │                     skeleton, Marca, ModalLegislacao, TermoAceite
-│   ├── modais/       ← pagina, globais, reclassificacao
-│   ├── store/        ← base, sessao, ui, consulta, calculadora, lote, nfe, produtos, auxiliares, dialogo
-│   ├── domain/       ← entities, contrato, legislacao, capitulos.json,
-│   │                     services/ (classificacao, calculo, busca-texto, classificador-descricao (+servicos),
-│   │                     detector-consulta, detector-chat, referencia-service, revogacao, format, cnae, cnae-nbs,
-│   │                     regras-hierarquicas, verificacao-servicos),
-│   │                     constants/ (index, tributarios, capitulos, seeds, aliases, cff-apis, siscomex-apis)
-│   ├── application/  ← base, atualizacao, auditoria, backup, reclassificacao, revalidacao,
-│   │                     produtos, empresas, emitente, notas-xml, nfe-insights, ncm-sync, cff-sync,
-│   │                     classificacao-inteligente (+servicos), classificacao-ia (+servicos),
-│   │                     aurum-ai-chat/tools/registro/livre/contexto, consultar-por-cnae/cnpj,
-│   │                     auxiliares, aux-meta
-│   └── infrastructure/← db/schema (Dexie v13), base/ (base-service, classificacao-repo, reclassificacao-repo, normalizacao),
-│                         ia/ (classificacao-ia-repo), nfe/ (parse, analisar, apuracao, regime, credito, tipos),
-│                         sped/ (leitura, parse, analisar, tipos), siscomex/ncm-sync, cff/cff-sync,
-│                         receita/brasilapi, parsers/lote, arquivos/xml-storage,
-│                         exporters/relatorios, pdf/ (setup, menu-exportacao),
-│                         bridge, legislacao-texto
+│   ├── pages/        ← Calculadora, Consultas (NCM/NBS/CNAEs/Simples via simples/), Lote,
+│   │                    NfeXml/NfeXmlPolida (+ NfeNatureza, NfeConferenciaProdutos, NfePendentes,
+│   │                     NfeCalendarioAnual, ModalRelatorioNfe), Produtos, Auxiliares, Legislacao
+│   ├── simples/      ← módulo Simples isolado (tabelas, calculo, store, DasModal, InsightsModal,
+│   │                    relatorio-analitico, ia-insights, exports)
+│   ├── simples-projection/ ← projeção dividida v2 (camada aditiva sobre `simples/`)
+│   ├── ui/           ← Layout, kit, cartoes, detalhes, dialogos, motion, skeleton, Marca,
+│   │                    ModalLegislacao, TourGuiado, ErroFatal  ← (TermoAceite/banner de licença removidos na v1.1.0)
+│   ├── modais/       ← globais (Empresas/Config/Backup/Atualização/Aparência), pagina, reclassificacao,
+│   │                     escolha-tributacao, produto-manual
+│   ├── store/        ← 17 stores (ui, sessao, consulta(+servicos,+cnaes), calculadora, lote, nfe,
+│   │                    produtos, auxiliares, base, ia, fundo, novidades, conferencia-xml, novidades,
+│   │                    tutorial, dialogo)
+│   ├── domain/       ← entities, legislacao, capitulos, services/ (calculo, classificacao(+ia), busca-texto,
+│   │                    detector-*, cnae(+nbs), referencia-service, format, hierarquia-fiscal, revogacao, vigencia…)
+│   ├── application/  ← base, atualizacao, backup, auditoria, reclassificacao, revalidacao, produtos,
+│   │                    empresas, emitente, notas-xml, ncm-sync, cff-sync, classificacao-inteligente…,
+│   │                    aurum-ai-* (orquestrador RAG+tools determinístico), grafo-consumo, auxiliares, aux-meta
+│   ├── infrastructure/ ← db/ (schema=types, db-protocolo, driver-prisma, validacao…), base/, ia/,
+│   │                     nfe/, sped/, siscomex/, cff/, receita/brasilapi, parsers/lote, arquivos/xml-storage,
+│   │                     exporters/relatorios, pdf/, bridge, fundo/pexels, legislacao-texto
+│   ├── ai/           ← guards de segurança (injection, PII) — os únicos guards sobreviventes da era Aurum AI
+│   ├── aurum/        ← (removido na v1.1.0 — era o módulo de licença/conta Aurumbit)
+│   └── domain/constants/  ← seeds, capitulos, cst, cnae-nbs… (dados embutidos)
 ├── electron/
 │   ├── main.ts · preload.ts · esbuild.mjs
-│   ├── ia/ (worker IA offline: ia-worker.cjs, ia-service.cjs, caminhos-ia.cjs, perfil-modelo.cjs, modelo-seguro.cjs)
-│   └── dist/ (gerado: main.js, preload.cjs + maps)
+│   ├── main/db.ts                       ← IPC `db:op`/`db:transaction`/`db:snapshot` (Prisma no main)
+│   └── ia/ (grafo fiscal: grafo-service.cjs, caminhos-ia.cjs)
 ├── public/
-│   ├── icone.png · icon.ico · escudo.png · logomarca*.png · manifest.webmanifest
-│   └── base/             ← bases NORMALIZADAS embutidas (saída do build-base)
-│       ├── reforma.json · classificacao-tributaria.json · nomenclatura.json · MANIFEST.json
-├── scripts/        ← build-base.mjs, build-grafo.mjs (10-01, pendente), gen-seeds.cjs, gen-capitulos.cjs,
-│                       gen-contrato.py, gen-licenca-rtf.py, kill-port.mjs, reparar-encoding.mjs, refazer-icone.py,
-│                       gerar-indice-ia.mjs, preparar-dados-ia.mjs, validar-conhecimento.mjs, testar-indice-ia.mjs,
-│                       cobertura-traducao.mjs, gerar-catalogo-rag.mjs, ofuscar-build.cjs, verificar-build.mjs, after-pack-ia.cjs
-│   └── grafo/          ← Phase 10: schema.cypher, spike-grafo.mjs (10-00 GO parcial), build-grafo-kglite.py (10-04)
-├── recursos-ia/      ← IA offline: modelo/*.gguf (Qwen3.5-2B, pin modelo.json) + indice-ncm/lexical-v2 (2335 docs) + conhecimento/
-│                         (sinonimos, dicionario, lc214-artigos, catalogo-rag…) + embedding/ (vazio — 10-03)
-├── tests/ (146 arquivos, 1560 casos) ← calculo, classificacao-inteligente/ia (+servicos), busca-texto, nfe-*, sped-*, lote, csv,
-│                       consulta-*, cff-*, brasilapi, siscomex-ncm, vigencia-ncm, reclassificacao-*,
-│                       revalidacao, revogacao, diferimento, mapeamento-legal, motor-unico,
-│                       legislacao-*, formato, aux-*, produtos, empresas-idempotentes, db-migracao,
-│                       base-embutida, pdf-exportacao, simples/*, ia/*, chat-*, cnae-nbs*,
-│                       grafo-tracer (10-00) + setup.ts
-├── docs/           ← SPEC-LOGICA-NEGOCIO.md + 2 contratos .docx
-├── build/ · dist/ · release/  ← saída de empacotamento (ver § Generated)
-└── node_modules/ (não inspecionado)
+│   └── base/             ← bases embutidas (reforma.json, nomenclatura.json, MANIFEST.json, grafo/grafo.lbug…)
+├── scripts/            ← build-base.mjs, build-grafo.mjs, gerar-indice-ia.mjs, ofuscar-build.cjs,
+│                          validar-conhecimento.mjs, verificar-build.mjs… (ver npm scripts)
+│   └── grafo/
+├── recursos-ia/        ← conhecimento curado + índice léxico + grafo + embeddings (12 MB) + dados-brutos
+├── tests/ (176→172 arquivos após limpeza v1.1.0)
+├── docs/               ← SPEC-LOGICA-NEGOCIO.md + diagnósticos/manuais (.docx fora do installer)
+├── build/              ← icon.ico/png/icns, LICENCA.txt/.rtf (NSIS PT-BR)
+├── dist/ · release/    ← saída de build/empacotamento (git-ignored)
+└── prisma/             ← schema.prisma (27 tabelas) + dev.db (git-ignored)
 ```
 
 ## Key Files
 
 | Path | Responsabilidade |
 |---|---|
-| `index.html` | Shell web: `#raiz`, metadados pt-BR, anti-flash de tema, `src/main.tsx`. |
-| `src/main.tsx` | Bootstrap React; dispara `useBase.iniciar()` + `useSessao.iniciar()` não-bloqueante. |
-| `src/App.tsx` | Shell de views por `store/ui` (11 views: 10 no menu + DebugIA oculta) + portão de aceite (`domain/contrato`). |
-| `electron/main.ts` | Janela, IPC, menu nativo, auto-update, sandboxes `diretorioBase`/`diretorioXml`. |
-| `electron/preload.ts` | `window.aurum` via `contextBridge` (implementa `AurumBridge`). |
-| `electron/esbuild.mjs` | Compila main+preload (o `tsc` raiz não inclui `electron/`). |
-| `src/infrastructure/bridge.ts` | Contrato `AurumBridge` + fallback `fetch` fora do Electron. |
-| `src/infrastructure/db/schema.ts` | `AurumDatabase` Dexie v8 + migrações + `bulkPut`/`contarTodos`. |
-| `src/domain/services/classificacao.ts` | Motor: join 3NF, manual, regra geral, vigência/extinção. |
-| `src/domain/services/calculo.ts` | `calcularTributos` (redução sobre alíquota), anexos, observações/diferimento. |
-| `src/application/base.ts` + `src/store/base.ts` | Seed/import/status da base + estado de progresso. |
-| `src/application/atualizacao.ts` | Update do programa (renovação das bases) via `electron-updater`. |
-| `src/infrastructure/exporters/relatorios.ts` | Geração Excel/CSV/PDF de relatórios. |
-| `src/infrastructure/nfe/parse.ts` + `sped/parse.ts` + `parsers/lote.ts` | Ingestão: NF-e XML, SPED, lote CSV/XLSX. |
-| `scripts/build-base.mjs` | Normaliza JSONs brutos → `public/base` (3NF) + `MANIFEST.json`. |
-| `src/domain/constants/index.ts` | `DB_NAME/VERSION`, `STORES`, `REGRA_GERAL`, `REF_DEFAULT`, links oficiais. |
-| `package.json` | Scripts (`base`, `dev`, `build`, `dist`), deps, config `electron-builder`. |
-| `vite.config.ts` / `vitest.config.ts` | Alias `@→src`, base `./`, server `:5173`; ambiente de testes. |
-| `docs/SPEC-LOGICA-NEGOCIO.md` | Spec da lógica de negócio (referência do domínio). |
+| `index.html` | Shell web: `#raiz`, anti-flash de tema, ícones |
+| `src/main.tsx` | Bootstrap React; `useBase.iniciar()` + `useSessao.iniciar()` não-bloqueantes |
+| `src/App.tsx` | Shell de views por `store/ui` (10 views lazy-load + ErroFatal por tela) |
+| `electron/main.ts` | Janela, menu nativo, IPC, auto-update, sandboxes (base/xml) |
+| `electron/main/db.ts` | `db:op`/`db:transaction`/`db:snapshot` — acesso Prisma no main |
+| `electron/preload.ts` | `window.aurum` via `contextBridge` (`sandbox:false` — hardening pendente) |
+| `src/infrastructure/bridge.ts` | `AurumBridge` + fallback web |
+| `src/infrastructure/db/driver-prisma.ts` | `DriverIpc` — o renderer só fala `db:op` com o main |
+| `src/domain/services/classificacao.ts` | Motor: join 3FN, manual, regra geral, vigência/extinção |
+| `src/domain/services/calculo.ts` | `calcularTributos` (redução na alíquota), anexos, diferimento |
+| `src/application/backup.ts` | Backup/restore transacional (valida tudo antes de apagar) |
+| `scripts/build-base.mjs` | Normaliza JSONs brutos → `public/base` + MANIFEST |
+| `package.json` | Versão, scripts, dependências, `electron-builder` (NSIS/DMG/AppImage) |
+| `docs/SPEC-LOGICA-NEGOCIO.md` | Spec da lógica de negócio |
 
 ## Entry Points
 
 | Entrada | Cadeia |
 |---|---|
-| Produção desktop | `package.json:main` (`electron/dist/main.js`) → `electron/main.ts:criarJanela` → `dist/index.html` → `src/main.tsx` → `App`. |
-| Dev desktop | `npm run dev`: `predev` (kill-port + `base` + `build:electron`) → `dev:renderer` (Vite `:5173`) + `dev:electron` (`VITE_DEV_SERVER_URL` → `loadURL`). |
-| Web/navegador | `npm run dev:web` (Vite) — `bridge=null`, bases via `fetch('base/...')`. |
-| Renderer | `index.html` → `/src/main.tsx` (`#raiz`) → `App` → `Layout` + página ativa (`store/ui.view`). |
-| Main→renderer | Preload `window.aurum`; canais `menu:acao` / `atualizacao:evento`; versão via `--aurum-versao`. |
-| Dados iniciais | `main.tsx` → `store/base.iniciar()` → `application/base.inicializarBase()` → Dexie seed a partir de `public/base` (dev) / `dist/base` (prod). |
-| Testes | `npm test` → Vitest (`vitest.config.ts`, `tests/setup.ts` com fake-indexeddb). |
+| Produção desktop | `package.json:main` (`electron/dist/main.js`) → janela → `dist/index.html` → `src/main.tsx` → `App` |
+| Dev desktop | `npm run dev`: `predev` (kill-port + `base`) + `build:electron` → Vite `:5173` + Electron |
+| Web/navegador | `npm run dev:web` (sem Electron; bases via `fetch('base/...')`) |
+| Renderer | `index.html` → `/src/main.tsx` → `App` → `Layout` + página ativa |
+| Main→renderer | Preload `window.aurum`; canais `menu:acao` / `atualizacao:evento` |
+| Dados | `main.tsx` → `useBase.iniciar()` → IPC `db:op` + arquivos em `resources/app/dist/base` |
+| Testes | `npm test` → Vitest (`tests/setup.ts`, banco-template SQLite em `%TEMP%`) |
 
 ## Data & Assets
 
 | Arquivo | Onde | Tamanho aprox. | Papel |
 |---|---|---|---|
-| `public/base/nomenclatura.json` | `public/base/` | ~2,9 MB | Nomenclatura NCM vigente normalizada (15.156 itens; autocompletar + vigência/extinção). |
-| `public/base/reforma.json` | idem | ~1,6 MB | CST + cClassTrib + vínculos NCM (2.335) / NBS. |
-| `public/base/classificacao-tributaria.json` | idem | ~307 KB | Referência CST×cClassTrib (164 registros, docs fiscais). |
-| `public/base/MANIFEST.json` | idem | ~2 KB | schema, `geradoEm`, contagens, checksums, `codigosIgnorados` (10). |
-| `reforma_tributaria_por_ncm.json` | raiz `REFORMA NCM/` | ~16 MB | Fonte bruta (repete referência por NCM — motivo da normalização 3NF). |
-| `Tabela_NCM_Vigente_20260922.json` | raiz | ~3 MB | Fonte bruta da nomenclatura. |
-| `classificacao_tributaria.json` | raiz | ~420 KB | Fonte bruta da referência. |
-| `Reforma Tributaria consulta por NCM - Original.xlsx` | raiz | ~162 KB | Planilha original de consulta. |
-| `src/domain/capitulos.json` + `constants/seeds.ts`, `capitulos.ts` | `src/domain/` | pequeno | Capítulos NCM e seeds embutidos no bundle. |
-| `public/*.png/.ico` | `public/` | — | Ícones/logo (`icone.png`, `icon.ico`, `escudo.png`, `logomarca*.png`). |
-| XMLs de NF-e do usuário | `<userData>/xml/<cnpj>/<chave>.xml` (runtime, fora do repo) | variável | Notas importadas (`xml:salvar/ler/remover`). |
+| `public/base/nomenclatura.json` | versionado | ~2,8 MB | Nomenclatura NCM vigente |
+| `public/base/reforma.json` | versionado | ~1,5 MB | CST × cClassTrib + vínculos NCM 2.335 |
+| `public/base/classificacoes-consolidadas.json` | versionado | ~1,7 MB | Vínculos consolidados |
+| `public/base/grafo/grafo.lbug` | versionado | ~6,1 MB | Grafo fiscal (FTS + 2-hops + PageRank) |
+| `public/base/grafo/vetores.json` | versionado | ~12 MB | Vetores 384-d (não embarcados no instalador) |
+| `public/base/parametros.json` | versionado | ~0,5 KB | IBS/CBS de referência (editável na UI) |
+| XMLs de usuário | `<userData>/xml/<cnpj>/<chave>.xml` | — | Runtime |
+| `aurum.db` | `<userData>` | — | SQLite (empresas/produtos/notas/…) |
 
-Fluxo de build de dados: `npm run base` (`scripts/build-base.mjs`, `AURUM_BASE_DIR` default = pasta pai) lê os 3 JSONs brutos da raiz → normaliza/valida → escreve `public/base/` (dev) → `vite build` copia para `dist/base` (prod, lido via `diretorioBase()`).
+Fluxo de build de dados: `npm run base` lê as fontes em `bases-fonte/` → normaliza/valida → `public/base/` → `vite build` copia para `dist/base` (consumido pelo main via `diretorioBase()`).
 
 ## Generated/Build Output
 
 | Diretório | Conteúdo | Versionado? |
 |---|---|---|
-| `dist/` | Saída do `vite build` (renderer + `dist/base` copiado do `public/base`). Lido por `main.ts:INDEX_PRODUCAO` em prod. | Não (build). |
-| `electron/dist/` | `main.js` + `preload.cjs` (+ maps) gerados por `electron/esbuild.mjs`. `main` do package e `preload` da janela apontam para cá. | Não (build). |
-| `build/` | Recursos do instalador (`icon.ico`, `LICENCA.rtf` — ver `gen-licenca-rtf.py`, `refazer-icone.py`; `directories.buildResources`). | Parcial (ícones/licença). |
-| `release/` | Instaladores `electron-builder` (`AurumTaxNCM-Setup-*-win-x64.exe`, `-Portatil-`, dmg/zip mac, AppImage). `output: release`, `publish: github privado`. | Não (artefatos). |
-| `public/base/` | Tecnicamente gerado por `scripts/build-base.mjs`, mas **embutido no pacote** — tratar como artefato versionado de dados. | Sim (dados embutidos). |
+| `dist/` | Saída do `vite build` | Não (build) |
+| `electron/dist/` | `main.js`, `preload.cjs` (+ `.map`? nunca — ofuscado) | Não (build) |
+| `build/` | Recursos do instalador (`icon.ico`, `LICENCA.txt/.rtf`) | Parcial |
+| `release/` | Instaladores (`AurumTaxNCM-Setup-*-win-x64.exe`, `-Portatil-`, dmg…). `publish: github` | Não (artefatos) |
+| `public/base/` | Gerado, mas **embutido e versionado** (com `MANIFEST.json` + `verificar-build.mjs`) | Sim |
+| `coverage/` | Relatórios v8 locais | Não |

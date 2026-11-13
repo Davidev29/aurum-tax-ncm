@@ -1,86 +1,57 @@
 ---
 gsd_state_version: '1.0'
-status: planning
+status: shipped
 progress:
-  total_phases: 6
-  completed_phases: 0
+  total_phases: 10
+  completed_phases: 10
   total_plans: 33
-  completed_plans: 0
-  percent: 0
+  completed_plans: 32
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-29)
+See: .planning/PROJECT.md (updated 2026-11-13)
 
 **Core value:** Classificação tributária precisa e automatizada que garante conformidade com a LC 214/2025, eliminando risco de multas e retrabalho fiscal.
-**Current focus:** Phase 1: Foundation & Data Layer
+**Current focus:** Distribuição da v1.1.0 (venda avulsa) e manutenção. Nenhum capítulo de feature aberto.
 
 ## Current Position
 
-Phase: 1 of 5 (Foundation & Data Layer)
-Plan: 0 of 4 in current phase
-Status: Ready to plan
-Last activity: 2026-09-30 — Phase 6 plan 06-10 docs entregues (arquitetura/manual/troubleshooting/dossiê), tsc 0 + npm test 41/433 verdes; aceite UAT pendente
-
-Progress: [░░░░░░░░░░] 0%
+Release: **v1.1.0** — 13/11/2026 (construída e verificada localmente; publicação no GitHub pendente)
+Release anterior: **v1.0.0** — 12/10/2026 (instalação local em `release/`)
+Status: v1.0.0 entregue (10 módulos) + v1.1.0 (remoção da camada de licenciamento/onboarding; app entra direto)
+Last activity: 2026-11-13 — v1.1.0: remoção do assistente de instalação e do portão de licença Aurumbit, `npm test` corrigido no Windows, docs e `.planning` atualizados, contrato/licença reescritos para venda avulsa
 
 ## Performance Metrics
 
-**Velocity:**
-- Total plans completed: 0
-- Average duration: 0 min
-- Total execution time: 0.0 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| - | - | - | - |
-
-**Recent Trend:**
-- Last 5 plans: []
-- Trend: Stable
-
-*Updated after each plan completion*
+- Velocity: 2 releases desde setembro/2026; 56+ commits em `main`
+- Qualidade dinâmica (13/11/2026): `npm run typecheck` limpo (app+electron) · `npm test` **172 suítes / 1.946 casos (1.945 pass + 1 skip)** verde · `npx vite build` verde · `node electron/esbuild.mjs` verde
+- v1.0.0 UAT: Electron audit (CSP/updater), 176 suítes verdes, typecheck limpo
 
 ## Accumulated Context
 
-### Decisions
+### Decisions (vigentes)
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
+- Electron sobre Tauri — maduro, equipe conhece
+- **SQLite + Prisma sobre Dexie/IndexedDB** (superseded, decidido na reconstrução p/ v1.0.0): 27 tabelas, IPC `db:op` validado no main, `aurum.db` em userData, snapshots rotativos e quarantine no boot
+- Zustand sobre Redux — slices mínimos por tela
+- Classificação 100% client-side; classificação determinística local (léxico + grafo fiscal + resolvedor oficial), sem LLM em runtime
+- Tailwind CSS 4 + tokens `brand`/`aurum`
+- Atualização de dados acoplada ao update do programa (GitHub Releases), não sync avulso da NCM
+- **Venda avulsa (v1.1.0)**: sem conta, sem chave, sem ativação — licença perpétua da versão no Pedido; atualização opcional via GitHub Releases
 
-- [Init]: Electron over Tauri — mature React ecosystem, team familiarity, WebView2 on Windows
-- [Init]: Dexie (IndexedDB) over SQLite — zero config, native offline sync
-- [Init]: Zustand over Redux — less boilerplate, TypeScript-first
-- [Init]: Client-side classification — sensitive NCM data never leaves machine
-- [Init]: Tailwind CSS — consistent design system, optimized build
+### Pendências (não bloqueantes para venda)
 
-### Pending Todos
-
-[From .planning/todos/pending/ — ideas captured during sessions]
-
-None yet.
-
-### Blockers/Concerns
-
-[Issues that affect future work]
-
-None yet.
-
-## Deferred Items
-
-Items acknowledged and carried forward from previous milestone close:
-
-| Category | Item | Status | Deferred At |
-|----------|------|--------|-------------|
-| *(none)* | | | |
+- Auto-update sem verificação de assinatura (Windows/mac/Linux) — assinar antes de distribuir amplamente
+- CSP inexistente — endurecimento pendente
+- `.planning` do GSD antigo substituído por este registro enxuto; fases 1–10 concluídas
+- Otimização estrutural pendente: monstros de código (`aurum-ai-chat.ts`, `NfeXml.tsx`), Clean Architecture nominal, ~195 catches engolidos, CI mínimo
 
 ## Session Continuity
 
-Last session: 2026-09-29 15:59
-Stopped at: Project initialized, planning structure created
+Last session: 2026-11-13 — v1.1.0 (remoção do onboarding/licença, docs, build)
+Stopped at: instalação 1.1.0 gerada em `release/` (não comitada); publicação no GitHub pendente
 Resume file: None

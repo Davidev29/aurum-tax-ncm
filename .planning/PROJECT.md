@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Sistema de classificação tributária para a Reforma Tributária Brasileira (LC 214/2025). Uma aplicação desktop construída com Electron que permite importar, classificar e validar códigos NCM (Nomenclatura Comum do Mercosul) segundo as novas regras da reforma tributária, gerando relatórios de adequação fiscal para empresas brasileiras.
+Sistema de classificação tributária para a Reforma Tributária Brasileira (LC 214/2025), distribuído como aplicativo desktop **Windows/macOS/Linux** (Electron) e web (Vite). Analisa XML de NF-e/NFC-e, classifica por NCM/NBS/CNAE (LC 214/2025), simula IBS/CBS e Simples Nacional, e gera relatórios PDF/CSV/JSON timbrados. Persistência e cálculo 100% local (SQLite no processo main via Prisma; IPC validado; bases embutidas no instalador).
 
 ## Core Value
 
@@ -10,57 +10,66 @@ Classificação tributária precisa e automatizada que garante conformidade com 
 
 ## Requirements
 
-### Validated
+### Validated (entregues e verificadas na v1.0.0 — 2026-10-12 — e na v1.1.0 — 2026-11-13)
 
-(None yet — ship to validate)
+- [x] Base oficial embutida versionada (NCM, CST × cClassTrib, nomenclatura, NBS, CNAE, vínculo NCM×Classificação) — gerada por `npm run base`, validada por `scripts/verificar-build.mjs`
+- [x] Classificação determinística local (CST · cClassTrib · % redução · anexo oficial · base legal · herança por família) com resolvedor oficial como única verdade
+- [x] Parsing lote CSV/XLSX + classificação em lote; XML NF-e/NFC-e com 2 layouts (Polida/Clássica) e conferência por produto
+- [x] Calculadora IBS/CBS + Simples Nacional (DAS, Fator R, sublimite, híbrido, projeção dividida v2)
+- [x] Simulação: anexos derivados de redução (0/30/…/100), diferimento Anexo IX condicional, tributação integral como última opção de segurança
+- [x] Consulta NCM / Serviços NBS / CNAEs (busca local, fan-out número/nome)
+- [x] Backup/restore JSON transacional (27 tabelas), snapshot pré-restore, integridade no boot
+- [x] Relatórios PDF/CSV/JSON timbrados (emitente configurável)
+- [x] Atualização via GitHub Releases (auto-update opcional, download só sob comando)
+- [x] Licença MIT no código-fonte (`LICENSE`); termos do instalador em `build/LICENCA.txt`/`.rtf` (venda avulsa a partir da v1.1.0)
+- [x] Tour guiado sob demanda; empresas multi-CNPJ; produtos; tabelas auxiliares; legislação in-app
+- [x] **v1.1.0**: app entra direto (sem assistente de instalação e sem portão de licença) — venda avulsa
 
-### Active
+### Active (próximos passos conhecidos)
 
-- [ ] Importar base de códigos NCM oficial (tabela completa)
-- [ ] Classificar NCMs por regime tributário (CBS, IBS, IS, Imune, Isento)
-- [ ] Validar classificação contra regras da LC 214/2025
-- [ ] Gerar relatório de adequação fiscal (Excel/PDF)
-- [ ] Interface de busca e filtro por código NCM, descrição, regime
-- [ ] Persistência local de dados (Dexie/IndexedDB)
-- [ ] Exportar classificação para integração com ERPs
-- [ ] Calculadora Tributária: Resumo lateral com reduções explícitas por item/produto
-- [ ] Calculadora Tributária: Análise comparativa quando múltiplas classificações existem para um NCM
-- [ ] Calculadora Tributária: Validação contra anexos da LC 214/2025 (vetos, tributação correta)
-- [ ] Calculadora Tributária: Atualização automática de bases oficiais na inicialização
+- [ ] Publicar a release 1.1.0 no GitHub Releases (a atualização em máquinas instaladas depende disso)
+- [ ] Assinar o instalador (Windows Authenticode / mac notarização) antes de distribuir amplamente
+- [ ] Endurecer o renderer (CSP) e revisar o IPC do processo main — ver assessment 2026-11-13 (sandbox, `openExternal`, allowlist, redirects do `rede:buscar-texto`)
+- [ ] Refatorar monstros de código (`aurum-ai-chat.ts`, `NfeXml.tsx`) e reduzir dívidas da avaliação 2026-11-13 (catches engolidos, Clean Architecture nominal, CI mínimo)
+- [ ] Avaliar a extração do módulo Simples como calculadora standalone (`docs/PROMPT_TECNICO_CALCULADORA_SIMPLES_NACIONAL.md`)
+- [ ] Decidir publicação do pacote no npm/GitHub Releases vs. interno (LICENSE-MIT vs `private`/`UNLICENSED`)
 
 ### Out of Scope
 
-- Integração direta com ERPs (SAP, Totvs, etc.) — complexidade de APIs proprietárias, fazer via exportação padrão
-- Cálculo de crédito tributário — fora do escopo de classificação, pertence a módulo fiscal separado
-- Versão web/SaaS — arquitetura Electron desktop-first, web requer autenticação e multi-tenancy
-- ~~Classificação de serviços (LC 214 foca em bens) — NCM é apenas para mercadorias~~ — **entregue na Phase 7** (menu Serviços: NBS + CNAE + CNPJ, 2026-10-03)
+- Integração direta com ERPs (SAP, Totvs, ContaAzul) — fazer via exportação padrão
+- Cálculo de crédito tributário completo como módulo próprio (escopo de apuração) — o app simula IBS/CBS e assiste a apuração no XML, não substitui o módulo fiscal
+- Versão SaaS multi-tenant — desktop-first (a modalidade SaaS é coberta pelo "Aurum Omni", produto à parte)
+- Serviços para atividades prestadas exclusivamente sob LC 116 com lista própria externa (NCM é bens; NBS/servidores cobertas na base embutida)
 
 ## Context
 
-- **Reforma Tributária Brasileira**: LC 214/2025 institui CBS (Contribuição sobre Bens e Serviços), IBS (Imposto sobre Bens e Serviços) e IS (Imposto Seletivo), substituindo PIS, Cofins, IPI, ICMS, ISS
-- **NCM**: Nomenclatura Comum do Mercosul — código de 8 dígitos usado no Brasil para classificar mercadorias
-- **Stack**: React + TypeScript + Vite (frontend), Electron (desktop), Dexie.js (IndexedDB wrapper), Zustand (state), Tailwind CSS (UI)
-- **Dados oficiais**: Tabelas NCM disponíveis no portal Comex Stat / Receita Federal
-- **Usuários-alvo**: Contadores, analistas fiscais, consultorias tributárias, departamentos fiscais de empresas
+- **Reforma Tributária**: LC 214/2025 institui CBS, IBS e IS, substituindo PIS, Cofins, IPI, ICMS, ISS (EC 132/2023; Decreto 12.955/2026; Res. CGIBS 6/2026; NT 2025.002). Base em transição — o software é ferramenta de apoio; vale o texto oficial.
+- **NCM**: 8 dígitos, Mercosul. **NBS**: 9 dígitos (serviços). **CNAE**: 7 dígitos.
+- **Stack real**: React 19 + TypeScript 5.9 strict · Vite 8 · Electron 44 · TailwindCSS 4 · Zustand 5 · Prisma 6 + SQLite (`aurum.db` em `userData`) · xlsx · fast-xml-parser · pdfmake · Chart.js · Framer Motion · Vitest 5 (environment node) — **não** é mais Dexie/IndexedDB (decisão revisitada na reconstrução para a v1.0.0).
+- **Dados oficiais**: portal CFF/DFe (classificação tributária), Siscomex (nomenclatura), planilhas vivas do projeto (CNAE×Anexo, NBS serviços).
+- **Usuários-alvo**: contadores, analistas fiscais, consultorias tributárias, departamentos fiscais.
 
 ## Constraints
 
-- **Tech stack**: React/TypeScript/Vite/Electron/Dexie/Zustand/Tailwind — definido pelo arquiteto, não renegociável
-- **Performance**: Deve processar ~10k códigos NCM em <2s (busca, filtro, classificação)
-- **Offline-first**: Funcionamento 100% offline após setup inicial (dados locais via Dexie)
-- **Compatibilidade**: Windows 10/11 (alvo principal), macOS/Linux (secundário)
-- **Regulatório**: Classificação deve seguir estritamente LC 214/2025 e atos normativos da Receita Federal
+- **Tech stack**: React/TypeScript/Vite/Electron/Zustand/Tailwind/Prisma+SQLite — definido; mudanças relevantes exigem ADR
+- **Offline-first**: uso diário sem internet (bases embutidas; atualização de dados acoplada ao update do programa)
+- **Performance**: busca local <100ms; seed da base em segundos; `tsc` limpo e suíte verde como gate
+- **Compatibilidade**: Windows 10/11 (alvo principal), macOS 12+, Linux
+- **Regulatório**: classificação segue estritamente LC 214/2025 e atos normativos; base embutida versionada a cada release
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Electron sobre Tauri | Ecossistema React maduro, equipe conhece, WebView2 no Windows | ✓ Good |
-| Dexie (IndexedDB) sobre SQLite | Zero config nativo no Electron, sincronização offline simples | ✓ Good |
-| Zustand sobre Redux | Menos boilerplate, TypeScript-first, suficiente para estado global | ✓ Good |
-| Classificação client-side | Dados sensíveis (NCMs da empresa) não saem da máquina | ✓ Good |
-| Tailwind CSS | Design system consistente, build otimizado, team familiar | ✓ Good |
+| Electron sobre Tauri | Ecossistema React maduro, WebView2 | ✓ Good |
+| ~~Dexie (IndexedDB) sobre SQLite~~ → **Prisma + SQLite** | Banco robusto, transações reais (`db:transaction`), migração legada com backup, backup JSON 27 tabelas | ✓ Good (rework v1.0.0) |
+| Classificação client-side | Dados sensíveis nunca saem da máquina; cálculo 100% local | ✓ Good |
+| Tailwind CSS 4 | Design system enxuto | ✓ Good |
+| Determinismo acima de IA | Classificador oficial = resolvedor; Aurum AI apenas roteamento/contexto | ✓ Good |
+| Venda avulsa (sem conta/chave) | Simplicidade para o cliente; menos superfície de ataque e suporte | ✓ Good (v1.1.0) |
+| Bases embutidas renovadas só via update do app | Cadeia de fornecimento controlada; sem drift de tabelas | ✓ Good |
+| Electron + NSIS PT-BR por usuário | Sem admin; atalhos padrão | ✓ Good |
 
 ---
 
-*Last updated: 2026-09-29 after project initialization*
+*Last updated: 2026-11-13 — v1.1.0: venda avulsa, onboarding/licença removidos; v1.0.0 (2026-10-12) = marco da entrega dos 10 módulos*

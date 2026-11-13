@@ -1,208 +1,124 @@
 # Requirements: Aurum Tax NCM
 
-**Defined:** 2026-09-29
+**Defined:** 2026-09-29 · **Atualizado:** 2026-11-13 (v1.1.0) — todas as entregas v1.0.0 marcadas
 **Core Value:** Classificação tributária precisa e automatizada que garante conformidade com a LC 214/2025, eliminando risco de multas e retrabalho fiscal.
 
-## v1 Requirements
+> Nota de interpretação: o projeto nasceu mirando Dexie/IndexedDB; na reconstrução para a v1.0.0 (2026-10) a persistência passou a **Prisma + SQLite** e a IA passou a ser **100% determinística local** (o LLM local foi removido do runtime). As marcações de requisitos refletem o sistema atual.
 
-Requirements for initial release. Each maps to roadmap phases.
+## v1 Requirements — Entregues (v1.0.0, 2026-10-12)
 
 ### Data Import (IMP)
 
-- [ ] **IMP-01**: Importar tabela NCM oficial (CSV/XLSX da Receita Federal) com ~10k códigos
-- [ ] **IMP-02**: Validar integridade dos dados importados (códigos únicos, descrições não vazias)
-- [ ] **IMP-03**: Armazenar dados em IndexedDB via Dexie com índices para busca rápida
-- [ ] **IMP-04**: Permitir reimportação/atualização da base sem perda de classificações do usuário
+- [x] **IMP-01**: Base NCM oficial — nomenclatura vigente (~15 mil itens) ingerida de `bases-fonte/` via `npm run base` → `public/base/nomenclatura.json`
+- [x] **IMP-02**: Validação de integridade do build — contagens exatas + hash do MANIFEST no `scripts/verificar-build.mjs` (porta de release)
+- [x] **IMP-03**: Persistência local — **Prisma 6 + SQLite** (`aurum.db` em `%APPDATA%`), 27 tabelas, acesso exclusivamente pelo processo main via IPC `db:op` validado; `integrity_check` + quarantine no boot
+- [x] **IMP-04**: Reimportação/atualização sem perda — bases embutidas versionadas a cada release; atualização do programa renova as bases; backup/restore transacional (snapshot pré-restore) preserva dados
 
 ### Classification (CLS)
 
-- [ ] **CLS-01**: Classificar cada NCM em regime: CBS, IBS, IS, Imune, Isento, Não Incidente
-- [ ] **CLS-02**: Aplicar regras da LC 214/2025 (Anexo I - IS, Anexo II - Imunes/Isentos, demais CBS+IBS)
-- [ ] **CLS-03**: Permitir classificação manual/override pelo usuário com justificativa
-- [ ] **CLS-04**: Rastrear origem da classificação (automática vs manual) e data
-- [ ] **CLS-05**: Validar consistência: mesmo NCM não pode ter regimes conflitantes
+- [x] **CLS-01**: Classificação por NCM → CST · cClassTrib · % redução · anexo oficial (resolvedor oficial como única verdade)
+- [x] **CLS-02**: Regras da LC 214/2025 (redução por anexo, diferimento Anexo IX condicional, regra geral `000/000001`, tributação integral como última opção)
+- [x] **CLS-03**: Override manual (CST × cClassTrib) com justificativa — "escolha de tributação" nos cards/lote/XML, propaga como reclassificação
+- [x] **CLS-04**: Rastreabilidade — `audit_log` (append-only) + `via` (grafo/determinístico) + trilha por NCM
+- [x] **CLS-05**: Consistência — react-check no boot (`db-protocolo`), uniques no schema, revisão determinística (Lote/XML mostram as N opções antes de salvar)
 
 ### Search & Filter (SRCH)
 
-- [ ] **SRCH-01**: Buscar por código NCM (prefixo ou exato, ex: "8471" ou "84713012")
-- [ ] **SRCH-02**: Buscar por descrição (texto parcial, case-insensitive)
-- [ ] **SRCH-03**: Filtrar por regime tributário (múltipla seleção)
-- [ ] **SRCH-04**: Filtrar por origem da classificação (automática/manual/todas)
-- [ ] **SRCH-05**: Paginação/virtualização para performance com 10k+ registros
+- [x] **SRCH-01**: Busca NCM por prefixo/exato (com/sem ponto), número/nome (fan-out local)
+- [x] **SRCH-02**: Busca textual na nomenclatura (léxico + sinônimos) — case-insensitive
+- [x] **SRCH-03**: Filtros por vínculo (NCM × Classificação), CFOP, CST, anexo, ano (2026/2027/2033 no módulo CNAEs)
+- [x] **SRCH-04**: Origem da classificação (oficial/manual/regra geral) exibida em todos os módulos
+- [x] **SRCH-05**: Performance local — busca lexical/grafo <50ms; bases renderizadas por seção (code-splitting por tela)
 
 ### Reporting (RPT)
 
-- [ ] **RPT-01**: Gerar relatório Excel com colunas: NCM, Descrição, Regime, Alíquota CBS, Alíquota IBS, Alíquota IS, Origem, Data, Observação
-- [ ] **RPT-02**: Gerar relatório PDF resumido (total por regime, alertas de classificação manual)
-- [ ] **RPT-03**: Exportar CSV padronizado para integração com ERPs (layout definido)
-- [ ] **RPT-04**: Incluir no relatório: NCMs sem classificação, classificações manuais pendentes de revisão
+- [x] **RPT-01**: Relatórios CSV/XLSX/PDF com emitente timbrado (razão social, CNPJ, logo, cor, rodapé)
+- [x] **RPT-02**: Relatório PDF resumido/executivo (XML NFe, Simples Analítico, produtos)
+- [x] **RPT-03**: CSV padronizado (`;`, UTF-8) para ERP
+- [x] **RPT-04**: Alertas de pendência/quarentena (XML órfãos, itens sem classificação, divergência crédito estimado × efetivo)
 
 ### User Interface (UI)
 
-- [ ] **UI-01**: Tela principal com tabela de NCMs (virtualizada, ordenável, redimensionável)
-- [ ] **UI-02**: Painel lateral de detalhes do NCM selecionado (descrição completa, regime, alíquotas, histórico)
-- [ ] **UI-03**: Modal de classificação manual com seletor de regime e campo observação
-- [ ] **UI-04**: Dashboard com contadores por regime e indicadores de saúde (ex: % classificado, conflitos)
-- [ ] **UI-05**: Tema claro/escuro com persistência de preferência
-- [ ] **UI-06**: Atalhos de teclado para navegação e ações comuns (buscar, classificar, próximo)
+- [x] **UI-01**: Visões de lista/tabela + paginação e filtro rápido (Produtos, Tabelas auxiliares)
+- [x] **UI-02**: Detalhe em camadas (Consulta NCM com N cards, Produtos em abas, Empresas em modal 3 etapas)
+- [x] **UI-03**: Modais de edição com validação de domínio (auxiliares, empresa, emitente)
+- [x] **UI-04**: Dashboards por módulo (Comparação Antigo × Novo no XML, ranking fornecedores/NCM/CFOP)
+- [x] **UI-05**: Tema claro/escuro persistido (anti-flash em `index.html` + `localStorage`)
+- [x] **UI-06**: Atalhos — ex.: Ctrl+E (exportar PDF do menu nativo), Ctrl+Shift+D (debug IA), menu nativo Arquivo/Exibir
 
 ### Calculadora Tributária & Validação (CALC)
 
-- [ ] **CALC-01**: Resumo do cálculo (lateral direita) exibe explicitamente cada redução de alíquota aplicada por item/produto (percentual, base legal, artigo da LC 214/2025)
-- [ ] **CALC-02**: Quando existirem múltiplas classificações para um mesmo NCM, apresentar análise comparativa (tabela/lado a lado) para o usuário escolher a correta conforme o produto
-- [ ] **CALC-03**: Validar se produto não foi vetado pelos anexos da LC 214/2025 e confirmar se tributação está correta (alertas visuais para inconsistências)
-- [ ] **CALC-04**: Ao iniciar o sistema, verificar e atualizar automaticamente as bases oficiais (NCM vigente, nomenclatura, classificação tributária da Receita Federal)
-- [ ] **CALC-05**: Indicadores visuais claros de redução nos itens da calculadora e no resumo (badge/pill com percentual, tooltip com base legal completa)
+- [x] **CALC-01**: Redução explícita por item (badge com % redução + base legal no Simulador/Consulta)
+- [x] **CALC-02**: Múltiplas classificações → N cards com comparação (Consulta) e `<select>` por linha (Lote), o usuário escolhe
+- [x] **CALC-03**: Validação contra anexos (art. 127/128/135/137/158/261/275–289/308) com badges e simulador editável
+- [x] **CALC-04**: Bases atualizadas pela **atualização do programa** (não fetch avulso — decisão registrada; o critério original foi revisto)
+- [x] **CALC-05**: Badges de anexo/redução + carga efetiva + % (carregamento via `public/base/parametros.json`, editável)
 
-### IA Assistida Offline — NCM only, camada superior (IA)
+### IA Assistida (IA) — determinística local; LLM removido do runtime
 
-- [ ] **IA-00**: Spike viabilidade `node-llama-cpp` + `utilityProcess` Electron 44, GO/NO-GO em Win/macOS/Linux (`docs/spike-eletron-llama.md`)
-- [ ] **IA-01**: Ambiente diagnosticado, `recursos-ia/` criado, `.gguf`/índice bloqueados no git, `CHECKSUMS.txt`
-- [ ] **IA-02**: Base `ncm-para-ia.json` com 2335 NCMs (8 dígitos, sem NBS), paridade com `montarClassificacao`
-- [ ] **IA-03**: Índice Vectra <200MB, Frango vivo→cap.01 top-3, Notebook→84/85 top-5, rebuild por hash MANIFEST
-- [ ] **IA-04**: Modelo AILO-152M-v2 q4_k_m íntegro, prompt restrito (candidato ou NÃO SEI), <5s CPU, ~300MB RAM
-- [ ] **IA-05**: Worker `utilityProcess` isolado, IPC `ia:classificar`/`ia:status`, store `ia.ts`, `DebugIA.tsx` (Ctrl+Shift+D)
-- [ ] **IA-06**: Fallback IA: determinístico primeiro; se null/baixa → Top5→LLM→`resolverClassificacoes`→`calcularTributos`, audit com `via`
-- [ ] **IA-07**: Instaladores NSIS/DMG/AppImage offline ≤300MB, `extraResources` + `asarUnpack`, zero rede
-- [ ] **IA-08**: Ofuscação worker + cifragem GGUF em repouso + rename `aux.dat`/`idx/`
-- [ ] **IA-09**: Testes 30 conhecidos +10 ambíguos +5 inválidos + bypass determinístico, ≥85%, zero alucinação, perf <5s/<500MB, 37 legadas verdes
-- [ ] **IA-10**: Docs arquitetura/manual/troubleshooting/dossiê + `taxa_uso_ia` (<30%), ROADMAP/REQUIREMENTS encerrados
+- [x] **IA-00**: Spike viabilidade (`docs/spike-eletron-llama.md`) — NO-GO para LLM embutido; Aurum AI ficou determinística (tool-calling rotulado, P(anexo), memória)
+- [ ] **IA-01**: `recursos-ia/`, `.gitignore` da IA, CHECKSUMS — feito no Phase 6; artefatos de modelo **não versionados** por decisão
+- [x] **IA-02**: Base `ncm-para-ia.json` (2.335 NCMs) com paridade a `montarClassificacao`
+- [x] **IA-03**: Índice vetorial/lexical local + grafo fiscal (LadybugDB FTS + HNSW 384-d + PageRank); rebuild por hash do MANIFEST
+- [x] **IA-04**: ~~Modelo AILO-152M-v2~~ **superseded** — sem LLM em runtime; Aurum AI = orquestrador determinístico (`aurum-ai-chat.ts`) com tools auditáveis
+- [x] **IA-05**: Worker IPC + `DebugIA` — implementado como `via:grafo`/`ia:*` no grafo (`electron/ia/grafo-service.cjs`); Ctrl+Shift+D mantido
+- [x] **IA-06**: Resolução — determinístico primeiro; sem lastro → regra geral honesta (nunca código inventado)
+- [x] **IA-07**: Instaladores com bases embutidas (`extraResources` + `asarUnpack`)
+- [x] **IA-08**: Ofuscação (`scripts/ofuscar-build.cjs`) + hashes de integridade (CHECKSUMS.txt); modelo cifrado **não embarcado**
+- [x] **IA-09**: Testes de massa (chaos 22/22, suites IA) + 1.946 casos verdes
+- [x] **IA-10**: Docs de arquitetura/manual (`docs/grafo-*`, `docs/arquitetura-ia.md`, manual-atualizacao-ia)
 
-**Scope note**: Somente NCM de 8 dígitos. NBS e códigos de 9 dígitos excluídos (os 10 ignorados do MANIFEST permanecem ignorados).
+### Serviços — NBS + CNAE + CNPJ (SER) — IMPLEMENTADA (Phase 7, 2026-10-03)
 
-### Serviços — NBS + CNAE + CNPJ, com Aurum AI (SER) — IMPLEMENTADA (2026-10-03)
+- [x] **SER-01..SER-05**: base viva CNAE×Anexo (1.090), ponte CNAE→NBS, CNPJ via BrasilAPI, Consulta NBS manual + por CNPJ, paridade UX com a Consulta NCM
 
-- [x] **SER-01**: Ingerir e versionar `CNAE X ANEXO.json` (1090) + `NBS SERVIÇOS.json` (137→112 dedupe) via `npm run base`, com `MANIFEST.fontesVivas` e artefato `cnae.json`
-- [x] **SER-02**: Consulta manual NBS (código 9 dígitos + nome + IA por descrição), painel oficial 0/1/N, regra geral `000/000001`
-- [x] **SER-03**: Ponte CNAE→NBS (matriz Situação→teto de confiança, palavras-chave por divisão, Fator R como refino; "Anexo Simples" vs "Anexo LC 214" sempre rotulados)
-- [x] **SER-04**: Consulta por CNPJ via BrasilAPI (DV local, CNAE principal+secundários, cache Dexie 30d, 1 cartão elegante por atividade)
-- [x] **SER-05**: Paridade UX/Aurum AI (mesmo GATE determinístico→fallback, ficha absoluta NBS, trilha `audit_log`+`.jsonl`, alíquotas de `calcularTributos`+`REF_DEFAULT`)
+### Consulta de CNAEs (CNAE) — IMPLEMENTADA (Phase 9, 2026-10-05)
 
-### Consulta de CNAEs — CNAE → NBS → Reforma (CNAE) — IMPLEMENTADA (Phase 9, 2026-10-05)
+- [x] **CNAE-01..CNAE-07** — duas camadas (regra sempre + NBS condicional), veredito por ano 2026/2027/2033, chaos 22/22
 
-- [x] **CNAE-01**: Ingerir `qualclasstrib_completo.json` (508 CNAEs, ~6,6k links, +677 LC +1.739 LC×NBS) via `npm run base` com `fixLatin1`, descarte do tracking Google, **conferência de descrições entre fontes + template consolidado (`classificacoesConsolidadas`)**, MANIFEST com proveniência (origem/licença/captura/cadência) + `cnaesComRegras:1090, cnaesComNbs:508, descricoesConferidas/Divergentes`, Dexie v13 aditiva
-- [x] **CNAE-02**: Motor em **duas camadas**: (1) `regrasDoCnae` sempre nos 1.090 (+ caminho bens→NCM); (2) enriquecimento NBS nos 508 × resolvedor → `VereditoNbs{…, anoReferencia}` (2026/2027/2033 via `refPorAno`), **cache por NBS**, ranking + destaque p/ 98-NBS
-- [x] **CNAE-03**: Menu novo "Consulta de CNAEs" (**busca nos 1.090**, invariante: zero CNAE sem regra); coluna NBS = contagem ou badge `sem-NBS`; painel = bloco Regras (sempre) + bloco NBS/Reforma (condicional, destaque + ranking + escolha) + template
-- [x] **CNAE-04**: CNPJ enriquecido — Serviços + Simples: regra sempre; NBS com flags/ano onde há link; **bens → faixa NCM**; fora-508 → regra + `sem-mapeamento-NBS` + fallback (DAS intocado)
-- [x] **CNAE-05**: Chat IA — regra (anexo/situação/vedação) p/ qualquer dos 1.090; NBS/benefício (+ano) só com link; sem lastro honesto
-- [x] **CNAE-06**: Chaos 22 casos (sorteio fora-508, 3 anos, cache, divergência, template, bens, 98-NBS; preserva `__COMPARAR`/rollback/degradação), gate `tsc 0 + npm test` ≥85%
-- [x] **CNAE-07**: Docs + UAT (MANIFEST completo, precedência oficial>ponte>auxiliar documentada, aceite incl. bens e 98-NBS)
+### Grafo Fiscal (GRAFO) — IMPLEMENTADA (Phase 10, 2026-10-06)
 
-### Grafo Fiscal Híbrido — LadybugDB + KGLite, com overlay local (GRAFO) — IMPLEMENTADA (Phase 10, 2026-10-06)
-
-- [x] **GRAFO-01**: Schema + build (`schema.cypher` + `scripts/build-grafo.mjs` → `public/base/grafo/grafo.lbug` via `npm run base`, MANIFEST.grafo, Dexie `grafometa`)
-- [x] **GRAFO-02**: Runtime no worker (`electron/ia/grafo-service.cjs` + `ia:grafo` IPC + `bridge.ia.grafoConsultar`, FTS+traversal <50ms, fallback sem `.lbug`)
-- [x] **GRAFO-03**: Retrieval híbrido (FTS seeds + HNSW 384-d + expansão 2-hops + PageRank/Louvain rerank + `taxa_uso_grafo`)
-- [x] **GRAFO-04**: KGLite tooling (`build-grafo-kglite.py` → `.kgl`, audit scorecard, `describe()` → system prompt + catálogo, MCP dev, `docs/grafo-mcp.md`)
-- [x] **GRAFO-05**: Consumo (`classificarComIa` + chat + lote + XML usam grafo primeiro, `via:grafo`, fichas com caminho, UI trilha + "por que sugeriu")
-- [x] **GRAFO-06**: Vetores offline (`recursos-ia/embedding/` versionado, `CHECKSUMS.txt`, `extraResources`, modo FTS-puro se ausente)
-- [x] **GRAFO-07**: Chaos 22 + docs + UAT (`tests/grafo-chaos.test.ts` 22/22, `docs/grafo-{arquitetura,manual,chaos,uat}.md`, UAT 5/5)
-- [x] **GRAFO-08**: Overlay de aprendizado local (`aprendizado.json` só-na-máquina, boost com teto 0.3, demote/TTL 90d/teto 5.000, veto do resolvedor, rollback por apagamento)
+- [x] **GRAFO-01..GRAFO-08** — LadybugDB FTS+2hops+PageRank, overlay de aprendizado local com teto, modo FTS-puro de fallback
 
 ### Persistence & Settings (PER)
-- [ ] **PER-01**: Persistir classificações do usuário em IndexedDB (sobrevivem a reinícios)
-- [ ] **PER-02**: Persistir configurações: tema, caminho último arquivo importado, preferências de exportação
-- [ ] **PER-03**: Backup/exportar banco local (arquivo .json ou .sqlite) para portabilidade
-- [ ] **PER-04**: Restaurar banco a partir de backup
 
-## v2 Requirements
+- [x] **PER-01**: Persistência local (Prisma/SQLite; empresas, produtos, auxiliares, notas, anexos)
+- [x] **PER-02**: Tema claro/escuro persistido; emitente timbrado; configurações por empresa
+- [x] **PER-03**: Backup/exportar banco (JSON, 27 tabelas + emitente, KEK e resumos fora por construção)
+- [x] **PER-04**: Restaurar com validação tudo-ou-nada + snapshot rotativo pré-restore (`pre-restore-*.bak`)
 
-Deferred to future release. Tracked but not in current roadmap.
+## v2 Requirements — BACKLOG (não programado)
 
-### Advanced Features (ADV)
-
-- **ADV-01**: Comparar duas versões de base NCM (diff de códigos/descrições)
-- **ADV-02**: Regras de classificação personalizadas (DSL para lógicas complexas por setor)
-- **ADV-03**: Auditoria completa (log de todas as alterações com usuário/timestamp)
-- **ADV-04**: Múltiplas empresas/bases NCM isoladas no mesmo app
-
-### Integration (INT)
-
-- **INT-01**: API REST local para integração com sistemas internos
-- **INT-02**: Conectores pré-definidos (Totvs Protheus, SAP B1, Domínio, ContaAzul)
-- **INT-03**: Sincronização em nuvem (opcional, multi-tenant)
+- **ADV-01**: Diff entre versões de base NCM (código/descrição/vínculo)
+- **ADV-02**: Regras de classificação personalizadas (por setor/empresa)
+- **ADV-03**: Auditoria avançada (relatório por usuário/período)
+- **INT-01**: API local para ERPs; export/import layouts adicionais
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Cálculo de crédito tributário (CBS/IBS) | Escopo de apuração, não classificação; regras complexas por operação |
-| Classificação de serviços (Código de Serviço) | LC 214/2025 foca em bens; serviços têm legislação distinta |
-| Versão web/SaaS com multi-tenancy | Requer autenticação, billing, infra; desktop-first MVP |
-| Integração direta com ERPs via API | APIs proprietárias, suporte contínuo; exportação CSV resolve v1 |
-| Assinatura digital de relatórios | Requer certificado digital, infra PKI; PDF assinado v2+ |
+| Cálculo completo de apuração (créditos/débitos) como substituto do módulo fiscal | Não é classificação; o app simula e assiste, não assume a apuração |
+| Classificação de bens importados por país de origem | Escopo de classificação por NCM/NBS, não de comércio exterior |
+| SaaS multi-tenant | Desktop-first; modalidade coberta pelo "Aurum Omni" |
+| Assinatura digital de relatórios | Exige certificado/PKI — não justifica o risco no escopo atual |
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| IMP-01 | Phase 1 | Pending |
-| IMP-02 | Phase 1 | Pending |
-| IMP-03 | Phase 1 | Pending |
-| IMP-04 | Phase 1 | Pending |
-| CLS-01 | Phase 2 | Pending |
-| CLS-02 | Phase 2 | Pending |
-| CLS-03 | Phase 2 | Pending |
-| CLS-04 | Phase 2 | Pending |
-| CLS-05 | Phase 2 | Pending |
-| SRCH-01 | Phase 3 | Pending |
-| SRCH-02 | Phase 3 | Pending |
-| SRCH-03 | Phase 3 | Pending |
-| SRCH-04 | Phase 3 | Pending |
-| SRCH-05 | Phase 3 | Pending |
-| RPT-01 | Phase 4 | Pending |
-| RPT-02 | Phase 4 | Pending |
-| RPT-03 | Phase 4 | Pending |
-| RPT-04 | Phase 4 | Pending |
-| UI-01 | Phase 3 | Pending |
-| UI-02 | Phase 3 | Pending |
-| UI-03 | Phase 3 | Pending |
-| UI-04 | Phase 1 | Pending |
-| UI-05 | Phase 1 | Pending |
-| UI-06 | Phase 3 | Pending |
-| PER-01 | Phase 1 | Pending |
-| PER-02 | Phase 1 | Pending |
-| PER-03 | Phase 4 | Pending |
-| PER-04 | Phase 4 | Pending |
-| CALC-01 | Phase 5 | Pending |
-| CALC-02 | Phase 5 | Pending |
-| CALC-03 | Phase 5 | Pending |
-| CALC-04 | Phase 5 | Pending |
-| CALC-05 | Phase 5 | Pending |
-| IA-00 | Phase 6 | Pending |
-| IA-01 | Phase 6 | Pending |
-| IA-02 | Phase 6 | Pending |
-| IA-03 | Phase 6 | Pending |
-| IA-04 | Phase 6 | Pending |
-| IA-05 | Phase 6 | Pending |
-| IA-06 | Phase 6 | Pending |
-| IA-07 | Phase 6 | Pending |
-| IA-08 | Phase 6 | Pending |
-| IA-09 | Phase 6 | Pending |
-| IA-10 | Phase 6 | Pending |
-| CNAE-01 | Phase 9 | Implemented |
-| CNAE-02 | Phase 9 | Implemented |
-| CNAE-03 | Phase 9 | Implemented |
-| CNAE-04 | Phase 9 | Implemented |
-| CNAE-05 | Phase 9 | Implemented |
-| CNAE-06 | Phase 9 | Implemented |
-| CNAE-07 | Phase 9 | Implemented |
-| GRAFO-01 | Phase 10 | Implemented |
-| GRAFO-02 | Phase 10 | Implemented |
-| GRAFO-03 | Phase 10 | Implemented |
-| GRAFO-04 | Phase 10 | Implemented |
-| GRAFO-05 | Phase 10 | Implemented |
-| GRAFO-06 | Phase 10 | Implemented |
-| GRAFO-07 | Phase 10 | Implemented |
-| GRAFO-08 | Phase 10 | Implemented |
-
-**Coverage:**
-- v1 requirements: 50 total (31 + 11 IA NCM-only com spike 06-00 + 8 GRAFO Phase 10)
-- Mapped to phases: 50
-- Unmapped: 0 ✓
+| Requirement | Status | Note |
+|-------------|--------|------|
+| IMP-01..04 | Implemented | v1.0.0 |
+| CLS-01..05 | Implemented | v1.0.0 |
+| SRCH-01..05 | Implemented | v1.0.0 |
+| RPT-01..04 | Implemented | v1.0.0 |
+| UI-01..06 | Implemented | v1.0.0 |
+| CALC-01..05 | Implemented | v1.0.0 (CALC-04 com critério revisto — update do app) |
+| IA-00..10 | Implemented / superseded | v1.0.0 (sem LLM em runtime) |
+| SER-01..05 | Implemented | 2026-10-03 |
+| CNAE-01..07 | Implemented | 2026-10-05 |
+| GRAFO-01..08 | Implemented | 2026-10-06 |
+| PER-01..04 | Implemented | v1.0.0 |
+| v2 / ADV / INT | Backlog | não programado |
 
 ---
-*Requirements defined: 2026-09-29*
-*Last updated: 2026-09-30 — Phase 6 IA NCM-only camada superior + spike 06-00, atalho Ctrl+Shift+D, 37 suítes*
+*Requirements updated: 2026-11-13 — v1.1.0 (venda avulsa)*

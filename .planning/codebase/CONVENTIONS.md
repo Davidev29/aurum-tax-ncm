@@ -1,49 +1,48 @@
 # Conventions
 
-> Mapeado em 2026-09-30 a partir de `` (Electron + React 19 + Vite 8 + TypeScript 5.9).
+> Mapeado em 2026-09-30; atualizado em 2026-11-13 (v1.1.0).
 
-## Code Style (prettier/eslint config, aspas, ponto-e-vírgula, indent — evidência nos arquivos)
+## Code Style (prettier/eslint config, aspas, ponto-e-vírgula, indent)
 
-- **Sem ESLint/Prettier no repo.** Glob por `eslint*`, `prettier*`, `.editorconfig` retorna vazio; `package.json` não tem scripts `lint`/`format`, nem `husky`/hooks (`ls .husky` → inexistente). Estilo é mantido por convenção, não por ferramenta.
-- **Aspas simples + 2 espaços.** Evidência: `src/store/consulta.ts:7` (`from 'zustand'`), `src/infrastructure/db/schema.ts:1` (`from 'dexie'`), `src/domain/services/classificacao.ts:1-14`. Indentação de 2 espaços em todos os arquivos amostrados.
-- **Ponto-e-vírgula inconsistente (predominância SEM).** A maioria dos módulos (`src/store/consulta.ts`, `src/infrastructure/db/schema.ts`, `src/domain/services/classificacao.ts`) omite `;`. Exceção: `src/App.tsx:1-13` e `src/main.tsx` usam `;` — legado/inconsistência a normalizar se um linter for adotado.
-- **Cabeçalho JSDoc por módulo.** Quase todo arquivo `domain/`, `application/`, `infrastructure/`, `store/` abre com bloco `/** ... */` explicando responsabilidade + referência SPEC (ex.: `src/domain/services/classificacao.ts:221-232` "Interpretação ÚNICA", `src/store/ui.ts:1-12`, `tests/setup.ts:1-12`). Comentários inline explicam *porquê* (ex.: `src/index.css:213-217` justifica ausência de `translateY` no hover).
-- **Imports com alias `@/`.** Configurado em `tsconfig.json:23-26` (`@/* → src/*`) e espelhado em `vite.config.ts:10-14` e `vitest.config.ts:5-9`. Ordem típica: externos → `@/domain` → `@/infrastructure`/`@/application` → `./` relativo. `verbatimModuleSyntax: true` → imports de tipo usam `import type` (ex.: `src/store/consulta.ts:9`, `src/App.tsx:1`).
-- **Idioma: código em inglês técnico, UI/comentários em português.** Identificadores misturam (`consultar`, `buscarSugestoes`, `trocarView`, `fonteCalc`); strings de UI e JSDoc em pt-BR.
+- **Sem ESLint/Prettier no repo.** Glob por `eslint*`, `prettier*`, `.editorconfig` vazio; `package.json` sem `lint`/`format`, sem `husky`. Estilo mantido por convenção.
+- **Aspas simples + 2 espaços.**
+- **Ponto-e-vírgula inconsistente (predominância SEM)** em módulos antigos; `src/App.tsx`/`main.tsx` usam `;` — legado se um linter for adotado.
+- **Cabeçalho JSDoc por módulo** explicando responsabilidade + referência SPEC/decisão.
+- **Imports com alias `@/`** (confirmado em `tsconfig.json`, `vite.config.ts`, `vitest.config.ts`). Ordem: externos → `@/domain` → `@/infrastructure`/`@/application` → relativo. `import type` quando o tipo é só de tipo.
+- **Idioma: código em inglês técnico; UI/comentários em pt-BR.**
 
-## Naming (arquivos, componentes, hooks, stores, tipos)
+## Naming
 
-- **Arquivos: kebab-case para multi-palavra em camadas lógicas; PascalCase para UI.** Ex.: `src/application/notas-xml.ts`, `ncm-sync.ts`, `classificacao-inteligente.ts`, `src/infrastructure/base/classificacao-repo.ts`, `reclassificacao-repo.ts`, `src/infrastructure/nfe/apuracao.ts`; vs. `src/pages/Consulta.tsx`, `NfeXml.tsx`, `src/ui/Layout.tsx`, `ModalLegislacao.tsx`, `src/modais/reclassificacao.tsx` (minúscula — inconsistência pontual em `modais/` vs. `ui/`).
-- **Componentes/páginas: PascalCase exportado nomeado.** `export function App()` (`src/App.tsx:18`), `export function Consulta`, `Calculadora`, `Lote`, `NfeXml`, `Produtos`, `Auxiliares`, `Legislacao`. Sem `default exports` na amostra.
-- **Stores: substantivo minúsculo singular/plural de tela.** `src/store/` contém `ui.ts`, `sessao.ts`, `produtos.ts`, `nfe.ts`, `lote.ts`, `dialogo.ts`, `consulta.ts`, `calculadora.ts`, `base.ts`, `auxiliares.ts`. Hook exposto como `use<Nome>` (`useConsulta`, `useUi`) via `create<State>()` do Zustand.
-- **Tipos: interfaces PascalCase, genéricos curtos.** Domínio: `Classificacao`, `VinculoNcm`, `TabelaCst`, `TabelaCstClassTrib`, `ReferenciaCClassTrib`, `ResumoClassificacao`, `ResultadoCalculo` (`src/domain/entities/index.ts`). Estados: `ConsultaState`, `UiState`, `Toast`, `ModalId`, `ViewId`, `FonteCalc`. Helpers de teste locais em minúscula (`vinculo()`, `cct()` em `tests/motor-unico.test.ts:34-48`).
-- **Funções: verbo português camelCase.** `consultar`, `buscarSugestoes`, `consultarUnificada`, `escolherTexto`, `trocarView`, `alternarTema`, `montarClassificacao`, `resolverClassificacoes`, `interpretarEntradaNcm`, `calcularTributos`. Constantes UPPER_SNAKE (`SUGGEST_LIMITS`, `REGRA_GERAL`, `STORES`, `DB_VERSION`).
+- **Arquivos:** kebab-case para camadas (`notas-xml.ts`, `cff-sync.ts`); PascalCase para componentes UI (`Consulta.tsx`, `NfeXml.tsx`, `Layout.tsx`); `modais/*.tsx` minúsculo (há inconsistência pontual — aceitar naquele estilo).
+- **Componentes/páginas:** PascalCase, named exports (`export function App()`). Sem `default exports` na amostra.
+- **Stores:** substantivo minúsculo em `src/store/` (`ui.ts`, `consulta.ts`, `sessao.ts`...) além dos stores de feature (`simples/store.ts`, `simples-projection/store.ts`, `aurum` — **removido na v1.1.0**); hook `use<Nome>` via Zustand `create<State>()`.
+- **Tipos:** interfaces PascalCase; `Registro = Record<string, unknown>` nas fronteiras dinâmicas.
+- **Funções:** camelCase em português (`consultar`, `montarClassificacao`, `calcularTributos`); constantes UPPER_SNAKE (`REGRA_GERAL`, `SUGGEST_LIMITS`).
 
-## TypeScript Usage (strict?, any usage, tipos de domínio NCM/Classificação)
+## TypeScript Usage
 
-- **`strict: true` + extras.** `tsconfig.json:16-21`: `strict`, `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`, `noUncheckedSideEffectImports` ativos; `exactOptionalPropertyTypes: false`. `moduleDetection: force`, `allowImportingTsExtensions: true`, `jsx: react-jsx`. `include: ["src", "tests"]`.
-- **Zero `any` na amostra — `unknown` é o padrão.** Grep por `:\s*any\b|as any` em `src/` retorna vazio. Fronteiras dinâmicas (IndexedDB legado, JSON, docs) usam `unknown`/`Record<string, unknown>` com narrowing explícito: `src/infrastructure/db/schema.ts:50` (`type Registro = Record<string, unknown>`), `src/application/aux-meta.ts:43` (`const str = (v: unknown)`), `src/ui/cartoes.tsx:38` (`docsLigados(docs: unknown)`), `src/modais/globais.tsx:586` (`const dado: unknown = JSON.parse(...)`). Único `as never` pontual em `bulkPut` (`src/infrastructure/db/schema.ts:259`).
-- **Tipos de domínio NCM/Classificação (núcleo em `src/domain/entities/index.ts`).** `VinculoNcm` (id/codigo/cst/cClassTrib/baseLegal), `NomenclaturaNcm` (codigo/descricao/dataInicio/dataFim/ato/atoFim), `Classificacao` (vinculo + joins `cstDetalhes`/`cstClassTribDetalhes`/`referencia`/`resumo` + flags `regraGeral`/`manual`/`revogado`), `ResumoClassificacao`, `ReferenciaTributaria`, `ResultadoCalculo` (documenta a mecânica `aliq = ref × (1−red/100)` em `entities/index.ts:342-350`), `ReclassificacaoManual`, `Produto` (+ `ClassificacaoSnapshot` congelado), `Empresa`, `Emitente`, tabelas auxiliares (`TabelaCst`, `TabelaCstClassTrib`, `TabelaAuxiliarSimples`, `TabelaCest`, `ClassificacaoProdutoSistema`).
-- **Regra de ouro: `interpretarEntradaNcm` é o intérprete único.** `src/domain/services/classificacao.ts:243-250` devolve `{kind: 'ok'|'truncado'|'invalido', codigo, digitos}`; todas as telas classificam pelo mesmo `codigo` (ver `tests/motor-unico.test.ts:1-11`).
+- **`strict: true` + extras** (`noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`, `exactOptionalPropertyTypes: false`).
+- **Zero `any` na amostra — `unknown` é o padrão.** Fronteiras dinâmicas (JSON, docs, IPC) usam `unknown`/`Record<string, unknown>` com narrowing explícito. Supressão (`@ts-ignore`, `@ts-nocheck`) não é usada.
+- **`interpretarEntradaNcm` é o intérprete único.** Telas classificam pelo mesmo código (`{kind:'ok'|'truncado'|'invalido'}`).
 
-## State & Data Patterns (Zustand stores, Dexie schema, como telas acessam dados)
+## State & Data Patterns
 
-- **Zustand: um store por tela/domínio, sem middleware.** Padrão `create<State>((set, get) => ({...}))` com estado plano + ações async no próprio store (ex.: `src/store/consulta.ts:141-369`). Telas consomem via seletores (`useUi((s) => s.view)` em `src/App.tsx:19`) — nunca o objeto inteiro.
-- **Guards de geração contra race conditions.** `src/store/consulta.ts:133-139` (`seqBuscaTexto`, `seqSugestoes`, `seqUnificada`): só a resposta mais recente escreve; `consultarUnificada` faz fan-out com `Promise.allSettled` (`consulta.ts:263-300`).
-- **Limpeza ao trocar de view.** `registrarLimpeza(view, fn)` em `src/store/ui.ts:98-100`; `trocarView` executa a limpeza da tela anterior (`ui.ts:157-162`). Cada store registra a sua (ex.: `src/store/consulta.ts:372`).
-- **Dexie singleton tipado (`src/infrastructure/db/schema.ts:168-242`).** Classe `AurumDatabase extends Dexie`, 17 tabelas (`ncm`, `nbs`, `cst`, `cstClassTrib`, `referencia`, `ncmNomenclatura`, `empresas`, `produtos`, `meta`, `cfop`, `cstIcms`, `cstPisCofins`, `nfeNotas`, `reclassificacoesManuais`, `classificacaoProduto`, `auditLog`, `cest`). Versões 6→7 com migração `migrarBancoLegado` (renomeia campos v2→canônicos). Helpers: `bulkPut` em lotes de 500 com progresso (`schema.ts:249-260`), `contarTodos()`. Nomes de stores centralizados em `STORES` (`@/domain/constants`).
-- **Fluxo de acesso das telas.** Página (ex.: `src/pages/Consulta.tsx`) → hook Zustand (`useConsulta`) → ação do store → camada `application/` (orquestração: `classificacao-inteligente.ts`, `produtos.ts`, `reclassificacao.ts`) ou `infrastructure/` (repos Dexie: `base/classificacao-repo.ts`, `base/reclassificacao-repo.ts`; parsers `nfe/`, `sped/`, `parsers/lote.ts`) → `domain/services/` (motor puro: `classificacao.ts`, `calculo.ts`, `revogacao.ts`). `App.tsx:18-53` é shell puro: `switch(view)` renderiza a página dentro de `Layout`, sem lógica de dados.
-- **Auditoria append-only.** `auditLog` (`++id, quando, tabela, chave, autor`) nunca atualizado pela UI (`schema.ts:191`, `entities/index.ts:241-250`).
+- **Zustand por tela/domínio**, sem middlewares; seletores (`useUi((s) => s.view)`), não o objeto inteiro.
+- **Guards de geração** contra race conditions (`seqBuscaTexto`, `Promise.allSettled` no fan-out de `consultarUnificada`).
+- **Limpeza ao trocar de view** via `registrarLimpeza(view, fn)` em `store/ui.ts`.
+- **Prisma + SQLite via processo main** (não Dexie). Singleton `PrismaClient` no main (`electron/main/db.ts`); no renderer, acesso via IPC `db:op` (`DriverIpc` → `src/infrastructure/db/driver-prisma.ts`) com allowlist de operações/tabelas, tetos (lote 2000, 4 MB, transação 500 ops), `"where"` estruturado e `removerOnde` exigindo critério.
+- **Tabelas (27)** + KEK/índices fora do backup; backup/restore JSON transacional e validado; `integrity_check` no boot com backend `node:sqlite` + quarentena.
+- **Auditoria append-only** — `audit_log` nunca atualizado pela UI; trilha `via:grafo`/determinístico.
 
-## Styling (Tailwind usage, temas claro/escuro, design system)
+## Styling
 
-- **Tailwind CSS v4 via plugin Vite.** `src/index.css:1` (`@import 'tailwindcss'`), `@tailwindcss/vite` em `vite.config.ts:4,9` e `package.json`. Sem `tailwind.config.js` — tokens via `@theme` no CSS.
-- **Design system próprio "marinho + ouro".** `src/index.css:13-99` define `@theme` com escalas `brand-*` (marinho `#16233a`→) e `aurum-*` (ouro `#be9433`→), fontes (`Inter`, `JetBrains Mono`), sombras (`--shadow-card/pop/drawer`) e animações (`fade-up`, `pop-in`, `slide-in`, `pulse-soft`, `shimmer`). Regra documentada no cabeçalho (`index.css:3-11`): ouro nunca como texto corrido no claro.
-- **Temas claro/escuro por classe.** `@custom-variant dark` (`index.css:102`); `.dark` no `<html>` alternado por `aplicarTema()` em `src/store/ui.ts:116-119` (persistido em `localStorage[TEMA_KEY]`, default = `prefers-color-scheme`). Superfícies via variáveis `--surface/--surface-2/--line/--ink/--ink-soft` com valores distintos por tema (`index.css:104-122`).
-- **Classes utilitárias de componente em `@layer components`.** `index.css:201-1445`: `.btn`/`.btn-primary/.btn-ghost/.btn-soft/.btn-danger`, `.field`/`.field-label/.field-wrap`, `.panel`, `.tbl`/`.tbl-notas/.tbl-grupos`, `.pill`/`.anexo-*`/`.tipo-badge`, `.modal-backdrop`/`.glass-box`/`.glass-header`, `.side-btn`, `.icone-badge`, `.calc-hero/.calc-bar/.calc-kpi/.calc-step`, `.sugg`, `.leitura-norma`. Telas combinam Tailwind inline + essas classes (ex.: badges de anexo por cor fiscal). `prefers-reduced-motion` respeitado (`index.css:183-192`).
-- **Sem CSS Modules / styled-components / Radix.** Dependências de UI: `framer-motion`, `chart.js` + `react-chartjs-2`, `@fontsource/inter`, `@fontsource/jetbrains-mono`. Ícones: SVG próprio (`.icone-svg`), emojis proibidos em selos (comentário em `index.css:410`).
+- **Tailwind CSS v4** (`@import 'tailwindcss'`, tokens `@theme` em `src/index.css`; sem `tailwind.config.js`).
+- **Design system próprio "marinho + ouro"** (`brand` = marinho, `aurum` = ouro; ouro nunca como texto corrido no tema claro).
+- **Tema claro/escuro por classe `.dark`** no `<html>`; `--surface/--surface-2/--line/--ink/...` por tema.
+- **Componentes utilitários em `index.css`** (`.btn`, `.panel`, `.tbl`, `.anexo-*`, `.modal-backdrop`, `.glass-box`...) — telas combinam Tailwind inline + essas classes; `prefers-reduced-motion` respeitado.
+- **Sem CSS Modules/styled-components/Radix.** Framer Motion para animações; Chart.js para gráficos do módulo XML.
 
-## Git & Commits (se .git existe, .gitignore cobre o quê)
+## Git & Commits
 
-- **`.git` existe, histórico curto (4 commits).** `git log --oneline`: `e4c8ffa fix: blindar sync Siscomex…`, `f82b502 feat: vigencia NCM, sync CFF/Siscomex…`, `2572b6b feat: Aurum Tax NCM v1.0.0…`, `646009a Initial commit`. Remoto: `github.com/Davidev29/aurum-tax-ncm` (privado, em `package.json:10-13`). Padrão observado: `feat:`/`fix:` + descrição em pt-BR.
-- **`.gitignore` (54 linhas) cobre:** `node_modules/`, `dist/`, `dist-ssr/`, `release/`, `electron/dist/`, `*.local`; logs (`logs/`, `*.log`, `npm-debug*`); SO/editores (`.DS_Store`, `Thumbs.db`, `.vscode/*` exceto `extensions.json`, `.idea/`); artefatos `electron-builder` (`*.exe/.dmg/.AppImage/.snap/.deb/.rpm/.zip/.tar.gz/.blockmap`); cobertura (`coverage/`, `.nyc_output/`); temporários (`*.tmp`, `tmp/`). Base de dados locais (`*.xlsx`, `*.json`) **comentadas** (linhas 50-54) — ou seja, hoje NÃO ignoradas por padrão.
+- Histórico: `feat:`/`fix:`/`chore:` em pt-BR (`2572b6b feat: Aurum Tax NCM v1.0.0…` … `4a57222 chore(grafo): …`).
+- `.gitignore` cobre: `node_modules/`, `dist/`, `electron/dist/`, `release/`, `coverage/`, `.vitest/`, `logs/*`, artefatos de build/certificado, `*.db`. **`public/base/*.json` e `prisma/schema.prisma|schema.sql` são versionados por design** (base embutida determinística, verificada por `verificar-build.mjs`).

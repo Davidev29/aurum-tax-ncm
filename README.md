@@ -25,17 +25,17 @@
 
 ◈ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ◈
 
-**Versão `1.0.0` · `10` views · `171` suítes Vitest · `1.933` casos · `typecheck` limpo (app + electron)**
+**Versão `1.1.0` · `10` views · `172` suítes Vitest · `1.946` casos · `typecheck` limpo (app + electron)**
 
-*Estado auditado em **08/10/2026** a partir da árvore de trabalho (branch `main`).*
+*Estado auditado em **13/11/2026** a partir da árvore de trabalho (branch `main`).*
 
-[◈ Estado atual](#-estado-atual--auditado-em-08102026) · [✨ Recursos](#-recursos-por-módulo) · [🚀 Começo rápido](#-começo-rápido) · [📖 Guia de uso](#-guia-de-uso--módulo-a-módulo) · [🧮 Regras de cálculo](#-como-o-cálculo-funciona) · [🛠️ Desenvolvimento](#️-desenvolvimento)
+[◈ Estado atual](#-estado-atual--auditado-em-13112026) · [✨ Recursos](#-recursos-por-módulo) · [🚀 Começo rápido](#-começo-rápido) · [📖 Guia de uso](#-guia-de-uso--módulo-a-módulo) · [🧮 Regras de cálculo](#-como-o-cálculo-funciona) · [🛠️ Desenvolvimento](#️-desenvolvimento)
 
 </div>
 
 ---
 
-## ◈ Estado atual — auditado em 08/10/2026
+## ◈ Estado atual — auditado em 13/11/2026
 
 > Este README descreve somente o que existe hoje na árvore.
 
@@ -44,9 +44,9 @@
 | Sinal | Valor real (árvore de trabalho) |
 |---|---|
 | 🖥️ Views no menu | **10** — Calculadora · Simples Nacional · Consulta NCM · Serviços (NBS) · Consulta de CNAEs · Classificação em lote · Notas Fiscais (XML) · Produtos · Tabelas auxiliares · Legislação |
-| 🧪 Testes | **171 arquivos** · **1.933 casos** — `npm test` → **tudo passando** · `npm run typecheck` limpo (app + electron) |
+| 🧪 Testes | **172 arquivos** · **1.946 casos** — `npm test` → **tudo passando** · `npm run typecheck` limpo (app + electron) |
 | ✅ Tipos | `npm run typecheck` (`tsc --noEmit` + `tsc -p tsconfig.electron.json`) — **limpo** |
-| 📦 Instaladores locais | `release/` com `Setup 1.0.0` + `Portátil 1.0.0` (ignorado no git, gerado por `npm run dist:win`) |
+| 📦 Instaladores locais | `release/` com `Setup 1.1.0` + `Portátil 1.1.0` (ignorado no git, gerado por `npm run dist:win`) |
 | 🗄️ Base embutida | `public/base/` versionada: `reforma.json` 1,5 MB · `nomenclatura.json` 2,8 MB · `classificacoes-consolidadas.json` 1,7 MB · `cnae-nbs.json` 1,3 MB · `parametros.json` (IBS 19 + CBS 9 de referência, editável) · grafo `grafo.lbug` 6,1 MB · `vetores.json` 12 MB (versionado p/ busca local; não empacotado no instalador) |
 | 📥 Formatos de entrada | **XML de NF-e/NFC-e** (modelo 55/65) + **CSV/XLSX de lote** (`COD/SKU; NOME; NCM; CFOP; CST; PIS; COFINS`) |
 
@@ -89,7 +89,7 @@ flowchart LR
 | 🖨️ **Emitente timbrado** | Razão social, CNPJ, logo, cor, rodapé — cabeçalho de todos os PDFs + modal de preview |
 | 🔄 **Atualização e bases** | GitHub Releases públicas (Configurações → Atualização, com snapshot pré-update do banco). Bases embutidas renovadas a cada release. Complementos online: Siscomex + CFF + BrasilAPI (com fallback manual). Backup/restauração JSON das 27 tabelas (KEK e resumos fora por construção), idempotente, com validação prévia, manifesto por tabela, bloqueio de backup parcial sem confirmação, transação tudo-ou-nada e snapshot pré-restore |
 | 🌙 **UX** | Tema claro/escuro, responsivo, sidebar recolhível (desktop) / drawer (móvel), transições em carrossel com respeito a `prefers-reduced-motion`, toasts 3,4 s, skeleton/count-up + barreira de erro por view (`ErroFatal`, sem tela em branco), code-splitting por tela, fundo global animado |
-| ✨ **Tour guiado** | Abre 1x após a instalação e quando quiser no botão **✨ Guia** do topo. 10 passos (um por menu), 100% informativo: quadro animado com miniatura do menu lateral, cursor em loop clicando no item do passo e prévia viva de cada módulo — sem navegar sozinho |
+| ✨ **Tour guiado** | Disponível sob demanda no botão **✨ Guia** do topo. 10 passos (um por menu), 100% informativo: quadro animado com miniatura do menu lateral, cursor em loop clicando no item do passo e prévia viva de cada módulo — sem navegar sozinho |
 
 ---
 
@@ -99,7 +99,7 @@ flowchart LR
 
 - **Node.js 20+** e **npm 10+** (só para desenvolver/compilar — o usuário final usa o instalador)
 - Windows 10/11 64-bit, macOS 12+ ou Linux (desktop)
-- ~1 GB livre para compilar · instalador Windows ~120 MB · **sem necessidade de administrador**
+- ~1 GB livre para compilar · instalador Windows ~170 MB · **sem necessidade de administrador**
 
 ### 1 · Instalar
 
@@ -330,7 +330,7 @@ aurum-tax-ncm/
 ├── bases-fonte/         # JSONs-fonte oficiais + vivos (ver tabela abaixo)
 ├── scripts/             # build-base, build-grafo, gerar-indice-ia (lexical),
 │                        #  cobertura, ofuscar, verificar, after-pack…
-├── tests/               # 171 suítes · 1.933 casos (tudo passando)
+├── tests/               # 172 suítes · 1.946 casos (tudo passando)
 ├── docs/                # SPEC, arquitetura, diagnósticos, manuais (.docx fora do installer)
 ├── public/base/         # base JSON embutida versionada + MANIFEST + grafo
 ├── build/               # icon.ico/png/icns, LICENCA.rtf/txt (NSIS PT-BR; icns p/ mac, png p/ linux)
@@ -401,7 +401,7 @@ Não. São motores separados: **Calculadora** simula IBS/CBS por NCM; **Simples*
 
 ## 📄 Licença
 
-Ver [LICENSE](./LICENSE) (MIT — copyright Francisco Davi Carneiro Brito, 2026).
+Ver [LICENSE](./LICENSE) (MIT — copyright Francisco Davi Carneiro Brito, 2026). Termos do instalador: [`build/LICENCA.txt`](./build/LICENCA.txt) (venda avulsa, v1.2 Nov/2026); histórico de versões: [`CHANGELOG.md`](./CHANGELOG.md).
 
 > Nota: `package.json` declara `private: true` + `UNLICENSED` (não publicado no npm). Vale o texto do arquivo `LICENSE` para o código-fonte.
 

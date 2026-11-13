@@ -1,18 +1,20 @@
 # Integrations
 
-> Mapeamento das integrações de `` (Electron main ↔ renderer, fontes de dados, import/export, segredos).
+> Mapeamento das integrações (Electron main ↔ renderer, fontes de dados, import/export, segredos).
 > Referências: `electron/main.ts`, `electron/preload.ts`, `src/infrastructure/bridge.ts`.
+> Atualizado em 2026-11-13 (v1.1.0): removidas as integrações da camada Aurumbit (licença/conta/cobrança).
 
 ## External Services
 
 | Serviço | Endpoint / mecanismo | Uso | Arquivo |
 |---|---|---|---|
-| BrasilAPI (CNPJ) | `https://brasilapi.com.br/api/cnpj/v1/{cnpj}` | Completar cadastro de empresas por CNPJ; timeout 12 s, cache em memória, lote com concorrência 3, nunca lança em lote | `src/infrastructure/receita/brasilapi.ts` |
-| Portal Único Siscomex — Classif (NCM vigente) | `https://portalunico.siscomex.gov.br/classif/api/publico/nomenclatura/download/json` (+ fallback `?perfil=PUBLICO`) | Sync da tabela NCM vigente: diff por hash canônico, novos/alterados/extintos (`dataFim`/`atoFim`), piso de sanidade 1000 linhas; intervalo mín. 24 h, timeout 90 s, retry 3×/10 s | `src/domain/constants/siscomex-apis.ts`, `src/infrastructure/siscomex/ncm-sync.ts`, `src/application/ncm-sync.ts` |
-| CFF — Conformidade Fácil / DFe (SVRS) | `https://cff.svrs.rs.gov.br/api/v1/consultas/{classTrib,credPresumido,anexos,…}` | Sync de referência CST × cClassTrib, crédito presumido, anexos LC 214, locais de operação, classificação de produtos (NFCom/NFAg/NF3e/NFGas); endpoints com mTLS lançam `ErroCertificadoCff` (import manual via portal) | `src/domain/constants/cff-apis.ts`, `src/infrastructure/cff/cff-sync.ts`, `src/application/cff-sync.ts` |
-| Planalto / CGIBS (legislação) | Hosts allowlist: `planalto.gov.br`, `www.planalto.gov.br`, `www4.planalto.gov.br`, `cgibs.gov.br`, `www.cgibs.gov.br` (+ `https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp214.htm` no menu Ajuda) | Leitura interna de normas no modal de legislação (renderer não sofre CORS — fetch roda no main) | `electron/main.ts` (`HOSTS_LEGISLACAO`, canal `rede:buscar-texto`), `src/infrastructure/legislacao-texto.ts`, `src/domain/legislacao.ts`, `src/ui/ModalLegislacao.tsx` |
-| GitHub Releases (auto-update) | `publish: { provider: github, owner: Davidev29, repo: aurum-tax-ncm, private: true }` via `electron-updater` | Checagem 30 s após abrir + a cada 6 h; eventos `verificando/disponivel/em-dia/baixando/baixada/erro`; **é aqui que as bases embutidas (`dist/base`) são renovadas** | `electron/main.ts` (`configurarAtualizador`, canais `atualizacao:*`), `src/application/atualizacao.ts`, `package.json: build.publish` |
-| Nenhum backend próprio | App 100% local/offline-first | Sem API SaaS, sem telemetria; aceite de contrato só em `localStorage` | `src/domain/contrato.ts`, `src/ui/TermoAceite.tsx` |
+| BrasilAPI (CNPJ) | `https://brasilapi.com.br/api/cnpj/v1/{cnpj}` (+ fallbacks `oficina.cnpj.ws` → `receitaws` → `cnpj.ws`) | Completar cadastro de empresas por CNPJ (opcional; botão "Puxar dados") | `src/infrastructure/receita/brasilapi.ts` |
+| Portal Único Siscomex — Classif | `https://portalunico.siscomex.gov.br/classif/api/publico/nomenclatura/download/json` | Sync da nomenclatura NCM (opcional; diff por hash, piso sanidade); timeout, retry, 24h mín. | `src/infrastructure/siscomex/ncm-sync.ts`, `src/application/ncm-sync.ts` |
+| CFF — Conformidade Fácil/DFe | `https://cff.svrs.rs.gov.br/api/v1/consultas/*` | Sync CST × cClassTrib, anexos, crédito presumido (opcional; endpoints mTLS → import manual) | `src/infrastructure/cff/cff-sync.ts`, `src/application/cff-sync.ts` |
+| Planalto / CGIBS (legislação) | allowlist: `planalto.gov.br` (+`www.`/`www4.`), `cgibs.gov.br` | Leitura de normas no modal in-app (fetch no main, sem CORS); teto 15 MB, timeout 90 s | `electron/main.ts` (`HOSTS_REDE`), `src/infrastructure/legislacao-texto.ts`, `src/ui/ModalLegislacao.tsx` |
+| GitHub Releases (auto-update) | `publish: { provider: github, owner: Davidev29, repo: aurum-tax-ncm, private: false }` via `electron-updater` | Checagem no boot + a cada 6 h; **é aqui que bases embutidas são renovadas** | `electron/main.ts` (`configurarAtualizador`), `src/application/atualizacao.ts`, `package.json: build.publish` |
+| Fundo animado (Pexels) | `https://api.pexels.com` | Imagem de fundo (opcional; cache 24h) | `src/infrastructure/fundo/pexels.ts` |
+| Nenhum backend próprio | App 100% local/offline-first | Sem API SaaS, sem conta, sem telemetria da base | — |
 
 ## Internal Modules / IPC
 
@@ -20,61 +22,58 @@ Arquitetura: renderer com `contextIsolation: true`, `nodeIntegration: false` —
 
 | Canal IPC | Direção | Payload | Propósito |
 |---|---|---|---|
-| `base:ler` | renderer → main → renderer | `relPath → string UTF-8` | Ler `public/base` (dev) / `dist/base` (prod) com trava anti-traversão (`resolverNoBase`) |
-| `base:ler-base64` | renderer → main → renderer | `relPath → base64` | Mesmo, binário; decode UTF-8 no preload (tem `Buffer`) |
-| `rede:buscar-texto` | renderer → main → renderer | `url → { ok, status, urlFinal, contentType, texto }` | Fetch de norma oficial sem CORS; travas: só HTTPS, só hosts allowlist, sem fragmento, teto 15 MB, timeout 90 s, decode charset (Planalto serve ISO-8859-1) |
-| `arquivo:escolher` | renderer → main → renderer | `filtros → { caminho, nome, conteudo base64 } \| null` | `dialog.showOpenDialog` (openFile) + leitura |
-| `arquivo:escolher-pasta` | renderer → main → renderer | `void → path \| null` | `dialog.showOpenDialog` (openDirectory) |
-| `arquivo:salvar` | renderer → main → renderer | `{ nome, conteudo base64, filtro } → path \| null` | `dialog.showSaveDialog` + escrita |
-| `xml:salvar` | renderer → main → renderer | `{ cnpj, chave44, conteudo } → relPath` | Guarda NF-e em `<userData>/xml/<cnpj>/<chave>.xml` (mkdir recursivo) |
-| `xml:ler` / `xml:remover` | renderer → main → renderer | `relPath → string` / `void` | Ler/remover XML guardado (inexistente não é erro) |
-| `atualizacao:versao` | renderer → main → renderer | `→ { versao, empacotado }` | Versão instalada (aba Atualização) |
-| `atualizacao:verificar` / `:baixar` / `:instalar` | renderer → main → renderer | manual check/download/quitAndInstall | Sem efeito fora do app empacotado (mensagem amigável) |
-| `atualizacao:evento` | main → renderer (push) | `{ tipo, … }` | Progresso do auto-updater |
-| `menu:acao` | main → renderer (push) | `{ acao: 'abrir' \| 'exportar' \| 'tema' \| 'atualizar' }` | Menu nativo (Arquivo/Exibir/Ajuda + atalhos `CmdOrCtrl+O/E`, `Shift+L`) |
+| `base:ler` / `base:ler-base64` | renderer → main | `relPath → texto/base64` | Ler `public/base` (dev) / `dist/base` (prod); anti-traversão |
+| `rede:buscar-texto` | renderer → main | `url → texto` | Fetch de norma oficial (só HTTPS + allowlist, sem fragmento, teto 15 MB, timeout 90 s) |
+| `arquivo:escolher` / `:escolher-pasta` / `:salvar` | renderer → main | filtros → caminho/conteúdo base64 | Diálogos nativos + leitura/escrita na escolha do usuário |
+| `xml:salvar` / `xml:ler` / `xml:remover` | renderer → main | `{ cnpj, chave44 }` / relPath | XMLs em `<userData>/xml/<cnpj>/<chave>.xml` (chave `^\d{44}$`) |
+| `db:op` | renderer → main | `DbOp → resultado` | Banco SQLite via Prisma; allowlist de 11 ops/tabelas + validação de domínio + tetos |
+| `db:transaction` | renderer → main | `DbOp[] → resultado[]` | Transação SQLite real (tudo-ou-nada), ≤500 ops |
+| `db:snapshot` | renderer → main | `→ { ok, caminho }` | Snapshot pré-restore rotativo (`pre-restore-*.bak`) |
+| `ia:grafo` / `ia:grafo-uso` | renderer → main | texto/k → resultado | Grafo fiscal local (FTS+2hops+PageRank) no `utilityProcess`; overlay local |
+| `atualizacao:versao` / `:verificar` / `:baixar` / `:instalar` | renderer → main | manual | Sem efeito fora do empacotado |
+| `atualizacao:evento` | main → renderer (push) | `{ tipo }` | Progresso do auto-updater |
+| `menu:acao` | main → renderer (push) | `{ acao }` | Menu nativo (Arquivo/Exibir/Ajuda; atalhos `Ctrl/Cmd+O/E`, `Shift+L`) |
 
 Contrato e fallback:
 
 | Peça | Arquivo | Notas |
 |---|---|---|
-| `AurumBridge` (tipos `BridgeEscolha`, `BridgeSalvar`, `TextoRemoto`, `VersaoApp`, `EventoAtualizacao`) | `src/infrastructure/bridge.ts` | `bridge = window.aurum ?? null`; `isElectron()`; `lerArquivoBase()` usa IPC no Electron e `fetch('base/...')` no navegador |
-| Preload `window.aurum` | `electron/preload.ts` | Implementa 1:1 o `AurumBridge`; versão via `--aurum-versao=` (additionalArguments); `onMenu`/`onAtualizacao` com assinatura única (`removeAllListeners`) |
-| Janela | `electron/main.ts: criarJanela` | 1440×900 (mín. 1024×700), `preload.cjs`, `sandbox: false`, single-instance, `will-navigate` bloqueada, `setWindowOpenHandler` → links externos no navegador |
-| Armazenamento XML | `electron/main.ts: diretorioXml/resolverNoXml` + `src/infrastructure/arquivos/xml-storage.ts` | `app.getPath('userData')/xml` (gravável, preservado no update; nunca dentro do `.asar`) |
+| `AurumBridge` | `src/infrastructure/bridge.ts` | `bridge = window.aurum ?? null`; `isElectron()`; leitura de base com fallback `fetch('base/...')` no navegador |
+| Preload `window.aurum` | `electron/preload.ts` | Implementa 1:1 o `AurumBridge`; `sandbox: false` (preload usa `Buffer`; hardening pendente) |
+| Janela | `electron/main.ts: criarJanela` | 1440×900 (mín. 1024×700); single-instance; `will-navigate` ativo; `setWindowOpenHandler` → deny + `openExternal` p/ http(s) |
+| Banco | `electron/main/db.ts` + `src/infrastructure/db/*` | Singleton Prisma no main; IPC `db:op`; `aurum.db` em `userData`; `integrity_check` no boot (quarentena se corrompido) |
 
 ## Data Sources
 
 | Fonte | Formato | Ingestão | Destino |
 |---|---|---|---|
-| Bases raiz (`classificacao_tributaria.json`, `reforma_tributaria_por_ncm.json`, `Tabela_NCM_Vigente_*.json`) | JSON brutos | `npm run base` → `scripts/build-base.mjs` (normalização 3FN, validações cruzadas, `MANIFEST.json` com sha256) | `public/base/*.json` → `dist/base` (embutido no instalador) |
-| Bases embutidas (`reforma.json`, `classificacao-tributaria.json`, `nomenclatura.json`) | JSON normalizados | `useBase.iniciar()` via `lerArquivoBase()` (IPC ou fetch) | IndexedDB (seed) |
-| Dexie/IndexedDB (`aurum_tax_ncm_v1`, v8) | Object stores locais | `src/infrastructure/db/schema.ts` + `src/infrastructure/base/*` + `src/application/base.ts` | Stores: `ncm`, `nbs`, `cst`, `cstClassTrib`, `referencia`, `ncmNomenclatura`, `empresas`, `produtos`, `meta`, `cfop`, `cstIcms`, `cstPisCofins`, `nfeNotas` (`++id`, único `empresaId+chave`), `reclassificacoesManuais`, `classificacaoProduto`, `auditLog` (append-only), `cest`; migração idempotente v2→v3 (nomes legados `ind_g*`) |
-| Siscomex Classif (tabela vigente) | JSON ~3 MB (`Nomenclaturas[]`) | `ncm-sync.ts` (hash canônico, diff, metadados em `meta[siscomex_ncm_sync]`) | `ncmNomenclatura` |
-| CFF/DFe (classTrib, anexos, crédito) | JSON por endpoint | `cff-sync.ts` (hash/etag/lastModified em `meta[cff_sync_*]`) | `cst`, `cstClassTrib`, `referencia`, `classificacaoProduto` |
-| XMLs de NF-e do usuário | NF-e XML (chave 44 dígitos) | `xml-storage.ts` + canais `xml:*` → `<userData>/xml/<cnpj>/<chave>.xml`; parse `fast-xml-parser` | `nfeNotas` (itens + análise embutidos) |
-| Cadastro de empresas | Digitação + BrasilAPI | `src/application/empresas.ts`, `src/application/emitente.ts` | `empresas` (+ sessão ativa em `localStorage[aurum_empresa_ativa_id]`) |
-| Tabelas auxiliares (CFOP, CST ICMS/PIS-COFINS, CEST) | Seeds gerados | `scripts/gen-seeds.cjs`, `scripts/gen-capitulos.cjs` → `src/domain/constants/seeds.ts` | `cfop`, `cstIcms`, `cstPisCofins`, `cest` |
+| Bases raiz (`classificacao_tributaria.json`, `reforma_tributaria_por_ncm.json`, `Tabela_NCM_Vigente_*.json`) | JSON | `npm run base` → `scripts/build-base.mjs` (3FN + `MANIFEST.json` sha256) | `public/base/*.json` → `dist/base` |
+| `public/base/*.json` (`reforma`, `classificacao-tributaria`, `nomenclatura`, `cnae-nbs`, `parametros`, `grafo/*`) | JSON/LBDBG | `useBase.iniciar()` via IPC | Repositórios locais + grafo |
+| SQLite (`aurum.db`) | Prisma schema (`prisma/schema.prisma`) | IPC `db:op` (bridge) ou Prisma direto em scripts | 27 tabelas (empresas, produtos, notas, audit_log, cest, cfop, auxiliares…) |
+| Siscomex vigente | JSON ~3 MB | `ncm-sync.ts` (hash canônico, merge) | `ncmNomenclatura` |
+| CFF/DFe | JSON/endpoint | `cff-sync.ts` (hash/etag) | `cst`, `cstClassTrib`, `referencia` |
+| XML NF-e do usuário | NF-e XML | `xml:*` + `fast-xml-parser` | `nfeNotas` |
+| Cadastro de empresas | digitação + BrasilAPI | `application/empresas.ts` | `empresas` |
+| Sementes auxiliares | geradas | `scripts/gen-seeds.cjs` | `cfop`, `cst*`, `cest` |
 
 ## Import/Export
 
 | Formato | Lib | Módulo | Notas |
 |---|---|---|---|
-| XLSX/CSV (import lote) | `xlsx ^0.18.5` | `src/infrastructure/parsers/lote.ts`, `src/store/lote.ts`, `src/pages/Lote.tsx` | Import de produtos/NCM em lote; limite `ROWS_LIMIT = 200` linhas |
-| CSV (export produtos) | manual (`montarCSV`) | `src/infrastructure/exporters/relatorios.ts` | Paridade v1: separador `;`, `\r\n`, BOM para Excel; produtos só entreaspam se contiver `"`/`;`/quebra; SPED sempre entreaspas |
-| JSON (export/backup) | nativo | `relatorios.ts`, `src/application/backup.ts` | Backup/restore do IndexedDB (mesmos keyPaths desde a v1) |
-| PDF (relatórios) | `pdfmake ^0.3.11` (lazy import) | `src/infrastructure/pdf/setup.ts` (+ `menu-exportacao.ts`), `relatorios.ts` | Documento declarativo (header timbrado, rodapé `Página X de Y`, Courier p/ NCM/CST/CFOP via `standard-fonts`); motor ~1,9 MB carregado sob demanda; substitui jsPDF+autotable da v1 |
-| XML NF-e/SPED (import) | `fast-xml-parser ^5.11.1` | `src/infrastructure/nfe/parse.ts`, `src/infrastructure/sped/{parse,leitura,analisar}.ts`, `src/pages/NfeXml.tsx` | Validação + análise fiscal (apuração IBS/CBS, crédito, regime); `estudo-relatorio-xml.md` documenta o relatório |
-| Arquivos genéricos | IPC `arquivo:*` | `electron/main.ts` + `preload.ts` | Abrir/salvar com filtros de extensão; conteúdo em base64 |
-| Download navegador | `Blob + <a download>` | `relatorios.ts: baixar()` | Fallback web (fora do Electron) |
-| Clipboard | `navigator.clipboard` | `src/pages/NfeXml.tsx`, `src/pages/Legislacao.tsx` | Copiar chave da nota / URL da norma |
+| XLSX/CSV (lote) | `xlsx ^0.18.5` | `infrastructure/parsers/lote.ts` | Limite de linhas configurável; fallback CSV próprio |
+| CSV (produtos) | manual | `infrastructure/exporters/relatorios.ts` | `;`, CRLF, BOM; escape de aspas |
+| JSON (backup) | nativo | `application/backup.ts` | Transacional, tudo-ou-nada, snapshot rotativo pré-restore |
+| PDF | `pdfmake ^0.3.11` | `infrastructure/exporters/relatorios.ts`, `infrastructure/pdf/*` | Lazy import (~1,9 MB sob demanda); emitente timbrado |
+| XML NF-e/SPED (import) | `fast-xml-parser ^5` | `infrastructure/nfe/*`, `infrastructure/sped/*` | Análise fiscal + apuração assistida IBS/CBS |
+| Download navegador | `Blob + <a download>` | `relatorios.ts` | Fallback web |
+| Clipboard | `navigator.clipboard` | telas | Copiar chave/URL |
 
 ## Environment & Secrets
 
 | Item | Valor / localização | Notas |
 |---|---|---|
-| `.env` / `.env.*` | **Inexistentes** (verificado) | Nenhuma variável de ambiente versionada ou exigida |
-| `VITE_DEV_SERVER_URL` | Injetada só em dev: `cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .` (`dev:electron`) | `electron/main.ts` usa para decidir dev (`loadURL`) vs. produção (`loadFile dist/index.html`) |
-| `AURUM_BASE_DIR` | Opcional para `scripts/build-base.mjs` (default: pasta pai do projeto) | Aponta onde estão os 3 JSONs-fonte |
-| `--aurum-versao=` | `webPreferences.additionalArguments` (main → preload) | Repassa `app.getVersion()` ao renderer (`window.aurum.versao`) |
-| Chaves/API keys | **Nenhuma** | BrasilAPI, Siscomex Classif e CFF públicos usados sem autenticação (CFF com mTLS exige certificado do usuário, nunca chave no código); GitHub Releases privado só no build empacotado |
-| Segredos locais | `localStorage`: `tema`, `aurum_empresa_ativa_id`, aceite de contrato; IndexedDB: dados fiscais; `userData/xml`: XMLs | Tudo 100% na máquina — sem nuvem, sem telemetria (ver `src/domain/contrato.ts`, `src/ui/TermoAceite.tsx`) |
+| `.env*` | **Sem variáveis exigidas** | v1.1.0 removeu `VITE_AURUM_*`; `.env.development.local` legado pode ser apagado (inerte) |
+| `VITE_DEV_SERVER_URL` | Só dev (via `cross-env`) | Escolhe `loadURL(:5173)` vs. `loadFile(dist/index.html)` |
+| `--aurum-versao=` | `additionalArguments` (main → preload) | Versão do app no renderer |
+| Chaves/API keys | **Nenhuma no código** | Endpoints públicos sem autenticação; CFF mTLS exige certificado do usuário (nunca no repo); exceção: chave Pexels embutida (pendente de rotação) |
+| Segredos locais | `localStorage`: `tema`, `aurum:sidebar-recolhida`, `aurum_empresa_ativa_id`, `xml-layout`, `TOUR_KEY` (`aurum:tour-guiado-visto`); SQLite: dados fiscais; `userData/xml`: XMLs | Tudo 100% na máquina; **o aceite de contrato e o gate de licença foram removidos na v1.1.0** |

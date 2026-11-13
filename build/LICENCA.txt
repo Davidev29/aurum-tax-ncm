@@ -1,14 +1,13 @@
 AURUM TAX NCM — CONTRATO DE LICENÇA DE USO DE SOFTWARE DESKTOP
-Licença local (instalação na máquina do cliente) · Sem armazenamento em nuvem
-Versão 1.1 — Outubro/2026 · Aurum Bit Labs & Studios LTDA · CNPJ 44.366.379/0001-23
+Licença de uso local (venda avulsa) · Sem armazenamento em nuvem
+Versão do texto 1.2 — Novembro/2026 · Aurum Bit Labs & Studios LTDA · CNPJ 44.366.379/0001-23
 
-LEIA COM ATENÇÃO. Para instalar e usar o Aurum Tax NCM você precisa aceitar
-este contrato. Se não concordar, cancele a instalação. Esta v1.1 substitui a
-v1.0 (Set/2026) e reflete o software como ele é hoje: 10 módulos, classificação
-determinística local (sem IA em nuvem, sem chat dedicado, sem mascote), Simples
-Nacional com projeção dividida v2 e motor SPED local sem tela dedicada (a
-importação com interface é a de XML de NF-e/NFC-e). Quem já aceitou a v1.0
-aceita novamente a v1.1 no primeiro uso após atualizar.
+LEIA COM ATENÇÃO. Ao instalar e usar o Aurum Tax NCM você aceita este contrato.
+Se não concordar, não instale o programa. Esta versão do texto (1.2, Nov/2026)
+reflete o software como ele é hoje: 10 módulos, classificação determinística
+local (sem IA em nuvem, sem chat dedicado, sem conta e sem chave de licença),
+Simples Nacional com projeção dividida v2 e motor SPED local sem tela dedicada
+(a importação com interface é a de XML de NF-e/NFC-e).
 
 1. OBJETO. Licença de uso, não exclusiva e intransferível, do software desktop
 "Aurum Tax NCM" (classificador fiscal da Reforma Tributária: Calculadora
@@ -34,19 +33,20 @@ usada se você pedir: consulta de CNPJ (BrasilAPI), leitura de norma oficial
 é transmitida à Aurum. Você é responsável pela segurança da máquina, pelos
 backups (menu Configurações > Backup) e pela guarda dos dados.
 
-3. ACEITE. Ao clicar "Aceito", você declara que leu este contrato (resumo
-nesta tela + texto integral em docs/CONTRATO - Aurum Tax NCM (Licenca de Uso
-Desktop Local).docx) e o aceita livremente. O aceite registra localmente
-versão do contrato (v1.1), data/hora e identificação da instalação como prova
-da contratação (MP 2.200-2/2001, Lei 14.063/2020, arts. 104, 107 e 219 do
-Código Civil). Quem aceita declara ter poderes para obrigar a contratante. O
-aceite da v1.0 não vale para a v1.1: o sistema pede o novo aceite uma única
-vez após atualizar.
+3. VENDA AVULSA — ACEITE. Este software é comercializado em venda avulsa: o
+pagamento único (ou na forma do Pedido) pela licença dá direito de uso nos
+limites do Pedido adquirido, sem assinatura obrigatória, sem conta em nuvem e
+sem ativação remota. A aquisição e a instalação implicam a aceitação integral
+destes termos (Lei 9.609/1998 art. 9º; MP 2.200-2/2001; Lei 14.063/2020). O
+texto integral está disponível no instalador (LICENCA.txt/LICENCA.rtf) e nos
+documentos do produto. Quem instala declara ter poderes para obrigar a
+contratante.
 
-4. RESTRIÇÕES. É vedado: copiar além das instalações licenciadas, modificar,
-engenheirar reversa (salvo hipótese legal), sublicenciar/ceder/revender,
-burlar ativação, usar para fim ilícito, remover marcas/avisos da Aurum.
-Descumprimento autoriza suspensão da licença e rescisão por justa causa.
+4. RESTRIÇÕES. É vedado: copiar além das instalações licenciadas no Pedido,
+modificar, engenheirar reversa (salvo hipótese legal), sublicenciar/ceder/
+revender, distribuir cópias não autorizadas, usar para fim ilícito, remover
+marcas/avisos da Aurum. Descumprimento autoriza suspensão de atualizações e
+suporte e a rescisão por justa causa.
 
 5. BASE TRIBUTÁRIA DE REFERÊNCIA. EC 132/2023, LC 214/2025 (IBS/CBS/IS),
 Decreto 12.955/2026 (CBS), Resolução CGIBS 6/2026 (IBS) e NT 2025.002 da
@@ -68,14 +68,16 @@ cobre: falhas do seu ambiente, perda de dados sem backup, uso indevido e
 indisponibilidade de serviços externos opcionais.
 
 7. PREÇO E PAGAMENTO. Conforme a Proposta/Pedido. Inadimplência: multa de 2%,
-juros de 1% a.m., correção, e suspensão de atualizações/suporte/ativação.
-Reajuste anual pelo IPCA/IBGE (ou substituto), com aviso de 30 dias.
+juros de 1% a.m., correção, e suspensão de atualizações e suporte. Reajuste
+(quando aplicável a planos de atualização) pelo IPCA/IBGE (ou substituto), com
+aviso de 30 dias.
 
 8. DADOS PESSOAIS (LGPD 13.709/2018). Seus dados operacionais ficam só na sua
-máquina: você é a controladora deles. Dados de cadastro/ativação (nome,
-CPF/CNPJ, e-mail, licenciamento): a Aurum é controladora para ativação,
-faturamento e suporte. DPO: Francisco Davi Carneiro Brito,
-privacy@aurumbit.com.br, (85) 9665-2002. Sigilo por 5 anos.
+máquina: você é a controladora deles. Dados de cadastro/faturamento
+(nome/razão social, CPF/CNPJ, e-mail) tratados pela Aurum servem para
+faturamento, nota fiscal e suporte, nos termos da LGPD. DPO: Francisco Davi
+Carneiro Brito, privacy@aurumbit.com.br, (85) 9665-2002. Sigilo por 5 anos.
+Nenhuma base operacional é coletada nem transmitida pela Aurum.
 
 9. RESPONSABILIDADE LIMITADA. No máximo permitido em lei, a responsabilidade
 total da Aurum limita-se ao pago nos 12 meses anteriores (ou ao valor da
@@ -83,12 +85,11 @@ licença perpétua, se menor). Sem danos indiretos, lucros cessantes, perda de
 dados locais sem backup, multas fiscais ou danos sem dolo/culpa grave
 comprovada.
 
-10. VIGÊNCIA E RESCISÃO. Vale do aceite em diante; licença perpétua da versão
-e/ou assinatura de atualizações, conforme o Pedido. Rescisão da assinatura a
-qualquer tempo (sem devolução de período iniciado). A Aurum pode rescindir
-com 30 dias (mantida a versão perpétua, se houver) ou de imediato por justa
-causa. Encerrado, cessam atualizações/suporte; seus dados locais permanecem
-na máquina para exportação — nada é apagado remotamente.
+10. VIGÊNCIA E RESCISÃO. Vale da aquisição em diante; licença perpétua da
+versão adquirida e/ou eventual plano de atualizações, conforme o Pedido. A
+Aurum pode rescindir com 30 dias (mantida a versão perpétua adquirida) ou de
+imediato por justa causa. Encerrado, cessam atualizações/suporte; seus dados
+locais permanecem na máquina para exportação — nada é apagado remotamente.
 
 11. LEI E FORO. Leis do Brasil (Lei de Software, Código Civil, Marco Civil no
 que couber, LGPD; matéria tributária: EC 132/2023, LC 214/2025, Decreto
@@ -98,8 +99,4 @@ a competência legal do consumidor pessoa física. Mediação facultativa.
 CONTRATADA: AURUM BIT LABS & STUDIOS LTDA — CNPJ 44.366.379/0001-23, Rua
 Cônego de Castro, 5185, Loja 01, Canindezinho, Fortaleza/CE, CEP 60763-433,
 por seu sócio-administrador Francisco Davi Carneiro Brito.
-CONTRATANTE: você, pelos dados informados no assistente de instalação, com
-aceite local registrado (contrato v1.1, data, hora e identificação da
-instalação).
-
-Ao clicar "Aceito" (I Agree), você conclui a contratação nestes termos.
+CONTRATANTE: você, pelos dados informados na aquisição (Pedido/nota fiscal).
