@@ -19,7 +19,7 @@
 | Renderer React | `src/App.tsx`, `src/pages/`, `src/ui/`, `src/modais/` | 9 views lazy-loaded com `ErroFatal` por tela; code-splitting; Suspense+skeleton |
 | Estado (Zustand) | `src/store/` + `simples/store.ts` + `simples-projection/store.ts` | Um store por domínio de tela; limpeza ao trocar view (`registrarLimpeza`) |
 | Persistência | `src/infrastructure/db/*` (+ `electron/main/db.ts`) | `driver-prisma.ts` (`DriverIpc`) é a única porta do renderer para o SQLite |
-| Domínio puro | `src/domain/` | `entities`, `services/calculo`, `services/classificacao`, `services/busca-texto`, `constants/` (`REGRA_GERAL`, `REF_DEFAULT IBS 19 / CBS 9`, links oficiais). Sem I/O — testável |
+| Domínio puro | `src/domain/` | `entities`, `services/calculo`, `services/classificacao`, `services/busca-texto`, `constants/` (`REGRA_GERAL`, `REF_DEFAULT IBS 19 / CBS 11,3 (sobrescrito pela tabela viva/override)`, links oficiais). Sem I/O — testável |
 | Aplicação / Infra | `src/application/`, `src/infrastructure/` | Orquestração (`backup`, `auditoria`, `reclassificacao`, `revalidacao`, `atualizacao`, `aurum-ai-*` determinísticos) sobre repos, parsers (lote/NF-e/SPED), exporters, PDF |
 
 ## Data Flow

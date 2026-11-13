@@ -33,7 +33,7 @@
 - **Monstros de código**: `aurum-ai-chat.ts` (253 KB), `pages/NfeXml.tsx` (195 KB), `modais/globais.tsx` (106 KB), `simples/page.tsx` (104 KB) — e `NfeXmlPolida.tsx` duplica a clássica sob toggle `xml-layout`. Decidir vencedor e deletar o perdedor.
 - **Clean Architecture nominal**: `infrastructure` é namespace universal (109 imports em `application/`, 32 em `pages/`, …); `domain/` importa infra (11) e a feature `simples/` (3). Refatorar = portas + composition root.
 - **Erros engolidos**: ~195 catches "best-effort" com comentário no corpo (bancos/rede falham em silêncio). Zero `console.log` em runtime, mas silêncio ≠ higiene — ao menos log local estruturado nas camadas de infra.
-- **Motores paralelos/duplicação**: `round2` ×6, `aliqIBS/aliqCBS` ×7 sítios, alíquotas 19/9 em 3 pontos + tabela viva (`parametros.json`), re-exports "compat" em `simples/`, duplicação `NfeXml` × `NfeXmlPolida`.
+- **Motores paralelos/duplicação**: `round2` ×6, `aliqIBS/aliqCBS` ×7 sítios, fonte única de referência IBS/CBS (tabela viva `parametros.json` + override do usuário em Configurações → Alíquotas; fallback embarcado 19/11,3) + re-exports "compat" em `simples/`, duplicação `NfeXml` × `NfeXmlPolida`.
 - **`xlsx@0.18.5`** sem patch de segurança recente; avaliar `exceljs` (ou travar versão e revisão).
 - **TODO real único** (`cff-sync.ts`: normalizadores de endpoints CFF incompletos) + **46 `eslint-disable`** (30 `exhaustive-deps`).
 - **CI mínimo**: 1 job, só Ubuntu+Node 22, sem build/release/lint/coverage publish; thresholds de coverage ignorando `simples/` (letra morta); `fake-indexeddb`/`jsdom` declarados, mas sem testes de `.tsx`.

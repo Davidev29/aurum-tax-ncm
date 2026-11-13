@@ -12,9 +12,8 @@
  *   a nota recém-chegada.
  */
 import { create } from 'zustand'
-import { REF_DEFAULT } from '@/domain/constants'
 import { clamp } from '@/domain/services/format'
-import { obterAliquotasRefDinamica } from '@/domain/services/referencia-service'
+import { useReferencia } from '@/store/referencia'
 import type { Empresa } from '@/domain/entities'
 import {
   apuracaoDaEmpresa,
@@ -119,8 +118,8 @@ export const useNfe = create<NfeState>((set, get) => ({
   mesMes: agora().mes,
   notaAberta: null,
   ultimoResumo: null,
-  refIBS: REF_DEFAULT.IBS,
-  refCBS: REF_DEFAULT.CBS,
+  refIBS: useReferencia.getState().rateIBS,
+  refCBS: useReferencia.getState().rateCBS,
   pendentes: [],
   cadastrandoCnpj: null,
   totalEmpresa: 0,
@@ -460,10 +459,12 @@ registrarLimpeza('nfe', () =>
   }),
 )
 
-// Carrega alíquotas dinâmicas do banco na inicialização (reativo a mudanças de regras vigentes)
-void obterAliquotasRefDinamica().then((ref) => {
-  useNfe.setState({ refIBS: ref.refIBS, refCBS: ref.refCBS })
+// Alíquotas de referência chegam do store `referencia` (React), que também
+// aplica o override do usuário (Configurações → Alíquotas) em tempo real.
+useReferencia.subscribe((s) => {
+  useNfe.setState({ refIBS: s.rateIBS, refCBS: s.rateCBS })
 })
+useNfe.setState({ refIBS: useReferencia.getState().rateIBS, refCBS: useReferencia.getState().rateCBS })
 
 // Reatividade cruzada: importação em outro cadastro, adoção via BrasilAPI ou
 // exclusão avisam — a ativa recarrega o motor sozinha, a qualquer momento.

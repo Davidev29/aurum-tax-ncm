@@ -40,10 +40,10 @@ describe('armadilha vinculo.aliquota (C-011)', () => {
     await expect(ALIQUOTAS_REF.cbs('08031000')).rejects.toThrow(/bloqueado/)
     await expect(ALIQUOTAS_REF.soma('08031000')).rejects.toThrow(/bloqueado/)
   })
-  it('REF_DEFAULT é 19/9 soma 28 (nunca IBS 28)', () => {
+  it('REF_DEFAULT é 19/11,3 soma 30,3 (nunca IBS 30,3)', () => {
     expect(REF_DEFAULT.IBS).toBe(19)
-    expect(REF_DEFAULT.CBS).toBe(9)
-    expect(REF_FONTE.soma).toBe(28)
+    expect(REF_DEFAULT.CBS).toBe(11.3)
+    expect(REF_FONTE.soma).toBe(30.3)
   })
 })
 

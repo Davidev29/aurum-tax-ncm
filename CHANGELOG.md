@@ -1,5 +1,14 @@
 # Changelog — Aurum Tax NCM
 
+## [Em breve] — 2026-11-13
+
+- **CBS de referência: 9% → 11,3%** (`public/base/parametros.json`, `PARAMETROS_REF`, `REF_DEFAULT`) — soma IBS 19 + CBS 11,3 = **30,3** (a confirmar com o ato vigente; `validarParametrosRef` valida)
+- **Configurações → 🧮 Alíquotas** — editor manual das alíquotas de referência direto na máquina; a alteração local tem precedência sobre a tabela do instalador e cobre todo o cálculo do app (Consulta, simulador dos cartões, XML, apuração, relatórios e exports)
+  - Override persistido em `meta` do SQLite (acompanha o backup/restauação); restaurável com um clique
+  - Aba mostra origem vigente (`Tabela do programa` / `Estimativa` / `Seu ajuste`) e soma calculada
+  - Store `useReferencia` passa a refletir o override em tempo real, inclusive no XML (via store `useNfe`)
+- Testes: `referencia-override.test.ts` (5 casos); total: **173 suítes · 1.951 casos**
+
 ## v1.2.0 — 2026-11-13
 
 **Menu enxuto (9 telas).** A Calculadora foi descontinuada — a simulação IBS/CBS vive nos cartões da Consulta NCM — e a **Consulta NCM passou a ser a primeira tela** (e a tela inicial) do menu. Nada mais foi tocado nas regras fiscais, nas bases nem nos dados do usuário.

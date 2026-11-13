@@ -331,7 +331,7 @@ export function BotaoVerLegislacao({
  * Simulador embutido nos cartões (SPEC R7.14).
  *
  * Usa **as alíquotas de referência da tabela `parametros.json`** (fallback:
- * estimativa embarcada 19/9 — ver `store/referencia.ts`).
+ * estimativa embarcada 19/11,3 — ver `store/referencia.ts`).
  */
 export function SimuladorRapido({ redIBS, redCBS }: { redIBS: number; redCBS: number }) {
   const rateIBS = useReferencia((s) => s.rateIBS)

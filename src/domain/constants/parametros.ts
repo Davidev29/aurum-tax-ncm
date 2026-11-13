@@ -5,7 +5,7 @@
  * `carregarParametrosRef()` + `referencia-service.ts`). Este módulo é o
  * ESPELHO embarcado no bundle (fallback offline quando o fetch falha).
  *
- * ESTIMATIVA, não fato: `refIBS 19 / refCBS 9 (soma 28)` DEVEM ser
+ * ESTIMATIVA, não fato: `refIBS 19 / refCBS 11.3 (soma 30.3)` DEVEM ser
  * confrontados com o ato vigente (LC 214/2025 e regulamentação) antes de
  * cada entrega fiscal. A UI exibe o banner de fallback sempre que a tabela
  * não pôde ser lida (ver `BANNER_REF_FALLBACK` em `referencia-service.ts`).
@@ -31,8 +31,8 @@ export const PARAMETROS_REF: ParametrosReferencia = {
   vigenciaFim: null,
   ato: 'LC 214/2025 — alíquotas de referência (estimativa; confirmar ato vigente antes de cada entrega)',
   refIBS: 19,
-  refCBS: 9,
-  soma: 28,
+  refCBS: 11.3,
+  soma: 30.3,
   fonteUrl: 'https://www.planalto.gov.br/ccivil_03/leis/lcp/lcp214.htm',
   shaFonte: null,
 } as const

@@ -4,7 +4,7 @@
  * Dinâmico de verdade: os percentuais vêm da tabela viva (editável sem
  * rebuild), com espelho embarcado (`PARAMETROS_REF`) como fallback offline.
  * Quando a tabela não pôde ser lida, o chamador DEVE exibir
- * `BANNER_REF_FALLBACK` — a estimativa 19/9 nunca passa por valor confirmado.
+ * `BANNER_REF_FALLBACK` — a estimativa 19/11,3 nunca passa por valor confirmado.
  *
  * Fallback: usa o espelho embarcado para não quebrar o fluxo de importação.
  */
@@ -31,12 +31,12 @@ export interface AliquotasRefDinamica {
  * não pôde ser lida e o cálculo usa a estimativa embarcada.
  */
 export const BANNER_REF_FALLBACK =
-  'Alíquotas de referência (IBS 19% · CBS 9%) são ESTIMATIVA — tabela `parametros.json` indisponível. Confirmar contra o ato vigente (LC 214/2025 e regulamentação) antes de cada entrega fiscal.'
+  'Alíquotas de referência (IBS 19% · CBS 11,3%) são ESTIMATIVA — tabela `parametros.json` indisponível. Confirmar contra o ato vigente (LC 214/2025 e regulamentação) antes de cada entrega fiscal.'
 
 /**
  * Lê as alíquotas de referência da tabela viva `public/base/parametros.json`.
  * Em falha, devolve o espelho embarcado (`REF_DEFAULT`, mesma estimativa
- * 19/9) com `fonte: 'fallback'` — o chamador exibe `BANNER_REF_FALLBACK`.
+ * 19/11,3) com `fonte: 'fallback'` — o chamador exibe `BANNER_REF_FALLBACK`.
  */
 export async function obterAliquotasRefDinamica(): Promise<AliquotasRefDinamica> {
   try {
@@ -65,7 +65,7 @@ export async function obterAliquotasRefDinamica(): Promise<AliquotasRefDinamica>
 /**
  * Versão síncrona para uso em contextos onde não é possível await
  * (ex.: cálculos síncronos em componentes React). Usa o espelho embarcado
- * (`PARAMETROS_REF` === `REF_DEFAULT` 19/9, estimativa).
+ * (`PARAMETROS_REF` === `REF_DEFAULT` 19/11,3, estimativa).
  * Para ler a tabela viva, chamar obterAliquotasRefDinamica() antes.
  */
 export function obterAliquotasRefSync(): AliquotasRefDinamica {

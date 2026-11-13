@@ -238,9 +238,9 @@ describe('refPorAno (ano explícito, REF_DEFAULT intacto)', () => {
     expect(CBS_REF_PADRAO).toBe(8.8)
   })
 
-  it('2033 → REF_DEFAULT {19, 9} (fixo, nunca muda)', () => {
-    expect(REF_DEFAULT).toEqual({ IBS: 19, CBS: 9 })
-    expect(refPorAno(2033)).toMatchObject({ refIBS: 19, refCBS: 9, emTransicao: false })
+  it('2033 → REF_DEFAULT {19, 11.3} (fixo, nunca muda)', () => {
+    expect(REF_DEFAULT).toEqual({ IBS: 19, CBS: 11.3 })
+    expect(refPorAno(2033)).toMatchObject({ refIBS: 19, refCBS: 11.3, emTransicao: false })
     expect(refPorAno(ANO_REFERENCIA_PADRAO)).toMatchObject({ refIBS: REF_DEFAULT.IBS, refCBS: REF_DEFAULT.CBS })
   })
 

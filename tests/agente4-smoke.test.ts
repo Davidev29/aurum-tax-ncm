@@ -13,9 +13,9 @@ const clBase = {
 } as unknown as Classificacao
 
 describe('agente4 smoke', () => {
-  it('parametros.json valido (soma 19+9=28)', () => {
-    expect(validarParametrosRef(PARAMETROS_REF)?.soma).toBe(28)
-    expect(validarParametrosRef({ refIBS: 19, refCBS: 9, soma: 27 })).toBeNull()
+  it('parametros.json valido (soma 19+11,3=30,3)', () => {
+    expect(validarParametrosRef(PARAMETROS_REF)?.soma).toBe(30.3)
+    expect(validarParametrosRef({ refIBS: 19, refCBS: 11.3, soma: 27 })).toBeNull()
   })
   it('sync expoe banner + fallback honesto', () => {
     expect(obterAliquotasRefSync().fonte).toBe('fallback')

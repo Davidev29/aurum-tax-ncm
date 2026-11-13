@@ -32,19 +32,19 @@ export const BANNER_KEY = 'banner_dismissed'
  * único (stores + relatórios). A antiga tela Calculadora (removida na v1.2)
  * sessão; aqui fica o carimbo exibido na UI.
  */
-export const REF_DEFAULT = { IBS: 19, CBS: 9 } as const
+export const REF_DEFAULT = { IBS: 19, CBS: 11.3 } as const
 
 /**
  * Proveniência das alíquotas de referência (estimativa — confirmar o ato).
  *
- * `fonte` é o carimbo exibido na UI; `soma` (28) é `19 + 9` conferida contra
- * a tabela viva (`validarParametrosRef` rejeita soma divergente). Quando a
- * tabela não pôde ser lida, `referencia-service.ts` marca `fonte: 'fallback'`
- * e o chamador exibe `BANNER_REF_FALLBACK`.
+ * `fonte` é o carimbo exibido na UI; `soma` (30,3) é `19 + 11,3` conferida
+ * contra a tabela viva (`validarParametrosRef` rejeita soma divergente).
+ * Quando a tabela não pôde ser lida, `referencia-service.ts` marca
+ * `fonte: 'fallback'` e o chamador exibe `BANNER_REF_FALLBACK`.
  */
 export const REF_FONTE = {
   fonte: 'Estimativa editável — confirmar contra o ato vigente (LC 214/2025 e regulamentação). Ver tabela public/base/parametros.json',
-  soma: 28,
+  soma: 30.3,
 } as const
 
 /** Limite de linhas das tabelas de dados (SPED/lote). */

@@ -23,7 +23,7 @@
  * e seguem o fluxo normal de enriquecimento — só é bens quem não tem
  * nenhum link.
  *
- * `REF_DEFAULT` (19/9) é importado e NUNCA alterado aqui: é o fallback
+ * `REF_DEFAULT` (19/11,3) é importado e NUNCA alterado aqui: é o fallback
  * 2033 e a base de `em-transicao` (anos 2028–2032 usam 2033 + flag,
  *   nunca número inventado).
  */
@@ -83,7 +83,7 @@ export interface ReferenciaAnual {
  *
  * - 2026 → ano-teste LC 214 (0,1% + 0,1%);
  * - 2027 → CBS plena (8,8%) + IBS em teste (0,1%);
- * - 2033 → regime pleno (`REF_DEFAULT` {19, 9});
+ * - 2033 → regime pleno (`REF_DEFAULT` {19, 11.3});
  * - demais anos (2028–2032, transição IBS×ICMS/ISS) → valores 2033 com
  *   `emTransicao: true` (a UI carimba o aviso; nenhum número é inventado).
  */

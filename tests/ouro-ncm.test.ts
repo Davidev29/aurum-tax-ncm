@@ -45,12 +45,12 @@ const clAnexoIX = (over: Partial<Classificacao> = {}): Classificacao =>
   }) as Classificacao
 
 describe('ouro — cesta 02011000 (CST 200 / 200003, redução 60%)', () => {
-  it('base 200 red 60/60 => 15.20 / 7.20 / 22.40', () => {
+  it('base 200 red 60/60 => 15.20 / 9.04 / 24.24', () => {
     const r = calcularTributos(200, 60, 60, REF_IBS, REF_CBS)
     expect(r.bcIBS).toBe(200)
     expect(r.vIBS).toBeCloseTo(15.2, 9)
-    expect(r.vCBS).toBeCloseTo(7.2, 9)
-    expect(r.total).toBeCloseTo(22.4, 9)
+    expect(r.vCBS).toBeCloseTo(9.04, 9)
+    expect(r.total).toBeCloseTo(24.24, 9)
   })
 
   it('60 exato cai no piso 60, sem inflar', () => {

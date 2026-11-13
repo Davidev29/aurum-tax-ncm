@@ -133,7 +133,7 @@ export const ARTIGOS_LC214: ArtigoLC214[] = [
     claro: 'A lista grande dos 60%: escola, hospital, remédio, comida, fralda, semente, teatro — tudo com 60% de desconto no IBS/CBS.',
     tecnico: 'Redução 60% IBS/CBS condicionada ao enquadramento em inciso do art. 128 + anexo (II–VII, conforme o bem/serviço). Cada NCM/NBS carrega o CST/cClassTrib do inciso correspondente; sem vínculo oficial, a IA trata como hipótese a verificar.',
     quandoAplica: 'Bens/serviços de ao menos um inciso do art. 128, com comprovação (registro ANVISA para medicamentos, p. ex.).',
-    exemplo: 'Medicamento do inciso → IBS 19%×0,40 + CBS 9%×0,40 sobre R$ 1.000.',
+    exemplo: 'Medicamento do inciso → IBS 19%×0,40 + CBS 11,3%×0,40 sobre R$ 1.000.',
     anexo: null,
     reducao: '60% IBS/CBS',
     link: L('128'),
