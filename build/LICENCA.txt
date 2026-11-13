@@ -1,20 +1,20 @@
 AURUM TAX NCM — CONTRATO DE LICENÇA DE USO DE SOFTWARE DESKTOP
 Licença de uso local (venda avulsa) · Sem armazenamento em nuvem
-Versão do texto 1.2 — Novembro/2026 · Aurum Bit Labs & Studios LTDA · CNPJ 44.366.379/0001-23
+Versão do texto 1.3 — Novembro/2026 · Aurum Bit Labs & Studios LTDA · CNPJ 44.366.379/0001-23
 
 LEIA COM ATENÇÃO. Ao instalar e usar o Aurum Tax NCM você aceita este contrato.
-Se não concordar, não instale o programa. Esta versão do texto (1.2, Nov/2026)
-reflete o software como ele é hoje: 10 módulos, classificação determinística
+Se não concordar, não instale o programa. Esta versão do texto (1.3, Nov/2026)
+reflete o software como ele é hoje: 9 módulos, classificação determinística
 local (sem IA em nuvem, sem chat dedicado, sem conta e sem chave de licença),
 Simples Nacional com projeção dividida v2 e motor SPED local sem tela dedicada
 (a importação com interface é a de XML de NF-e/NFC-e).
 
 1. OBJETO. Licença de uso, não exclusiva e intransferível, do software desktop
-"Aurum Tax NCM" (classificador fiscal da Reforma Tributária: Calculadora
-IBS/CBS, Simples Nacional com DAS por Anexo I–V + projeção dividida v2 com
-segregação, Consulta NCM, Serviços NBS, Consulta de CNAEs, Classificação em
-lote CSV/XLSX, XML de NF-e/NFC-e com layouts Polida e Clássica, Produtos,
-Tabelas auxiliares editáveis, Legislação com leitura in-app e relatórios
+"Aurum Tax NCM" (classificador fiscal da Reforma Tributária: Simples Nacional
+com DAS por Anexo I–V + projeção dividida v2 com segregação, Consulta NCM
+(com simulador IBS/CBS embutido nos cartões), Serviços NBS, Consulta de CNAEs,
+Classificação em lote CSV/XLSX, XML de NF-e/NFC-e com layouts Polida e Clássica,
+Produtos, Tabelas auxiliares editáveis, Legislação com leitura in-app e relatórios
 PDF/CSV/JSON com emitente timbrado), nos limites da versão adquirida
 (Proposta/Pedido). Não há transferência de propriedade, código-fonte ou
 propriedade intelectual (Leis 9.609/1998, 9.610/1998 e 9.279/1996). Não há

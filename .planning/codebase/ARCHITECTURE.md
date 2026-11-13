@@ -16,7 +16,7 @@
 | Main process | `electron/main.ts` | Cria `BrowserWindow` (1440×900, `show:false` → `ready-to-show`); menu nativo; auto-update (`electron-updater`, 30s após abrir + 6h); IPC mínimo; sandboxes `resolverNoBase`/`resolverNoXml` anti-traversão; `will-navigate` travado; `setWindowOpenHandler` deny |
 | Main DB | `electron/main/db.ts` | Singleton Prisma no main; IPC `db:op` (allowlist de 11 ops/tabelas + `where` estruturado + tetos lote 2000/4 MB/500 ops), `db:transaction` (tudo-ou-nada), `db:snapshot` rotativo (`pre-restore-*.bak`) |
 | Preload / IPC | `electron/preload.ts` + `src/infrastructure/bridge.ts` | Contrato `AurumBridge`: `base:ler[-base64]`, `arquivo:*`, `xml:*`, `rede:buscar-texto`, `ia:grafo[-uso]`, `atualizacao:*`, `menu:acao` |
-| Renderer React | `src/App.tsx`, `src/pages/`, `src/ui/`, `src/modais/` | 10 views lazy-loaded com `ErroFatal` por tela; code-splitting; Suspense+skeleton |
+| Renderer React | `src/App.tsx`, `src/pages/`, `src/ui/`, `src/modais/` | 9 views lazy-loaded com `ErroFatal` por tela; code-splitting; Suspense+skeleton |
 | Estado (Zustand) | `src/store/` + `simples/store.ts` + `simples-projection/store.ts` | Um store por domínio de tela; limpeza ao trocar view (`registrarLimpeza`) |
 | Persistência | `src/infrastructure/db/*` (+ `electron/main/db.ts`) | `driver-prisma.ts` (`DriverIpc`) é a única porta do renderer para o SQLite |
 | Domínio puro | `src/domain/` | `entities`, `services/calculo`, `services/classificacao`, `services/busca-texto`, `constants/` (`REGRA_GERAL`, `REF_DEFAULT IBS 19 / CBS 9`, links oficiais). Sem I/O — testável |

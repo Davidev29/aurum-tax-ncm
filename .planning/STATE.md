@@ -22,8 +22,8 @@ See: .planning/PROJECT.md (updated 2026-11-13)
 
 Release: **v1.1.0** — 13/11/2026 (construída e verificada localmente; publicação no GitHub pendente)
 Release anterior: **v1.0.0** — 12/10/2026 (instalação local em `release/`)
-Status: v1.0.0 entregue (10 módulos) + v1.1.0 (remoção da camada de licenciamento/onboarding; app entra direto)
-Last activity: 2026-11-13 — v1.1.0: remoção do assistente de instalação e do portão de licença Aurumbit, `npm test` corrigido no Windows, docs e `.planning` atualizados, contrato/licença reescritos para venda avulsa
+Status: v1.2.0 (menu enxuto — Calculadora removida; Consulta NCM como tela inicial) após v1.1.0 (venda avulsa)
+Last activity: 2026-11-13 — v1.2.0: remoção da Calculadora e Consulta NCM primeira; v1.1.0: remoção do assistente de instalação e do portão de licença Aurumbit, `npm test` corrigido no Windows, docs e `.planning` atualizados, contrato/licença reescritos para venda avulsa
 
 ## Performance Metrics
 
@@ -52,6 +52,6 @@ Last activity: 2026-11-13 — v1.1.0: remoção do assistente de instalação e 
 
 ## Session Continuity
 
-Last session: 2026-11-13 — v1.1.0 (remoção do onboarding/licença, docs, build)
+Last session: 2026-11-13 — v1.2.0 (Calculadora removida; Consulta NCM inicial); v1.1.0 (onboarding/licença, docs, build)
 Stopped at: instalação 1.1.0 gerada em `release/` (não comitada); publicação no GitHub pendente
 Resume file: None

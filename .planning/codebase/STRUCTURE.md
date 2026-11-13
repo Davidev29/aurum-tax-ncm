@@ -12,17 +12,17 @@ Top 3 níveis (`node_modules/`, `build/`, `dist/`, `release/`, `electron/dist/` 
 ├── package.json · vite.config.ts · vitest.config.ts · tsconfig.json · tsconfig.electron.json
 ├── src/ (271 arquivos)
 │   ├── main.tsx · App.tsx · index.css · pdfmake.d.ts
-│   ├── pages/        ← Calculadora, Consultas (NCM/NBS/CNAEs/Simples via simples/), Lote,
+│   ├── pages/        ← Consulta, Consultas (NBS/CNAEs), Lote,
 │   │                    NfeXml/NfeXmlPolida (+ NfeNatureza, NfeConferenciaProdutos, NfePendentes,
 │   │                     NfeCalendarioAnual, ModalRelatorioNfe), Produtos, Auxiliares, Legislacao
 │   ├── simples/      ← módulo Simples isolado (tabelas, calculo, store, DasModal, InsightsModal,
 │   │                    relatorio-analitico, ia-insights, exports)
 │   ├── simples-projection/ ← projeção dividida v2 (camada aditiva sobre `simples/`)
 │   ├── ui/           ← Layout, kit, cartoes, detalhes, dialogos, motion, skeleton, Marca,
-│   │                    ModalLegislacao, TourGuiado, ErroFatal  ← (TermoAceite/banner de licença removidos na v1.1.0)
+│   │                    ModalLegislacao, TourGuiado, ErroFatal
 │   ├── modais/       ← globais (Empresas/Config/Backup/Atualização/Aparência), pagina, reclassificacao,
 │   │                     escolha-tributacao, produto-manual
-│   ├── store/        ← 17 stores (ui, sessao, consulta(+servicos,+cnaes), calculadora, lote, nfe,
+│   ├── store/        ← 17 stores (ui, sessao, consulta(+servicos,+cnaes), referencia, lote, nfe,
 │   │                    produtos, auxiliares, base, ia, fundo, novidades, conferencia-xml, novidades,
 │   │                    tutorial, dialogo)
 │   ├── domain/       ← entities, legislacao, capitulos, services/ (calculo, classificacao(+ia), busca-texto,
@@ -59,7 +59,7 @@ Top 3 níveis (`node_modules/`, `build/`, `dist/`, `release/`, `electron/dist/` 
 |---|---|
 | `index.html` | Shell web: `#raiz`, anti-flash de tema, ícones |
 | `src/main.tsx` | Bootstrap React; `useBase.iniciar()` + `useSessao.iniciar()` não-bloqueantes |
-| `src/App.tsx` | Shell de views por `store/ui` (10 views lazy-load + ErroFatal por tela) |
+| `src/App.tsx` | Shell de views por `store/ui` (9 views lazy-load + ErroFatal por tela) |
 | `electron/main.ts` | Janela, menu nativo, IPC, auto-update, sandboxes (base/xml) |
 | `electron/main/db.ts` | `db:op`/`db:transaction`/`db:snapshot` — acesso Prisma no main |
 | `electron/preload.ts` | `window.aurum` via `contextBridge` (`sandbox:false` — hardening pendente) |

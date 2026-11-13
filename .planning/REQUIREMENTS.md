@@ -46,7 +46,7 @@
 - [x] **UI-05**: Tema claro/escuro persistido (anti-flash em `index.html` + `localStorage`)
 - [x] **UI-06**: Atalhos — ex.: Ctrl+E (exportar PDF do menu nativo), Ctrl+Shift+D (debug IA), menu nativo Arquivo/Exibir
 
-### Calculadora Tributária & Validação (CALC)
+### Consulta NCM & Validação (CALC) — Calculadora removida na v1.2.0
 
 - [x] **CALC-01**: Redução explícita por item (badge com % redução + base legal no Simulador/Consulta)
 - [x] **CALC-02**: Múltiplas classificações → N cards com comparação (Consulta) e `<select>` por linha (Lote), o usuário escolhe

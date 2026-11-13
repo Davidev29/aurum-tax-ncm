@@ -1,5 +1,22 @@
 # Changelog — Aurum Tax NCM
 
+## v1.2.0 — 2026-11-13
+
+**Menu enxuto (9 telas).** A Calculadora foi descontinuada — a simulação IBS/CBS vive nos cartões da Consulta NCM — e a **Consulta NCM passou a ser a primeira tela** (e a tela inicial) do menu. Nada mais foi tocado nas regras fiscais, nas bases nem nos dados do usuário.
+
+### Removed
+- Tela **Calculadora Tributária** (`pages/Calculadora.tsx`) e store `store/calculadora.ts`
+- Modal "Adicionar à calculadora" (`ModalCalculadora`), o modal de NCM manual (`ModalCalcCustom`) e a ação "Enviar para a calculadora" em Produtos
+- Botão "🧮 Calculadora" nos cartões/detalhe da Consulta (NCM e NBS)
+- `produtoParaCalculadora` em `application/produtos.ts`
+- Passo "Calculadora" do tour guiado (9 passos, 3 trilhas mantidas); passos das trilhas renumerados
+
+### Changed
+- **Consulta NCM em primeiro lugar no menu** e como tela inicial (`useUi.view = 'consulta'`)
+- Alíquotas de referência IBS/CBS passam a viver em `store/referencia.ts` (tabela viva `parametros.json`, estimativa 19/9 como fallback) — o Simulador rápido dos cartões segue idêntico
+- IA: Chat direciona "me leva para a calculadora" para a Consulta NCM; textos/botões de "Abrir Calculadora" viram "Abrir Consulta NCM"; exemplos do roteador atualizados
+- Testes: tour 9 passos, navegação sem calculadora; `motor-unico` sem o assert da conversão removida
+
 ## v1.1.0 — 2026-11-13
 
 **Modalidade de distribuição: venda avulsa.** O app abre direto na tela inicial — sem assistente de instalação, sem conta, sem chave de licença, sem portão de ativação. Nenhum dado fiscal sai da máquina.

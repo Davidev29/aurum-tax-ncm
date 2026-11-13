@@ -31,13 +31,13 @@ Resolvedor oficial único (`montarClassificacao` / `montarRegraGeral`), manual o
 
 ### Phase 3: Search & UI — CONCLUÍDA
 
-10 views (Calculadora, Simples Nacional, Consulta NCM, Serviços NBS, Consulta de CNAEs, Lote, XML NF-e (2 layouts), Produtos, Tabelas auxiliares, Legislação), code-splitting por tela, busca local (léxico+grafo), telas multi-entidade com paginação/filtro.
+9 views (Consulta NCM, Simples Nacional, Consulta NCM, Serviços NBS, Consulta de CNAEs, Lote, XML NF-e (2 layouts), Produtos, Tabelas auxiliares, Legislação), code-splitting por tela, busca local (léxico+grafo), telas multi-entidade com paginação/filtro.
 
 ### Phase 4: Reporting & Export — CONCLUÍDA
 
 Relatórios PDF/CSV/JSON timbrados (pdfmake/SheetJS), emitente configurável, exportação em lote, backup/restauração do banco, ações de atualização do programa (auto-update opcional via GitHub Releases).
 
-### Phase 5: Calculadora Tributária & Validação Avançada — CONCLUÍDA
+### Phase 5: Calculadora Tributária & Validação Avançada — CONCLUÍDA (tela removida na v1.2.0; simulação vive nos cartões da Consulta NCM)
 
 Redução explícita por item (% com base legal), N cards/análise comparativa (via Consulta), selo/ST por item (1.010 registros CEST), simulador editável, atualização automática das bases pelo release do programa (decisão arquitetural documentada).
 
@@ -64,7 +64,7 @@ LadybugDB FTS + HNSW (all-MiniLM) + 2-hops + PageRank, overlay de aprendizado lo
 ### v1.1.0 — Venda avulsa — CONCLUÍDA (2026-11-13)
 
 - Removidos: assistente de instalação (`TermoAceite`), portão de licença (`src/aurum/*`), cofre do main (`aurum-licenca.ts`), aba Conta, banners de graça/offline, guards de exportação/troca de titular/exclusão de empresa, proxy dev `/v1`+`/api`, `VITE_AURUM_*` no build
-- App abre direto na Calculadora; licença MIT (código) + termos do instalador reescritos como venda avulsa (`build/LICENCA.txt|rtf`, contrato .docx atualizado para a v1.2)
+- App abre direto na Consulta NCM (desde a v1.2.0); licença MIT (código) + termos do instalador reescritos como venda avulsa (`build/LICENCA.txt|rtf`, contrato .docx atualizado para a v1.2)
 - `npm test` corrigido (shim `.bin` quebrava no Windows → `node node_modules/vitest/vitest.mjs`)
 - Docs e `.planning` atualizados para a realidade pós-1.0
 
@@ -74,6 +74,7 @@ LadybugDB FTS + HNSW (all-MiniLM) + 2-hops + PageRank, overlay de aprendizado lo
 |-------|---------|--------|------|
 | Fases 1–10 | v1.0.0 | Implementado e verificado | 2026-10-12 |
 | Venda avulsa + limpeza release + docs | v1.1.0 | Concluído; instalador gerado; publicação pendente | 2026-11-13 |
+| Menu enxuto — Calculadora removida; Consulta NCM inicial | v1.2.0 | Concluído | 2026-11-13 |
 
 **Execution order:** Fases 1 → 10 concluídas; releases 1.0.0 → 1.1.0.
 

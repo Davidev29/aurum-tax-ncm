@@ -15,7 +15,7 @@ Classificação tributária precisa e automatizada que garante conformidade com 
 - [x] Base oficial embutida versionada (NCM, CST × cClassTrib, nomenclatura, NBS, CNAE, vínculo NCM×Classificação) — gerada por `npm run base`, validada por `scripts/verificar-build.mjs`
 - [x] Classificação determinística local (CST · cClassTrib · % redução · anexo oficial · base legal · herança por família) com resolvedor oficial como única verdade
 - [x] Parsing lote CSV/XLSX + classificação em lote; XML NF-e/NFC-e com 2 layouts (Polida/Clássica) e conferência por produto
-- [x] Calculadora IBS/CBS + Simples Nacional (DAS, Fator R, sublimite, híbrido, projeção dividida v2)
+- [x] Consulta NCM com simulação IBS/CBS + Simples Nacional (DAS, Fator R, sublimite, híbrido, projeção dividida v2)
 - [x] Simulação: anexos derivados de redução (0/30/…/100), diferimento Anexo IX condicional, tributação integral como última opção de segurança
 - [x] Consulta NCM / Serviços NBS / CNAEs (busca local, fan-out número/nome)
 - [x] Backup/restore JSON transacional (27 tabelas), snapshot pré-restore, integridade no boot
@@ -72,4 +72,4 @@ Classificação tributária precisa e automatizada que garante conformidade com 
 
 ---
 
-*Last updated: 2026-11-13 — v1.1.0: venda avulsa, onboarding/licença removidos; v1.0.0 (2026-10-12) = marco da entrega dos 10 módulos*
+*Last updated: 2026-11-13 — v1.2.0: Consulta NCM inicial, Calculadora removida; v1.1.0: venda avulsa, onboarding/licença removidos; v1.0.0 (2026-10-12)*

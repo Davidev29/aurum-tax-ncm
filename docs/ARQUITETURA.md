@@ -62,7 +62,7 @@ Fronteiras que `infrastructure` implementa e `application` consome:
 **Violações conhecidas (backlog, não quebrar em refactor oportunista)**:
 
 - `pages`: `NfeXml.tsx:37-43`, `NfeXmlPolida.tsx:28-29`, `Lote.tsx:21-24`,
-  `Consulta.tsx:53-59`, `Calculadora.tsx:29`, `NfeNatureza.tsx:13`,
+  `Consulta.tsx:53-59`, `NfeNatureza.tsx:13`,
   `NfeConferenciaProdutos.tsx:13`, `ModalRelatorioNfe.tsx:10-11`,
   `ConsultaCnaes.tsx:16` importam `infrastructure/*` direto.
 - `domain` importa fora: `services/classificacao-nbs.ts`,
