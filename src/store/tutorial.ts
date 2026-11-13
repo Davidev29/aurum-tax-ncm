@@ -1,24 +1,13 @@
 /**
- * Estado do tour guiado — abre 1x após a instalação + sob demanda.
+ * Estado do tour guiado — aberto sob demanda pelo botão "Guia" no header.
  *
  * Tour informativo com CTA real: cada passo oferece "Experimentar agora"
  * (fecha o tour e navega ao menu). O progresso é linear (10 passos em
  * 3 trilhas); `visitados` marca os já vistos para o contador do stepper.
  * `animar` pausa as animações de ambiente sem depender só do SO.
- *
- * - `deveAbrirAposInstalacao()`: primeira execução (sem carimbo) → auto-abre.
- * - `abrir() / fechar() / concluir()`: controle via botão "Guia" no header.
  */
 import { create } from 'zustand'
 import { TOUR_KEY } from '@/domain/tutorial'
-
-function lido(): string | null {
-  try {
-    return localStorage.getItem(TOUR_KEY)
-  } catch {
-    return null
-  }
-}
 
 function carimbar(): void {
   try {
@@ -73,12 +62,7 @@ export const useTutorial = create<TutorialState>((set, get) => ({
   alternarAnimacao: () => set((s) => ({ animar: !s.animar })),
 }))
 
-/** Primeira execução (tour nunca visto)? */
-export function deveAbrirAposInstalacao(): boolean {
-  return lido() == null
-}
-
-/** Reabre o tour mesmo já concluído (botão Guia). */
+/** Reabre o tour sob demanda (botão Guia no header). */
 export function reabrirTour(passo = 0): void {
   useTutorial.getState().abrir(passo)
 }

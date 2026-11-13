@@ -31,9 +31,6 @@ import { Area, BarraProgresso, Btn, Campo, Check, Modal, Painel, Texto, useAcaoT
 import { ModalNovidades } from '@/ui/ModalNovidades'
 import { useNovidades } from '@/store/novidades'
 import { ModalCalculadora } from './pagina'
-// AURUM: seção Conta (licença + pagamentos) mora nas Configurações.
-import { AbaContaPagamentos } from '@/aurum/components/AbaConta'
-import { consumirAbaContaInicial } from '@/aurum/conta-nav'
 
 /* ------------------------------------------------------------- empresas --- */
 
@@ -1464,9 +1461,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
   const [cor, setCor] = useState('#0f215c')
   const [mostrarPreview, setMostrarPreview] = useState(false)
   const [contagens, setContagens] = useState<Record<string, number>>({})
-  const [aba, setAba] = useState<'emitente' | 'aparencia' | 'bases' | 'backup' | 'atualizacao' | 'conta'>(
-    () => (consumirAbaContaInicial() ? 'conta' : 'emitente'),
-  )
+  const [aba, setAba] = useState<'emitente' | 'aparencia' | 'bases' | 'backup' | 'atualizacao'>('emitente')
   const [buscandoCnpj, setBuscandoCnpj] = useState(false)
   const [cffStatus, setCffStatus] = useState<Awaited<ReturnType<typeof statusSincronizacao>> | null>(null)
   const [versao, setVersao] = useState<string>('—')
@@ -1479,8 +1474,6 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
 
   useEffect(() => {
     if (!aberto) return
-    // AURUM: deep-link (banner de graça, botões de renovação) abre direto na Conta.
-    if (consumirAbaContaInicial()) setAba('conta')
     void contarTodos().then(setContagens).catch(() => {})
     void recarregarStatus()
     void statusSincronizacao().then(setCffStatus)
@@ -1608,7 +1601,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
       aberto={aberto}
       onFechar={onFechar}
       titulo="Configurações"
-      subtitulo="Conta e pagamentos, emitente, aparência, bases, atualização e backup"
+      subtitulo="Emitente, aparência, bases, atualização e backup"
       largura="max-w-2xl"
       rodape={
         <>
@@ -1626,7 +1619,6 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
       <div className="mb-3 flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
         {(
           [
-            ['conta', '💳 Conta'],
             ['emitente', '🏷 Emitente'],
             ['aparencia', '🎨 Aparência'],
             ['bases', '🗂 Bases'],
@@ -1649,8 +1641,6 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
         ))}
       </div>
       <div className="space-y-4">
-        {/* AURUM: financeiro (licença + faturas + conta) — só aqui, nunca na tela inicial. */}
-        {aba === 'conta' ? <AbaContaPagamentos /> : null}
         {aba === 'emitente' ? (
         <section>
           <h3 className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500">

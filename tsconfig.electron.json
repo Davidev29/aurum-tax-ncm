@@ -19,7 +19,6 @@
   },
   "include": [
     "electron",
-    "src/aurum/ip.ts",
     "src/infrastructure/bridge.ts",
     "src/infrastructure/db/db-protocolo.ts",
     "src/infrastructure/db/validacao.ts",

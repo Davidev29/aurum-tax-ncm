@@ -16,8 +16,6 @@ import {
 } from '@/application/empresas'
 import { carregarEmitente, salvarEmitente } from '@/application/emitente'
 import { toast } from './ui'
-// AURUM-GATE: excluir empresa e trocar a ativa são ações sensíveis.
-import { exigirAcaoSensivel } from '@/aurum/guards'
 
 interface SessaoState {
   empresas: Empresa[]
@@ -65,15 +63,7 @@ export const useSessao = create<SessaoState>((set, get) => ({
 
   selecionar: async (id) => {
     if (id === null) return get().limparSessao()
-    // AURUM-GATE: trocar a empresa ativa é ação sensível (graça/DENY
-    // bloqueiam). Reselecionar a mesma não é troca — segue livre.
-    if (id !== get().ativa?.id) {
-      const bloqueio = exigirAcaoSensivel('trocar-titular')
-      if (!bloqueio.ok) {
-        toast(bloqueio.motivo, 'warn')
-        throw new Error(bloqueio.motivo)
-      }
-    }
+    // Selecionar outra empresa; reselecionar a mesma segue livre.
     const alvo = get().empresas.find((e) => e.id === id)
     if (!alvo) return
     definirEmpresaAtivaSessao(id)
@@ -118,12 +108,6 @@ export const useSessao = create<SessaoState>((set, get) => ({
   },
 
   excluir: async (id) => {
-    // AURUM-GATE: excluir é ação sensível (graça/DENY bloqueiam).
-    const bloqueioExcluir = exigirAcaoSensivel('excluir')
-    if (!bloqueioExcluir.ok) {
-      toast(bloqueioExcluir.motivo, 'warn')
-      throw new Error(bloqueioExcluir.motivo)
-    }
     const vinculos = await excluirEmpresa(id)
     const eraAtiva = get().ativa?.id === id
     if (eraAtiva) definirEmpresaAtivaSessao(null)

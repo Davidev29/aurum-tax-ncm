@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { detectarInjection, detectarForaDeEscopo } from '@/domain/services/escopo-consulta'
 import { removerPII, contemPII, hashEmitente, MENSAGEM_RECUSA_INJECTION } from '@/ai/guards'
-import { validarContratante } from '@/domain/contrato'
 import { extrairCnpjsDeTexto } from '@/infrastructure/receita/brasilapi'
 
 // C-007: injection fiscal-independente — vence até o lastro fiscal
@@ -46,10 +45,6 @@ describe('removerPII / hashEmitente (C-008)', () => {
 
 // C-008 laterais: DV código-first
 describe('DV código-first (C-008 laterais)', () => {
-  it('validarContratante rejeita DV errado', () => {
-    expect(validarContratante({ nome: 'Empresa X', documento: '12.345.678/0001-94', email: 'a@b.com' })).toMatch(/verificador/)
-    expect(validarContratante({ nome: 'Empresa X', documento: '11.222.333/0001-81', email: 'a@b.com' })).toBe(null)
-  })
   it('extrairCnpjsDeTexto filtra DV inválido (não gasta fetch)', () => {
     const out = extrairCnpjsDeTexto('consulte 12.345.678/0001-94 e 11.222.333/0001-81')
     expect(out).not.toContain('12345678000194')

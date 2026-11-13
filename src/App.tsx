@@ -1,12 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Layout } from '@/ui/Layout';
 import { ErroFatal, SkeletonPagina } from '@/ui/ErroFatal';
-import { AssistenteInstalacao } from '@/ui/TermoAceite';
-import { lerAceite } from '@/domain/contrato';
-import { deveAbrirAposInstalacao, useTutorial } from '@/store/tutorial';
 import { useUi } from '@/store/ui';
-// AURUM-GATE: portão de licença no boot (módulo `src/aurum/` — sem lógica de negócio).
-import { PortaoAurum } from '@/aurum/components/PortaoAurum';
 
 // Code-splitting por view: o boot carrega só o shell; cada tela (com seu
 // chart.js pesado) vira um chunk sob demanda + Suspense com esqueleto.
@@ -27,8 +22,6 @@ const Legislacao = lazy(() => import('@/pages/Legislacao').then((m) => ({ defaul
  */
 export function App() {
   const view = useUi((s) => s.view);
-  // Portão de aceite local: exibido antes de qualquer tela até o aceite v1.
-  const [aceito, setAceito] = useState(() => lerAceite() !== null);
   // Layout do XML lido 1× fora do render crítico (vira estado inicial).
   const [layoutXml] = useState(() => {
     try {
@@ -37,15 +30,6 @@ export function App() {
       return null;
     }
   });
-
-  // Tour guiado: abre sozinho 1x após a instalação (ou para quem já
-  // aceitou o contrato anterior mas nunca viu o tour).
-  useEffect(() => {
-    if (!aceito) return;
-    if (!deveAbrirAposInstalacao()) return;
-    const t = window.setTimeout(() => useTutorial.getState().abrir(0), 600);
-    return () => window.clearTimeout(t);
-  }, [aceito]);
 
   // GRAFO-08: job incremental do overlay ao abrir + ocioso (<1s, nunca
   // rebuild diário — só poda TTL + teto). Best-effort, nunca lança.
@@ -125,25 +109,12 @@ export function App() {
   }
 
   return (
-    // AURUM-GATE: o portão avalia o cofre no boot; DENY vira tela de
-    // bloqueio (login + faturas), sem tocar nas páginas do core.
-    <PortaoAurum>
     <Layout>
       {/* `key` reseta a barreira a cada troca de tela: falha numa view não
           contamina a próxima. */}
       <ErroFatal key={view} nome={view}>
         <Suspense fallback={<SkeletonPagina />}>{pagina}</Suspense>
       </ErroFatal>
-      {!aceito ? (
-        <AssistenteInstalacao
-          onConcluido={() => {
-            setAceito(true);
-            // Pós-instalação: apresenta o tour guiado menu a menu.
-            window.setTimeout(() => useTutorial.getState().abrir(0), 400);
-          }}
-        />
-      ) : null}
     </Layout>
-    </PortaoAurum>
   );
 }

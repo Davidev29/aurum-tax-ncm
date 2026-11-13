@@ -21,9 +21,6 @@ import { DialogoGlass } from './dialogos'
 import { ModaisGlobais } from '@/modais/globais'
 import { TourGuiado } from './TourGuiado'
 import { reabrirTour } from '@/store/tutorial'
-// AURUM-GATE: banner da licença (módulo `src/aurum/`).
-import { BannerLicenca } from '@/aurum/components/BannerLicenca'
-import { podeAcaoSensivel } from '@/aurum/guards'
 
 /** Grupos do menu lateral — a ordem e os ícones espelham o sistema anterior. */
 const NAV: { secao?: string; itens: { id: ViewId; icone: NomeIcone; rotulo: string }[] }[] = [
@@ -310,11 +307,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     bridge.onMenu((acao) => {
       if (acao === 'abrir') abrirModal('config')
       if (acao === 'atualizar') abrirModal('config')
-      // AURUM-GATE: exportação é ação sensível — bloqueada em graça/DENY.
-      if (acao === 'exportar') {
-        if (!podeAcaoSensivel('exportar')) return
-        dispararExportacao(useUi.getState().view)
-      }
+      // Exportação do PDF da view ativa (Ctrl+E no menu nativo).
+      if (acao === 'exportar') dispararExportacao(useUi.getState().view)
       if (acao === 'tema') alternarTema()
     })
   }, [abrirModal, alternarTema])
@@ -407,16 +401,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         >
           {reduzir ? (
             <div className="mx-auto w-full max-w-[1400px]">
-              {/* AURUM-GATE: banner de graça/offline. */}
-              <BannerLicenca />
               <BannerSemEmpresa />
               {children}
             </div>
           ) : (
             <AnimatePresence mode="wait" initial={false}>
               <Pagina key={view} viewKey={view} seq={seqTransicao} className="mx-auto w-full max-w-[1400px]">
-                {/* AURUM-GATE: banner de graça/offline. */}
-                <BannerLicenca />
                 <BannerSemEmpresa />
                 {children}
               </Pagina>

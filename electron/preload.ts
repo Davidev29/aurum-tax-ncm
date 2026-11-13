@@ -14,10 +14,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AurumBridge,
   EventoAtualizacao,
-  LicencaPonte,
   ResultadoGrafoBridge,
 } from '../src/infrastructure/bridge'
-import type { LicencaEstado } from '../src/aurum/types'
 import type { DbOp } from '../src/infrastructure/db/db-protocolo'
 
 /**
@@ -80,26 +78,6 @@ const aurum: AurumBridge = {
 
   /** Remove um XML guardado; inexistente não é erro. */
   removerXml: (caminho) => ipcRenderer.invoke('xml:remover', caminho),
-
-  /**
-   * Cofre Aurumbit (canais `aurum:*` no main — safeStorage + userData).
-   * A chave integral `AURUM-…` NUNCA passa por aqui: só o estado
-   * pós-ativação (com `keyMasked` ••••-WXYZ) e o Bearer da conta.
-   */
-  licenca: {
-    instanciaId: () => ipcRenderer.invoke('aurum:instancia-id'),
-    ipLocal: () => ipcRenderer.invoke('aurum:ip-local'),
-    ler: () => ipcRenderer.invoke('aurum:licenca:ler'),
-    salvar: (estado: LicencaEstado) => ipcRenderer.invoke('aurum:licenca:salvar', estado),
-    limpar: () => ipcRenderer.invoke('aurum:licenca:limpar'),
-    sessaoLer: () => ipcRenderer.invoke('aurum:sessao:ler'),
-    sessaoSalvar: (sessao: { token: string; email: string; obtidoEm: number }) =>
-      ipcRenderer.invoke('aurum:sessao:salvar', sessao),
-    sessaoLimpar: () => ipcRenderer.invoke('aurum:sessao:limpar'),
-  } satisfies LicencaPonte,
-
-  /** Abre URL HTTPS no navegador (checkout, dashboard). */
-  abrirUrl: (url: string) => ipcRenderer.invoke('aurum:abrir-url', url),
 
   /** Assina as ações do menu nativo (canal `menu:acao`). */
   onMenu: (cb) => {
