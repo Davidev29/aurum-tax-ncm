@@ -14,7 +14,7 @@
  * (`src/store/ui.ts` lê `localStorage`/tema no carregamento do módulo).
  * Não afetam os testes existentes: só preenchem o que não existe.
  */
-import { execFileSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { closeSync, existsSync, openSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
@@ -142,20 +142,46 @@ function magiaSqlite(caminho: string): string {
     }
     if (dono) {
       try {
-        try {
-          rmSync(template, { force: true })
-        } catch {
-          /* best-effort */
+        // 3 tentativas com backoff: `prisma db push` do zero falha
+        // intermitentemente em runners carregados (obs.: run #43443485021
+        // do dependabot caiu aqui em 2026-11-13). O template é recriado
+        // do zero a cada tentativa — refazer nunca envenena o alem.
+        let ultimoErro = ''
+        for (let tentativa = 1; tentativa <= 3; tentativa++) {
+          try {
+            rmSync(template, { force: true })
+          } catch {
+            /* best-effort */
+          }
+          const resultado = spawnSync(
+            process.execPath,
+            [join('node_modules', 'prisma', 'build', 'index.js'), 'db', 'push', '--accept-data-loss', '--skip-generate'],
+            {
+              cwd: raiz,
+              env: { ...process.env, DATABASE_URL: `file:${template}` },
+              stdio: ['ignore', 'pipe', 'pipe'],
+              timeout: 180_000,
+            },
+          )
+          if (resultado.status === 0 && !resultado.error) {
+            ultimoErro = ''
+            break
+          }
+          ultimoErro = [
+            typeof resultado.status === 'number' ? `status ${resultado.status}` : null,
+            resultado.error ? resultado.error.message : null,
+            resultado.stderr ? resultado.stderr.toString().trim() : null,
+            resultado.stdout ? resultado.stdout.toString().trim() : null,
+          ]
+            .filter(Boolean)
+            .join(' | ')
+          if (tentativa < 3) {
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 400 * tentativa)
+          }
         }
-        execFileSync(
-          process.execPath,
-          [join('node_modules', 'prisma', 'build', 'index.js'), 'db', 'push', '--accept-data-loss', '--skip-generate'],
-          {
-            cwd: raiz,
-            env: { ...process.env, DATABASE_URL: `file:${template}` },
-            stdio: 'ignore',
-          },
-        )
+        if (ultimoErro) {
+          throw new Error(`setup: prisma db push falhou após 3 tentativas no template ${template}: ${ultimoErro}`)
+        }
         finalizarTemplate()
       } finally {
         try {
