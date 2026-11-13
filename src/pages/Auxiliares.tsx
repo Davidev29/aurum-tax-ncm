@@ -243,6 +243,18 @@ export function Auxiliares() {
         </Secao>
 
         <Secao>
+        <LimiteErro nome="nbs-oficial">
+          <PainelNbsNomenclatura />
+        </LimiteErro>
+        </Secao>
+
+        <Secao>
+        <LimiteErro nome="nbs-depara">
+          <PainelDeparaNbs />
+        </LimiteErro>
+        </Secao>
+
+        <Secao>
         <LimiteErro nome="tabelas-cff">
           <TabelasOficiaisCff />
         </LimiteErro>
@@ -1267,6 +1279,303 @@ function PainelNbs() {
                         <td className="whitespace-nowrap font-mono">{textoCurto(rec.cst, 12)}</td>
                         <td className="whitespace-nowrap font-mono">{textoCurto(rec.cClassTrib, 12)}</td>
                         <td className="max-w-md truncate">{textoCurto(rec.descricao, 140)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <Paginacao
+              pagina={paginaSegura}
+              totalPaginas={totalPaginas}
+              inicio={(paginaSegura - 1) * PAGE_SIZE + 1}
+              fim={Math.min(paginaSegura * PAGE_SIZE, filtradas.length)}
+              total={filtradas.length}
+              aoMudar={setPagina}
+            />
+          </>
+        )}
+      </div>
+    </Painel>
+  )
+}
+
+/* ------------------- NBS oficial (nomenclatura) — somente leitura -------- */
+
+/** Artifatos estáticos `public/base/nbs-nomenclatura.json` / `nbs-depara.json`
+ *  (gerados por `npm run fontes:sync` + `npm run base`). Não passam pelo
+ *  SQLite — lidos diretamente via bridge (IPC no Electron, fetch no navegador). */
+
+const NIVEL_NBS_ROTULO: Record<string, string> = {
+  capitulo: 'Capítulo',
+  posicao: 'Posição',
+  subposicao1: 'Subposição 1º nível',
+  subposicao2: 'Subposição 2º nível',
+  item: 'Item',
+  subitem: 'Subitem',
+}
+
+const nivelNbsRotulo = (n: unknown): string => NIVEL_NBS_ROTULO[String(n ?? '')] ?? String(n ?? '—')
+
+function PainelNbsNomenclatura() {
+  const [itens, setItens] = useState<Record<string, unknown>[]>([])
+  const [filtro, setFiltro] = useState('')
+  const [pagina, setPagina] = useState(1)
+  const [erro, setErro] = useState<string | null>(null)
+  const [carregando, setCarregando] = useState(true)
+  const [meta, setMeta] = useState<Record<string, unknown> | null>(null)
+
+  useEffect(() => {
+    let vivo = true
+    setCarregando(true)
+    setErro(null)
+    void (async () => {
+      try {
+        const { carregarNbsNomenclatura } = await import('@/infrastructure/base/nbs-oficial')
+        const artefato = await carregarNbsNomenclatura()
+        if (!vivo) return
+        setMeta((artefato?.meta ?? null) as Record<string, unknown> | null)
+        setItens(Array.isArray(artefato?.itens) ? (artefato.itens as unknown as Record<string, unknown>[]) : [])
+        setCarregando(false)
+      } catch (e) {
+        if (vivo) {
+          setErro(e instanceof Error ? e.message : String(e))
+          setItens([])
+          setCarregando(false)
+        }
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [])
+
+  const f = filtro.trim().toLowerCase()
+  const filtradas = f
+    ? itens.filter((r) => {
+        const rec = (r ?? {}) as Record<string, unknown>
+        return `${String(rec.codigo ?? '')} ${String(rec.codigoFormatado ?? '')} ${String(rec.descricao ?? '')} ${String(rec.nivel ?? '')}`
+          .toLowerCase()
+          .includes(f)
+      })
+    : itens
+  const totalPaginas = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE))
+  const paginaSegura = Math.min(Math.max(1, pagina), totalPaginas)
+  const visiveis = filtradas.slice((paginaSegura - 1) * PAGE_SIZE, paginaSegura * PAGE_SIZE)
+  const totalOficial = Number(meta?.total ?? itens.length) || 0
+  const folhas = Number(meta?.totalFolhas ?? itens.filter((r) => (r as Record<string, unknown>).folha).length) || 0
+
+  return (
+    <Painel>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
+        <h2 className="flex items-center gap-2 text-base font-bold">
+          <span className="text-lg">📑</span> NBS 2.00 — nomenclatura oficial completa
+        </h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            {qtdSegura(totalOficial)} posições · {qtdSegura(folhas)} subitens
+          </span>
+          <Texto
+            type="search"
+            className="field-sm w-64"
+            placeholder="Filtrar código ou descrição…"
+            value={filtro}
+            onChange={(e) => {
+              setFiltro(e.target.value)
+              setPagina(1)
+            }}
+          />
+        </div>
+      </div>
+      <div className="p-5">
+        <p className="mb-3 text-[11px] text-slate-500 dark:text-slate-400">
+          Nomenclatura Brasileira de Serviços (NBS), versão 2.00 — hierarquia completa com as
+          descrições oficiais. Fonte: MDIC — Painel de Códigos NBS (Portaria Conjunta RFB/SCS nº 2.000/2018).
+          Atualização: <code>npm run fontes:sync -- --only=nbs</code>. Somente leitura.
+        </p>
+        {erro ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+            <div className="font-bold">Falha ao ler a nomenclatura oficial</div>
+            <p className="mt-1">{textoCurto(erro, 200)}</p>
+          </div>
+        ) : carregando ? (
+          <div className="animate-pulse space-y-2" aria-label="Carregando NBS oficial">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-10 rounded-xl bg-slate-100 dark:bg-slate-800" />
+            ))}
+          </div>
+        ) : !visiveis.length ? (
+          <Vazio
+            icone="📑"
+            titulo={f ? 'Nenhuma posição NBS corresponde ao filtro' : 'Nomenclatura NBS 2.00 ausente'}
+            texto="Rode `npm run fontes:sync -- --only=nbs` e depois `npm run base` para gerar `public/base/nbs-nomenclatura.json`."
+          />
+        ) : (
+          <>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+              <table className="tbl w-full">
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Nível</th>
+                    <th>Descrição (oficial)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visiveis.map((r, i) => {
+                    const rec = (r ?? {}) as Record<string, unknown>
+                    return (
+                      <tr key={`${String(rec.codigo ?? i)}-${i}`}>
+                        <td className="whitespace-nowrap font-mono font-bold">{textoCurto(rec.codigoFormatado ?? rec.codigo, 16)}</td>
+                        <td className="whitespace-nowrap">{nivelNbsRotulo(rec.nivel)}</td>
+                        <td className="max-w-xl">{textoCurto(rec.descricao, 160)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <Paginacao
+              pagina={paginaSegura}
+              totalPaginas={totalPaginas}
+              inicio={(paginaSegura - 1) * PAGE_SIZE + 1}
+              fim={Math.min(paginaSegura * PAGE_SIZE, filtradas.length)}
+              total={filtradas.length}
+              aoMudar={setPagina}
+            />
+          </>
+        )}
+      </div>
+    </Painel>
+  )
+}
+
+const RELACAO_NBS_ROTULO: Record<string, { rotulo: string; chip: string }> = {
+  mapeado: { rotulo: 'Mapeado', chip: 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200' },
+  extinto: { rotulo: 'Extinto na 2.0', chip: 'bg-red-100 text-red-900 dark:bg-red-950/60 dark:text-red-200' },
+  novo: { rotulo: 'Novo na 2.0', chip: 'bg-teal-100 text-teal-900 dark:bg-teal-950/60 dark:text-teal-200' },
+}
+
+function PainelDeparaNbs() {
+  const [itens, setItens] = useState<Record<string, unknown>[]>([])
+  const [filtro, setFiltro] = useState('')
+  const [pagina, setPagina] = useState(1)
+  const [erro, setErro] = useState<string | null>(null)
+  const [carregando, setCarregando] = useState(true)
+
+  useEffect(() => {
+    let vivo = true
+    setCarregando(true)
+    setErro(null)
+    void (async () => {
+      try {
+        const { carregarNbsDepara } = await import('@/infrastructure/base/nbs-oficial')
+        const artefato = await carregarNbsDepara()
+        if (!vivo) return
+        setItens(Array.isArray(artefato?.itens) ? (artefato.itens as unknown as Record<string, unknown>[]) : [])
+        setCarregando(false)
+      } catch (e) {
+        if (vivo) {
+          setErro(e instanceof Error ? e.message : String(e))
+          setItens([])
+          setCarregando(false)
+        }
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [])
+
+  const f = filtro.trim().toLowerCase()
+  const filtradas = f
+    ? itens.filter((r) => {
+        const rec = (r ?? {}) as Record<string, unknown>
+        return `${String(rec.nbs11Formatado ?? rec.nbs11 ?? '')} ${String(rec.nbs20Formatado ?? rec.nbs20 ?? '')} ${String(rec.desc11 ?? '')} ${String(rec.desc20 ?? '')} ${String(rec.relacao ?? '')}`
+          .toLowerCase()
+          .includes(f)
+      })
+    : itens
+  const totalPaginas = Math.max(1, Math.ceil(filtradas.length / PAGE_SIZE))
+  const paginaSegura = Math.min(Math.max(1, pagina), totalPaginas)
+  const visiveis = filtradas.slice((paginaSegura - 1) * PAGE_SIZE, paginaSegura * PAGE_SIZE)
+  const mapeados = itens.filter((r) => (r as Record<string, unknown>).relacao === 'mapeado').length
+  const extintos = itens.filter((r) => (r as Record<string, unknown>).relacao === 'extinto').length
+  const novos = itens.filter((r) => (r as Record<string, unknown>).relacao === 'novo').length
+
+  return (
+    <Painel>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5 dark:border-slate-800">
+        <h2 className="flex items-center gap-2 text-base font-bold">
+          <span className="text-lg">🔁</span> DE-PARA NBS 1.1 → 2.0
+        </h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+            {qtdSegura(mapeados)} mapeadas · {qtdSegura(extintos)} extintas · {qtdSegura(novos)} novas
+          </span>
+          <Texto
+            type="search"
+            className="field-sm w-64"
+            placeholder="Filtrar NBS 1.1, 2.0 ou descrição…"
+            value={filtro}
+            onChange={(e) => {
+              setFiltro(e.target.value)
+              setPagina(1)
+            }}
+          />
+        </div>
+      </div>
+      <div className="p-5">
+        <p className="mb-3 text-[11px] text-slate-500 dark:text-slate-400">
+          Correlação oficial entre NBS 1.1 (Portaria Conjunta RFB/SCS nº 1.820/2013) e NBS 2.00
+          (Portaria Conjunta RFB/SCS nº 2.000/2018) — MDIC/Correlações. Orientação de migração,
+          sem caráter oficial de classificação. Atualização: <code>npm run fontes:sync -- --only=depara</code>.
+        </p>
+        {erro ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center text-xs text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+            <div className="font-bold">Falha ao ler o DE-PARA</div>
+            <p className="mt-1">{textoCurto(erro, 200)}</p>
+          </div>
+        ) : carregando ? (
+          <div className="animate-pulse space-y-2" aria-label="Carregando DE-PARA">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-10 rounded-xl bg-slate-100 dark:bg-slate-800" />
+            ))}
+          </div>
+        ) : !visiveis.length ? (
+          <Vazio
+            icone="🔁"
+            titulo={f ? 'Nenhuma linha corresponde ao filtro' : 'DE-PARA NBS ausente'}
+            texto="Rode `npm run fontes:sync -- --only=depara` e depois `npm run base` para gerar `public/base/nbs-depara.json`."
+          />
+        ) : (
+          <>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+              <table className="tbl w-full">
+                <thead>
+                  <tr>
+                    <th>NBS 1.1</th>
+                    <th>Relação</th>
+                    <th>NBS 2.0</th>
+                    <th>Descrição (2.0 / 1.1)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visiveis.map((r, i) => {
+                    const rec = (r ?? {}) as Record<string, unknown>
+                    const rel = String(rec.relacao ?? '')
+                    const chip = RELACAO_NBS_ROTULO[rel]?.chip ?? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                    const rotulo = RELACAO_NBS_ROTULO[rel]?.rotulo ?? rel
+                    return (
+                      <tr key={`${String(rec.nbs11 ?? '')}|${String(rec.nbs20 ?? '')}|${i}`}>
+                        <td className="whitespace-nowrap font-mono">{textoCurto(rec.nbs11Formatado ?? rec.nbs11 ?? '—', 16)}</td>
+                        <td className="whitespace-nowrap">
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${chip}`}>
+                            {rotulo}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap font-mono font-bold">{textoCurto(rec.nbs20Formatado ?? rec.nbs20 ?? '—', 16)}</td>
+                        <td className="max-w-xl">{textoCurto(rec.desc20 ?? rec.desc11, 160)}</td>
                       </tr>
                     )
                   })}

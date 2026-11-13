@@ -49,6 +49,9 @@ export const TABELAS_EXPORTAVEIS: TabelaExportavel[] = [
   { store: 'anexos', titulo: 'Anexos', icone: '📎', descricao: 'Restrições oficiais por NCM/NBS', escopo: 'geral' },
   { store: 'audit_log', titulo: 'Auditoria', icone: '🧾', descricao: 'Log imutável (últimos 2.000)', escopo: 'geral' },
   { store: 'nbs', titulo: 'NBS', icone: '🧮', descricao: 'Vínculos de serviços (NBS 9 dígitos)', escopo: 'servico' },
+  // Artefatos oficiais estáticos (lidos do public/base via bridge — não passam pelo SQLite)
+  { store: 'nbsNomenclatura', titulo: 'NBS oficial', icone: '📑', descricao: 'NBS 2.00 completa (3.239 posições)', escopo: 'servico' },
+  { store: 'nbsDepara', titulo: 'NBS DE-PARA', icone: '🔁', descricao: 'De-para NBS 1.1 → 2.0 (oficial)', escopo: 'servico' },
 ]
 
 /**
@@ -181,6 +184,23 @@ function hoje(): string {
 export async function coletarTabela(store: string, filtro: FiltroExportacao): Promise<Record<string, unknown>[]> {
   let linhas: Record<string, unknown>[] = []
   try {
+    if (store === 'nbsNomenclatura' || store === 'nbsDepara') {
+      // Artefatos NBS oficiais: não são stores do SQLite — lidos do public/base
+      const { carregarNbsNomenclatura, carregarNbsDepara } = await import('@/infrastructure/base/nbs-oficial')
+      const artefato = store === 'nbsNomenclatura' ? await carregarNbsNomenclatura() : await carregarNbsDepara()
+      linhas = (artefato?.itens ?? []) as unknown as Record<string, unknown>[]
+      const t = filtro.texto.trim().toLowerCase()
+      if (t) {
+        linhas = linhas.filter((r) => {
+          try {
+            return JSON.stringify(r).toLowerCase().includes(t)
+          } catch {
+            return false
+          }
+        })
+      }
+      return linhas
+    }
     if (store === 'audit_log') {
       linhas = ((await db.table(store).toArray().catch(() => [])) as Record<string, unknown>[]).slice(-2000)
     } else {

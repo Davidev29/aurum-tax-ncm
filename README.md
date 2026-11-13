@@ -25,7 +25,7 @@
 
 ◈ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ◈
 
-**Versão `1.2.0` · `9` views · `172` suítes Vitest · `1.946` casos · `typecheck` limpo (app + electron)**
+**Versão `1.2.0` · `9` views · `173` suítes Vitest · `1.951` casos · `typecheck` limpo (app + electron)**
 
 *Estado auditado em **13/11/2026** a partir da árvore de trabalho (branch `main`).*
 
@@ -44,10 +44,10 @@
 | Sinal | Valor real (árvore de trabalho) |
 |---|---|
 | 🖥️ Views no menu | **9** — Consulta NCM · Simples Nacional · Serviços (NBS) · Consulta de CNAEs · Classificação em lote · Notas Fiscais (XML) · Produtos · Tabelas auxiliares · Legislação |
-| 🧪 Testes | **172 arquivos** · **1.946 casos** — `npm test` → **tudo passando** · `npm run typecheck` limpo (app + electron) |
+| 🧪 Testes | **173 arquivos** · **1.951 casos** — `npm test` → **tudo passando** · `npm run typecheck` limpo (app + electron) |
 | ✅ Tipos | `npm run typecheck` (`tsc --noEmit` + `tsc -p tsconfig.electron.json`) — **limpo** |
 | 📦 Instaladores locais | `release/` com `Setup 1.2.0` + `Portátil 1.2.0` (ignorado no git, gerado por `npm run dist:win`) |
-| 🗄️ Base embutida | `public/base/` versionada: `reforma.json` 1,5 MB · `nomenclatura.json` 2,8 MB · `classificacoes-consolidadas.json` 1,7 MB · `cnae-nbs.json` 1,3 MB · `parametros.json` (IBS 19 + CBS 9 de referência, editável) · grafo `grafo.lbug` 6,1 MB · `vetores.json` 12 MB (versionado p/ busca local; não empacotado no instalador) |
+| 🗄️ Base embutida | `public/base/` versionada: `reforma.json` 1,5 MB · `nomenclatura.json` 2,8 MB · `classificacoes-consolidadas.json` 1,7 MB · `cnae-nbs.json` 1,3 MB · `nbs-nomenclatura.json` (NBS 2.00 oficial) · `nbs-depara.json` (DE-PARA 1.1↔2.0) · `parametros.json` (IBS 19 + CBS 9 de referência, editável) · grafo `grafo.lbug` 6,1 MB · `vetores.json` 12 MB (versionado p/ busca local; não empacotado no instalador) |
 | 📥 Formatos de entrada | **XML de NF-e/NFC-e** (modelo 55/65) + **CSV/XLSX de lote** (`COD/SKU; NOME; NCM; CFOP; CST; PIS; COFINS`) |
 
 ### ◆ Arquitetura em uma figura
@@ -315,7 +315,7 @@ aurum-tax-ncm/
 ├── bases-fonte/         # JSONs-fonte oficiais + vivos (ver tabela abaixo)
 ├── scripts/             # build-base, build-grafo, gerar-indice-ia (lexical),
 │                        #  cobertura, ofuscar, verificar, after-pack…
-├── tests/               # 172 suítes · 1.946 casos (tudo passando)
+├── tests/               # 173 suítes · 1.951 casos (tudo passando)
 ├── docs/                # SPEC, arquitetura, diagnósticos, manuais (.docx fora do installer)
 ├── public/base/         # base JSON embutida versionada + MANIFEST + grafo
 ├── build/               # icon.ico/png/icns, LICENCA.rtf/txt (NSIS PT-BR; icns p/ mac, png p/ linux)
@@ -340,16 +340,25 @@ Arquitetura: **React + Clean Architecture** — `domain` (regras puras) → `app
 
 ### Onde baixar as bases oficiais
 
-Coloque os arquivos em `bases-fonte/` com os nomes exatos e rode `npm run base` (detalhes em [`bases-fonte/README.md`](./bases-fonte/README.md)):
+Coloque os arquivos em `bases-fonte/` com os nomes exatos e rode `npm run base` (detalhes em [`bases-fonte/README.md`](./bases-fonte/README.md)). Para as fontes com endpoint oficial de download, `npm run fontes:sync` baixa/normaliza tudo sozinho (e gera `bases-fonte/FONTES.json`, o mapa auditável da pasta):
+
+```powershell
+npm run fontes:sync   # NBS 2.00 (painel MDIC) + DE-PARA 1.1→2.0 (CSV oficial) + NCM (Siscomex)
+npm run base          # recompila public/base/ a partir de bases-fonte/
+```
 
 | Arquivo em `bases-fonte/` | O que é | Onde baixar | Obrigatório? |
 |---|---|---|---|
 | `classificacao_tributaria.json` | Referência CST × cClassTrib (164 registros) | Portal DFe / Conformidade Fácil: https://dfe-portal.svrs.rs.gov.br/Cff → Classificação Tributária; API: `https://cff.svrs.rs.gov.br/api/v1/consultas/classTrib` | Sim |
 | `reforma_tributaria_por_ncm.json` | Vínculos NCM/NBS × CST × cClassTrib | Mesmo portal CFF acima (exportação NCM da Reforma — LC 214/2025) | Sim |
-| `Tabela_NCM_Vigente_AAAA-MM-DD.json` | Nomenclatura NCM vigente (~15 mil itens) | Portal Único Siscomex: https://portalunico.siscomex.gov.br/classif/api/publico/nomenclatura/download/json | Sim |
+| `Tabela_NCM_Vigente_AAAA-MM-DD.json` | Nomenclatura NCM vigente (~15 mil itens) | `npm run fontes:sync` (Siscomex) · ou Portal Único Siscomex: https://portalunico.siscomex.gov.br/classif/api/publico/nomenclatura/download/json | Sim |
+| `NBS 2.00 (oficial).json` | **NBS 2.00 oficial completa** (3.239 posições — 919 subitens) | `npm run fontes:sync` — MDIC Painel de Códigos NBS (Power BI) · https://www.gov.br/mdic/pt-br/assuntos/sdic/comercio-e-servicos/nbs-nomenclatura-brasileira-de-servicos/painel-de-codigos-nbs · Portaria Conjunta RFB/SCS nº 2.000/2018 | Não (artefato versionado em `public/base/nbs-nomenclatura.json`) |
+| `NBS DE-PARA (oficial).json` | **DE-PARA NBS 1.1 ↔ 2.0** (correlação oficial, 1.391 linhas) | `npm run fontes:sync` — MDIC Correlações · https://www.gov.br/mdic/pt-br/assuntos/sdic/comercio-e-servicos/nbs-nomenclatura-brasileira-de-servicos/correlacoes | Não (artefato versionado em `public/base/nbs-depara.json`) |
+| `NBSa_DE-PARAa_COMPILADOa_FINALa_05a_deza_2018(Planilha1).csv` | Fonte bruta do DE-PARA (planilha oficial exportada em CSV Latin-1) | Mesmo link MDIC Correlações acima (arquivo `.xlsx` — exporte a aba "Planilha1" como CSV `;`) | Fonte do `fontes:sync -- --only=depara` |
 | `CNAE X ANEXO.json` | CNAE × Anexo Simples + Fator R (~1.090 CNAEs) | Arquivo vivo do projeto (sem URL oficial única) | Não (sem ele a store `cnae` nasce vazia) |
 | `NBS SERVIÇOS.json` | Vínculos NBS (122 após dedupe + Anexo IX) | Arquivo vivo do projeto | Não |
 | `CNAE X NBS.qualclasstrib.json` | Ponte CNAE → NBS (fonte não-oficial, só candidatos; verdade fiscal é o resolvedor) | Arquivo vivo do projeto | Não (sem ele a ponte CNAE→NBS fica vazia) |
+| `FONTES.json` | Mapa auditável das fontes (nome, arquivo, origem, sha256, frescor) | Gerado por `npm run fontes:sync` | Gerado |
 
 ---
 

@@ -60,6 +60,8 @@ temp/
 prisma/dev.db*
 # Phase 10-01: CSVs intermediários do build do grafo (regenerados por `npm run base`)
 scripts/grafo/.tmp/
+# Fontes/histórico: versões anteriores baixadas pelo `npm run fontes:sync -- --only=ncm`
+bases-fonte/.historico/
 
 # Base / dados locais grandes (descomente se não quiser versionar)
 # *.xlsx

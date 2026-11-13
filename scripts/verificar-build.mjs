@@ -2,9 +2,11 @@
  * verificar-build.mjs — Portão de saída da BUILD completa.
  *
  * Garante que a nova versão interpreta TODAS as bases e entrega IA embutida:
- *   1. Base tributária `public/base/`: 4 artefatos + MANIFEST com contagens
+ *   1. Base tributária `public/base/`: 7 artefatos + MANIFEST com contagens
  *      oficiais (164 referência, 2335 NCM, 15156 nomenclatura, 1090 CNAE,
- *      122 NBS, 17 CST, 132 CST×cClassTrib).
+ *      122 NBS, 17 CST, 132 CST×cClassTrib) + NBS 2.00 oficial
+ *      (`nbs-nomenclatura.json` 3239 posições / 919 subitens) + DE-PARA
+ *      NBS 1.1↔2.0 (`nbs-depara.json` 1391 linhas).
  *   1b. Grafo fiscal `public/base/grafo/`: `grafo.lbug` (+ espelho
  *      `grafo.lbug.json`) + `MANIFEST.grafo.json` com hash íntegro +
  *      `vetores.json` SINCRONIZADO (`hashGrafo` === hash do payload — par
@@ -39,6 +41,11 @@ const ESPERADO = {
   nbsMin: 100,
   cst: 17,
   cstClassTrib: 132,
+  // NBS 2.00 oficial (public/base/nbs-nomenclatura.json, via `npm run fontes:sync`)
+  nbsOficialMin: 3000, // 3239 hoje (5 seções fora do artefato)
+  nbsOficialFolhasMin: 900, // 919 subitens hoje
+  // DE-PARA NBS 1.1 ↔ 2.0 (public/base/nbs-depara.json, via `npm run fontes:sync`)
+  nbsDeparaMin: 1300, // 1391 linhas hoje
 }
 
 const MARCADORES_OFUSC = ['__AURUM_BUILD_OFUSCADO__', '__AURUM_IA_OFUSCADO__']
@@ -67,7 +74,7 @@ function ehOfuscado(conteudo) {
 function verificarBase() {
   console.log('\n[1/5] Base tributária (public/base/)')
   const dir = path.join(RAIZ, 'public', 'base')
-  for (const f of ['classificacao-tributaria.json', 'reforma.json', 'nomenclatura.json', 'cnae.json', 'MANIFEST.json']) {
+  for (const f of ['classificacao-tributaria.json', 'reforma.json', 'nomenclatura.json', 'cnae.json', 'nbs-nomenclatura.json', 'nbs-depara.json', 'MANIFEST.json']) {
     if (!fs.existsSync(path.join(dir, f))) fail(`public/base/${f} ausente (rode npm run base:completa)`)
   }
   if (falhas.length) return
@@ -98,6 +105,24 @@ function verificarBase() {
     else ok(`CNAE×Anexo: ${nCnae}`)
     if (nNbs < ESPERADO.nbsMin) fail(`NBS: ${nNbs} (mínimo ${ESPERADO.nbsMin})`)
     else ok(`NBS serviços: ${nNbs} vínculos`)
+    // Artefatos NBS oficiais novos (nbs-nomenclatura / nbs-depara)
+    if (fs.existsSync(path.join(dir, 'nbs-nomenclatura.json'))) {
+      const nOf = lerJson(path.join(dir, 'nbs-nomenclatura.json'))?.itens?.length ?? 0
+      if (nOf < ESPERADO.nbsOficialMin) fail(`NBS oficial: ${nOf} posições (mínimo ${ESPERADO.nbsOficialMin}) — rode npm run fontes:sync -- --only=nbs && npm run base`)
+      else ok(`NBS oficial: ${nOf} posições (nomenclatura NBS 2.00)`)
+      const nFolhas = (lerJson(path.join(dir, 'nbs-nomenclatura.json'))?.itens ?? []).filter((i) => i?.folha).length
+      if (nFolhas < ESPERADO.nbsOficialFolhasMin) fail(`NBS oficial: ${nFolhas} subitens (mínimo ${ESPERADO.nbsOficialFolhasMin})`)
+      else ok(`NBS oficial: ${nFolhas} subitens`)
+    } else {
+      fail('public/base/nbs-nomenclatura.json ausente (rode npm run fontes:sync && npm run base)')
+    }
+    if (fs.existsSync(path.join(dir, 'nbs-depara.json'))) {
+      const nDep = lerJson(path.join(dir, 'nbs-depara.json'))?.itens?.length ?? 0
+      if (nDep < ESPERADO.nbsDeparaMin) fail(`DE-PARA NBS: ${nDep} linhas (mínimo ${ESPERADO.nbsDeparaMin}) — rode npm run fontes:sync -- --only=depara && npm run base`)
+      else ok(`DE-PARA NBS 1.1→2.0: ${nDep} linhas`)
+    } else {
+      fail('public/base/nbs-depara.json ausente (rode npm run fontes:sync && npm run base)')
+    }
     const est = manifest.estatisticas ?? {}
     if (est.ncm !== ESPERADO.ncm || est.referencia !== ESPERADO.referencia) {
       fail(`MANIFEST inconsistente (ncm=${est.ncm}, referencia=${est.referencia})`)

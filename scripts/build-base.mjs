@@ -20,6 +20,8 @@
  *   - CNAE X ANEXO.json                   -> (Phase 7, vivo/opcional) CNAE × Anexo Simples + Fator R
  *   - NBS SERVIÇOS.json                   -> (Phase 7, vivo/opcional) vínculos NBS (prefere ao legado)
  *   - CNAE X NBS.qualclasstrib.json       -> (Phase 9) ponte CNAE → NBS (fonte não-oficial)
+ *   - NBS 2.00 (oficial).json             -> (novo) NBS 2.00 oficial completo (painel MDIC via `npm run fontes:sync`)
+ *   - NBS DE-PARA (oficial).json          -> (novo) correlação NBS 1.1 ↔ 2.0 (oficial, via `npm run fontes:sync`)
  *
  * SAÍDA (public/base/):
  *   - classificacao-tributaria.json  referência normalizada (chave: cClassTrib)
@@ -28,6 +30,8 @@
  *   - cnae.json                      CNAE × Anexo Simples (Phase 7)
  *   - cnae-nbs.json                  links CNAE → NBS + relações LC × NBS (Phase 9)
  *   - classificacoes-consolidadas.json  templates por CNAE com descrições conferidas (Phase 9)
+ *   - nbs-nomenclatura.json          NBS 2.00 oficial completa (hierarquia + descrições; novo)
+ *   - nbs-depara.json                DE-PARA NBS 1.1 ↔ 2.0 (correlação oficial; novo)
  *   - MANIFEST.json                  metadados, contagens e checksums (+fontesVivas, +grafo)
  *   - grafo/grafo.lbug               grafo fiscal local (Phase 10-01; nativo ou JSON portátil)
  *   - grafo/grafo.lbug.json          espelho portátil do grafo (sempre JSON)
@@ -397,6 +401,142 @@ export function normalizarNbsServicos(bruto) {
   });
   return { vinculos, duplicados };
 }
+
+// ---------------------------------------------------------------------------
+// NBS 2.00 oficial (painel MDIC) + DE-PARA 1.1 → 2.0 (correlação oficial)
+// Fontes vivas OPCIONAIS (como CNAE/NBS SERVIÇOS): sem elas a compilação
+// segue com o `public/base/` versionado; com elas, os artefatos nascem de
+// novo a cada `npm run base`.
+// ---------------------------------------------------------------------------
+
+const NBS_OFICIAL_LEVELS = [
+  // [chave no dump, campo do código, nível, tamanho (dígitos), pai (dígitos)]
+  ['capitulos', 'Codigo_Capitulo', 'capitulo', 3, null],
+  ['posicoes', 'Codigo_Posicao', 'posicao', 5, 3],
+  ['subposicoes_1_nivel', 'Codigo_Subposicao_1_Nivel', 'subposicao1', 6, 5],
+  ['subposicoes_2_nivel', 'Codigo_Subposicao_2_Nivel', 'subposicao2', 7, 6],
+  ['itens', 'Codigo_Item', 'item', 8, 7],
+  ['subitens', 'Codigo_Subitem', 'subitem', 9, 8],
+];
+
+/**
+ * `NBS 2.00 (oficial).json` (dump do painel MDIC — secoes…subitens)
+ * → lista plana hierárquica normalizada para `nbs-nomenclatura.json`.
+ *
+ * Cada item: `{ codigo (dígitos), codigoFormatado (pontilhado oficial),
+ * descricao, nivel, pai (dígitos do pai|null), folha (nível subitem) }`.
+ * Seções (I..V) NÃO entram: são 5 nós decorativos sem código NBS.
+ */
+export function normalizarNbsOficial(bruto) {
+  // Tolerância ao artefato já normalizado (tipo 'nbs-nomenclatura') — não quebra re-importação.
+  // (o dump oficial também tem a chave `itens` — os Itens da NBS — então o
+  // reconhecimento é pelo `tipo`, nunca só pela presença da chave)
+  if (bruto && bruto.tipo === 'nbs-nomenclatura' && Array.isArray(bruto.itens)) {
+    return { itens: bruto.itens.filter((i) => i && typeof i === 'object' && typeof i.codigo === 'string'), ignorados: [] };
+  }
+  const itens = [];
+  const ignorados = [];
+  const efetiva = new Map(); // codigo → descrição efetiva (própria ou herdada do ancestral mais próximo)
+  let herdadas = 0;
+  for (const [chave, campo, nivel, len, paiLen] of NBS_OFICIAL_LEVELS) {
+    for (const raw of bruto?.[chave] ?? []) {
+      if (!raw || typeof raw !== 'object') continue;
+      const fmt = String(raw[campo] ?? '').trim();
+      const codigo = digits(fmt);
+      if (!fmt || codigo.length !== len) {
+        if (fmt) ignorados.push({ origem: 'NBS-oficial', nivel, codigo: fmt || '(vazio)', motivo: `${codigo.length} dígitos (esperado ${len})` });
+        continue;
+      }
+      const pai = paiLen ? codigo.slice(0, paiLen) : null;
+      const original = String(raw.Descricao ?? '').trim();
+      // A tabela oficial publica vários nós estruturais/item SEM texto próprio
+      // (ex.: itens quase sempre em branco, 71% das subposições de 1º nível);
+      // o conteúdo é o do ancestral mais próximo. Guardamos as duas versões.
+      const descricao = original || (pai ? (efetiva.get(pai) ?? '') : '');
+      if (!original) herdadas++;
+      itens.push({
+        codigo,
+        codigoFormatado: fmt,
+        descricao,
+        descricaoOriginal: original || null,
+        nivel,
+        pai,
+        folha: nivel === 'subitem',
+      });
+      efetiva.set(codigo, descricao);
+    }
+  }
+  itens.sort((a, b) => (a.codigo < b.codigo ? -1 : a.codigo > b.codigo ? 1 : 0));
+  return { itens, ignorados, herdadas };
+}
+
+/**
+ * `NBS DE-PARA (oficial).json` (correlação oficial 1.1 ↔ 2.0, gerada pelo
+ * `npm run fontes:sync` a partir do CSV oficial da MDIC). Revalida os itens
+ * e recalcula as contagens — o arquivo versionado reflete a fonte, não o
+ * que foi digitado à mão.
+ *
+ * Relação: `mapeado` (1.1→2.0, inclui identidade) · `extinto` (sem 2.0) ·
+ * `novo` (sem 1.1).
+ */
+export function normalizarNbsDepara(bruto) {
+  const lista = Array.isArray(bruto) ? bruto : (bruto?.itens ?? []);
+  const itens = [];
+  const vistos = new Set();
+  let duplicados = 0;
+  for (const r of lista) {
+    if (!r || typeof r !== 'object') continue;
+    const nbs11 = digits(r.nbs11);
+    const nbs20 = digits(r.nbs20);
+    if (!nbs11 && !nbs20) continue;
+    const chave = `${nbs11}|${nbs20}`;
+    if (vistos.has(chave)) { duplicados++; continue; }
+    vistos.add(chave);
+    const identico = !!nbs11 && !!nbs20 && nbs11 === nbs20;
+    itens.push({
+      nbs11: nbs11 || null,
+      nbs11Formatado: r.nbs11Formatado ?? (nbs11 ? fmtNbsOficial(nbs11) : null),
+      desc11: r.desc11 ?? null,
+      nbs20: nbs20 || null,
+      nbs20Formatado: r.nbs20Formatado ?? (nbs20 ? fmtNbsOficial(nbs20) : null),
+      desc20: r.desc20 ?? null,
+      identico,
+      relacao: nbs11 && nbs20 ? 'mapeado' : nbs11 ? 'extinto' : 'novo',
+      nivel: nivelPorDigitos(nbs20 || nbs11),
+    });
+  }
+  const identidade = itens.filter((i) => i.relacao === 'mapeado' && i.identico).length;
+  return {
+    itens,
+    duplicados,
+    identidade,
+    migrados: itens.filter((i) => i.relacao === 'mapeado' && !i.identico).length,
+    extintos: itens.filter((i) => i.relacao === 'extinto').length,
+    novos: itens.filter((i) => i.relacao === 'novo').length,
+  };
+}
+
+/** Formata dígitos NBS no pontilhado oficial (1.0101.11.00 etc.). */
+const fmtNbsOficial = (d) => {
+  if (d.length === 3) return `1.${d.slice(1)}`;
+  if (d.length === 5) return `1.${d.slice(1)}`;
+  if (d.length === 6) return `1.${d.slice(1, 5)}.${d.slice(5)}`;
+  if (d.length === 7) return `1.${d.slice(1, 5)}.${d.slice(5)}`;
+  if (d.length === 8) return `1.${d.slice(1, 5)}.${d.slice(5, 7)}.${d.slice(7)}`;
+  if (d.length === 9) return `1.${d.slice(1, 5)}.${d.slice(5, 7)}.${d.slice(7, 9)}`;
+  return d;
+};
+
+/** Nível NBS pela quantidade de dígitos do código. */
+const nivelPorDigitos = (d) => {
+  const n = d.length;
+  if (n <= 3) return 'capitulo';
+  if (n === 5) return 'posicao';
+  if (n === 6) return 'subposicao1';
+  if (n === 7) return 'subposicao2';
+  if (n === 8) return 'item';
+  return 'subitem';
+};
 
 // ---------------------------------------------------------------------------
 // Phase 9 — ponte CNAE → NBS (`CNAE X NBS.qualclasstrib.json`, fonte NÃO-oficial)
@@ -939,6 +1079,9 @@ async function main() {
     nbsServicos: localizar('^NBS SERVIÇOS\\.json$'),
     // Phase 9 — ponte CNAE → NBS (fonte não-oficial; links são candidatos).
     ponteCnaeNbs: localizar('^CNAE X NBS\\.qualclasstrib\\.json$'),
+    // NBS 2.00 oficial (painel MDIC) + DE-PARA 1.1↔2.0 — opcionais (vivos).
+    nbsOficial: localizar('^NBS 2\\.00 \\(oficial\\)\\.json$'),
+    nbsDepara: localizar('^NBS DE-PARA \\(oficial\\)\\.json$'),
   };
 
   const ausentes = Object.entries({ referencia: arquivos.referencia, reforma: arquivos.reforma, nomenclatura: arquivos.nomenclatura, ponteCnaeNbs: arquivos.ponteCnaeNbs }).filter(([, v]) => !v).map(([k]) => k);
@@ -949,7 +1092,7 @@ async function main() {
     // Tolera fontes ausentes quando a saída versionada já existe: `public/base/`
     // é commitado no repo, então `npm run build`/`dist` funciona em qualquer
     // máquina com só `git clone + npm ci` (sem os JSONs brutos).
-    const saidasVersionadas = ['classificacao-tributaria.json', 'reforma.json', 'nomenclatura.json', 'cnae.json', 'cnae-nbs.json', 'classificacoes-consolidadas.json', 'MANIFEST.json'];
+    const saidasVersionadas = ['classificacao-tributaria.json', 'reforma.json', 'nomenclatura.json', 'cnae.json', 'cnae-nbs.json', 'classificacoes-consolidadas.json', 'nbs-nomenclatura.json', 'nbs-depara.json', 'MANIFEST.json'];
     const saidasOk = saidasVersionadas.every((f) => fs.existsSync(path.join(OUT_DIR, f)));
     if (saidasOk) {
       console.warn(`\n⚠ Fontes ausentes (${ausentes.join(', ')}) — usando public/base/ versionado.`);
@@ -970,6 +1113,8 @@ async function main() {
   console.log(`   cnae        : ${arquivos.cnae ? path.basename(arquivos.cnae) : '(ausente — store CNAE vazia)'}`);
   console.log(`   nbsServicos : ${arquivos.nbsServicos ? path.basename(arquivos.nbsServicos) : '(ausente — NBS do legado)'}`);
   console.log(`   ponteCnaeNbs: ${arquivos.ponteCnaeNbs ? path.basename(arquivos.ponteCnaeNbs) : '(ausente — sem ponte CNAE→NBS)'}`);
+  console.log(`   nbsOficial  : ${arquivos.nbsOficial ? path.basename(arquivos.nbsOficial) : '(ausente — artefato NBS 2.00 não será gerado)'}`);
+  console.log(`   nbsDepara   : ${arquivos.nbsDepara ? path.basename(arquivos.nbsDepara) : '(ausente — artefato DE-PARA não será gerado)'}`);
   if (vivosAusentes.length) console.log(`   vivos ausentes: ${vivosAusentes.join(', ')} (tolerado)`);
 
   const t0 = Date.now();
@@ -979,6 +1124,8 @@ async function main() {
   const refCnae = arquivos.cnae ? lerJson(arquivos.cnae) : [];
   const refNbsVivo = arquivos.nbsServicos ? lerJson(arquivos.nbsServicos) : null;
   const refPonte = lerJson(arquivos.ponteCnaeNbs);
+  const refNbsOficial = arquivos.nbsOficial ? lerJson(arquivos.nbsOficial) : null;
+  const refNbsDepara = arquivos.nbsDepara ? lerJson(arquivos.nbsDepara) : null;
 
   const referencia = normalizarReferencia(refBruta);
   const cst = normalizarCst(refReforma.tabelasAuxiliares?.cst);
@@ -1028,7 +1175,20 @@ async function main() {
   });
   const nbsUnicasPonte = new Set(cnaeNbsNorm.links.map((l) => l.nbs)).size;
 
-  const ignorados = coletarIgnorados(refReforma, refNomen);
+  // NBS 2.00 oficial (hierarquia completa) + DE-PARA 1.1↔2.0 — opcionais.
+  const nbsOficialNorm = refNbsOficial ? normalizarNbsOficial(refNbsOficial) : { itens: [], ignorados: [], herdadas: 0 };
+  const nbsDeparaNorm = refNbsDepara ? normalizarNbsDepara(refNbsDepara) : { itens: [], duplicados: 0, identidade: 0, migrados: 0, extintos: 0, novos: 0 };
+  const nbsOficialItens = nbsOficialNorm.itens;
+  const nbsDeparaItens = nbsDeparaNorm.itens;
+  const nbsOficialFolhas = nbsOficialItens.filter((i) => i.folha).length;
+
+  // Conferências cruzadas (avisos — nunca derrubam a compilação):
+  const nbsOficialSet = new Set(nbsOficialItens.map((i) => i.codigo));
+  const nbsDeparaFaltantesOficial = refNbsOficial ? nbsDeparaItens.filter((i) => i.nbs20 && !nbsOficialSet.has(i.nbs20)) : [];
+  const nbsOficialPaisQuebrados = refNbsOficial ? nbsOficialItens.filter((i) => i.pai && !nbsOficialSet.has(i.pai)) : [];
+  const nbsOficialDuplicados = nbsOficialItens.length - new Set(nbsOficialItens.map((i) => i.codigo)).size;
+
+  const ignorados = [...coletarIgnorados(refReforma, refNomen), ...(nbsOficialNorm.ignorados ?? [])];
   const { problemas, estatisticas } = validar(referencia, cst, cstClassTrib, ncm, nomenclatura, ignorados, {
     nbs,
     estatisticas: {
@@ -1038,10 +1198,26 @@ async function main() {
       nbsResgatadosOverflow: nbsOverflowNcm.filter((v) =>
         nbs.some((u) => u.codigo === v.codigo && u.cst === v.cst && u.cClassTrib === v.cClassTrib),
       ).length,
+      // NBS 2.00 oficial + DE-PARA (quando as fontes vivas estão presentes).
+      nbsOficial: nbsOficialItens.length,
+      nbsOficialFolhas,
+      nbsOficialDuplicados,
+      nbsOficialPaisQuebrados: nbsOficialPaisQuebrados.length,
+      nbsOficialDescricoesHerdadas: nbsOficialNorm.herdadas ?? 0,
+      nbsDepara: nbsDeparaItens.length,
+      nbsDeparaDuplicados: nbsDeparaNorm.duplicados,
+      nbsDeparaMapeados: nbsDeparaNorm.identidade + nbsDeparaNorm.migrados,
+      nbsDeparaIdentidade: nbsDeparaNorm.identidade,
+      nbsDeparaMigrados: nbsDeparaNorm.migrados,
+      nbsDeparaExtintos: nbsDeparaNorm.extintos,
+      nbsDeparaNovos: nbsDeparaNorm.novos,
+      nbsDeparaFaltantesOficial: nbsDeparaFaltantesOficial.length,
       fontesVivas: {
         cnae: arquivos.cnae ? path.basename(arquivos.cnae) : null,
         nbsServicos: arquivos.nbsServicos ? path.basename(arquivos.nbsServicos) : null,
         ponteCnaeNbs: path.basename(arquivos.ponteCnaeNbs),
+        nbsOficial: arquivos.nbsOficial ? path.basename(arquivos.nbsOficial) : null,
+        nbsDepara: arquivos.nbsDepara ? path.basename(arquivos.nbsDepara) : null,
       },
       // Phase 9 — ponte CNAE → NBS + conferência entre fontes.
       cnaesComRegras: conferencia.cnaesComRegras,
@@ -1057,6 +1233,12 @@ async function main() {
       respostasRedeDescartadas: cnaeNbsNorm.descartadosRede,
     },
   });
+
+  // Avisos das fontes NBS novas (de-para × oficial) — rastreáveis no MANIFEST.
+  if (nbsOficialPaisQuebrados.length) problemas.push(`${nbsOficialPaisQuebrados.length} NBS oficial com pai ausente da hierarquia (ex.: ${nbsOficialPaisQuebrados[0]?.codigo})`);
+  if (nbsOficialDuplicados) problemas.push(`${nbsOficialDuplicados} códigos NBS duplicados no oficial`);
+  if (nbsDeparaFaltantesOficial.length) problemas.push(`${nbsDeparaFaltantesOficial.length} DE-PARA com código 2.0 ausente do oficial NBS 2.00 (ex.: ${nbsDeparaFaltantesOficial[0]?.nbs20})`);
+  if (nbsOficialNorm.ignorados?.length) problemas.push(`${nbsOficialNorm.ignorados.length} códigos NBS oficial descartados na normalização (ver MANIFEST → codigosIgnorados)`);
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const geradoEm = new Date().toISOString();
@@ -1152,6 +1334,45 @@ async function main() {
       },
       itens: templates,
     }),
+    ...(refNbsOficial ? [escrever('nbs-nomenclatura.json', {
+      schema: SCHEMA_VERSION,
+      tipo: 'nbs-nomenclatura',
+      meta: {
+        fonte: 'MDIC — Painel de Códigos NBS (Power BI) — publicação oficial da Portaria Conjunta RFB/SCS nº 2.000/2018',
+        url: 'https://www.gov.br/mdic/pt-br/assuntos/sdic/comercio-e-servicos/nbs-nomenclatura-brasileira-de-servicos/painel-de-codigos-nbs',
+        norma: refNbsOficial?.meta?.norma ?? 'Portaria Conjunta RFB/SCS nº 2.000, de 18/12/2018',
+        versao: refNbsOficial?.meta?.versao ?? 'NBS_2.00',
+        arquivoOrigem: path.basename(arquivos.nbsOficial),
+        capturaEm: refNbsOficial?.meta?.capturaEm ?? null,
+        refreshModelo: refNbsOficial?.meta?.refreshModelo ?? null,
+        descricao: 'Nomenclatura Brasileira de Serviços (NBS) — versão 2.00 completa: hierarquia (capítulos → subitens) com descrições oficiais. NBS usada na LC 214/2025.',
+        total: nbsOficialItens.length,
+        totalFolhas: nbsOficialFolhas,
+        geradoEm,
+      },
+      itens: nbsOficialItens,
+    })] : []),
+    ...(refNbsDepara ? [escrever('nbs-depara.json', {
+      schema: SCHEMA_VERSION,
+      tipo: 'nbs-depara',
+      meta: {
+        fonte: 'MDIC — Correlações NBS ("Planilha de Correlação entre as versões 1.1 e 2.0 da NBS", Comissão da NBS, 2019)',
+        url: 'https://www.gov.br/mdic/pt-br/assuntos/sdic/comercio-e-servicos/nbs-nomenclatura-brasileira-de-servicos/correlacoes',
+        arquivoOrigem: path.basename(arquivos.nbsDepara),
+        sha256Csv: refNbsDepara?.meta?.sha256Csv ?? null,
+        norma: 'Portaria Conjunta RFB/SCS nº 2.000/2018 (NBS 2.0) ← Portaria Conjunta RFB/SCS nº 1.820/2013 (NBS 1.1)',
+        capturaEm: refNbsDepara?.meta?.capturaEm ?? null,
+        descricao: 'De-para NBS 1.1 ↔ 2.0 — orientação para migração de referências legadas. NÃO tem caráter oficial de classificação (a classificação é definida na RFB/SCS).',
+        total: nbsDeparaItens.length,
+        mapeados: nbsDeparaNorm.identidade + nbsDeparaNorm.migrados,
+        identidade: nbsDeparaNorm.identidade,
+        migrados: nbsDeparaNorm.migrados,
+        extintos: nbsDeparaNorm.extintos,
+        novos: nbsDeparaNorm.novos,
+        geradoEm,
+      },
+      itens: nbsDeparaItens,
+    })] : []),
   ];
 
   const manifest = {
@@ -1170,6 +1391,24 @@ async function main() {
         cadencia: 'sob demanda (re-capturar a cada atualização da base)',
         notaRede: 'respostas_de_rede com url contendo `google` (tracking adtrafficquality) descartada no import',
       },
+      ...(arquivos.nbsOficial ? {
+        nbsOficial: {
+          origem: 'MDIC — Painel de Códigos NBS (Power BI) — publicação oficial',
+          url: 'https://www.gov.br/mdic/pt-br/assuntos/sdic/comercio-e-servicos/nbs-nomenclatura-brasileira-de-servicos/painel-de-codigos-nbs',
+          licenca: 'publicação oficial MDIC/RFB/SCS — Portaria Conjunta RFB/SCS nº 2.000, de 18/12/2018',
+          capturaEm: refNbsOficial?.meta?.capturaEm ?? fs.statSync(arquivos.nbsOficial).mtime.toISOString(),
+          cadencia: 'sob demanda — `npm run fontes:sync -- --only=nbs`',
+        },
+      } : {}),
+      ...(arquivos.nbsDepara ? {
+        nbsDepara: {
+          origem: 'MDIC — Correlações NBS (1.1 ↔ 2.0) — publicação oficial',
+          url: 'https://www.gov.br/mdic/pt-br/assuntos/sdic/comercio-e-servicos/nbs-nomenclatura-brasileira-de-servicos/correlacoes',
+          licenca: 'publicação oficial MDIC — orientação de migração (sem caráter oficial de classificação)',
+          capturaEm: refNbsDepara?.meta?.capturaEm ?? fs.statSync(arquivos.nbsDepara).mtime.toISOString(),
+          cadencia: 'sob demanda — `npm run fontes:sync -- --only=depara`',
+        },
+      } : {}),
     },
     estatisticas,
     codigosIgnorados: ignorados,
@@ -1225,6 +1464,22 @@ async function main() {
       + ` · ${amostraCnae.situacao} · Anexo Simples ${amostraCnae.anexos.join('/') || '—'} (${cnae.length} CNAEs)`);
   } else {
     console.log(' Amostra CNAE: store vazia (arquivo vivo ausente — tolerado).');
+  }
+
+  // Amostra NBS oficial (hierarquia NBS 2.00) + DE-PARA 1.1 ↔ 2.0.
+  if (refNbsOficial) {
+    const amostraOficial = nbsOficialItens.find((i) => i.codigo === '101011100') ?? nbsOficialItens.find((i) => i.folha);
+    console.log(` Amostra NBS oficial ${amostraOficial?.codigoFormatado}: ${amostraOficial?.descricao ?? '—'}`
+      + ` (${nbsOficialItens.length} posições, ${nbsOficialFolhas} subitens)`);
+  } else {
+    console.log(' Amostra NBS oficial: fonte ausente (tolerado — rode `npm run fontes:sync -- --only=nbs`).');
+  }
+  if (refNbsDepara) {
+    const amostraDepara = nbsDeparaItens.find((i) => i.nbs11 === '122032000') ?? nbsDeparaItens.find((i) => i.relacao === 'mapeado' && !i.identico);
+    console.log(` Amostra DE-PARA ${amostraDepara?.nbs11Formatado} → ${amostraDepara?.nbs20Formatado}: ${amostraDepara?.desc20 ?? '—'}`
+      + ` (${nbsDeparaItens.length} linhas | mapeados ${nbsDeparaNorm.identidade + nbsDeparaNorm.migrados} | extintos ${nbsDeparaNorm.extintos} | novos ${nbsDeparaNorm.novos})`);
+  } else {
+    console.log(' Amostra DE-PARA: fonte ausente (tolerado — rode `npm run fontes:sync -- --only=depara`).');
   }
 
   // Amostra Phase 9 (ponte CNAE → NBS + template consolidado).

@@ -2,12 +2,18 @@
 
 ## [Em breve] — 2026-11-13
 
+- **Módulo NBS — base oficial embutida + mecanismo de atualização (plug-in pull).** A partir de agora o app embarca a **nomenclatura oficial NBS 2.00 completa** (3.239 posições: 26 capítulos, 146 posições, 454 subposições 1º nível, 802 2º nível, 892 itens, 919 subitens), com descrições oficiais (herança do ancestral mais próximo — a tabela oficial publica ~1.251 nós sem texto próprio), e o **DE-PARA oficial NBS 1.1 ↔ 2.0** (1.391 linhas). Fontes: MDIC — Painel de Códigos NBS (Power BI público) e MDIC — Correlações. Portaria Conjunta RFB/SCS nº 2.000, de 18/12/2018. Detalhes e SOP em `docs/fontes-oficiais-nbs.md` e achados em `docs/nbs-avaliacao-2026-11.md`
+  - `npm run fontes:sync` — comando único para refrescar o que tem endpoint oficial (NBS oficial + DE-PARA + NCM Siscomex) + verificação de frescor/sha256 de todas as fontes + mapa auditável `bases-fonte/FONTES.json`
+  - `npm run base` compila para `public/base/nbs-nomenclatura.json` e `public/base/nbs-depara.json` (versionados); `npm run verificar:pre` exige mínimos no gate
+  - UI: 2 painéis novos em **Tabelas Auxiliares** (NBS 2.00 oficial e DE-PARA), bloco "Descrição do NBS pela tabela oficial (NBS 2.00)" no cartão de consulta NBS, 2 contadores em Config → Bases e os 2 artefatos no export geral
+  - Nenhum dado tributário foi migrado: **os 122 vínculos da Reforma (Anexo II/IX) já são NBS 2.00** (verificados um a um contra a nomenclatura oficial)
+  - 1 inconsistência da própria planilha DE-PARA mantida fiel à fonte e sinalizada (aviso): linha `1.0119.10.00 → 1.0105.21.00` aponta código fora da NBS 2.00 vigente
 - **CBS de referência: 9% → 11,3%** (`public/base/parametros.json`, `PARAMETROS_REF`, `REF_DEFAULT`) — soma IBS 19 + CBS 11,3 = **30,3** (a confirmar com o ato vigente; `validarParametrosRef` valida)
 - **Configurações → 🧮 Alíquotas** — editor manual das alíquotas de referência direto na máquina; a alteração local tem precedência sobre a tabela do instalador e cobre todo o cálculo do app (Consulta, simulador dos cartões, XML, apuração, relatórios e exports)
   - Override persistido em `meta` do SQLite (acompanha o backup/restauação); restaurável com um clique
   - Aba mostra origem vigente (`Tabela do programa` / `Estimativa` / `Seu ajuste`) e soma calculada
   - Store `useReferencia` passa a refletir o override em tempo real, inclusive no XML (via store `useNfe`)
-- Testes: `referencia-override.test.ts` (5 casos); total: **173 suítes · 1.951 casos**
+- Testes: `referencia-override.test.ts` (5 casos) + `nbs-oficial-base.test.ts` (12 casos); total: **174 suítes · 1.963 casos**
 
 ## v1.2.0 — 2026-11-13
 

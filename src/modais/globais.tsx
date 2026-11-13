@@ -24,6 +24,7 @@ import { useBase } from '@/store/base'
 import { confirmar } from '@/store/dialogo'
 import { useAuxiliares } from '@/store/auxiliares'
 import { useFundo } from '@/store/fundo'
+import { useReferencia, salvarAliquotasReferencia, restaurarAliquotasReferenciaPadrao } from '@/store/referencia'
 import { useSessao } from '@/store/sessao'
 import { useUi, toast } from '@/store/ui'
 import { ESTILOS_FUNDO, FREQUENCIAS_FUNDO, fmtIntervaloFundo } from '@/infrastructure/fundo/pexels'
@@ -1237,6 +1238,139 @@ function CoberturaTabelas() {
 }
 
 /** Aba Aparência — estilo do fundo global + frequência de troca. */
+function AbaAliquotas() {
+  const rateIBS = useReferencia((s) => s.rateIBS)
+  const rateCBS = useReferencia((s) => s.rateCBS)
+  const fonte = useReferencia((s) => s.fonte)
+  const ato = useReferencia((s) => s.ato)
+  const [ibsTxt, setIbsTxt] = useState(() => String(rateIBS))
+  const [cbsTxt, setCbsTxt] = useState(() => String(rateCBS))
+  const [salvando, setSalvando] = useState(false)
+
+  useEffect(() => {
+    setIbsTxt(String(rateIBS))
+    setCbsTxt(String(rateCBS))
+  }, [rateIBS, rateCBS])
+
+  const limpa = (v: string) => Number(String(v ?? '').replace(',', '.'))
+  const ibsNum = limpa(ibsTxt)
+  const cbsNum = limpa(cbsTxt)
+  const somaValid = Number.isFinite(ibsNum) && Number.isFinite(cbsNum) && ibsNum >= 0 && cbsNum >= 0 && ibsNum <= 100 && cbsNum <= 100 && ibsNum + cbsNum > 0
+  const somaFmt = Number.isFinite(ibsNum) && Number.isFinite(cbsNum) ? `${(ibsNum + cbsNum).toFixed(2).replace('.', ',')}%` : '—'
+  const alterado =
+    Math.abs(rateIBS - ibsNum) > 0.0001 || Math.abs(rateCBS - cbsNum) > 0.0001
+
+  const fontePill =
+    fonte === 'usuario'
+      ? 'bg-violet-100 text-violet-800 dark:bg-violet-950/40 dark:text-violet-300'
+      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+  const fonteLabel =
+    fonte === 'usuario' ? '✍️ Seu ajuste' : fonte === 'parametros' ? '✅ Tabela do programa' : '⚠️ Estimativa'
+
+  const salvar = async () => {
+    if (!somaValid || !alterado) return
+    setSalvando(true)
+    try {
+      await salvarAliquotasReferencia({ refIBS: ibsNum, refCBS: cbsNum })
+      toast(`Alíquotas salvas — IBS ${ibsNum.toFixed(2).replace('.', ',')}% · CBS ${cbsNum.toFixed(2).replace('.', ',')}% · soma ${(ibsNum + cbsNum).toFixed(2).replace('.', ',')}%.`, 'ok')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Não foi possível salvar as alíquotas.', 'err')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const restaurar = async () => {
+    setSalvando(true)
+    try {
+      await restaurarAliquotasReferenciaPadrao()
+      toast('Alíquotas restauradas para o padrão do programa.', 'ok')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-gradient-to-br from-brand-50 via-white to-white p-4 shadow-card dark:from-brand-950/40 dark:via-slate-900 dark:to-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-500">
+            🧮 Alíquotas de referência
+          </h3>
+          <span className={`pill ${fontePill}`}>{fonteLabel}</span>
+        </div>
+        <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+          IBS/CBS usados em todo o cálculo do sistema: Consulta NCM/NBS, simulador dos cartões, apuração do
+          XML, relatórios e exportações. Ajuste aqui quando a LC 214/2025 for regulamentada — vale para esta máquina.
+        </p>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Campo label="Alíquota IBS (%)" obrigatorio dica="Referência de IBS — 2027">
+            <Texto
+              type="number"
+              step="0.01"
+              min={0}
+              max={100}
+              mono
+              value={ibsTxt}
+              onChange={(e) => setIbsTxt(e.target.value.replace(/[^\d.,-]/g, ''))}
+              placeholder="19,00"
+              inputMode="decimal"
+              aria-label="Alíquota de referência do IBS"
+            />
+          </Campo>
+          <Campo label="Alíquota CBS (%)" obrigatorio dica="Referência de CBS — 2027">
+            <Texto
+              type="number"
+              step="0.01"
+              min={0}
+              max={100}
+              mono
+              value={cbsTxt}
+              onChange={(e) => setCbsTxt(e.target.value.replace(/[^\d.,-]/g, ''))}
+              placeholder="11,30"
+              inputMode="decimal"
+              aria-label="Alíquota de referência da CBS"
+            />
+          </Campo>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950/40">
+          <div className="text-sm">
+            <span className="font-bold">Soma IBS + CBS:</span>{' '}
+            <span className="font-mono font-black text-brand-700 dark:text-aurum-300">{somaFmt}</span>
+          </div>
+          <div className="text-[10px] text-slate-400">edição local desta máquina</div>
+        </div>
+
+        <p className="mt-2 text-[10px] leading-relaxed text-slate-400">
+          Base legal vigente: {ato}. Este ajuste fica salvo no banco local e acompanha o backup/restauração.
+        </p>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Btn className="flex-1 sm:flex-none" onClick={() => void restaurar()} title="Apaga o seu ajuste e volta à tabela do programa">
+            ↩ Restaurar padrão
+          </Btn>
+          <Btn
+            variante="primary"
+            className="flex-1"
+            carregando={salvando}
+            disabled={!somaValid || !alterado}
+            onClick={() => void salvar()}
+          >
+            {salvando ? 'Salvando…' : '💾 Salvar alíquotas'}
+          </Btn>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-[11px] leading-relaxed text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+        <strong>Importante:</strong> a mudança vale para esta máquina (e vai dentro do backup JSON). Os cartões e relatórios
+        passam a usar os novos valores na hora — não é preciso reiniciar. Se o ato vigente mudar depois, ajuste aqui novamente.
+      </div>
+    </section>
+  )
+}
+
 function AbaAparencia() {
   const tema = useFundo((s) => s.tema)
   const setTema = useFundo((s) => s.setTema)
@@ -1460,7 +1594,8 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
   const [cor, setCor] = useState('#0f215c')
   const [mostrarPreview, setMostrarPreview] = useState(false)
   const [contagens, setContagens] = useState<Record<string, number>>({})
-  const [aba, setAba] = useState<'emitente' | 'aparencia' | 'bases' | 'backup' | 'atualizacao'>('emitente')
+  const [refsNbs, setRefsNbs] = useState<{ nomenclatura: number | null; depara: number | null }>({ nomenclatura: null, depara: null })
+  const [aba, setAba] = useState<'emitente' | 'aparencia' | 'bases' | 'backup' | 'atualizacao' | 'referencia'>('emitente')
   const [buscandoCnpj, setBuscandoCnpj] = useState(false)
   const [cffStatus, setCffStatus] = useState<Awaited<ReturnType<typeof statusSincronizacao>> | null>(null)
   const [versao, setVersao] = useState<string>('—')
@@ -1474,6 +1609,10 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
   useEffect(() => {
     if (!aberto) return
     void contarTodos().then(setContagens).catch(() => {})
+    void import('@/infrastructure/base/nbs-oficial')
+      .then((m) => m.contarNbsOficiais())
+      .then(setRefsNbs)
+      .catch(() => setRefsNbs({ nomenclatura: null, depara: null }))
     void recarregarStatus()
     void statusSincronizacao().then(setCffStatus)
     void versaoInstalada().then(setVersao)
@@ -1600,18 +1739,20 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
       aberto={aberto}
       onFechar={onFechar}
       titulo="Configurações"
-      subtitulo="Emitente, aparência, bases, atualização e backup"
+      subtitulo="Emitente, aparência, alíquotas, bases, atualização e backup"
       largura="max-w-2xl"
       rodape={
         <>
           <Btn onClick={onFechar}>Fechar</Btn>
-          <Btn
-            variante="primary"
-            carregando={acaoSalvarEmitente.carregando}
-            onClick={acaoSalvarEmitente.executar}
-          >
-            {acaoSalvarEmitente.carregando ? 'Salvando…' : '💾 Salvar emitente'}
-          </Btn>
+          {aba === 'emitente' ? (
+            <Btn
+              variante="primary"
+              carregando={acaoSalvarEmitente.carregando}
+              onClick={acaoSalvarEmitente.executar}
+            >
+              {acaoSalvarEmitente.carregando ? 'Salvando…' : '💾 Salvar emitente'}
+            </Btn>
+          ) : null}
         </>
       }
     >
@@ -1621,6 +1762,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
             ['emitente', '🏷 Emitente'],
             ['aparencia', '🎨 Aparência'],
             ['bases', '🗂 Bases'],
+            ['referencia', '🧮 Alíquotas'],
             ['atualizacao', '🔄 Atualização'],
             ['backup', '💾 Backup'],
           ] as const
@@ -1746,6 +1888,7 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
         </section>
         ) : null}
 
+        {aba === 'referencia' ? <AbaAliquotas /> : null}
         {aba === 'aparencia' ? <AbaAparencia /> : null}
 
         {aba === 'bases' ? (
@@ -1780,6 +1923,8 @@ function ModalConfig({ aberto, onFechar }: { aberto: boolean; onFechar: () => vo
             <StatTabela icone="📚" rotulo="Referência" valor={fmtQtd(status?.referencia)} chip="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300" />
             <StatTabela icone="📖" rotulo="Nomenclatura" valor={fmtQtd(status?.nomenclatura)} chip="bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300" />
             <StatTabela icone="🧮" rotulo="NBS" valor={fmtQtd(status?.nbs)} chip="bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300" />
+            <StatTabela icone="📑" rotulo="NBS oficial" valor={fmtQtd(refsNbs.nomenclatura)} chip="bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300" />
+            <StatTabela icone="🔁" rotulo="NBS DE-PARA" valor={fmtQtd(refsNbs.depara)} chip="bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-200" />
             <StatTabela icone="🗂" rotulo="CNAE" valor={fmtQtd(status?.cnae)} chip="bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300" />
             <StatTabela icone="🏢" rotulo="Empresas" valor={fmtQtd(contagens.empresas)} chip="bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300" />
             <StatTabela icone="📦" rotulo="Produtos" valor={fmtQtd(contagens.produtos)} chip="bg-orange-100 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300" />

@@ -58,6 +58,28 @@ export function CartaoEnxuto({
   const negado = bloqueios?.some((b) => b.permitido === false) ?? false
   const obs = observacoesFiscais(visivel.codigo, visivel, nomenclatura ?? null)
   const [fiscalAberto, setFiscalAberto] = useState(false)
+  // Descrição oficial NBS 2.00 (artefato estático da base) — carregada sob demanda,
+  // com cache; ausência do artefato degrada para o comportamento anterior.
+  const [descricaoOficialNbs, setDescricaoOficialNbs] = useState<string | null>(null)
+  useEffect(() => {
+    if (!ehNbs) {
+      setDescricaoOficialNbs(null)
+      return
+    }
+    let vivo = true
+    import('@/infrastructure/base/nbs-oficial')
+      .then(({ descricaoNbsOficial }) => descricaoNbsOficial(visivel.codigo))
+      .then((item) => {
+        if (vivo) setDescricaoOficialNbs(item?.descricao ?? null)
+      })
+      .catch(() => {
+        if (vivo) setDescricaoOficialNbs(null)
+      })
+    return () => {
+      vivo = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ehNbs, visivel.codigo])
   const rotuloCodigo = ehNbs ? 'NBS' : 'NCM'
   const codigoFormatado = visivel.codigoFormatado || (ehNbs ? fmtNbs(visivel.codigo) : fmtNcm(visivel.codigo))
   // Legenda do serviço (NBS): nome da atividade + item LC 116 + texto do item,
@@ -112,6 +134,25 @@ export function CartaoEnxuto({
               </div>
               <p className="mt-0.5 text-[15px] font-semibold leading-relaxed text-brand-900 dark:text-brand-100">
                 {nomenclatura.descricao}
+              </p>
+            </div>
+          </div>
+        ) : null}
+        {ehNbs && descricaoOficialNbs ? (
+          <div
+            className="mt-2 flex items-start gap-2 rounded-xl border border-teal-200/60 border-l-4 border-l-teal-500 bg-teal-50/70 px-3 py-2 dark:border-aurum-900/50 dark:border-l-teal-400 dark:bg-teal-950/30"
+            title="Descrição oficial do NBS — nomenclatura brasileira de serviços (NBS 2.00)"
+          >
+            <span aria-hidden="true" className="mt-0.5 shrink-0 text-base leading-none">📋</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] font-black uppercase tracking-wider text-teal-700/80 dark:text-teal-200/70">
+                Descrição do NBS pela tabela oficial (NBS 2.00)
+              </div>
+              <p className="mt-0.5 text-[15px] font-semibold leading-relaxed text-teal-950 dark:text-teal-100">
+                {descricaoOficialNbs}
+              </p>
+              <p className="mt-0.5 text-[10px] leading-snug text-teal-800/70 dark:text-teal-200/50">
+                Portaria Conjunta RFB/SCS nº 2.000/2018 · painel MDIC
               </p>
             </div>
           </div>

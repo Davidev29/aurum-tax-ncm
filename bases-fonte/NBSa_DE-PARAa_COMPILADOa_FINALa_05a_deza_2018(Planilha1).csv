@@ -1,0 +1,1469 @@
+NBS 1.1;;NBS 2.0;
+1.01;Serviços de construção;;
+1.0101;Serviços de construção de edificações residenciais ;;
+1.0101.10.00 ;Serviços de construção de edificações residenciais de um e dois pavimentos ;1.0101.11.00;Serviços de construção de edificações residenciais de um e dois pavimentos
+1.0101.20.00 ;Serviços de construção de edificações residenciais com mais de dois pavimentos ;1.0101.12.00;Serviços de construção de edificações residenciais com mais de dois pavimentos
+1.0102;Serviços de construção de edificações não residenciais ;;
+1.0102.10.00 ;Serviços de construção de edificações industriais ;1.0101.21.00;Serviços de construção de edificações industriais
+1.0102.20.00 ;Serviços de construção de edificações comerciais ;1.0101.22.00;Serviços de construção de edificações comerciais
+1.0102.90.00 ;Outros serviços de construção de edificações não residenciais ;1.0101.29.00;Serviços de construção de edificações não residenciais não classificados em subposições anteriores
+;;1.0101.30.00;Serviços de construção de edificações de uso misto (residencial e não residencial)
+1.0103;Serviços de construção de autoestradas (exceto autoestradas elevadas), ruas, estradas, estradas férreas e pistas de pouso e decolagem em aeroportos e infraestrutura aeroportuária ;;
+1.0103.10.00 ;Serviços de construção de autoestradas (exceto autoestradas elevadas), ruas e estradas. ;1.0102.11.00;Serviços de construção de autoestradas (exceto autoestradas elevadas), ruas e estradas
+1.0103.20.00 ;Serviços de construção de estradas férreas ;1.0102.12.00;Serviços de construção de ferrovias
+1.0103.30.00 ;Serviços de construção de pistas de pouso e decolagem em aeroportos ;1.0102.13.00;Serviços de construção de pistas de pouso e decolagem em aeroportos e de infraestrutura aeroportuária
+1.0103.40.00 ;Serviços de construção de infraestrutura aeroportuária ;1.0102.13.00;Serviços de construção de pistas de pouso e decolagem em aeroportos e de infraestrutura aeroportuária
+1.0104.00.00 ;Serviços de construção de pontes, autoestradas elevadas e túneis ;1.0102.20.00;Serviços de construção de pontes, autoestradas elevadas e túneis
+1.0105;Serviços de construção de portos e sua infraestrutura;;
+1.0105.1 ;Serviços de construção de infraestrutura de proteção e acesso aquaviário ;;
+1.0105.11.00 ;Serviços de construção de guias-corrente, espigões, quebra-mares, canais de acesso, bacias de evolução, balizamento e sinalização, derrocagens e dragagens. ;1.0102.31.00;Serviços de construção de infraestrutura de proteção e acesso aquaviário
+1.0105.19.00 ;Outros serviços de construção de infraestrutura de proteção e acesso aquaviário ;1.0102.31.00;Serviços de construção de infraestrutura de proteção e acesso aquaviário
+1.0105.2 ;Serviços de construção de infraestrutura de acostagem aquaviária ;;
+1.0105.21.00 ;Serviços de construção de ancoradouros, docas, cais, pontes, dolfins e píeres ;1.0102.32.00;Serviços de construção de infraestrutura de acostagem aquaviária
+1.0105.29.00 ;Outros serviços de construção de infraestrutura de acostagem aquaviária ;1.0102.32.00;Serviços de construção de infraestrutura de acostagem aquaviária
+1.0105.3 ;Serviços de construção de infraestrutura terrestre nos portos ;;
+1.0105.31.00 ;Serviços de construção de armazéns, inclusive os especiais, silos, pátios e vias de circulação ;1.0102.33.00;Serviços de construção de infraestrutura terrestre e de obras de engenharia afins nos portos
+1.0105.39.00 ;Outros serviços de construção de infraestrutura terrestre nos portos ;1.0102.33.00;Serviços de construção de infraestrutura terrestre e de obras de engenharia afins nos portos
+1.0106;Serviços de construção de barragens, adutoras, sistemas de irrigação e de outros sistemas de captação, adução, contenção e armazenamento de água ;;
+1.0106.10.00 ;Serviços de construção de barragens e adutoras ;1.0102.34.00;Serviços de construção de barragens
+;;1.0102.35.10;Serviços de construção de adutoras em conduto livre
+1.0106.2 ;Serviços de construção de sistemas de irrigação, de esgotos e de unidades para tratamento e purificação de água ;;
+1.0106.21.00 ;Serviços de construção de sistemas de irrigação ;1.0102.35.20;Serviços de construção de sistemas de irrigação  
+1.0106.22.00 ;Serviços de construção de sistemas de esgotos ;1.0102.53.10;Serviços de construção de sistemas de esgotos
+1.0106.23.00 ;Serviços de construção de sistemas de unidades para tratamento e purificação de água ;1.0102.53.20;Serviços de construção de sistemas de estações para elevação, tratamento e purificação de água
+1.0106.90.00 ;Outros serviços de construção de sistemas hídricos ;1.0102.35.30;Serviços de construção relacionada ao controle dos cursos de água, inclusive canalização
+1.0107;Serviços de construção de dutos e linhas de comunicação, de longo curso, e de linhas de transmissão de alta tensão ;;
+1.0107.1 ;Serviços de construção de dutos de longo curso ;;
+1.0107.11.00 ;Serviços de construção de dutos de longo curso para o transporte de petróleo, seus derivados, e gás ;1.0102.41.10;Serviços de construção de dutos de longo curso para o transporte de petróleo, seus derivados, e gás
+1.0107.12.00 ;Serviços de construção de dutos de longo curso para o transporte e escoamento de águas e esgotos ;1.0102.41.20;Serviços de construção de dutos de longo curso para o transporte e escoamento de águas
+;;1.0102.41.90;Serviços de construção de dutos de longo curso não classificados em subposições anteriores
+;;1.0102.53.10;Serviços de construção de sistemas de esgotos
+;;1.0102.53.20;Serviços de construção de sistemas de estações para elevação, tratamento e purificação de água
+1.0107.19.00 ;Serviços de construção de outros dutos de longo curso ;1.0102.41.90;Serviços de construção de dutos de longo curso não classificados em subposições anteriores
+1.0107.2 ;Serviços de construção de linhas de comunicação de longo curso e linhas de transmissão de alta tensão ;;
+1.0107.21.00 ;Serviços de construção de linhas de comunicação de longo curso ;1.0102.42.10;Serviços de construção de linhas de comunicação de longo curso
+1.0107.22 ;Serviços de construção de linhas de transmissão de alta tensão ;;
+1.0107.22.10 ;Serviços de construção de linhas de transmissão de alta tensão em corrente contínua ;1.0102.42.20;Serviços de construção de linhas de transmissão de alta tensão
+1.0107.22.20 ;Serviços de construção de linhas de transmissão de alta tensão em corrente alternada;1.0102.42.20;Serviços de construção de linhas de transmissão de alta tensão
+10108;Serviços de construção de dutos e linhas locais de transmissão, de baixa e média tensão, e de comunicação e outros serviços de construção relacionados ;;
+1.0108.10.00 ;Serviços de construção de dutos locais ;1.0102.51.00;Serviços de construção de dutos locais
+1.0108.2 ;Serviços de construção de linhas locais de transmissão, de baixa e média tensão, e de comunicação e outros serviços relacionados ;;
+1.0108.21 ;Serviços de construção de linhas locais de transmissão, de baixa e média tensão, e de comunicação ;;
+1.0108.21.10 ;Serviços de construção de linhas locais de transmissão de baixa e média tensão ;1.0102.52.20;Serviços de construção de linhas locais de transmissão de baixa e média tensão
+1.0108.21.20 ;Serviços de construção de linhas locais de comunicação ;1.0102.52.10;Serviços de construção de linhas locais de comunicação
+1.0108.29.00 ;Outros serviços de construção relacionados ;1.0102.52.10;Serviços de construção de linhas locais de comunicação
+;;1.0102.52.20;Serviços de construção de linhas locais de transmissão de baixa e média tensão
+1.0109;Serviços de construção de usinas de geração de energia e subestações de força ;;
+1.0109.10.00 ;Serviços de construção de usinas de geração de energia ;1.0102.61.00;Serviços de construção de usinas de geração de energia
+1.0109.20.00 ;Serviços de construção de subestações de força ;1.0102.61.00;Serviços de construção de usinas de geração de energia
+1.0110;Serviços de construção de minas e suas unidades industriais, exceto usinas de geração de energia e subestações de força ;;
+1.0110.10.00 ;Serviços de construção de minas ;1.0102.70.00;Serviços de construção de minas e suas unidades industriais
+1.0110.20.00 ;Serviços de construção de unidades industriais relacionadas à mineração ;1.0102.70.00;Serviços de construção de minas e suas unidades industriais
+1.0111.00.00 ;Serviços de construção de instalações para recreação e atividades desportivas ao ar livre ;1.0102.80.00;Serviços de construção de instalações para recreação e atividades desportivas ao ar livre
+1.0112.00.00 ;Outros serviços de construção civil não classificados nas posições anteriores ;1.0102.90.00;Serviços de construção de obras de engenharia civil não classificados em subposições anteriores
+1.0113.00.00 ;Serviços de demolição ;1.0103.10.00;Serviços de demolição
+1.0114.00.00 ;Serviços de preparação de terrenos e construção de canteiros de obras ;1.0103.20.00;Serviços de preparação de terrenos e de canteiros de obras
+1.0115.00.00 ;Serviços de escavação e remoção de terra ;1.0103.30.00;Serviços de escavação e remoção de terra
+10116;Serviços de perfuração de poços de água e de instalação de sistemas sépticos ;;
+1.0116.10.00 ;Serviços de perfuração de poços de água ;1.0103.41.00;Serviços de perfuração de poços de água
+1.0116.20.00 ;Serviços de instalação de sistemas sépticos ;1.0103.42.00;Serviços de instalação de sistemas sépticos
+1.0117.00.00 ;Serviços de montagem e edificação de construções pré-fabricadas ;1.0104.00.00;Serviços de montagem e de edificação de construções pré-fabricadas
+10118;Serviços de fundação e estaqueamento ;;
+1.0118.10.00 ;Serviços de estaqueamento ;1.0105.11.00;Serviços de estaqueamento
+1.0118.20.00 ;Serviços de fundação ;1.0105.12.00;Serviços de fundação
+10119;Serviços de construção de estruturas ;;
+1.0119.10.00 ;Serviços de construção de estruturas de prédios ;1.0105.21.00;Serviços de construção de estruturas de edificações
+1.0119.20.00 ;Serviços de construção de estruturas de telhados e coberturas ;1.0105.22.00;Serviços de construção de estruturas de telhados e coberturas
+1.0120.00.00 ;Serviços de construção de telhados e coberturas e serviços de impermeabilização ;1.0105.30.00;Serviços de construção de telhados e coberturas e serviços de impermeabilização
+1.0121.00.00 ;Serviços de concretagem ;1.0105.40.00;Serviços de concretagem
+1.0122.00.00 ;Serviços de estruturas de aço estrutural ;1.0105.50.00;Serviços de montagem de estruturas de aço
+1.0123.00.00 ;Serviços de alvenaria ;1.0105.60.00;Serviços de alvenaria
+1.0124.00.00 ;Serviços de andaimes ;1.0105.70.00;Serviços de andaimes
+1.0125.00.00 ;Outros serviços especializados de construção ;1.0105.90.00;Serviços especializados de construção não classificados em subposições anteriores
+1.0126;Serviços de instalação elétrica ;;
+1.0126.10.00 ;Serviços de instalação de fiação elétrica e componentes ;1.0106.11.00;Serviços de instalação de fiação elétrica e componentes
+1.0126.20.00 ;Serviços de instalação de alarmes contra incêndio ;1.0106.12.00;Serviços de instalação de alarmes contra incêndio
+1.0126.30.00 ;Serviços de instalação de sistemas de alarmes antifurto ;1.0106.13.00;Serviços de instalação de sistemas de alarmes antifurto
+1.0126.40.00 ;Serviços de instalação de antenas residenciais ;1.0106.14.00;Serviços de instalação de antenas residenciais
+1.0126.90.00 ;Outros serviços de instalação elétrica ;1.0106.19.00;Serviços de instalação elétrica não classificados em subposições anteriores
+1.0127;Serviços de tubulação para fornecimento e escoamento de águas ;;
+1.0127.10.00 ;Serviços de tubulação para fornecimento de água ;1.0106.21.00;Serviços de instalação de tubulação para fornecimento de água
+1.0127.20.00 ;Serviços de tubulação de escoamento de água ;1.0106.22.00;Serviços de instalação de tubulação para escoamento de água
+1.0128;Serviços de instalação de aquecimento, ventilação e ar condicionado ;;
+1.0128.10.00 ;Serviços de instalação de aquecimento ;1.0106.31.00;Serviços de instalação de equipamentos de aquecimento
+1.0128.20.00 ;Serviços de instalação de ventilação e ar condicionado ;1.0106.32.00;Serviços de instalação de equipamentos de ventilação e de ar condicionado
+1.0129.00.00 ;Serviços de instalação de gás ;1.0106.40.00;Serviços de instalação de gás
+1.0130.00.00 ;Serviços de isolamento ;1.0106.50.00;Serviços de instalação de isolamentos
+10131;Outros serviços de instalação ;;
+1.0131.10.00 ;Serviços de instalação de elevadores, esteiras e escadas rolantes ;1.0106.60.00;Serviços de instalação de elevadores, esteiras e escadas rolantes
+1.0131.90.00 ;Outros serviços de instalação ;1.0106.90.00;Serviços de instalação não classificados em subposições anteriores
+1.0132.00.00 ;Serviços de vidraçaria ;1.0107.10.00;Serviços de vidraçaria
+1.0133.00.00 ;Serviços de gesso ;1.0107.20.00;Serviços de gesso e de estuque
+1.0134.00.00 ;Serviços de pintura ;1.0107.30.00;Serviços de pintura
+1.0135.00.00 ;Serviços de assentamento de revestimentos em paredes e pisos ;1.0107.40.00;Serviços de revestimento de pisos e de paredes
+1.0136.00.00 ;Outros serviços de cobertura de pisos e paredes e papel de parede ;1.0107.40.00;Serviços de revestimento de pisos e de paredes
+1.0137.00.00 ;Serviços de carpintaria e serralheria, inclusive suas instalações e montagens ;1.0107.50.00;Serviços de carpintaria e de serralharia
+1.0138.00.00 ;Serviços de instalação de cercas e grades ;1.0107.60.00;Serviços de instalação de cercas e grades
+1.0139.00.00 ;Outros serviços de acabamento das construções ;1.0107.90.00;Serviços de acabamento não classificados em subposições anteriores
+1.02;"Serviços de distribuição de mercadorias; serviços de despachante aduaneiro";;
+1.0201.00.00;Serviços de agentes de distribuição de mercadorias ;1.0201.00.00;Serviços de intermediação na distribuição de mercadorias
+1.0202.00.00;Comércio atacadista;1.0202.00.00;Comércio atacadista
+1.0203.00.00;Comércio varejista ;1.0203.00.00;Comércio varejista
+1.0204;Serviços de despachante aduaneiro;;
+1.0204.10.00;Serviços de despachante aduaneiro na importação;1.0204.00.00;Serviços de despacho aduaneiro
+1.0204.20.00;Serviços de despachante aduaneiro na exportação;1.0204.00.00;Serviços de despacho aduaneiro
+1.0205.00.00;Serviços de agentes na comercialização de energia elétrica ;1.0205.00.00;Serviços de intermediação na comercialização de energia elétrica
+1.03;Fornecimento de alimentação e bebidas e serviços de hospedagem;;
+1.0301;Fornecimento de alimentação, incluindo refeições;;
+1.0301.10.00;Fornecimento de refeições acompanhado de serviços de restaurante;1.0301.10.00;Fornecimento de refeições acompanhado de serviços de restaurante
+1.0301.2;Fornecimento de refeições com serviços limitados de restaurante;;
+1.0301.21.00;Fornecimento de refeições pelo sistema de autosserviço (self-service);1.0301.21.00;Fornecimento de refeições pelo sistema de autosserviço (self-service)
+1.0301.22.00;"Fornecimento de comidas do tipo ""comidas rápidas"" (fast-food)";1.0301.22.00;Fornecimento de comidas rápidas (fast-food)
+1.0301.29.00;Outros fornecimentos de refeições com serviços limitados de restaurante;1.0301.29.00;Fornecimento de refeições com serviços limitados de restaurante não classificado em subposições anteriores
+1.0301.3;Fornecimento de alimentação, incluindo refeições, sob contrato;;
+1.0301.31.00;Fornecimento de alimentação para eventos, sob contrato;1.0301.31.00;Fornecimento de alimentação para eventos
+1.0301.32.00;Fornecimento de alimentação, incluindo refeições, para operadores de transportes (comissaria ou catering);1.0301.32.00;Fornecimento de alimentação para operadores de transportes (comissaria ou catering)
+1.0301.39.00;Outros fornecimentos de alimentação, incluindo refeições, sob contrato;1.0301.39.00;Fornecimento de alimentação, incluindo refeições, sob contrato não classificado em subposições anteriores
+1.0301.90.00;Outros fornecimentos de alimentação;1.0301.90.00;Fornecimento de alimentação não classificado em subposições anteriores
+1.0302.00.00;Fornecimento de bebidas em bares, cervejarias e outros;1.0302.00.00;Fornecimento de bebidas em bares, cervejarias e outros
+1.0303;Serviços de hospedagem para visitantes;;
+1.0303.1;Serviços de quarto ou de unidades de hospedagem para visitantes;;
+1.0303.11.00;Serviços de quarto ou de unidades de hospedagem para visitantes, com serviços diários de faxina;1.0303.11.00;Serviços de hospedagem em quartos ou unidades de hospedagem para visitantes, com serviços diários de faxina
+1.0303.12.00;Serviços de quarto ou de unidades de hospedagem para visitantes, sem serviços diários de faxina;1.0303.12.00;Serviços de hospedagem em quartos ou unidades de hospedagem para visitantes, sem serviços diários de faxina
+1.0303.13.00;Serviços de quarto ou de unidades de hospedagem para visitantes, em propriedades partilhadas;1.0303.13.00;Serviços de hospedagem em quartos ou unidades de hospedagem para visitantes, em propriedades partilhadas
+1.0303.14.00;Serviços de quarto ou de unidades de hospedagem para visitantes, em quartos de múltipla ocupação;1.0303.14.00;Serviços de hospedagem para visitantes, em quartos de múltipla ocupação
+1.0303.20.00;Serviços de acampamentos turísticos (camping);1.0303.20.00;Serviços de acampamentos turísticos (camping)
+1.0303.90.00;Outros serviços de hospedagem para visitantes;1.0303.90.00;Serviços de hospedagem para visitantes não classificados em subposições anteriores
+1.0304;Outros serviços de hospedagem;;
+1.0304.10.00;Serviços de quarto ou de unidades de hospedagem para estudantes em residências estudantis;1.0304.10.00;Serviços de hospedagem em quartos ou unidades de hospedagem para estudantes em residências estudantis
+1.0304.20.00;Serviços de quarto ou de unidades de hospedagem para trabalhadores em hotéis ou campos;1.0304.20.00;Serviços de hospedagem em quartos ou unidades de hospedagem para trabalhadores em hotéis ou campos
+1.0304.90.00;Outros serviços de quarto ou de unidades de hospedagem;1.0304.90.00;Serviços de hospedagem, exceto para visitantes, não classificados em subposições anteriores
+1.04;Serviços de transporte de passageiros;;
+1.0401;Serviços de transporte de passageiros em áreas urbanas ou rurais, inclusive nas áreas metropolitanas ;;
+1.0401.1;Serviços de transporte terrestre de passageiros em áreas urbanas ou rurais, inclusive nas áreas metropolitanas;;
+1.0401.11;Serviços de transporte rodoviário urbano de passageiros, exceto em áreas metropolitanas ;;
+1.0401.11.10;Serviços prestados única e exclusivamente por meio de ônibus;1.0401.11.11;Serviços de transporte rodoviário local prestados exclusivamente por meio de ônibus
+;;1.0403.11.10;Serviços de transporte de passageiros prestados exclusivamente por meio de ônibus
+1.0401.11.90;Serviços prestados por meio de outros veículos rodoviários;1.0401.11.19;Serviços de transporte rodoviário local regular de passageiros, exceto em áreas metropolitanas, não classificados em subitens anteriores
+1.0401.12.00;Serviços de transporte rodoviário de passageiros nas áreas metropolitanas ;1.0401.11.20;Serviços de transporte rodoviário local regular de passageiros, em áreas metropolitanas 
+1.0401.13.00;Serviços de transporte ferroviário urbano ou rural, inclusive nas áreas metropolitanas, de passageiros;1.0401.16.10;Serviços de transporte ferroviário local de passageiros
+1.0401.14.00;Serviços de transporte metroviário (metrô) de passageiros ;1.0401.16.20;Serviços de transporte metroviário (metrô) local de passageiros
+1.0401.15.00;Serviços de transporte integrado urbano ou rural, inclusive nas áreas metropolitanas, de passageiros;1.0401.30.00;Serviços de transporte integrado local de passageiros
+1.0401.16.00;Serviços de taxi;1.0401.13.00;Serviços de táxi
+1.0401.17.00;Serviço de aluguel de carros com motorista;1.0401.14.00;Serviços de carro com motorista, exceto táxi
+1.0401.19;Outros serviços terrestres de transporte de passageiros ;;
+1.0401.19.10;Serviços de transporte escolar;1.0401.12.10;Serviços de transporte escolar
+1.0401.19.90;Outros serviços terrestres de transporte de passageiros ;1.0401.12.20;Serviços de transporte para aeroportos (shuttle)
+;;1.0401.12.90;Serviços especiais de transporte rodoviário local regular de passageiros não classificados em itens anteriores
+;;1.0401.17.90 ;Serviços de transporte terrestre para passeios turísticos (sightseeing), não classificados em itens anteriores
+;;1.0401.19.00;Serviços de transporte terrestre local de passageiros, não classificados em subposições anteriores
+1.0401.2;Serviços de transporte aquaviário de passageiros;;
+1.0401.21.00;Serviços de transporte por navegação interior de passageiros por embarcações para travessia ;1.0401.21.10;Serviços de transporte aquaviário local de passageiros, por navegação interior, em embarcações para travessia
+;;1.0402.21.10;Serviços de transporte aquaviário de passageiros, por navegação interior, em embarcações para travessia
+;;1.0403.21.10;Serviços de transporte aquaviário internacional de passageiros, por navegação interior, em embarcações para travessia
+1.0401.22.00;Serviços de transporte por navegação interior de passageiros por embarcações para cruzeiros;1.0401.21.20;Serviços de transporte aquaviário local de passageiros, por navegação interior, em embarcações para cruzeiros
+;;1.0402.21.20;Serviços de transporte aquaviário de passageiros, por navegação interior, em embarcações para cruzeiros
+;;1.0403.21.20;Serviços de transporte aquaviário internacional de passageiros, por navegação interior, em embarcações para cruzeiros
+1.0401.29.00;Outros serviços de transporte por navegação interior de passageiros;1.0401.21.90;Serviços de transporte aquaviário local de passageiros, por navegação interior, não classificados em itens anteriores
+;;1.0402.21.90;Serviços de transporte aquaviário nacional, exceto local, de passageiros, por navegação interior, não classificados em itens anteriores
+;;1.0403.21.90;Serviços de transporte aquaviário internacional de passageiros, por navegação interior, não classificados em itens anteriores
+1.0401.90.00;Outros serviços de transporte de passageiros em áreas urbanas ou rurais, inclusive metropolitanas;1.0401.19.00;Serviços de transporte terrestre local de passageiros, não classificados em subposições anteriores
+;;1.0401.29.00 ;Serviços de transporte aquaviário local de passageiros, não classificados em subposições anteriores
+;;1.0401.30.00;Serviços de transporte integrado local de passageiros
+;;1.0401.49.00;Serviços de transporte aéreo local de passageiros, não classificados em subposições anteriores
+;;1.0401.90.00;Serviços de transporte local de passageiros, não classificados em subposições anteriores
+1.0402;"Serviços de transporte para passeios turísticos (sightseeing); serviços de fretamento, exceto aéreo";;
+1.0402.1;Serviços de transporte para passeios turísticos (sightseeing);;
+1.0402.11.00;Serviços de transporte rodoviário para passeios turísticos (sightseeing);1.0401.17.10;Serviços de transporte rodoviário para passeios turísticos (sightseeing)
+1.0402.12.00;Serviços de transporte ferroviário para passeios turísticos (sightseeing);1.0401.17.20 ;Serviços de transporte ferroviário para passeios turísticos (sightseeing)
+1.0402.13.00;Serviços de transporte aquaviário para passeios turísticos (sightseeing);1.0401.23.00 ;Serviços de transporte aquaviário para passeios turísticos (sightseeing)
+1.0402.14.00;Serviços de transporte aéreo para passeios turísticos (sightseeing);1.0401.43.00 ;Serviços de transporte aéreo para passeios turísticos (sightseeing)
+1.0402.19.00;Outros serviços transporte para passeios turísticos (sightseeing);1.0401.17.90 ;Serviços de transporte terrestre para passeios turísticos (sightseeing), não classificados em itens anteriores
+1.0402.2;Serviços de fretamento, exceto aéreo;;
+1.0402.21.00;Serviços de fretamento contínuo;1.0401.15.10;Serviços de fretamento contínuo, local
+;;1.0402.13.10;Serviços de fretamento contínuo, nacional, exceto local
+1.0402.22.00;Serviços de fretamento eventual ou turístico;1.0401.15.20;Serviços de fretamento eventual ou turístico, local
+;;1.0401.22.00;Serviços de transporte aquaviário local de passageiros por fretamento
+;;1.0402.13.20;Serviços de fretamento eventual ou turístico, nacional, exceto local
+;;1.0402.23.00;Serviços de transporte aquaviário nacional, exceto local, de passageiros por fretamento
+;;1.0403.12.00;Serviços de transporte rodoviário internacional de passageiros por fretamento
+;;1.0403.24.00;Serviços de transporte aquaviário internacional de passageiros por fretamento
+1.0402.29.00;Outros serviços de fretamento, exceto aéreo;1.0401.15.20;Serviços de fretamento eventual ou turístico, local
+;;1.0401.22.00;Serviços de transporte aquaviário local de passageiros por fretamento
+;;1.0402.13.20;Serviços de fretamento eventual ou turístico, nacional, exceto local
+;;1.0402.23.00;Serviços de transporte aquaviário nacional, exceto local, de passageiros por fretamento
+;;1.0403.12.00;Serviços de transporte rodoviário internacional de passageiros por fretamento
+;;1.0403.24.00;Serviços de transporte aquaviário internacional de passageiros por fretamento
+1.0403;Serviços de transporte interestadual, inclusive interestadual semiurbano, e internacional, de passageiros, exceto os serviços de transporte aéreo;;
+1.0403.1;Serviços de transporte terrestre interestadual, inclusive interestadual semiurbano, e internacional de passageiros ;;
+1.0403.11;Serviços de transporte rodoviário interestadual, inclusive interestadual semiurbano, de passageiros;;
+1.0403.11.10;Serviços prestados única e exclusivamente por meio de ônibus;1.0402.11.10;Serviços de transporte rodoviário nacional, exceto local, prestados exclusivamente por meio de ônibus
+1.0403.11.90;Serviços prestados por meio de outros veículos rodoviários;1.0402.11.90;Serviços de transporte rodoviário nacional, exceto local, de passageiros, não classificados em subitens anteriores
+1.0403.12.00;Serviços de transporte ferroviário interestadual, inclusive interestadual semiurbano, de passageiros;1.0402.14.00;Serviços de transporte ferroviário nacional, exceto local, de passageiros
+1.0403.19.00;Outros serviços terrestres de transporte interestadual, inclusive interestadual semiurbano, não classificados em outra posição, e de transporte internacional de passageiros;1.0402.19.00;Serviços de transporte terrestre nacional, exceto local, de passageiros, não classificados em subposições anteriores
+;;1.0403.19.00;Serviços de transporte terrestre internacional de passageiros não classificados em subposições anteriores
+1.0403.2;Serviços de transporte aquaviário interestadual, inclusive interestadual semiurbano, e internacional de passageiros;;
+1.0403.21.00;Serviços de transporte interestadual, inclusive interestadual semiurbano, por navegação interior, de passageiros por embarcações para travessia ;1.0402.21.10;Serviços de transporte aquaviário de passageiros, por navegação interior, em embarcações para travessia
+1.0403.22.00;Serviços de transporte interestadual, inclusive interestadual semiurbano, por navegação interior, de passageiros por embarcações para cruzeiros;1.0402.21.20;Serviços de transporte aquaviário de passageiros, por navegação interior, em embarcações para cruzeiros
+1.0403.23.00;Serviços de transporte internacional de passageiros por embarcações para cruzeiros;1.0403.21.20;Serviços de transporte aquaviário internacional de passageiros, por navegação interior, em embarcações para cruzeiros
+;;1.0403.22.00;Serviços de transporte aquaviário internacional costeiro de passageiros
+;;1.0403.23.00;Serviços de transporte aquaviário internacional transoceânico de passageiros
+1.0403.29.00;Outros serviços de transporte aquaviário interestadual, inclusive interestadual semiurbano, de passageiros;1.0402.29.00;Serviços de transporte aquaviário nacional, exceto local, de passageiros, não classificados em subposições anteriores
+1.0403.90.00;Outros serviços de transporte interestadual, inclusive interestadual semiurbano, e internacional de passageiros, exceto os serviços de transporte aéreo;1.0402.90.00;Serviços de transporte nacional, exceto local, de passageiros, não classificados em subposições anteriores
+;;1.0402.22.00;Serviços de transporte aquaviário nacional costeiro de passageiros
+;;1.0403.11.90;Serviços de transporte rodoviário internacional de passageiros não classificados em itens anteriores
+;;1.0403.13.10;Serviços de transporte internacional ferroviário de passageiros
+;;1.0403.13.90;Serviços de transporte internacional de passageiros por veículos sobre trilhos não classificados em itens anteriores
+;;1.0403.19.00;Serviços de transporte terrestre internacional de passageiros não classificados em subposições anteriores
+;;1.0403.21.90;Serviços de transporte aquaviário internacional de passageiros, por navegação interior, não classificados em itens anteriores
+;;1.0403.29.00;Serviços de transporte aquaviário internacional de passageiros, não classificados em subposições anteriores
+;;1.0403.90.00;Serviços de transporte internacional de passageiros, não classificados em subposições anteriores
+1.0404;Serviços de transporte aéreo de passageiros, inclusive por fretamento;;
+1.0404.1;Serviços de transporte aéreo, em linhas regulares;;
+1.0404.11.00;Serviços de transporte aéreo doméstico de passageiros ;1.0402.31.00;Serviços de transporte aéreo nacional, exceto local, regular de passageiros
+1.0404.12.00;Serviços de transporte aéreo internacional de passageiros ;1.0403.31.00;Serviços de transporte aéreo internacional regular de passageiros
+1.0404.20.00;Serviços de transporte aéreo por fretamento;1.0401.42.00;Serviços de transporte aéreo local de passageiros por fretamento
+;;1.0402.33.00;Serviços de transporte aéreo nacional, exceto local, de passageiros, por fretamento
+;;1.0403.33.00;Serviços de transporte aéreo internacional de passageiros por fretamento
+1.0404.9;Outros serviços de transporte aéreo de passageiros;;
+1.0404.91.00;Serviços de táxi aéreo;1.0401.41.00;Serviços de táxi aéreo local
+;;1.0402.32.00;Serviços de táxi aéreo nacional, exceto local
+;;1.0403.32.00;Serviços de táxi aéreo internacional
+1.0404.99.00;Outros serviços de transporte aéreo de passageiros;1.0401.49.00;Serviços de transporte aéreo local de passageiros, não classificados em subposições anteriores
+;;1.0402.39.00;Serviços de transporte aéreo nacional, exceto local, de passageiros, não classificados em subposições anteriores
+;;1.0403.39.00;Serviços de transporte aéreo internacional de passageiros, não classificados em subposições anteriores
+1.0490.00.00;Outros serviços de transporte de passageiros;1.0401.11.19;Serviços de transporte rodoviário local regular de passageiros, exceto em áreas metropolitanas não classificados em subitens anteriores
+;;1.0401.12.90;Serviços especiais de transporte rodoviário local regular de passageiros não classificados em itens anteriores
+;;1.0401.16.90;Serviços de transporte local de passageiros por veículos sobre trilhos não classificados em itens anteriores
+;;1.0401.17.90;Serviços de transporte terrestre para passeios turísticos (sightseeing) não classificados em itens anteriores
+;;1.0401.19.00;Serviços de transporte terrestre local de passageiros não classificados em subposições anteriores
+;;1.0401.21.90;Serviços de transporte aquaviário local de passageiros, por navegação interior não classificados em itens anteriores
+;;1.0401.29.00;Serviços de transporte aquaviário local de passageiros não classificados em subposições anteriores
+;;1.0401.49.00;Serviços de transporte aéreo local de passageiros não classificados em subposições anteriores
+;;1.0401.90.00;Serviços de transporte local de passageiros não classificados não classificados em subposições anteriores
+;;1.0402.11.90;Serviços de transporte rodoviário nacional, exceto local, de passageiros não classificados não classificados em subitens anteriores
+;;1.0402.19.00;Serviços de transporte terrestre nacional, exceto local, de passageiros não classificados não classificados em subposições anteriores
+;;1.0402.21.90;Serviços de transporte aquaviário nacional, exceto local, de passageiros, por navegação interior não classificados em itens anteriores
+;;1.0402.29.00;Serviços de transporte aquaviário nacional, exceto local, de passageiros não classificados em subposições anteriores
+;;1.0402.39.00;Serviços de transporte aéreo nacional, exceto local, de passageiros não classificados em subposições anteriores
+;;1.0402.90.00;Serviços de transporte nacional, exceto local, de passageiros não classificados em subposições anteriores
+;;1.0403.11.90;Serviços de transporte rodoviário internacional de passageiros não classificados em itens anteriores
+;;1.0403.13.90;Serviços de transporte internacional de passageiros por veículos sobre trilhos não classificados em itens anteriores
+;;1.0403.19.00;Serviços de transporte terrestre internacional de passageiros não classificados em subposições anteriores
+;;1.0403.21.90;Serviços de transporte aquaviário internacional de passageiros, por navegação interior não classificados em itens anteriores
+;;1.0403.29.00;Serviços de transporte aquaviário internacional de passageiros não classificados em subposições anteriores
+;;1.0403.39.00;Serviços de transporte aéreo internacional de passageiros não classificados em subposições anteriores
+;;1.0403.90.00;Serviços de transporte internacional de passageiros não classificados em subposições anteriores
+;NOVO;1.0401.16.90;Serviços de transporte local de passageiros por veículos sobre trilhos não classificados em itens anteriores
+;NOVO;1.0404.10.00;Locação de veículos rodoviários de passageiros com motorista
+;NOVO;1.0404.20.00;Locação de embarcações de passageiros com tripulação
+;NOVO;1.0404.30.00;Locação de aeronaves de passageiros com tripulação
+;NOVO;1.0405.00.00;Afretamento de embarcações de passageiros por tempo
+1.05;Serviços de transporte de cargas;;
+1.0501;Serviços de transportes terrestres de cargas;;
+1.0501.1;Serviços de transportes rodoviários de cargas;;
+1.0501.11;Serviços de transporte rodoviário de cargas a granel;;
+1.0501.11.10;Serviços de transporte rodoviário de cargas sólidas a granel ;1.0501.11.10;Serviços de transporte rodoviário de cargas sólidas a granel
+1.0501.11.20;Serviços de transporte rodoviário de cargas líquidas ou liquefeitas, a granel; 1.0501.11.20;Serviços de transporte rodoviário de cargas líquidas, ou liquefeitas, a granel
+1.0501.11.30;Serviços de transporte rodoviário de cargas gasosas a granel;1.0501.11.30;Serviços de transporte rodoviário de cargas gasosas a granel
+1.0501.12.00;Serviços de transporte rodoviário de cargas vivas;1.0501.14.10;Serviços de transporte rodoviário de cargas vivas
+1.0501.13;Serviços de transporte rodoviário de carga geral;;
+1.0501.13.10;Serviços de transporte rodoviário de carga solta, não unitizada. ;1.0501.12.10;Serviços de transporte rodoviário de carga solta, não unitizada
+1.0501.13.20;Serviços de transporte rodoviário de carga unitizada, exceto em contêineres;1.0501.12.20;Serviços de transporte rodoviário de carga unitizada
+1.0501.14;Serviços de transporte rodoviários de cargas em contêineres;;
+1.0501.14.10;Serviços de transporte rodoviário de cargas em contêineres frigorificados ou climatizados;1.0501.13.10;Serviços de transporte rodoviário de cargas em contêineres frigorificados ou climatizados
+1.0501.14.90;Serviços de transporte rodoviário de cargas em outros tipos de contêineres;1.0501.13.20;Serviços de transporte rodoviário de cargas em contêineres não frigorificados ou climatizados
+1.0501.15.00;Serviços de transporte rodoviário de mudanças domésticas e de mobília e outros objetos de escritório ;1.0501.14.20;Serviços de transporte rodoviário de mudanças domésticas e de mobília e outros objetos de escritório
+1.0501.16.00;Serviços de transporte rodoviário de cargas especiais e de grande porte ;1.0501.14.30;Serviços de transporte rodoviário de cargas de grande porte
+1.0501.17.00;Serviços de transporte rodoviário de veículos;1.0501.14.40;Serviços de transporte rodoviário de veículos
+1.0501.18;Serviços de transporte rodoviário de produtos perigosos;;
+1.0501.18.10;Serviços de transporte rodoviário de combustíveis, lubrificantes e GLP, inclusive apresentado em botijões metálicos;1.0501.14.51;Serviços de transporte rodoviário de combustíveis, lubrificantes e GLP, inclusive apresentados em botijões metálicos
+1.0501.18.20;Serviços de transporte rodoviário de produtos químicos perigosos;1.0501.14.52;Serviços de transporte rodoviário de produtos químicos perigosos, exceto lubrificantes e GLP
+1.0501.18.90;Serviços de transporte rodoviário de outros produtos perigosos;1.0501.14.59;Serviços de transporte rodoviário de produtos perigosos não classificados em subitens anteriores
+1.0501.19.00;Serviços de transporte rodoviário de outros tipos de carga ;1.0501.12.30;Serviços de transporte rodoviário de carga frigorificada ou climatizada
+;;1.0501.15.00;Serviços de transporte rodoviário de cargas postais e malotes
+;;1.0501.19.00;Serviços de transporte rodoviário de cargas não classificados em subposições anteriores
+1.0501.2;Serviços de transporte ferroviário de cargas ;;
+1.0501.21;Serviços de transporte ferroviário de cargas a granel ;;
+1.0501.21.10;Serviços de transporte ferroviário de cargas sólidas a granel ;1.0501.21.10;Serviços de transporte ferroviário de cargas sólidas a granel
+1.0501.21.20;Serviços de transporte ferroviário de cargas líquidas ou liquefeitas, a granel;1.0501.21.20;Serviços de transporte ferroviário de cargas líquidas, ou liquefeitas, a granel
+1.0501.21.30;Serviços de transporte ferroviário de cargas gasosas a granel;1.0501.21.30;Serviços de transporte ferroviário de cargas gasosas a granel
+1.0501.22.00;Serviços de transporte ferroviário de cargas vivas;1.0501.24.10;Serviços de transporte ferroviário de cargas vivas
+1.0501.23;Serviços de transporte ferroviário de carga geral;;
+1.0501.23.10;Serviços de transporte ferroviário de carga solta, não unitizada  ;1.0501.22.10;Serviços de transporte ferroviário de carga solta, não unitizada
+1.0501.23.20;Serviços de transporte ferroviário de carga unitizada, exceto em contêineres ;1.0501.22.20;Serviços de transporte ferroviário de carga unitizada
+1.0501.23.30;Serviços de transporte ferroviário de bens e valores;1.0501.25.00;Serviços de transporte ferroviário de bens e valores
+1.0501.24;Serviços de transporte ferroviário de cargas em contêineres;;
+1.0501.24.10;Serviços de transporte ferroviário de cargas em contêineres frigorificados ou climatizados;1.0501.23.10;Serviços de transporte ferroviário de cargas em contêineres frigorificados ou climatizados
+1.0501.24.90;Serviços de transporte ferroviário de cargas em outros tipos de contêineres;1.0501.23.20;Serviços de transporte ferroviário de cargas em contêineres não frigorificados ou climatizados
+;;;
+1.0501.25;Serviços de transporte ferroviário de produtos perigosos;;
+1.0501.25.10;Serviços de transporte ferroviário de combustíveis, lubrificantes e GLP, inclusive apresentado em botijões metálicos;1.0501.24.21;Serviços de transporte ferroviário de combustíveis, lubrificantes e GLP, inclusive apresentados em botijões metálicos
+1.0501.25.20;Serviços de transporte ferroviário de produtos químicos perigosos ;1.0501.24.22;Serviço de transporte ferroviário de produtos químicos perigosos, exceto lubrificantes e GLP
+1.0501.25.30;Serviços de transporte ferroviário de armamentos militares e munições ;1.0501.24.29;Serviços de transporte ferroviário de produtos perigosos não classificados em subposições anteriores
+1.0501.25.40;Serviços de transporte ferroviário de fundidos em estado líquido;1.0501.24.29;Serviços de transporte ferroviário de produtos perigosos não classificados em subposições anteriores
+1.0501.25.50;Serviços de transporte ferroviário de material radioativo;1.0501.24.29;Serviços de transporte ferroviário de produtos perigosos não classificados em subposições anteriores
+1.0501.25.90;Serviços de transporte ferroviário de outros produtos perigosos;1.0501.24.29;Serviços de transporte ferroviário de produtos perigosos não classificados em subposições anteriores
+1.0501.29.00;Serviços de transporte ferroviário de outros tipos de carga ;1.0501.22.30;Serviços de transporte ferroviário de carga frigorificada ou climatizada
+;;1.0501.29.00;Serviços de transporte ferroviário de cargas não classificados em subposições anteriores
+1.0501.3;Serviços de transporte por meio de dutos;;
+1.0501.31.00;Serviços de transporte de petróleo, gás natural e combustível;1.0501.31.00;Serviços de transporte de petróleo, gás natural e combustível por meio de dutos
+1.0501.32.00;Serviços de transporte de minérios;1.0501.32.00;Serviços de transporte de minérios por meio de dutos
+1.0501.39.00;Serviços de transporte de outras mercadorias;1.0501.39.00;Serviços de transporte de cargas por meio de dutos não classificados em subposições anteriores
+1.0502;Serviços de transporte aquaviário de cargas;;
+1.0502.1;Serviços de transportes aquaviário de navegação de cabotagem e de longo curso;;
+1.0502.11;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de cargas a granel;;
+1.0502.11.10;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de cargas sólidas, a granel ;1.0502.21.10;Serviços de transporte aquaviário costeiro de cargas sólidas a granel
+;;1.0502.31.10;Serviços de transporte aquaviário transoceânico de cargas sólidas a granel
+1.0502.11.20;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de cargas líquidas ou liquefeitas, a granel;1.0502.21.20;Serviços de transporte aquaviário costeiro de cargas líquidas ou liquefeitas, a granel
+;;1.0502.31.20;Serviços de transporte aquaviário transoceânico de cargas líquidas, ou liquefeitas, a granel
+1.0502.11.30;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de cargas gasosas a granel;1.0502.21.30;Serviços de transporte aquaviário costeiro de cargas gasosas a granel
+;;1.0502.31.30;Serviços de transporte aquaviário transoceânico de cargas gasosas a granel
+1.0502.12.00;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso  de cargas vivas;1.0502.24.10;Serviços de transporte aquaviário costeiro de cargas vivas
+;;1.0502.34.10;Serviços de transporte aquaviário transoceânico de cargas vivas
+1.0502.13;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de carga geral;;
+1.0502.13.10;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de carga solta, não unitizada;1.0502.22.10;Serviços de transporte aquaviário costeiro de carga solta, não unitizada
+;;1.0502.32.10;Serviços de transporte aquaviário transoceânico de carga solta, não unitizada
+1.0502.13.20;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de carga unitizada, exceto em contêineres;1.0502.22.20;Serviços de transporte aquaviário costeiro de carga unitizada
+;;1.0502.32.20;Serviços de transporte aquaviário transoceânico de carga unitizada
+1.0502.14;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de cargas em contêineres;;
+1.0502.14.10;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de cargas em contêineres frigorificados ou climatizados;1.0502.23.10;Serviços de transporte aquaviário costeiro de cargas em contêineres frigorificados ou climatizados
+;;1.0502.33.10;Serviços de transporte aquaviário transoceânico de cargas em contêineres frigorificados ou climatizados
+1.0502.14.90;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de cargas em outros tipos de contêineres;1.0502.23.20;Serviços de transporte aquaviário costeiro de cargas em contêineres não classificados em subposições anteriores
+;;1.0502.33.20;Serviços de transporte aquaviário transoceânico de cargas em contêineres não frigorificados ou climatizados
+1.0502.15.00;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de mudanças domésticas e de mobília e outros objetos de escritório;1.0502.24.20;Serviços de transporte aquaviário costeiro de mudanças domésticas e de mobília e outros objetos de escritório
+;;1.0502.34.20;Serviços de transporte aquaviário transoceânico de mudanças domésticas e de mobília e outros objetos de escritório
+1.0502.16.00;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de cargas especiais e de grande porte ;1.0502.24.30;Serviços de transporte aquaviário costeiro de cargas de grande porte
+;;1.0502.34.30;Serviços de transporte aquaviário transoceânico de cargas de grande porte
+1.0502.17.00;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de veículos;1.0502.24.40;Serviços de transporte aquaviário costeiro de veículos
+;;1.0502.34.40;Serviços de transporte aquaviário transoceânico de veículos
+1.0502.18;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de produtos perigosos;;
+1.0502.18.10;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de combustíveis, lubrificantes e GLP, inclusive apresentado em botijões metálicos;1.0502.24.51;Serviços de transporte aquaviário costeiro de combustíveis, lubrificantes e GLP, inclusive apresentado em botijões metálicos
+;;1.0502.34.51;Serviços de transporte aquaviário transoceânico de combustíveis, lubrificantes e GLP, inclusive apresentado em botijões metálicos
+1.0502.18.20;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de produtos químicos perigosos;1.0502.24.52;Serviços de transporte aquaviário costeiro de produtos químicos perigosos, exceto lubrificantes e GLP
+;;1.0502.34.52;Serviços de transporte aquaviário transoceânico de produtos químicos perigosos, exceto lubrificantes e GLP
+1.0502.18.90;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de outros produtos perigosos;1.0502.24.59;Serviços de transporte aquaviário costeiro de produtos perigosos não classificados em subposições anteriores
+;;1.0502.34.59;Serviços de transporte aquaviário transoceânico de produtos perigosos não classificados em subposições anteriores
+1.0502.19.00;Serviços de transporte aquaviário de navegação de cabotagem e de longo curso de outros tipos de carga ;1.0502.22.30;Serviços de transporte aquaviário costeiro de carga frigorificada ou climatizada
+;;1.0502.29.00;Serviços de transportes aquaviário costeiro de cargas não classificados em subposições anteriores
+;;1.0502.32.30;Serviços de transporte aquaviário transoceânico de carga frigorificada ou climatizada
+;;1.0502.39.00;Serviços de transporte aquaviário transoceânico de cargas não classificados em subposições anteriores
+1.0502.2;Serviços de transporte aquaviário por navegação interior;;
+1.0502.21;Serviços de transporte aquaviário por navegação interior de cargas a granel;;
+1.0502.21.10;Serviços de transporte aquaviário por navegação interior de cargas sólidas, a granel ;1.0502.11.10;Serviços de transporte aquaviário por navegação interior de cargas sólidas, a granel
+1.0502.21.20;Serviços de transporte aquaviário por navegação interior de cargas líquidas ou liquefeitas, a granel;1.0502.11.20;Serviços de transporte aquaviário por navegação interior de cargas líquidas, ou liquefeitas, a granel
+1.0502.21.30;Serviços de transporte aquaviário por navegação interior de cargas gasosas a granel;1.0502.11.30;Serviços de transporte aquaviário por navegação interior de cargas gasosas a granel
+1.0502.22.00;Serviços de transporte aquaviário por navegação interior  de cargas vivas;1.0502.14.10;Serviços de transporte aquaviário por navegação interior de cargas vivas
+1.0502.23;Serviços de transporte aquaviário por navegação interior de carga geral;;
+1.0502.23.10;Serviços de transporte aquaviário por navegação interior de carga solta, não unitizada;1.0502.12.10;Serviços de transporte aquaviário por navegação interior de carga solta, não unitizada
+1.0502.23.20;Serviços de transporte aquaviário por navegação interior de carga unitizada, exceto em contêineres;1.0502.12.20;Serviços de transporte aquaviário por navegação interior de carga unitizada
+1.0502.24;Serviços de transporte aquaviário por navegação interior de cargas em contêineres;;
+1.0502.24.10;Serviços de transporte aquaviário por navegação interior de cargas em contêineres frigorificados ou climatizados;1.0502.13.10;Serviços de transporte aquaviário por navegação interior de cargas em contêineres frigorificados ou climatizados
+1.0502.24.90;Serviços de transporte aquaviário por navegação interior de cargas em outros tipos de contêineres;1.0502.13.20;Serviços de transporte aquaviário por navegação interior de cargas em contêineres não frigorificados ou climatizados
+1.0502.25.00;Serviços de transporte aquaviário por navegação interior de mudanças domésticas e de mobília e outros objetos de escritório;1.0502.14.20;Serviços de transporte aquaviário por navegação interior de mudanças domésticas e de mobília e outros objetos de escritório
+1.0502.26.00;Serviços de transporte aquaviário por navegação interior de cargas especiais e de grande porte ;1.0502.14.30;Serviços de transporte aquaviário por navegação interior de cargas de grande porte
+;;1.0502.14.90;Serviços de transporte aquaviário por navegação interior de cargas especiais não classificados em subposições anteriores
+1.0502.27.00;Serviços de transporte aquaviário por navegação interior de veículos;1.0502.14.40;Serviços de transporte aquaviário por navegação interior de veículos
+1.0502.28;Serviços de transporte aquaviário por navegação interior de produtos perigosos;;
+1.0502.28.10;Serviços de transporte aquaviário por navegação interior de combustíveis, lubrificantes e GLP, inclusive apresentado em botijões metálicos;1.0502.14.51;Serviços de transporte aquaviário por navegação interior de combustíveis, lubrificantes e GLP, inclusive apresentado em botijões metálicos
+1.0502.28.20;Serviços de transporte aquaviário por navegação interior de produtos químicos perigosos;1.0502.14.52;Serviços de transporte aquaviário por navegação interior de produtos químicos perigosos, exceto lubrificantes e GLP
+1.0502.28.90;Serviços de transporte aquaviário por navegação interior de outros produtos perigosos;1.0502.14.59;Serviços de transporte aquaviário por navegação interior de produtos perigosos não classificados em subposições anteriores
+1.0502.29.00;Serviços de transporte aquaviário por navegação interior de outros tipos de carga;1.0502.12.30;Serviços de transporte aquaviário por navegação interior de carga frigorificada ou climatizada
+;;1.0502.19.00;Serviços de transporte aquaviário por navegação interior de cargas não classificados em subposições anteriores
+1.0502.3;Serviços de navegação de apoio ao transporte aquaviário de carga;;
+1.0502.31.00;Serviços de navegação de apoio portuário;1.0605.40.00;Serviços de navegação de apoio 
+1.0502.32.00;Serviços de navegação de apoio marítimo;1.0605.40.00;Serviços de navegação de apoio 
+1.0503;Serviços de transportes aéreo de cargas;;
+1.0503.10.00;Serviços de transporte aéreo de cargas postais, remessas expressas e cargas congêneres;1.0503.28.00;Serviços de transporte aéreo de cargas postais, remessas expressas e cargas congêneres
+1.0503.20;Serviços de transporte aéreo de cargas em contêineres;;
+1.0503.20.10;Serviços de transporte aéreo de cargas em contêineres frigorificados ou climatizados;1.0503.11.00;Serviços   de  transporte   aéreo   de   cargas   em   contêineres frigorificados ou climatizados
+1.0503.20.90;Serviços de transporte aéreo de cargas em outros tipos de contêineres;1.0503.12.00;Serviços de transporte aéreo de cargas  em contêineres não frigorificados ou climatizados
+1.0503.30;Serviços de transporte aéreo de cargas especiais;;
+1.0503.30.10;Serviços de transporte aéreo de produtos perigosos;1.0503.21.00;Serviços de transporte aéreo de produtos perigosos
+1.0503.30.20;Serviços de transporte aéreo de animais vivos;1.0503.22.00;Serviços de transporte aéreo de cargas vivas
+1.0503.30.30;Serviços de transporte aéreo de máquinas e veículos;1.0503.23.00;Serviços de transporte aéreo de máquinas e veículos
+1.0503.30.40;Serviços de transporte aéreo de perecíveis;1.0503.24.00;Serviços de transporte aéreo de perecíveis
+1.0503.30.50;Serviços de transporte aéreo de cargas frágeis;1.0503.25.00;Serviços de transporte aéreo de cargas frágeis
+1.0503.30.60;Serviços de transporte aéreo de cargas controladas;1.0503.26.00;Serviços de transporte aéreo de cargas controladas
+1.0503.30.70;Serviços de transporte aéreo de valores;1.0503.27.00;Serviços de transporte aéreo de valores
+1.0503.30.90;Serviços de transporte aéreo de outras cargas especiais;1.0503.29.00;Serviços de transporte aéreo de cargas especiais não classificados em subposições anteriores
+1.0503.90.00;Serviços de transporte aéreo de outros tipos de cargas;1.0503.90.00;Serviços de transporte aéreo de cargas não classificados em subposições anteriores
+1.0504;Serviços de transporte multimodal, exceto os serviços de apoio;;
+1.0504.10;Serviços de transporte multimodal de cargas a granel;;
+1.0504.10.10;Serviços de transporte multimodal de cargas sólidas, a granel ;1.0504.11.00;Serviços de transporte multimodal de cargas sólidas a granel
+1.0504.10.20;Serviços de transporte multimodal de cargas líquidas ou liquefeitas, a granel;1.0504.12.00;Serviços de transporte multimodal de cargas líquidas, ou liquefeitas, a granel
+1.0504.10.30;Serviços de transporte multimodal de cargas gasosas a granel;1.0504.13.00;Serviços de transporte multimodal de cargas gasosas a granel
+1.0504.20.00;Serviços de transporte multimodal de cargas vivas;1.0504.41.00;Serviços de transporte multimodal de cargas vivas
+1.0504.30;Serviços de transporte multimodal de carga geral;;
+1.0504.30.10;Serviços de transporte multimodal de cargas soltas, não unitizadas;1.0504.21.00;Serviços de transporte multimodal de carga solta, não unitizada
+1.0504.30.20;Serviços de transporte multimodal de cargas unitizadas, exceto em contêineres;1.0504.22.00;Serviços de transporte multimodal de carga unitizada
+1.0504.40;Serviços de transporte multimodal de cargas em contêineres;;
+1.0504.40.10;Serviços de transporte multimodal de cargas em contêineres frigorificados ou climatizados;1.0504.31.00;Serviços de transporte multimodal de cargas em contêineres frigorificados ou climatizados
+1.0504.40.90;Serviços de transporte multimodal de cargas em outros tipos de contêineres;1.0504.32.00;Serviços de transporte multimodal de cargas em contêineres não frigorificados ou climatizados
+1.0504.50.00;Serviços de transporte multimodal de mudanças domésticas e de mobília e outros objetos de escritório;1.0504.42.00;Serviços de transporte multimodal de mudanças domésticas e de mobília e outros objetos de escritório
+1.0504.60.00;Serviços de transporte multimodal de cargas especiais e de grande porte ;1.0504.43.00;Serviços de transporte multimodal de cargas de grande porte
+1.0504.70.00;Serviços de transporte multimodal de veículos;1.0504.44.00;Serviços de transporte multimodal de veículos
+1.0504.80;Serviços de transporte multimodal de produtos perigosos;;
+1.0504.80.10;Serviços de transporte multimodal de combustíveis, lubrificantes e GLP, inclusive apresentado em botijões metálicos;1.0504.45.10;Serviços de transporte multimodal de combustíveis, lubrificantes e GLP, inclusive apresentado em botijões metálicos
+1.0504.80.20;Serviços de transporte multimodal de produtos químicos perigosos;1.0504.45.20;Serviços de transporte multimodal de produtos químicos perigosos, exceto lubrificantes e GLP
+1.0504.80.90;Serviços de transporte multimodal de outros produtos perigosos;1.0504.45.90;Serviços de transporte multimodal de produtos perigosos não classificados em subposições anteriores
+1.0504.90.00;Serviços de transporte multimodal de outros tipos de carga ;1.0504.23.00;Serviços de transporte multimodal de carga frigorificada ou climatizada 
+;;1.0504.49.00;Serviços de transporte multimodal de cargas especiais não classificados em subposições anteriores
+;;1.0504.90.00;Serviços de transporte multimodal de cargas não classificados em subposições anteriores
+1.0505;Serviços de transporte intermodal, exceto os serviços de apoio;;
+1.0505.10;Serviços de transporte intermodal de cargas a granel;;
+1.0505.10.10;Serviços de transporte intermodal de cargas sólidas, a granel ;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.10.20;Serviços de transporte intermodal de cargas líquidas ou liquefeitas, a granel;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.10.30;Serviços de transporte intermodal de cargas gasosas a granel;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.20.00;Serviços de transporte intermodal de cargas vivas;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.30;Serviços de transporte intermodal de carga geral;;
+1.0505.30.10;Serviços de transporte intermodal de cargas soltas, não unitizadas. ;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.30.20;Serviços de transporte intermodal de cargas unitizadas, exceto em contêineres;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.40;Serviços de transporte intermodal de cargas em contêineres;;
+1.0505.40.10;Serviços de transporte intermodal de cargas em contêineres frigorificados ou climatizados;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.40.90;Serviços de transporte intermodal de cargas em outros tipos de contêineres;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.50.00;Serviços de transporte intermodal de mudanças domésticas e de mobília e outros objetos de escritório;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.60.00;Serviços de transporte intermodal de cargas especiais e de grande porte ;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.70.00;Serviços de transporte intermodal de veículos;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.80;Serviços de transporte intermodal de produtos perigosos;;
+1.0505.80.10;Serviços de transporte intermodal de combustíveis, lubrificantes e GLP, inclusive apresentado em botijões metálicos;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.80.20;Serviços de transporte intermodal de produtos químicos perigosos;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.80.90;Serviços de transporte intermodal de outros produtos perigosos;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+1.0505.90.00;Serviços de transporte intermodal de outros tipos de carga ;;* Na operação intermodal, a cada nova mudança de meio ou modal de transporte, um contrato diferente entra em vigor e, portanto, será necessário um registro específico na NBS para cada modal.
+;NOVO;1.0505.10.00;Locação de veículos rodoviários de carga com operador
+;NOVO;1.0505.20.00;Locação de embarcações de carga com tripulação
+;NOVO;1.0505.30.00;Locação de aeronaves de carga com tripulação
+;NOVO;1.0506.00.00;Afretamento de embarcações de carga por tempo
+1.06;Serviços de apoio aos transportes;;
+1.0601;Serviços de manuseio de cargas ;;
+1.0601.10.00 ;Serviços de manuseio de contêineres ;1.0601.10.00 ;Serviços de manuseio de contêineres 
+1.0601.90.00 ;Outros serviços de manuseio de cargas e bagagens ;1.0601.90.00 ;Serviços de manuseio de cargas não classificados em subposições anteriores 
+1.0602;Serviços de armazenagem em depósitos ;;
+1.0602.10.00 ;Serviços de armazenagem frigorífica ;1.0602.10.00 ;Serviços de armazenagem frigorificada 
+1.0602.20 ;Serviços de armazenagem de produtos perigosos ;;
+1.0602.20.10 ;Serviços de armazenagem de petróleo e seus derivados ;1.0602.21.00;Serviços de armazenagem de petróleo e seus derivados 
+1.0602.20.20 ;Serviços de armazenagem de combustíveis, lubrificantes e GLP, inclusive apresentado em botijões metálicos ;1.0602.22.00;Serviços de armazenagem de combustíveis, lubrificantes e GLP, inclusive apresentado em botijões metálicos 
+1.0602.20.30 ;Serviços de armazenagem de produtos químicos perigosos ;1.0602.23.00;Serviços de armazenagem de produtos químicos perigosos 
+1.0602.20.90 ;Serviços de armazenagem de outros produtos perigosos ;1.0602.29.00;Serviços de armazenagem de outros produtos perigosos 
+1.0602.30 ;Serviços de armazenagem de granéis sólidos, líquidos ou liquefeitos e gasosos ;;
+1.0602.30.10 ;Serviços de armazenagem de granéis sólidos ;1.0602.31.00;Serviços de armazenagem de granéis sólidos 
+1.0602.30.20 ;Serviços de armazenagem de granéis líquidos ou liquefeitos ;1.0602.32.00;Serviços de armazenagem de granéis líquidos ou liquefeitos 
+1.0602.30.30 ;Serviços de armazenagem de granéis gasosos ;1.0602.33.00;Serviços de armazenagem de granéis gasosos 
+1.0602.90.00 ;Outros serviços de armazenagem em depósitos ;1.0602.90.00 ;Serviços de armazenagem não classificados em subposições anteriores
+1.0603.00.00 ;Serviços de apoio para transportes ferroviários ;1.0603.00.00 ;Serviços de apoio ao transporte ferroviário 
+1.0604;Serviços de apoio para transportes rodoviários ;;
+1.0604.10.00 ;Serviços de estações rodoviárias ;1.0604.10.00 ;Serviços de estações rodoviárias 
+1.0604.20 ;Serviços de operação de autoestradas, pontes e túneis ;;
+1.0604.20.10 ;Serviços de operação de autoestradas ;1.0604.21.00;Serviços de operação de rodovias 
+1.0604.20.20 ;Serviços de operação de pontes e túneis ;1.0604.22.00;Serviços de operação de pontes e túneis 
+1.0604.20.30 ;Serviços de exploração de pedágios ;1.0604.21.00;Serviços de operação de rodovias 
+1.0604.30.00 ;Serviços de estacionamentos ;1.0604.30.00 ;Serviços de estacionamento 
+1.0604.40.00 ;Serviços de reboque para veículos particulares e comerciais ;1.0604.40.00 ;Serviços de reboque para veículos particulares e comerciais 
+1.0604.90.00 ;Outros serviços de apoio ao transporte rodoviário ;1.0604.90.00 ;Serviços de apoio ao transporte rodoviário não classificados em subposições anteriores
+1.0605;Serviços de apoio para transportes aquaviários ;;
+1.0605.10.00 ;Serviços de operação de portos e canais, exceto manuseio de cargas ;1.0605.10.00 ;Serviços de operação de portos e canais, exceto manuseio de cargas 
+1.0605.20.00 ;Serviços de praticagem e de docas ;1.0605.20.00 ;Serviços de praticagem e de atracação
+1.0605.30.00 ;Serviços de salvamento de embarcações ;1.0605.30.00 ;Serviços de salvamento de embarcações 
+1.0605.90.00 ;Outros serviços de apoio ao transporte aquaviário, exceto os serviços de navegação de apoio ;1.0605.90.00 ;Serviços de apoio ao transporte aquaviário não classificados em subposições anteriores
+1.0606;Serviços de apoio ao transporte aéreo ;;
+1.0606.10.00 ;Serviços de operação de aeroportos, exceto manuseio de cargas ;1.0606.11.00 ;Serviços de operação aeroportuária, exceto manuseio de cargas 
+1.0606.20.00 ;Serviços de controle de tráfego aéreo ;1.0606.12.00 ;Serviços de controle de tráfego aéreo 
+1.0606.90.00 ;Outros serviços de apoio ao transporte aéreo ;1.0606.19.00 ;Serviços de apoio ao transporte aéreo não classificados em suposições anteriores
+1.0607;Outros serviços de apoio aos transportes;;
+1.0607.10.00 ;Serviços de agências de fretamento de transporte e outros serviços de fretamento de transportes ;1.0607.00.00;Serviços de agenciamento no transporte de cargas
+1.0607.90.00 ;Outros serviços de apoio aos transportes, exceto serviços de apoio ao transporte multimodal e intermodal de cargas ;1.0609.00.00;Serviços de apoio aos transportes não classificados em posições anteriores
+1.0608;Serviços de apoio ao transporte multimodal e intermodal de cargas ;;
+;Serviços de coleta e entrega do transporte multimodal e intermodal de cargas ;1.0608.10.00 ;Serviços de coleta e entrega de cargas no transporte multimodal
+1.0608.20.00 ;Serviços de unitização ou desunitização do transporte multimodal e intermodal de cargas ;1.0608.20.00 ;Serviços de unitização ou desunitização de cargas no transporte multimodal 
+1.0608.30.00 ;Serviços de movimentação do transporte multimodal e intermodal de cargas ;1.0608.30.00 ;Serviços de movimentação de cargas no transporte multimodal 
+1.0608.40.00 ;Serviços de consolidação ou desconsolidação documental do transporte multimodal e intermodal de cargas ;1.0608.40.00 ;Serviços de consolidação ou desconsolidação documental de cargas no transporte multimodal 
+1.0608.90.00 ;Outros serviços de apoio ao transporte multimodal e intermodal de cargas ;1.0608.90.00 ;Serviços de apoio ao transporte multimodal de cargas não classificados em subposições anteriores
+;NOVO;1.0606.20.00 ;Serviços de apoio ao transporte aeroespacial
+;NOVO;1.0609.00.00;Serviços de apoio aos transportes não classificados em posições anteriores
+1.07;"Serviços postais; serviços de coleta, remessa ou entrega de documentos (exceto cartas) ou de pequenos objetos; serviços de remessas expressas";;
+1.0701.00.00;Serviços postais e de telegrama;1.0701.00.00;Serviços postais e de telegrama
+1.0702.00.00;Serviços de coleta, remessa ou entrega de documentos (exceto cartas) ou de pequenos objetos;1.0702.00.00;Serviços de coleta, transporte, remessa ou entrega de documentos ou encomendas, exceto remessas expressas
+1.0703.00.00;Serviços de remessas expressas;1.0703.00.00;Serviços de remessas expressas
+1.08;"Serviços de transmissão e distribuição de eletricidade; serviços de distribuição de gás e água";;
+1.0801.1;Serviços de transmissão e distribuição de eletricidade;;
+1.0801.11.00;Serviços de transmissão de eletricidade;1.0801.10.00;Serviços de transmissão de eletricidade
+1.0801.12.00;Serviços de distribuição de eletricidade;1.0801.20.00;Serviços de distribuição de eletricidade
+1.0801.20.00;Serviços de distribuição de gás canalizado;1.0803.00.00;Serviços de distribuição de gás canalizado
+10802;Serviços de distribuição de água;;
+1.0802.10.00;Serviços de distribuição de água por meio de tubulações, exceto vapor de água e água quente;1.0802.10.00;Serviços de distribuição de água por meio de tubulações, exceto vapor de água e água quente
+1.0802.20.00;Serviços de distribuição de vapor de água, água quente e ar condicionado por meio de tubulações;1.0802.20.00;Serviços de distribuição de vapor de água, água quente e ar condicionado por meio de tubulações
+1.0802.30.00;Serviços de distribuição de água, exceto através de tubulações;1.0802.30.00;Serviços de distribuição de água, exceto por meio de tubulações
+1.09;"Serviços financeiros e relacionados; securitização de recebíveis e fomento comercial";;
+1.0901;Serviços financeiros, exceto bancos de investimento, serviços de seguros e previdência complementar;;
+1.0901.10.00;Serviços de banco central;1.0901.10.00;Serviços de banco central
+1.0901.2;Serviços de depósito ;;
+1.0901.21.00;Serviços de depósito para pessoas jurídicas;1.0901.21.00;Serviços de depósito para pessoas jurídicas
+1.0901.22.00;Serviços de depósito para pessoas físicas;1.0901.22.00;Serviços de depósito para pessoas físicas
+1.0901.29.00;Outros serviços de depósito;1.0901.29.00;Serviços de depósito para outros depositantes
+1.0901.3;Serviços de concessão de crédito ;;
+1.0901.31.00;Serviços de financiamentos imobiliários residenciais;1.0901.31.00;Serviços de financiamentos imobiliários residenciais
+1.0901.32.00;Serviços de financiamentos imobiliários não-residenciais;1.0901.32.00;Serviços de financiamentos imobiliários não residenciais
+1.0901.33.00;Serviços de empréstimos e financiamentos, pessoais;1.0901.33.00;Serviços de empréstimos e financiamentos pessoais
+1.0901.34.00;Serviços de empréstimos e financiamentos, comerciais ;1.0901.34.00;Serviços de empréstimos e financiamentos comerciais 
+1.0901.35.00;Serviços de empréstimos e financiamentos, industriais;1.0901.35.00;Serviços de empréstimos e financiamentos industriais
+1.0901.36.00;Serviços de empréstimos e financiamentos, agropecuários;1.0901.36.00;Serviços de empréstimos e financiamentos agropecuários
+1.0901.39.00;Outros serviços de concessão de crédito ;1.0901.39.00;Serviços de concessão de crédito não classificados em subposições anteriores
+1.0901.40.00;Serviços de cartão de crédito ;1.0901.40.00;Serviços de cartão de crédito 
+1.0901.5;Operações de arrendamento mercantil financeiro;;
+1.0901.51;Arrendamento mercantil financeiro de máquinas e equipamentos;;
+1.0901.51.1;Arrendamento mercantil financeiro de equipamentos de transporte;;
+1.0901.51.11;Arrendamento mercantil financeiro de veículos rodoviários automotores para o transporte de passageiros ;1.0901.51.11;Arrendamento mercantil financeiro de veículos rodoviários automotores para o transporte de passageiros 
+1.0901.51.12;Arrendamento mercantil financeiro de veículos rodoviários automotores para o transporte de mercadorias ;1.0901.51.12;Arrendamento mercantil financeiro de veículos rodoviários automotores para o transporte de mercadorias 
+1.0901.51.13;Arrendamento mercantil financeiro de veículos e equipamentos ferroviários ;1.0901.51.13;Arrendamento mercantil financeiro de veículos e equipamentos ferroviários 
+1.0901.51.14;Arrendamento mercantil financeiro de outros equipamentos de transporte terrestre, inclusive de veículos de uso misto ;1.0901.51.14;Arrendamento mercantil financeiro de outros equipamentos de transporte terrestre, inclusive de veículos de uso misto 
+1.0901.51.15;Arrendamento mercantil financeiro de navios e outras embarcações;1.0901.51.15;Arrendamento mercantil financeiro de navios e outras embarcações
+1.0901.51.16;Arrendamento mercantil financeiro de aeronaves;1.0901.51.16;Arrendamento mercantil financeiro de aeronaves
+1.0901.51.17;Arrendamento mercantil financeiro de contêineres ;1.0901.51.17;Arrendamento mercantil financeiro de contêineres 
+1.0901.51.2;Arrendamento mercantil financeiro de outras máquinas e equipamentos ;;
+1.0901.51.21;Arrendamento mercantil financeiro de máquinas e equipamentos agrícolas ;1.0901.51.21;Arrendamento mercantil financeiro de máquinas e equipamentos agrícolas 
+1.0901.51.22;Arrendamento mercantil financeiro de máquinas e equipamentos de construção ;1.0901.51.22;Arrendamento mercantil financeiro de máquinas e equipamentos de construção 
+1.0901.51.23;Arrendamento mercantil financeiro de máquinas e equipamentos para escritórios, exceto computadores ;1.0901.51.23;Arrendamento mercantil financeiro de máquinas e equipamentos para escritórios, exceto computadores 
+1.0901.51.24;Arrendamento mercantil financeiro de computadores;1.0901.51.24;Arrendamento mercantil financeiro de computadores
+1.0901.51.25;Arrendamento mercantil financeiro de equipamentos de telecomunicação ;1.0901.51.25;Arrendamento mercantil financeiro de equipamentos de telecomunicação 
+1.0901.51.29;Arrendamento mercantil financeiro de máquinas e equipamentos, não classificados em outra posição ;1.0901.51.29;Arrendamento mercantil financeiro de outras máquinas e equipamentos não classificado em subposições anteriores 
+1.0901.52;Arrendamento mercantil financeiro de outras mercadorias ;;
+1.0901.52.10;Arrendamento mercantil financeiro de televisão e outros eletroeletrônicos domésticos, bem como seus acessórios ;1.0901.52.10;Arrendamento mercantil financeiro de televisão e outros eletroeletrônicos domésticos, bem como seus acessórios 
+1.0901.52.20;Arrendamento mercantil financeiro de mídias gravadas ;1.0901.52.20;Arrendamento mercantil financeiro de mídias gravadas 
+1.0901.52.30;Arrendamento mercantil financeiro de móveis e eletrodomésticos;1.0901.52.30;Arrendamento mercantil financeiro de móveis e eletrodomésticos
+1.0901.52.40;Arrendamento mercantil financeiro de equipamentos para diversão e lazer ;1.0901.52.40;Arrendamento mercantil financeiro de equipamentos para diversão e lazer 
+1.0901.52.50;Arrendamento mercantil financeiro de artigos de cama, mesa e banho;1.0901.52.50;Arrendamento mercantil financeiro de artigos de cama, mesa e banho
+1.0901.52.90;Arrendamento mercantil financeiro de outras mercadorias não classificadas em outra posição;1.0901.52.90;Arrendamento mercantil financeiro de outras mercadorias não classificado em subposições anteriores
+1.0901.90.00;Outros serviços financeiros, exceto bancos de investimento, serviços de seguros e previdência complementar;1.0901.90.00;Serviços financeiros, exceto bancos de investimento, serviços de seguros e previdência complementar, não classificados em subposições anteriores
+1.0902;Serviços de banco de investimento;;
+1.0902.10.00;Serviços de valoração de ativos;1.0902.10.00;Serviços de valoração de ativos
+1.0902.20.00;Serviços de subscrição de valores mobiliários;1.0902.20.00;Serviços de subscrição de valores mobiliários
+1.0902.30.00;Serviços de fusões e aquisições  ;1.0902.30.00;Serviços de fusões e aquisições  
+1.0902.40.00;Serviços de capital de risco e finanças corporativas ;1.0902.40.00;Serviços de capital de risco e finanças corporativas 
+1.0902.90.00;Outros serviços relacionados a bancos de investimentos ;1.0902.90.00;Serviços de banco de investimento não classificados em subposições anteriores
+1.0903;Serviços de seguros e previdência complementar (excluídos os serviços de resseguros), exceto serviços de previdência social compulsória;;
+1.0903.1;Serviços de seguros de vida e de previdência complementar, excluídos os serviços de resseguros  ;;
+1.0903.11.00;Serviços de seguros de vida;1.0903.11.00;Serviços de seguro de vida
+1.0903.12.00;Serviços de previdência complementar aberta;1.0903.12.00;Serviços de previdência complementar aberta
+1.0903.13.00;Serviços de previdência complementar fechada;1.0903.13.00;Serviços de previdência complementar fechada
+1.0903.20.00;Serviços de seguros saúde e de acidentes;1.0903.21.00;Serviços de seguro de saúde
+;;1.0903.22.00;Serviços de seguro de acidentes
+1.0903.9;Outros serviços de seguros, excluídos os serviços de resseguros ;;
+1.0903.91.00;Serviços de seguros de veículos rodoviários;1.0903.31.00;Serviços de seguro de veículos rodoviários
+1.0903.92.00;Serviços de seguros de veículos e equipamentos para transporte ferroviário, aquaviário e aéreo ;1.0903.32.00;Serviços de seguro de veículos e equipamentos para transporte ferroviário, aquaviário e aéreo 
+1.0903.93.00;Serviços de seguros de cargas;1.0903.33.00;Serviços de seguro de cargas
+1.0903.94.00;Serviços de seguros de outras propriedades;1.0903.34.00;Serviços de seguro de outras propriedades
+1.0903.95.00;Serviços de seguros por responsabilidade civil;1.0903.35.00;Serviços de seguro por responsabilidade civil
+1.0903.96.00;Serviços de seguros de crédito e de caução;1.0903.36.00;Serviços de seguro de crédito e de caução
+1.0903.97.00;Serviços de seguros de viagem ;1.0903.37.00;Serviços de seguro de viagem 
+1.0903.99.00;Outros serviços de seguros ;1.0903.38.00;Serviços de seguro rural
+;;1.0903.39.00;Serviços de outros seguros, excluídos os serviços de resseguro, não classificados em subposições anteriores
+1.0904;Serviços de resseguros e de retrocessão;;
+1.0904.10.00;Serviços de resseguros de vida ;1.0904.10.00;Serviços de resseguro de vida 
+1.0904.20.00;Serviços de resseguros saúde e de acidentes;1.0904.21.00;Serviços de resseguro saúde
+;;1.0904.22.00;Serviços de resseguro de acidentes
+1.0904.3;Serviços de resseguros não classificados nas subposições anteriores e serviços de retrocessão;;
+1.0904.31.00;Serviços de resseguros de veículos rodoviários ;1.0904.31.00;Serviços de resseguro de veículos rodoviários 
+1.0904.32.00;Serviços de resseguros de veículos e equipamentos para transporte ferroviário, aquaviário e aéreo ;1.0904.32.00;Serviços de resseguro de veículos e equipamentos para transporte ferroviário, aquaviário e aéreo 
+1.0904.33.00;Serviços de resseguros de cargas;1.0904.33.00;Serviços de resseguro de cargas
+1.0904.34.00;Serviços de resseguros de outras propriedades;1.0904.34.00;Serviços de resseguro de outras propriedades
+1.0904.35.00;Serviços de resseguros de responsabilidade civil;1.0904.35.00;Serviços de resseguro de responsabilidade civil
+1.0904.36.00;Serviços de resseguros de crédito e caução ;1.0904.36.00;Serviços de resseguro de crédito e caução 
+1.0904.39.00;Outros serviços de resseguros e serviços de retrocessão;1.0904.37.00;Serviços de resseguro rural
+;;1.0904.39.00;Serviços de outros resseguros não classificados em subposições anteriores
+1.0905;Serviços auxiliares aos serviços financeiros, exceto os relacionados a seguros e previdência complementar;;
+1.0905.1;Serviços de corretagem de títulos, derivativos e commodities ;;
+1.0905.11.00;Serviços de corretagem de títulos;1.0905.11.00;Serviços de corretagem de títulos
+1.0905.12.00;Serviços de corretagem de derivativos e commodities;1.0905.12.00;Serviços de corretagem de derivativos e commodities
+1.0905.13.00;Serviços de compensação de transações financeiras, inclusive com ativos financeiros (clearinghouse);1.0905.13.00;Serviços de compensação de transações financeiras, inclusive com ativos financeiros (clearinghouse)
+1.0905.20.00;Serviços de gestão e administração de carteiras de ativos, exceto fundos de pensão ;1.0905.21.00;Serviços de gestão e administração de carteiras de ativos, exceto fundos de pensão 
+1.0905.30.00;Serviços de guarda e custódia ;1.0905.30.00;Serviços de guarda e custódia 
+1.0905.40.00;Serviços relacionados à administração de mercados financeiros ;1.0905.40.00;Serviços relacionados à administração de mercados financeiros 
+1.0905.9;Outros serviços auxiliares aos serviços financeiros ;;
+1.0905.91.00;Serviços de consultoria financeira ;1.0905.50.00;Serviços de consultoria financeira 
+1.0905.92.00;Serviços de câmbio ;1.0905.60.00;Serviços de câmbio 
+1.0905.93.00;Serviços de classificação de risco (rating);1.0905.70.00;Serviços de classificação de risco (rating)
+1.0905.94.00;Serviços fiduciários ;1.0905.80.00;Serviços fiduciários 
+1.0905.99.00;Outros serviços auxiliares aos serviços financeiros não classificados em outra posição ;1.0905.22.00;Serviços de administração fundos de investimento e fundos de pensão
+;;1.0905.23.00;Serviços de gestão e administração de trust
+;;1.0905.90.00;Serviços auxiliares aos serviços financeiros não classificados em subposições anteriores 
+1.0906;Serviços auxiliares a seguros e previdência complementar;;
+1.0906.1;Serviços de agenciamento e corretagem de seguros e previdência complementar;;
+1.0906.11.00;Serviços de agenciamento e corretagem de seguros e previdência complementar, exceto de seguros saúde;1.0906.11.00;Serviços de agenciamento e corretagem de seguros, resseguros e previdência complementar, exceto de seguros saúde
+1.0906.12.00;Serviços de corretagem de seguros saúde ;1.0906.12.00;Serviços de corretagem de seguros saúde 
+1.0906.20.00;Serviços de perícia e avaliação de seguros ;1.0906.20.00;Serviços de perícia e avaliação de seguros e resseguros
+1.0906.30.00;Serviços atuariais ;1.0906.30.00;Serviços atuariais 
+1.0906.40.00;Serviços de gestão de fundos de previdência complementar;1.0906.40.00;Serviços de gestão de fundos de previdência complementar
+1.0906.90.00;Outros serviços auxiliares a seguros e previdência complementar;1.0906.90.00;Serviços auxiliares a seguros, resseguros e previdência complementar não classificados em subposições anteriores
+1.0907.00.00;Securitização de recebíveis;1.0907.00.00;Serviços de seguro de recebíveis
+1.0908.00.00;Fomento comercial (factoring);1.0908.00.00;Fomento comercial (factoring)
+;NOVO;1.0909.10.00;Serviços de holding de patrimônio de empresas subsidiárias
+;NOVO;1.0909.20.00;Serviços de holding de valores mobiliários e outros ativos financeiros e fundos e entidades financeiras similares
+;NOVO;1.0911.00.00;Serviços financeiros e serviços relacionados não classificados em posições anteriores
+1.10;Serviços imobiliários;;
+1.1001;Serviços imobiliários sob comissão ou contrato;;
+1.1001.1;Serviços de administração e locação de imóveis;;
+1.1001.11.00;Serviços de administração e locação de imóveis residenciais;1.1001.11.00;Serviços de administração e locação de imóveis residenciais
+1.1001.12;Serviços de administração e locação de imóveis não residenciais;;
+1.1001.12.10;Serviços de administração de locação, sublocação, arrendamento, direito de passagem ou permissão de uso, compartilhado ou não, de ferrovia, rodovia, postes, cabos, dutos e condutos de qualquer natureza;1.1001.12.10;Serviços de administração e locação, sublocação, arrendamento, direito de passagem ou permissão de uso, compartilhado ou não, de ferrovia, rodovia, postes, cabos, dutos e condutos de qualquer natureza
+1.1001.12.90;Outros serviços de administração e locação de imóveis não residenciais;1.1001.12.90;Serviços de administração e locação de outros imóveis não residenciais
+1.1001.2;Compra e venda de imóveis;;
+1.1001.21.00;Compra e venda de imóveis residenciais;1.1001.21.00;Serviços de intermediação na compra e venda de imóveis residenciais
+1.1001.22.00;Compra e venda de imóveis não-residenciais;1.1001.22.00;Serviços de intermediação na compra e venda de imóveis não residenciais
+1.1001.30.00;Serviços de avaliação de imóveis;1.1001.30.00;Serviços de avaliação de imóveis
+1.1001.40.00;Serviços de consultoria imobiliária;1.1001.40.00;Serviços de consultoria imobiliária
+1.1001.50.00;Serviços de assessoria de gestão condominial (condomínios, edifícios residenciais e mistos);1.1001.50.00;Serviços de assessoria de gestão condominial
+1.1090.00.00;Outros serviços imobiliários;1.1001.90.00;Serviços imobiliários não classificados em subposições anteriores
+;NOVO;1.1002.10.00;Locação de imóveis residenciais
+;NOVO;1.1002.20.00;Locação de imóveis não residenciais
+1.11;Arrendamento mercantil operacional, propriedade intelectual, franquias empresariais e exploração de outros direitos;;
+1.1101;Arrendamento mercantil operacional ou locação de máquinas e equipamentos, sem operador ;;
+1.1101.1;Arrendamento mercantil operacional ou locação de equipamentos de transporte, sem operador;;
+1.1101.11.00;Arrendamento mercantil operacional ou locação de veículos rodoviários automotores para o transporte de até oito passageiros, sem operador ;1.1101.11.00;Arrendamento mercantil operacional ou locação de veículos rodoviários automotores para o transporte de até oito passageiros, sem operador 
+1.1101.12.00 ;Arrendamento mercantil operacional ou locação de veículos rodoviários automotores para o transporte de mercadorias, sem operador ;1.1101.12.00 ;Arrendamento mercantil operacional ou locação de veículos rodoviários automotores para o transporte de cargas, sem operador 
+1.1101.13.00 ;Arrendamento mercantil operacional ou locação de veículos e equipamentos ferroviários, sem operador ;1.1101.13.00 ;Arrendamento mercantil operacional ou locação de veículos e equipamentos de transporte ferroviário, sem operador 
+1.1101.14.00;Arrendamento mercantil operacional ou locação de outros equipamentos de transporte terrestre, inclusive de veículos de uso misto, sem operador ;1.1101.14.00;Arrendamento mercantil operacional ou locação de outros equipamentos de transporte terrestre, inclusive de veículos de uso misto, sem operador 
+1.1101.15.00;Arrendamento mercantil operacional ou locação de navios e outras embarcações, sem tripulação ;1.1101.15.00;Arrendamento mercantil operacional ou locação de navios e outras embarcações, sem tripulação 
+1.1101.16.00;Arrendamento mercantil operacional ou locação de aeronaves, sem tripulação ;1.1101.16.00;Arrendamento mercantil operacional ou locação de aeronaves, sem tripulação 
+1.1101.17.00;Arrendamento mercantil operacional ou locação de contêineres ;1.1101.17.00;Arrendamento mercantil operacional ou locação de contêineres 
+1.1101.2;Arrendamento mercantil operacional ou locação de outras máquinas e equipamentos, sem operador ;;
+1.1101.21.00;Arrendamento mercantil operacional ou locação de máquinas e equipamentos agrícolas, sem operador ;1.1101.20.00;Arrendamento mercantil operacional ou locação de máquinas e equipamentos agrícolas, sem operador 
+1.1101.22.00;Arrendamento mercantil operacional ou locação de máquinas e equipamentos de construção, sem operador ;1.1101.30.00;Arrendamento mercantil operacional ou locação de máquinas e equipamentos de construção, sem operador 
+1.1101.23.00;Arrendamento mercantil operacional ou locação de máquinas e equipamentos para escritórios, exceto computadores, sem operador ;1.1101.40.00;Arrendamento mercantil operacional ou locação de máquinas e equipamentos para escritórios, exceto computadores, sem operador 
+1.1101.24.00;Arrendamento mercantil operacional ou locação de computadores, sem operador;1.1101.50.00;Arrendamento mercantil operacional ou locação de computadores, sem operador
+1.1101.25.00;Arrendamento mercantil operacional ou locação de equipamentos de telecomunicação, sem operador ;1.1101.60.00;Arrendamento mercantil operacional ou locação de equipamentos de telecomunicação, sem operador 
+1.1101.29.00;Arrendamento mercantil operacional ou locação de máquinas e equipamentos, não classificados em outra posição, sem operador ;1.1101.90.00;Arrendamento mercantil operacional ou locação de máquinas e equipamentos, sem operador, não classificado em subposições anteriores
+1.1102;Arrendamento mercantil operacional ou locação de outras mercadorias ;;
+1.1102.10.00;Arrendamento mercantil operacional ou locação de televisão e outros eletroeletrônicos domésticos, bem como seus acessórios ;1.1102.10.00;Arrendamento mercantil operacional ou locação de televisão e outros eletroeletrônicos, bem como seus acessórios 
+1.1102.20.00;Arrendamento mercantil operacional ou locação de mídias gravadas ;1.1102.20.00;Arrendamento mercantil operacional ou locação de mídias gravadas 
+1.1102.30.00;Arrendamento mercantil operacional ou locação de móveis e eletrodomésticos;1.1102.30.00;Arrendamento mercantil operacional ou locação de móveis e eletrodomésticos
+1.1102.40.00;Arrendamento mercantil operacional ou locação de equipamentos para diversão e lazer ;1.1102.40.00;Arrendamento mercantil operacional ou locação de equipamentos para diversão e lazer 
+1.1102.50.00;Arrendamento mercantil operacional ou locação de artigos de cama, mesa e banho;1.1102.50.00;Arrendamento mercantil operacional ou locação de artigos de cama, mesa e banho
+1.1102.60.00;Arrendamento mercantil operacional ou locação de roupas e calçados ;1.1102.60.00;Arrendamento mercantil operacional ou locação de roupas e calçados 
+1.1102.90.00;Arrendamento mercantil operacional ou locação de outras mercadorias não classificadas em outra posição;1.1102.90.00;Arrendamento mercantil operacional ou locação de outras mercadorias não classificado em subposições anteriores
+1.1103;Licenciamento de direitos de autor e direitos conexos;;
+1.1103.10.00;Licenciamento de direitos de obras literárias;1.1103.10.00;Licenciamento de direitos de obras literárias
+1.1103.2;Licenciamento de direitos sobre programas de computador  ;;
+1.1103.21.00;Licenciamento de direitos de produção, distribuição ou comercialização de programas de computador;1.1103.21.00;Licenciamento de direitos de produção, distribuição ou comercialização de programas de computador (software)
+1.1103.22.00;Licenciamento de direitos de uso de programas de computador;1.1103.22.00;Licenciamento de direitos de uso de programas de computador (software)
+1.1103.29.00;Licenciamento de outros direitos sobre programas de computador  ;1.1103.29.00;Licenciamento de direitos sobre programas de computador (software) e bancos de dados não classificado em subposições anteriores
+1.1103.3;Licenciamento de direitos de obras audiovisuais;;
+1.1103.31.00;Licenciamento de direitos de autor de obras cinematográficas;1.1103.31.00;Licenciamento de direitos de autor de obras cinematográficas
+1.1103.32.00;Licenciamento de direitos de autor de obras jornalísticas;1.1103.32.00;Licenciamento de direitos de autor de obras jornalísticas
+1.1103.33.00;Licenciamento de direitos de autor de obras publicitárias;1.1103.33.00;Licenciamento de direitos de autor de obras publicitárias
+1.1103.34.00;Licenciamento de direitos conexos de artistas intérpretes ou executantes em obras audiovisuais;1.1103.34.00;Licenciamento de direitos conexos de artistas intérpretes ou executantes em obras audiovisuais
+1.1103.35.00;Licenciamento de direitos conexos de produtores de obras audiovisuais;1.1103.35.00;Licenciamento de direitos conexos de produtores de obras audiovisuais
+1.1103.39;Licenciamento de direitos de outras obras audiovisuais;;
+1.1103.39.1;Licenciamento de direitos de obras audiovisuais destinadas à televisão ;;
+1.1103.39.11;Licenciamento de direitos de obras audiovisuais sobre transmissões de eventos esportivos;1.1103.36.10;Licenciamento de direitos de obras audiovisuais sobre transmissões de eventos esportivos
+1.1103.39.12;Licenciamento de direitos de obras audiovisuais sobre transmissões de programas televisivos;1.1103.36.20;Licenciamento de direitos de obras audiovisuais sobre transmissões de programas televisivos
+1.1103.39.19;Licenciamento de direitos de obras audiovisuais sobre outras transmissões televisivas;1.1103.36.90;Licenciamento de direitos de obras audiovisuais sobre outras transmissões televisivas
+1.1103.39.90;Licenciamento de direitos de outras obras audiovisuais;1.1103.39.00;Licenciamento de direitos de obras audiovisuais não classificado em subposições anteriores
+ 1.1103.4 ;Licenciamento de direitos de obras musicais e outros fonogramas;;
+1.1103.41.00;Licenciamento de direitos de autor de obras musicais ou literomusicais;1.1103.41.00;Licenciamento de direitos de autor de obras musicais ou literomusicais
+1.1103.42.00;Licenciamento de direitos conexos de artistas intérpretes ou executantes;1.1103.42.00;Licenciamento de direitos conexos de artistas intérpretes ou executantes
+1.1103.43.00;Licenciamento de direitos conexos de produtores de fonogramas;1.1103.43.00;Licenciamento de direitos conexos de produtores de fonogramas
+1.1103.50.00;Licenciamento de direitos relacionados à radiodifusão;1.1103.50.00;Licenciamento de direitos relacionados à radiodifusão
+1.1103.9 ;Licenciamento de outros direitos de autor e outros direitos conexos ;;
+1.1103.91.00;Licenciamento de outros direitos de autor ;1.1103.90.00 ;Licenciamento de direitos de autor e de direitos conexos não classificado em subposições anteriores
+1.1103.92.00;Licenciamento de outros direitos conexos ;1.1103.90.00 ;Licenciamento de direitos de autor e de direitos conexos não classificado em subposições anteriores
+1.1104;Cessão temporária de direitos de autor e direitos conexos;;
+1.1104.10.00;Cessão temporária de direitos de obras literárias;1.1106.10.00;Cessão temporária de direitos de obras literárias
+1.1104.20.00;Cessão temporária de direitos sobre programas de computador  ;1.1106.20.00;"Cessão temporária de direitos sobre programas de computador (software)
+"
+1.1104.3;Cessão temporária de direitos sobre obras audiovisuais;;
+1.1104.31.00;Cessão temporária de direitos de autor de obras cinematográficas;1.1106.31.00;Cessão temporária de direitos de autor de obras cinematográficas
+1.1104.32.00;Cessão temporária de direitos de autor de obras jornalísticas;1.1106.32.00;Cessão temporária de direitos de autor de obras jornalísticas
+1.1104.33.00;Cessão temporária de direitos de autor de obras publicitárias;1.1106.33.00;Cessão temporária de direitos de autor de obras publicitárias
+1.1104.34.00;Cessão temporária de direitos conexos de artistas intérpretes ou executantes em obras audiovisuais;1.1106.34.00;Cessão temporária de direitos conexos de artistas intérpretes ou executantes em obras audiovisuais
+1.1104.35.00;Cessão temporária de direitos conexos de produtores de obras audiovisuais;1.1106.35.00;Cessão temporária de direitos conexos de produtores de obras audiovisuais
+1.1104.39;Cessão temporária de direitos de outras obras audiovisuais ;;
+1.1104.39.1;Cessão temporária de direitos de obras audiovisuais destinadas à televisão;;
+1.1104.39.11;Cessão temporária de direitos de obras audiovisuais sobre transmissões de eventos esportivos;1.1106.36.10;Cessão temporária de direitos de obras audiovisuais sobre transmissões de eventos esportivos
+1.1104.39.12;Cessão temporária de direitos de obras audiovisuais sobre transmissões de programas televisivos;1.1106.36.20;Cessão temporária de direitos de obras audiovisuais sobre transmissões de programas televisivos
+1.1104.39.19;Cessão temporária de direitos de obras audiovisuais sobre outras transmissões televisivas;1.1106.36.90;Cessão temporária de direitos de obras audiovisuais sobre outras transmissões televisivas
+1.1104.39.90;Cessão temporária de direitos de outras obras audiovisuais, não classificados em outro item;1.1106.39.00;Cessão temporária de direitos de obras audiovisuais não classificada em subposições anteriores
+1.1104.4;Cessão temporária de direitos de obras musicais e de outros fonogramas;;
+1.1104.41.00;Cessão temporária de direitos de autor de obras musicais e literomusicais;1.1106.41.00;Cessão temporária de direitos de autor de obras musicais e literomusicais
+1.1104.42.00;Cessão temporária de direitos conexos de artistas intérpretes ou executantes;1.1106.42.00;Cessão temporária de direitos conexos de artistas intérpretes ou executantes
+1.1104.43.00;Cessão temporária de direitos conexos de produtores de fonogramas;1.1106.43.00;Cessão temporária de direitos conexos de produtores de fonogramas
+1.1104.50.00;Cessão temporária de direitos relacionados à radiodifusão;1.1106.50.00;Cessão temporária de direitos relacionados à radiodifusão
+1.1104.9;Cessão temporária de outros direitos de autor e outros direitos conexos;;
+1.1104.91.00;Cessão temporária de outros direitos de autor ;1.1106.90.00;"Cessão temporária de direitos de autor e de direitos conexos não classificada em subposições anteriores
+
+"
+1.1104.92.00;Cessão temporária de outros direitos conexos;1.1106.90.00;"Cessão temporária de direitos de autor e de direitos conexos não classificada em subposições anteriores
+
+"
+1.1105;Licenciamento de direitos sobre a propriedade industrial;;
+1.1105.10.00;Licenciamento de direitos sobre patentes;1.1104.10.00;Licenciamento de direitos sobre patentes
+1.1105.20.00;Licenciamento de direitos sobre marcas ;1.1104.20.00;Licenciamento de direitos sobre marcas 
+1.1105.30.00;Licenciamento de direitos sobre desenho industrial;1.1104.30.00;Licenciamento de direitos sobre desenho industrial
+1.1105.90.00;Licenciamento de outros direitos sobre a propriedade industrial;1.1104.90.00;Licenciamento de direitos sobre a propriedade industrial não classificado em subposições anteriores
+1.1106.00.00;Licenciamento de direitos sobre cultivares;1.1105.10.00;Licenciamento de direitos sobre cultivares
+1.1107.00.00;Licenciamento de direitos sobre topografias de circuitos integrados;1.1105.20.00;Licenciamento de direitos sobre topografias de circuitos integrados
+1.1108.00.00;Licenciamento de direitos relativos à informação não divulgada;1.1105.30.00;Licenciamento de direitos relativos à informação não divulgada
+1.1109.00.00;Licenciamento de outros direitos de propriedade intelectual não classificados em nenhuma das posições anteriores ;1.1104.90.00;Licenciamento de direitos sobre a propriedade industrial não classificado em subposições anteriores
+;;1.1105.90.00;Licenciamento de outros direitos não classificado em subposições anteriores
+1.1110;Contratos de transferência de tecnologia ;;
+1.1110.10.00;Contratos de prestação de serviços de assistência técnica e científica, combinadamente ou não, com qualquer modalidade de transferência de tecnologia;;
+1.1110.20.00 ;Contratos de fornecimento de tecnologia (know-how);1.1105.70.00;Licenciamento de direitos sobre informações relativas à experiência adquirida no setor industrial, comercial ou científico (know-how)
+1.1110.30.00;Contratos de franquia;1.1110.00.00;Franquia
+1.1110.90.00;Outros contratos de transferência de tecnologia;;
+1.1111;Exploração de recursos naturais;;
+1.1111.10.00;Exploração de recursos vegetais, inclusive florestais;1.1105.41.00;Exploração de recursos vegetais, inclusive florestais
+1.1111.20.00;Exploração de recursos minerais;1.1105.42.00;Exploração de recursos minerais
+1.1112;Licenciamento de direitos sobre conhecimento tradicional;;
+1.1112.10.00;Licenciamento de direitos sobre conhecimento tradicional associado a recursos genéticos;1.1105.51.00;Licenciamento de direitos sobre conhecimento tradicional associado a recursos genéticos
+1.1112.90.00;Licenciamento de direitos sobre outros conhecimentos tradicionais;1.1105.59.00;Licenciamento de direitos sobre conhecimento tradicional não classificado em subposições anteriores
+1.1113.00.00;Licenciamento de direitos relativos ao acesso a recursos genéticos, exceto os decorrentes do conhecimento tradicional;1.1105.60.00;Licenciamento de direitos relativos ao acesso a recursos genéticos, exceto os decorrentes do conhecimento tradicional
+1.1190.00.00;Outras formas de licenciamento e de cessões para exploração de direitos, não classificadas nas posições anteriores;1.1105.90.00;Licenciamento de outros direitos não classificado em subposições anteriores
+;;1.1106.90.00;"Cessão temporária de direitos de autor e de direitos conexos não classificada em subposições anteriores
+
+"
+;NOVO;"1.1103.23.00
+";Licenciamento de direitos sobre bancos de dados
+1.12;Serviços de pesquisa e desenvolvimento;;
+1.1201;Serviços de pesquisa e desenvolvimento em ciências naturais, exatas e engenharia;;
+1.1201.1;Serviços de pesquisa e desenvolvimento em ciências naturais e exatas;;
+1.1201.11.00;Serviços de pesquisa e desenvolvimento em física;1.1201.11.00;Serviços de pesquisa e desenvolvimento em ciências físicas
+1.1201.12.00;Serviços de pesquisa e desenvolvimento em química e biologia;1.1201.12.00;Serviços de pesquisa e desenvolvimento em química e biologia
+1.1201.19.00;Serviços de pesquisa e desenvolvimento em outras ciências naturais e exatas;1.1201.19.00;Serviços de pesquisa e desenvolvimento em ciências não classificadas em subposições anteriores
+1.1201.2;Serviços de pesquisa e desenvolvimento em engenharia e tecnologia;;
+1.1201.21.00;Serviços de pesquisa e desenvolvimento em biotecnologia;1.1201.20.00;Serviços de pesquisa e desenvolvimento em biotecnologia
+1.1201.22.00;Serviços de pesquisa e desenvolvimento em Tecnologia da Informação e Comunicação (TIC);1.1201.31.00;Serviços de pesquisa e desenvolvimento em Tecnologia da Informação e Comunicação (TIC)
+1.1201.23.00;Serviços de pesquisa e desenvolvimento em nanotecnologia;1.1201.32.00;Serviços de pesquisa e desenvolvimento em nanotecnologia
+1.1201.24.00;Serviços de pesquisa e desenvolvimento em engenharia e tecnologia nucleares;1.1201.33.00;Serviços de pesquisa e desenvolvimento em engenharia e tecnologia nucleares
+1.1201.25.00;Serviços de pesquisa e desenvolvimento em engenharia e tecnologia em microondas de potência;1.1201.34.00;Serviços de pesquisa e desenvolvimento em engenharia e tecnologia em micro-ondas de potência
+1.1201.29.00;Serviços de pesquisa e desenvolvimento em outros ramos da engenharia e tecnologia;1.1201.39.00;Serviços de pesquisa e desenvolvimento em engenharia e tecnologia não classificados em subposições anteriores
+1.1201.30.00;Serviços de pesquisa e desenvolvimento em ciências médica, odontológica e farmacêutica;1.1201.40.00;Serviços de pesquisa e desenvolvimento em ciências médicas, odontológicas e farmacêuticas
+1.1201.40.00;Serviços de pesquisa e desenvolvimento em ciências agrárias;1.1201.50.00;Serviços de pesquisa e desenvolvimento em ciências agrárias
+1.1201.9;Outros serviços de pesquisa e desenvolvimento em ciências naturais e engenharia;;
+1.1201.91.00;Pesquisa tecnológica utilizando documentos de patentes;1.1201.90.00;Serviços de pesquisa e desenvolvimento em ciências, engenharia e tecnologia não classificados em subposições anteriores
+1.1201.99.00;Outros serviços de pesquisa e desenvolvimento em ciências naturais e engenharia;1.1201.90.00;Serviços de pesquisa e desenvolvimento em ciências, engenharia e tecnologia não classificados em subposições anteriores
+1.1202;Serviços de pesquisa e desenvolvimento em ciências sociais e humanidades;;
+1.1202.1;Serviços de pesquisa e desenvolvimento em ciências sociais;;
+1.1202.11.00;Serviços de pesquisa e desenvolvimento em psicologia;1.1202.10.00;Serviços de pesquisa e desenvolvimento em psicologia
+1.1202.12.00;Serviços de pesquisa e desenvolvimento em ciências econômicas;1.1202.20.00;Serviços de pesquisa e desenvolvimento em ciências econômicas
+1.1202.13.00;Serviços de pesquisa e desenvolvimento em direito;1.1202.30.00;Serviços de pesquisa e desenvolvimento em direito
+1.1202.19.00;Serviços de pesquisa e desenvolvimento em outras ciências sociais;1.1202.90.00;Serviços de pesquisa e desenvolvimento em ciências sociais e humanidades não classificadas em subposições anteriores
+1.1202.20.00;Serviços de pesquisa e desenvolvimento em humanidades;1.1202.40.00;Serviços de pesquisa e desenvolvimento em línguas e literatura
+;;1.1202.90.00;Serviços de pesquisa e desenvolvimento em ciências sociais e humanidades não classificadas em subposições anteriores
+1.1203.00.00;Serviços de pesquisa e desenvolvimento interdisciplinar;1.1203.00.00;Serviços de pesquisa e desenvolvimento interdisciplinar
+1.13;Serviços jurídicos e contábeis;;
+1.1301;Serviços jurídicos;;
+1.1301.10.00;Serviços de representação e consultoria jurídica criminal;1.1301.10.00;Serviços de representação e consultoria jurídica criminal
+1.1301.20.00;Serviços de representação e consultoria jurídica em outras áreas do direito;1.1301.20.00;Serviços de representação e consultoria jurídica em outras áreas do direito, exceto consultoria tributária
+1.1301.30.00;Serviços de documentação e certificação, exceto os serviços notariais e de registro;1.1301.30.00;Serviços de documentação e certificação, exceto os serviços notariais e de registro
+1.1301.4;Outros serviços jurídicos;;
+1.1301.41.00;Serviços de arbitragem, conciliação e mediação;1.1301.40.00;Serviços de arbitragem, conciliação e mediação
+1.1301.49.00;Outros serviços jurídicos não classificados em outra posição;1.1301.90.00;Serviços jurídicos não classificados em subposições anteriores
+1.1302;Serviços de auditoria, contabilidade e escrituração mercantil;;
+1.1302.1;Serviços de auditoria;;
+1.1302.11.00;Serviços de auditoria contábil;1.1302.11.00;Serviços de auditoria contábil
+1.1302.19.00;Outros serviços de auditoria;1.1302.19.00;Serviços de auditoria não classificados em subposições anteriores
+1.1302.2;Serviços de contabilidade e escrituração mercantil;;
+1.1302.21.00;Serviços de contabilidade;1.1302.21.00;Serviços de contabilidade
+1.1302.22.00;Serviços de escrituração mercantil;1.1302.22.00;Serviços de escrituração mercantil
+1.1302.23.00;Serviços de folha de pagamento;1.1302.23.00;Serviços de folha de pagamento
+1.1302.29.00;Outros serviços de contabilidade e escrituração mercantil;1.1302.21.00;Serviços de contabilidade
+;;1.1302.22.00;Serviços de escrituração mercantil
+;;1.1302.23.00;Serviços de folha de pagamento
+1.1303;Serviços de consultoria tributária;;
+1.1303.10.00;Serviços de consultoria tributária para pessoas jurídicas;1.1303.10.00;Serviços de consultoria tributária para pessoas jurídicas
+1.1303.20.00;Serviços de consultoria tributária para pessoas físicas;1.1303.20.00;Serviços de consultoria tributária para pessoas físicas
+1.1304.00.00;Serviços notariais e de registro;1.1304.00.00;Serviços notariais e de registro
+1.14;Outros serviços profissionais;;
+1.1401;Serviços gerenciais, de consultoria gerencial, de relações públicas e de comunicação social;;
+1.1401.1;Serviços gerenciais e de consultoria gerencial ;;
+1.1401.11.00;Serviços de consultoria gerencial estratégica;1.1401.11.00;Serviços de consultoria em gestão estratégica
+1.1401.12.00;Serviços de consultoria gerencial financeira ;1.1401.12.00;Serviços de consultoria em gestão financeira 
+1.1401.13.00;Serviços de consultoria gerencial em recursos humanos;1.1401.13.00;"Serviços de consultoria em gestão de recursos humanos
+"
+1.1401.14.00;Serviços de consultoria gerencial em marketing ;1.1401.14.00;Serviços de consultoria em gestão de marketing 
+1.1401.15.00;Serviços de consultoria gerencial operacional;1.1401.15.00;Serviços de consultoria  em gestão operacional
+1.1401.16.00;Serviços de consultoria gerencial em energia;1.1401.16.00;Serviços de consultoria em gestão energética
+1.1401.17.00;Serviços de consultoria em logística;1.1401.17.00;Serviços de consultoria  em gestão de cadeia logística
+1.1401.18.00;Serviços gerenciais em processos de negócios ;1.1401.21.00;Serviços  de gestão em processos de negócios 
+1.1401.19.00;Outros serviços gerenciais e de consultoria gerencial;1.1401.19 .00;Serviços de consultoria em gestão empresarial não classificados em subposições anteriores
+;;1.1401.29.00;Serviços de gestão não classificados em subposições anteriores
+1.1401.20.00;Serviços de relações públicas ;1.1401.32.00;Serviços de relações públicas
+1.1401.3;Serviço de comunicação social ;;
+1.1401.31.00;Serviços de assessoria de imprensa;1.1401.31.00;Serviços de assessoria de imprensa
+1.1401.39.00;Outros serviços de comunicação social;1.1401.39.00;Serviços de assessoria empresarial não classificados em subposições anteriores
+1.1402;Serviços de arquitetura, de planejamento urbano e de áreas rurais e de paisagismo ;;
+1.1402.1;Serviços de arquitetura;;
+1.1402.11.00;Serviços de consultoria em arquitetura ;1.1402.11.00;Serviços de consultoria em arquitetura 
+1.1402.12.00;Serviços arquitetônicos para projetos de construções residenciais ;1.1402.12.00;Serviços de arquitetura para projetos de construções residenciais
+1.1402.13.00;Serviços arquitetônicos para projetos de construções não residenciais  ;1.1402.13.00;Serviços de arquitetura para projetos de construções não residenciais  
+1.1402.14.00;Serviços arquitetônicos para restauração de prédios históricos;1.1402.14.00;Serviços de arquitetura para restauração de prédios históricos
+1.1402.15.00;Serviços de arquitetura relativos ao acompanhamento e fiscalização da execução de projetos arquitetônicos e urbanísticos;1.1402.15.00;Serviços de arquitetura relativos ao acompanhamento e fiscalização da execução de projetos arquitetônicos e urbanísticos
+1.1402.2;Serviços de planejamento urbano e de áreas rurais ;;
+1.1402.21.00;Serviços de planejamento urbano ;1.1402.21.00;Serviços de planejamento urbano 
+1.1402.22.00;Serviços de planejamento de áreas rurais ;1.1402.22.00;Serviços de planejamento de áreas rurais 
+1.1402.3;Serviços de paisagismo;;
+1.1402.31.00;Serviços de consultoria de paisagismo;1.1402.31.00;Serviços de consultoria em paisagismo
+1.1402.32.00;Serviços arquitetônicos de paisagismo ;1.1402.32.00;Serviços de paisagismo, exceto consultoria
+ 1.1402.90.00;Outros serviços de arquitetura, de planejamento urbano e de áreas rurais e de paisagismo;1.1402.90.00;Serviços de arquitetura, de planejamento urbano e de áreas rurais e de paisagismo não classificados em subposições anteriores
+11403;Serviços de engenharia ;;
+1.1403.10.00;Serviços de consultoria de engenharia ;1.1403.10.00;Serviços de consultoria  em engenharia
+1.1403.2;Serviços de engenharia para projetos específicos ;;
+1.1403.21;Serviços de engenharia de projetos de construção ;;
+1.1403.21.10;Serviços de engenharia de projetos de construção residencial;1.1403.21.10;Serviços de engenharia  para projetos de construção residencial
+1.1403.21.20;Serviços de engenharia de projetos de construção não-residencial;1.1403.21.20;Serviços de engenharia  para projetos de construção não residencial
+1.1403.22.00;Serviços de engenharia de projetos industriais e de fabricação, exceto para projetos de energia;1.1403.22.11;Serviços de engenharia para projetos de exploração de minerais
+;;1.1403.22.21;Serviços de engenharia para projetos de veículos terrestres
+;;1.1403.22.90 ;Serviços de engenharia para outros projetos industriais e de fabricação, exceto para projetos de energia
+1.1403.23.00;Serviços de engenharia para projetos de transportes;1.1403.23.00;Serviços de engenharia para projetos de infraestrutura de transportes
+1.1403.24;Serviços de engenharia para projetos de energia ;;
+1.1403.24.10;Serviços de engenharia para projetos de exploração de petróleo e gás;1.1403.22.12;Serviços de engenharia para projetos de exploração de petróleo e gás
+1.1403.24.20;Serviços de engenharia para projetos de refino de petróleo e petroquímica;1.1403.22.13;Serviços de engenharia para projetos de refino de petróleo e petroquímica
+1.1403.24.30;Serviços de engenharia para projetos de unidades de produção de biocombustíveis;1.1403.22.14;Serviços de engenharia para projetos de unidades de produção de biocombustíveis
+1.1403.24.40;Serviços de engenharia para projetos de energia elétrica;1.1403.24.00;Serviços de engenharia para projetos de energia
+1.1403.24.90;Outros serviços de engenharia para projetos de energia ;1.1403.24.00;Serviços de engenharia para projetos de energia
+1.1403.25.00;Serviços de engenharia de projetos de radiodifusão e televisão;1.1403.25.00;Serviços de engenharia para projetos de telecomunicações, radiodifusão e televisão
+1.1403.26.00;Serviços de engenharia de projetos de gerenciamento de resíduos (perigosos e não perigosos) ;1.1403.26.00;Serviços de engenharia para projetos de gerenciamento de resíduos (perigosos e não perigosos)
+1.1403.27.00;Serviços de engenharia de projetos de distribuição de água e redes de esgotos;1.1403.27.00;Serviços de engenharia para projetos de distribuição de água e rede de esgoto
+1.1403.28.00;Serviços de engenharia de projetos de telecomunicação;1.1403.25.00;Serviços de engenharia para projetos de telecomunicações, radiodifusão e televisão
+1.1403.29;Outros serviços de engenharia de projetos ;;
+1.1403.29.10;Serviços de engenharia de projetos aeroespaciais ;1.1403.22.23;Serviços de engenharia para projetos de veículos aéreos e aeroespaciais
+1.1403.29.20 ;Serviços de engenharia para projetos de embarcações;1.1403.22.22;Serviços de engenharia para projetos de embarcações
+1.1403.29.90;Outros serviços de engenharia de projetos ;1.1403.29.00;Serviços de engenharia  para outros projetos 
+1.1403.30.00;Serviços de gerenciamento de projetos de construção ;1.1403.30.00;Serviços de gerenciamento de projetos de construção 
+1.1403.90.00;Outros serviços de engenharia;1.1403.90.00;Serviços de engenharia não classificados em subposições anteriores
+1.1404;Serviços científicos e outros serviços técnicos;;
+1.1404.1;Serviços geológicos, geofísicos e outros de prospecção;;
+1.1404.11.00;Serviços de consultoria geológica e geofísica;1.1404.11.00;Serviços de consultoria geológica e geofísica
+1.1404.12.00;Serviços geofísicos;1.1404.12.00;Serviços geofísicos
+1.1404.13.00;Serviços geoquímicos;1.1404.13.00;Serviços geoquímicos
+1.1404.14.00;Serviços de informações para avaliação e exploração de recursos naturais;1.1404.14.00;Serviços de informações para avaliação e exploração de recursos naturais
+1.1404.19.00;Outros serviços de prospecção;1.1404.19.00;Serviços geológicos, geofísicos e outros de prospecção não classificados em subposições anteriores
+1.1404.2;Serviços topográficos e cartográficos ;;
+1.1404.21.00;Serviços topográficos ;1.1404.21.00;Serviços topográficos 
+1.1404.22.00;Serviços cartográficos ;1.1404.22.00;Serviços cartográficos 
+1.1404.30.00;Serviços meteorológicos e de previsão do tempo;1.1404.30.00;Serviços meteorológicos e de previsão do tempo
+1.1404.4;Serviços de análise e exames técnicos;;
+1.1404.41.00;Serviços de análise e de exames técnicos sobre pureza e composição ;1.1404.41.00;Serviços de análise e de exames técnicos sobre pureza e composição 
+1.1404.42.00;Serviços de análise e de exames técnicos de propriedades físicas ;1.1404.42.00;Serviços de análise e de exames técnicos de propriedades físicas 
+1.1404.43.00;Serviços de análise e de exames técnicos de sistemas elétricos e mecânicos ;1.1404.43.00;Serviços de análise e de exames técnicos de sistemas elétricos e mecânicos 
+1.1404.44.00;Serviços de inspeção técnica de veículos de transporte rodoviários ;1.1404.44.00;Serviços de inspeção técnica de veículos de transporte rodoviário
+1.1404.49.00;Outros serviços de análise e de exames técnicos ;1.1404.49.00;Serviços de análise e de exames técnicos não classificados em subposições anteriores
+1.1405;Serviços veterinários;;
+1.1405.10;Serviços veterinários para animais domésticos ;;
+1.1405.10.10;Serviços hospitalares, com ou sem internação;1.1405.11.00;Serviços hospitalares, com ou sem internação, para animais domésticos
+1.1405.10.90;Outros serviços veterinários para animais domésticos ;1.1405.90.00;Serviços veterinários não classificados em subposições anteriores
+1.1405.20;Serviços veterinários para animais de corte;;
+1.1405.20.10;Serviços hospitalares, com ou sem internação;1.1405.21.00;Serviços hospitalares, com ou sem internação, para animais de corte
+1.1405.20.90;Outros serviços veterinários para animais de corte ;1.1405.90.00;Serviços veterinários não classificados em subposições anteriores
+1.1405.30.00;Serviços funerários, de cremação e de embalsamamento de animais;1.1405.30.00;Serviços funerários, de cremação e de embalsamamento de animais
+1.1405.9;Outros serviços veterinários;1.1405.90.00;Serviços veterinários não classificados em subposições anteriores
+1.1405.91.00;Serviços de bancos de órgãos, sangue, sêmen, tecidos, óvulos e outros materiais biológicos ;1.1405.40.00;Serviços de bancos de órgãos, sangue, sêmen, tecidos, óvulos e outros materiais biológicos
+1.1405.92.00;Serviços de unidades de atendimento, assistência ou tratamento móvel;1.1405.12.00;Serviços de atendimento, assistência ou tratamento para animais domésticos
+;;1.1405.22.00;Serviços de atendimento, assistência ou tratamento para animais de corte
+1.1405.93.00;Planos de atendimento e assistência médico-veterinária;1.1405.50.00;Planos de atendimento e assistência médico-veterinária
+1.1405.94.00;Serviços de guarda, tratamento, adestramento, embelezamento e alojamento (hotel veterinário);1.1405.60.00;Serviços de guarda,  adestramento, embelezamento e alojamento
+;;1.1405.11.00;Serviços hospitalares, com ou sem internação, para animais domésticos
+;;1.1405.12.00;Serviços de atendimento, assistência ou tratamento para animais domésticos
+;;1.1405.21.00;Serviços hospitalares, com ou sem internação, para animais de corte
+;;1.1405.22.00;Serviços de atendimento, assistência ou tratamento para animais de corte
+;;1.1405.90.00;Serviços veterinários não classificados em subposições anteriores
+1.1405.99.00;Outros serviços veterinários;1.1405.90.00;Serviços veterinários não classificados em subposições anteriores
+1.1406;Serviços de propaganda e de alocação de espaço ou tempo para propaganda;;
+1.1406.1;Serviços de propaganda;;
+1.1406.11.00;Serviços de campanhas publicitárias ;1.1406.11.00;Serviços de campanhas publicitárias 
+1.1406.12.00;Serviços de marketing direto e mala direta;1.1406.12.00;Serviços de marketing direto e mala direta
+1.1406.19.00;Outros serviços de propaganda;1.1406.19.00;Serviços de propaganda não classificados em subposições anteriores
+1.1406.20.00;Aquisição ou venda de espaço ou tempo para propaganda, sob comissão ;1.1406.20.00;Aquisição ou venda de espaço ou tempo para propaganda, sob comissão 
+1.1406.3;Venda de espaço ou tempo para propaganda, exceto sob comissão ;;
+1.1406.31.00;Venda de espaço para propaganda em mídia impressa, exceto sob comissão ;1.1406.31.00;Venda de espaço para propaganda em mídia impressa, exceto sob comissão 
+1.1406.32.00;Venda de tempo para propaganda em rádio e televisão, exceto sob comissão ;1.1406.32.00;Venda de tempo para propaganda em rádio e televisão, exceto sob comissão 
+1.1406.33.00;Venda de espaço para propaganda na rede mundial de computadores, exceto sob comissão ;1.1406.33.00;Venda de espaço para propaganda na rede mundial de computadores, exceto sob comissão 
+1.1406.39.00;Venda de espaço ou tempo para propaganda em outros meios de comunicação publicitária, exceto sob comissão;1.1406.34.00;Venda de espaço para propaganda em mídia exterior, exceto sob comissão
+;;1.1406.39.00;Venda de espaço ou tempo para propaganda, exceto sob comissão, não classificados em subposições anteriores
+1.1407.00.00;Pesquisas de mercado e serviços de pesquisa de opinião pública;1.1407.00.00;Pesquisas de mercado e serviços de pesquisa de opinião pública
+1.1408;Serviços fotográficos, videográficos e de processamento de fotografias;;
+1.1408.1;Serviços fotográficos e videográficos de eventos;;
+1.1408.11.00;Serviços fotográficos de retratos ;1.1408.11.00;Serviços fotográficos de retratos
+1.1408.12.00;Serviços fotográficos para propaganda ;1.1408.12.00;Serviços fotográficos e videográficos para propaganda
+1.1408.13.00;Serviços fotográficos e videográficos de eventos;1.1408.13.00;Serviços fotográficos e videográficos de eventos
+1.1408.14.00;Serviços fotográficos especiais ;1.1408.14.00;Serviços fotográficos especiais 
+1.1408.19.00;Outros serviços fotográficos e videográficos;1.1408.12.00;Serviços fotográficos e videográficos para propaganda
+;;1.1408.13.00;Serviços fotográficos e videográficos de eventos
+;;1.1408.15.00;Serviços de restauração e retoque de fotografias 
+;;1.1408.19.00;Serviços fotográficos e videográficos não classificados em subposições anteriores
+1.1408.20.00;Serviços de processamento de fotografias;1.1408.20.00;Serviços de processamento de fotografias
+1.1409;Outros serviços profissionais, técnicos e gerenciais não classificados em outra posição ;;
+1.1409.1;Serviços especializados de projetos (design) ;;
+1.1409.11;Serviços de projeto (design) de interiores ;;
+1.1409.11.10;Serviços de projetos (design) de espaços comerciais e públicos;1.1409.11.00;Serviços de design de interiores para espaços comerciais e públicos
+1.1409.11.90;Outros serviços de projeto (design) de interiores ;1.1409.12.00 ;Serviços de design de interiores para espaços residenciais
+;;1.1409.90.00;Serviços especializados de  design não classificados em subposições anteriores
+1.1409.12.00;Serviços de desenho industrial ;1.1409.24.00;Serviços de desenho industrial de mobiliários e itens de decoração
+;;1.1409.25.00 ;Serviços de desenho industrial de utensílios e equipamentos eletrodomésticos e eletroeletrônicos
+;;1.1409.29.00 ;Serviços de desenho industrial não classificados em subposições anteriores 
+1.1409.13;Projetos (design) originais;;
+1.1409.13.10;Serviços de projetos (design) de marcas, imagens, objetos gráficos e digitais;1.1409.30.00;Serviços de design de marcas, imagens, objetos gráficos e digitais
+1.1409.13.20;Serviços de projetos (design) de embalagens, expositores de loja e objetos promocionais para comunicação e vendas;1.1409.21.00;Serviços de desenho industrial de embalagens, expositores de loja e objetos promocionais para comunicação e vendas
+1.1409.13.30;Serviços de projetos (design) de produtos, utensílios, equipamentos, vestuário, calçados, ornamentos, joias e objetos pessoais;1.1409.22.00;Serviços de desenho industrial de produtos, utensílios, equipamentos, vestuário, calçados, ornamentos, joias e objetos pessoais
+1.1409.13.40;Serviços de projetos (design) de máquinas, equipamentos, acessórios e objetos de uso industrial de qualquer natureza;1.1409.23.00;Serviços de  desenho industrial de máquinas, equipamentos, acessórios e objetos de uso industrial de qualquer natureza
+1.1409.13.90;Outros serviços projetos (design) originais; 1.1409.90.00;Serviços especializados de  design não classificados em subposições anteriores
+1.1409.19.00;Outros serviços especializados de projeto (design) ; 1.1409.90.00;Serviços especializados de  design não classificados em subposições anteriores
+1.1409.2;Serviços de consultoria técnica e científica não classificados em outra posição ;;
+1.1409.21.00;Serviços de consultoria ambiental ;1.1410.10.00;Serviços de consultoria ambiental
+1.1409.29.00;Outros serviços de consultoria técnica e científica ;1.1410.90.00;Serviços de consultoria técnica e científica não classificados em subposições anteriores
+1.1409.30.00;Serviços de compilação e coletânea de fatos e informações originais ;1.1415.00.00 ;Serviços profissionais, técnicos e gerenciais não classificados em posições anteriores
+1.1409.40.00;Serviços de tradução e de intérpretes ;1.1411.00.00;Serviços de tradução e de intérpretes
+1.1409.50.00;Serviços para registros de marcas comerciais e de franquias empresariais, exceto as licenças de uso de direito ;1.1412.00.00;Serviços para registros de marcas comerciais e de franquias empresariais, exceto as licenças de uso de direito
+1.1409.90.00;Outros serviços profissionais, técnicos e gerenciais não classificados nas subposições anteriores ;1.1415.00.00;Serviços profissionais, técnicos e gerenciais não classificados em posições anteriores
+;NOVO;1.1413.00.00 ;Serviços de prospecção de clientes
+;NOVO;1.1414.00.00 ;Serviços de prospecção de fornecedores
+1.15;Serviços de tecnologia da informação;;
+1.1501;Serviços de consultoria, de segurança e de suporte em tecnologia da informação (TI) ;;
+1.1501.10.00 ;Serviços de consultoria em tecnologia da informação (TI) ;1.1501.10.00 ;Serviços de consultoria em tecnologia da informação (TI) 
+1.1501.20.00 ;Serviços de segurança em tecnologia da informação (TI) ;1.1501.20.00 ;Serviços de segurança em tecnologia da informação (TI) 
+1.1501.30.00 ;Serviços de suporte em tecnologia da informação (TI) ;1.1501.30.00 ;Serviços de suporte em tecnologia da informação (TI) 
+1.1502;Serviços de projeto e desenvolvimento de aplicativos e programas em tecnologia da informação (TI) ;;
+1.1502.10.00 ;Serviços de projeto, desenvolvimento e instalação de aplicativos e programas não personalizados (não customizados) ;1.1502.10.00 ;Serviços de projeto, desenvolvimento e instalação de aplicativos e programas não personalizados (não customizados) 
+1.1502.20.00 ;Serviços de projeto e desenvolvimento, adaptação e instalação de aplicativos personalizados (customizados) ;1.1502.20.00 ;Serviços de projeto e desenvolvimento, adaptação e instalação de aplicativos personalizados (customizados) 
+1.1502.30.00 ;Serviços de projeto e desenvolvimento de estruturas e conteúdo de páginas eletrônicas;1.1502.30.00 ;Serviços de projeto e desenvolvimento de estruturas e conteúdo de páginas eletrônicas
+1.1502.40.00 ;Serviços de projeto e desenvolvimento de estruturas e conteúdo de bancos de dados ;1.1502.40.00 ;Serviços de projeto e desenvolvimento de estruturas e conteúdo de bancos de dados 
+1.1502.50.00 ;Serviços de integração de sistemas em tecnologia da informação (TI) ;1.1502.50.00 ;Serviços de integração de sistemas em tecnologia da informação (TI) 
+1.1502.90.00 ;Outros serviços de projeto e desenvolvimento de aplicativos ;1.1502.90.00;Serviços de projeto e desenvolvimento de aplicativos e programas em tecnologia da informação (TI) não classificados em subposições anteriores
+1.1503.00.00 ;Serviços de projeto e desenvolvimento de redes em tecnologia da informação (TI) ;1.1503.00.00 ;Serviços de projeto e desenvolvimento de redes em tecnologia da informação (TI) 
+1.1504.00.00 ;Serviços de projeto e desenvolvimento de topografias de circuitos integrados ;1.1504.00.00 ;Serviços de projeto e desenvolvimento de topografias de circuitos integrados 
+1.1505.00.00 ;Serviços de projeto de circuitos integrados ;1.1505.00.00 ;Serviços de projeto de circuitos integrados 
+1.1506;Serviços de infraestrutura para hospedagem em tecnologia da informação (TI) ;;
+1.1506.10.00 ;Serviços de hospedagem de sítios na rede mundial de computadores ;1.1506.10.00 ;Serviços de hospedagem de sítios eletrônicos na rede mundial de computadores 
+1.1506.20.00 ;Serviços de hospedagem de aplicativos e programas ;1.1506.21.00;Serviços de hospedagem de aplicativos e programas software como serviço (SaaS)
+;;1.1506.22.00;Serviços de fornecimento de infraestrutura como serviço (IaaS)
+;;1.1506.23.00;Serviços de fornecimento de plataformas como serviço (PaaS)
+;;1.1506.29.00;Serviços de hospedagem de aplicativos e programas não classificados em subposições anteriores
+1.1506.90.00 ;Outros serviços de infraestrutura para hospedagem em tecnologia da informação (TI) ;1.1506.90.00 ;Serviços de hospedagem e de disponibilização de infraestrutura em tecnologia da informação (TI) não classificados em subposições anteriores
+1.1507;Serviços de gerenciamento de infraestrutura de tecnologia da informação (TI) ;;
+1.1507.10.00 ;Serviços de gerenciamento de redes ;1.1507.10.00 ;Serviços de gerenciamento de redes em tecnologia da informação (TI)
+1.1507.20.00 ;Serviços de gerenciamento de sistemas computacionais ;1.1507.20.00 ;Serviços de gerenciamento de sistemas computacionais 
+1.1507.90.00 ;Outros serviços de gerenciamento de infraestrutura de tecnologia da informação (TI) ;1.1507.90.00 ;Serviços de gerenciamento de infraestrutura em tecnologia da informação (TI) não classificados em subposições anteriores
+1.1508.00.00 ;Serviços de manutenção de aplicativos e programas ;1.1508.00.00 ;Serviços de manutenção de aplicativos e programas 
+1.1509.00.00 ;Serviços auxiliares de processamento de dados ;1.1509.00.00 ;Serviços de processamento de dados 
+1.1590.00.00 ;Outros serviços de gerenciamento de tecnologia da informação (TI) ;1.1510.00.00 ;Serviços de tecnologia da informação (TI) não classificados em subposições anteriores
+1.16;Reservado para possível uso futuro;;
+1.17;Serviços de telecomunicação, difusão e fornecimento de informações;;
+1.1701;Telefonia e outros serviços de telecomunicações;;
+1.1701.1;Serviços de telecomunicações fixos e serviços de valor adicionado;;
+1.1701.11;Serviços de chamada de telecomunicações fixos comutados em banda estreita e larga;;
+1.1701.11.10;Local;1.1701.21.00;Serviços de chamadas de telecomunicações fixas comutadas
+1.1701.11.20;Nacional;1.1701.21.00;Serviços de chamadas de telecomunicações fixas comutadas
+1.1701.11.30;Internacional;1.1701.21.00;Serviços de chamadas de telecomunicações fixas comutadas
+1.1701.12;Serviços de acesso e uso de telecomunicações fixos comutados em banda estreita e banda larga;1.1701.21.00;Serviços de chamadas de telecomunicações fixas comutadas
+1.1701.12.10;Local;1.1701.21.00;Serviços de chamadas de telecomunicações fixas comutadas
+1.1701.12.20;Nacional;1.1701.21.00;Serviços de chamadas de telecomunicações fixas comutadas
+1.1701.12.30;Internacional;1.1701.21.00;Serviços de chamadas de telecomunicações fixas comutadas
+1.1701.13.00;Serviços de valor adicionado sobre serviços de telecomunicações fixos;1.1701.21.00;Serviços de chamadas de telecomunicações fixas comutadas
+;;1.1701.29.00;Serviços de telecomunicações fixas não classificados em subposições anteriores
+1.1701.14.00;Serviços de gerência de redes fixas e administração de seus usuários;1.1507.10.00 ;Serviços de gerenciamento de redes em tecnologia da informação (TI)
+;;1.1507.90.00 ;Serviços de gerenciamento de infraestrutura em tecnologia da informação (TI) não classificados em subposições anteriores
+1.1701.15.00;Serviços de interconexão pelo uso da rede fixa;1.1701.11.00;Serviços de interconexão pelo uso da rede fixa
+1.1701.19.00;Outros serviços de telecomunicações fixas;1.1701.29.00;Serviços de telecomunicações fixas não classificados em subposições anteriores
+1.1701.2;Serviços de telecomunicações móveis e serviços de valor adicionado;;
+1.1701.21;Serviços de chamada de telecomunicações móveis comutados em banda estreita e banda larga;1.1701.31.00;Serviços de voz nas telecomunicações móveis
+1.1701.21.10;Local;;
+1.1701.21.20;Nacional;;
+1.1701.21.30;Internacional;;
+1.1701.22;Serviços de acesso e uso de telecomunicações móveis comutado em banda estreita e banda larga;;
+1.1701.22.10;Local;1.1701.31.00;Serviços de voz nas telecomunicações móveis
+;;1.1701.32.00;Serviços de texto nas telecomunicações móveis
+;;1.1701.33.00;Serviços de transmissão de dados nas telecomunicações móveis, exceto serviços de texto
+1.1701.22.20;Nacional;1.1701.31.00;Serviços de voz nas telecomunicações móveis
+;;1.1701.32.00;Serviços de texto nas telecomunicações móveis
+;;1.1701.33.00;Serviços de transmissão de dados nas telecomunicações móveis, exceto serviços de texto
+1.1701.22.30;Internacional;1.1701.31.00;Serviços de voz nas telecomunicações móveis
+;;1.1701.32.00;Serviços de texto nas telecomunicações móveis
+;;1.1701.33.00;Serviços de transmissão de dados nas telecomunicações móveis, exceto serviços de texto
+1.1701.23.00;Serviços de valor adicionado sobre serviços de telecomunicações móveis;;Os serviços de valor adicionado sobre serviços de telecomunicações móveis serviços de telecomunicações móveis anteriormente classificados nesta posição devem ser classificados de acordo com a natureza do serviço efetivamente prestado.
+;;;
+;;;
+;;;
+1.1701.24.00;Serviços de gerência das redes móveis e administração de seus usuários;1.1507.10.00 ;Serviços de gerenciamento de redes em tecnologia da informação (TI)
+;;1.1507.90.00 ;Serviços de gerenciamento de infraestrutura em tecnologia da informação (TI) não classificados em subposições anteriores
+1.1701.25.00;Serviços de interconexão pelo uso de rede móvel;1.1701.12.00;Serviços de interconexão pelo uso de rede móvel
+1.1701.26;Serviços de usuário visitante (roaming);;
+1.1701.26.10;Serviços de usuário visitante nacional (roaming nacional);1.1701.34.00;Serviços de telecomunicações móveis para usuários visitantes (roaming)
+1.1701.26.20;Serviços de usuário visitante internacional (roaming internacional);1.1701.34.00;Serviços de telecomunicações móveis para usuários visitantes (roaming)
+1.1701.27.00;Serviços nomádicos;1.1701.90.00;Serviços de telecomunicações, exceto pela rede mundial de computadores, não classificados em subposições anteriores
+1.1701.29.00;Outros serviços de telecomunicações móveis;1.1701.90.00;Serviços de telecomunicações, exceto pela rede mundial de computadores, não classificados em subposições anteriores
+1.1701.30;Serviços de redes privadas, serviços de interesse restrito e serviços de valor adicionado;;
+1.1701.30.10;Serviços fixos de redes privativas;1.1701.40.00;Serviços de redes privadas 
+1.1701.30.20;Serviços móveis, nomádicos de uso privativo;1.1701.40.00;Serviços de redes privadas 
+1.1701.30.3;Serviços de interesse restrito;;
+1.1701.30.31;Serviços de interesse restrito de abrangência local;1.1701.40.00;Serviços de redes privadas 
+1.1701.30.32;Serviços de interesse restrito de abrangência nacional;1.1701.40.00;Serviços de redes privadas 
+1.1701.30.33;Serviços de interesse restrito de abrangência internacional;1.1701.40.00;Serviços de redes privadas 
+1.1701.30.40;Serviços de valor adicionado sobre serviços de redes privadas ou de serviços de interesse restrito;1.1701.40.00;Serviços de redes privadas 
+1.1701.40;Serviços de transmissão de dados e serviços de exploração de linha dedicada;;
+1.1701.40.10;Serviços de transmissão de dados local, nacional ou internacional;1.1701.51.00;Serviços de transmissão de dados local, nacional ou internacional
+1.1701.40.20;Serviços de exploração de linha dedicada local, nacional ou internacional;1.1701.52.00;Serviços de exploração de linha dedicada local, nacional ou internacional
+1.1701.50;Serviços de distribuição de programação de televisão por assinatura;;
+1.1701.50.10;Serviços de distribuição de pacotes básicos de programação de televisão por assinatura;1.1706.22.00;Serviços de distribuição de pacotes básicos de progamação de televisão por assinatura
+1.1701.50.20;Serviços de distribuição de grades de programação especiais de televisão por assinatura;1.1706.23.00;Serviços de distribuição de pacotes de programação adicional de televisão por assinatura
+1.1701.50.30;Serviços de distribuição de programação através do sistema “pague e assista” (pay-per-view) de televisão por assinatura;1.1706.24.00;"Serviços de distribuição de programas de televisão por assinatura, na modalidade ""pague por exibição"" (""pay-per-view"")"
+1.1701.50.90;Outros serviços de distribuição de programação de televisão por assinatura, inclusive os “pacotes combinados”;1.1701.19.00;Serviços de operadoras não classificados em subposições anteriores
+1.1701.90.00;Outros serviços de telecomunicações;1.1701.90.00;Serviços de telecomunicações, exceto pela rede mundial de computadores, não classificados em subposições anteriores
+1.1702.;Serviços de telecomunicação pela rede mundial de computadores;;
+1.1702.10.00;Serviços de fornecimento de infraestrutura de acesso (backbone) à rede mundial de computadores;1.1702.10.00;Serviços de fornecimento de infraestrutura de acesso (backbone) à rede mundial de computadores
+1.1702.2;Serviços de acesso à rede mundial de computadores;;
+1.1702.21.00;Serviços de acesso à rede mundial de computadores por conexão discada;1.1702.21.00;Serviços de acesso à rede mundial de computadores por banda estreita
+1.1702.22.00;Serviços de acesso à rede mundial de computadores por banda larga;1.1702.22.00;Serviços de acesso à rede mundial de computadores por banda larga
+1.1702.90.00;Outros serviços na rede mundial de computadores;1.1702.90.00;Serviços de telecomunicações pela rede mundial de computadores não classificados em subposições anteriores
+1.1703.;Serviços de oferta de conteúdo de acesso imediato (on-line);;
+1.1703.10.00;Serviços de oferta de livros, jornais, periódicos, diretórios e listas de postagem de acesso imediato (on-line);1.1703.10.00;Serviços de oferta de livros, jornais, periódicos, diretórios e malas diretas de acesso imediato (on-line)
+1.1703.20.00;Serviços de oferta de áudio, inclusive de conteúdo contínuo (streaming), de acesso imediato (on-line);1.1703.21.00;Serviços de oferta de áudio para download
+;;1.1703.22.00;Serviços de oferta de áudio de conteúdo contínuo (streaming)
+1.1703.30.00;Serviços de oferta de filmes e vídeos, inclusive de conteúdo contínuo;1.1703.31.00;Serviços de oferta de arquivos contendo filmes e vídeos para download
+;;1.1703.32.00;Serviços de oferta de filmes e vídeos de conteúdo contínuo (streaming)
+1.1703.40.00;Serviços de oferta de conteúdos que combinem duas ou mais mídias de acesso imediato (on-line);1.1703.91.00;Serviços de oferta de jogos de acesso imediato (on-line) 
+;;1.1703.92.00;Serviços de oferta de conteúdo de portais de busca na rede mundial de computadores
+;;1.1703.99.00;Serviços de oferta de outros conteúdos de acesso imediato (on-line) não classificados em subposições anteriores
+1.1703.50.00;Serviços de conteúdo de portais de busca na rede mundial de computadores;1.1703.92.00;Serviços de oferta de conteúdo de portais de busca na rede mundial de computadores
+1.1703.90.00;Outros serviços de conteúdos de acesso imediato (on-line);1.1703.91.00;Serviços de oferta de jogos de acesso imediato (on-line) 
+;;1.1703.99.00;Serviços de oferta de outros conteúdos de acesso imediato (on-line) não classificados em subposições anteriores
+1.1704;Serviços de agências de notícias;;
+1.1704.10.00;Serviços de agências de notícias para jornais e periódicos;1.1704.10.00;Serviços de agências de notícias para jornais e periódicos
+1.1704.20.00;Serviços de agências de notícias em mídia audiovisual;1.1704.20.00;Serviços de agências de notícias para mídia audiovisual
+1.1704.90.00;Outros serviços de agências de notícias;1.1704.10.00;Serviços de agências de notícias para jornais e periódicos
+;;1.1704.20.00;Serviços de agências de notícias para mídia audiovisual
+1.1705.;Serviços de biblioteca e arquivo;;
+1.1705.10.00;Serviços de biblioteca;1.1705.10.00;Serviços de biblioteca
+1.1705.20.00;Serviços de arquivo;1.1705.20.00;Serviços de arquivo
+1.1706.;Serviços de difusão, programação e distribuição de programas de rádio e televisão;;
+1.1706.1;Serviços de difusão de programas originais de rádio e televisão;;
+1.1706.11.00;Serviços de difusão de programas originais de rádio;1.1706.21.00;Serviços de transmissão de sinais, sons e imagens de rádio e televisão, aberta ou por assinatura
+1.1706.12;Serviços de difusão de programas originais de televisão;1.1706.21.00;Serviços de transmissão de sinais, sons e imagens de rádio e televisão, aberta ou por assinatura
+1.1706.12.10;Serviços de difusão de programas originais para televisão aberta;1.1706.21.00;Serviços de transmissão de sinais, sons e imagens de rádio e televisão, aberta ou por assinatura
+1.1706.12.20;Serviços de difusão de programas originais para televisão por assinatura;1.1706.21.00;Serviços de transmissão de sinais, sons e imagens de rádio e televisão, aberta ou por assinatura
+1.1706.2;Serviços de programação dos canais de rádio e televisão;;
+1.1706.21.00;Serviços de programação dos canais de rádio;1.1706.11.00;Serviços de programação dos canais de rádio
+1.1706.22.00;Serviços de programação dos canais de televisão;1.1706.12.00;Serviços de programação dos canais de televisão
+1.1706.30.00;Serviços de distribuição de sinais de rádio e televisão;1.1706.21.00;Serviços de transmissão de sinais, sons e imagens de rádio e televisão, aberta ou por assinatura
+;;1.1706.22.00;Serviços de distribuição de pacotes básicos de programação de televisão por assinatura
+;;1.1706.23.00;Serviços de distribuição de pacotes de programação adicional de televisão por assinatura
+;;1.1706.24.00;"Serviços de distribuição de programas de televisão por assinatura, na modalidade ""pague por exibição"" (""pay-per-view"")"
+1.1706.40.00;Serviços de distribuição de programas de televisão aberta;1.1706.21.00;Serviços de transmissão de sinais, sons e imagens de rádio e televisão, aberta ou por assinatura
+1.1706.90.00;Outros serviços de difusão, programação e distribuição de programas de rádio e televisão;1.1706.90.00;Serviços de difusão, programação e distribuição de programas de rádio e televisão não classificados em subposições anteriores
+1.18;Serviços de apoio às atividades empresariais;;
+1.1801;Serviços de recrutamento e seleção de pessoal ;;
+1.1801.10.00 ;Serviços de busca de empregos e encaminhamento de pessoal ;1.1801.11.00;Serviço de recrutamento e seleção de profissionais executivos
+;;1.1801.12.00;Serviço de recrutamento e seleção de profissionais, exceto executivos
+1.1801.2 ;Serviços de fornecimento de mão de obra ;;
+1.1801.21.00 ;Serviços de fornecimento de mão de obra efetiva ;1.1801.21.00 ;Serviços de fornecimento de mão de obra terceirizada, exceto temporária
+1.1801.22.00 ;Serviços de fornecimento de mão de obra temporária ;1.1801.22.00 ;Serviços de fornecimento de mão de obra temporária
+1.1801.90.00 ;Outros serviços de recrutamento e seleção de pessoal ;1.1801.29.00;Serviços de fornecimento de mão de obra não classificados em subposições anteriores
+1.1802;Serviços de investigação e segurança ;;
+1.1802.10.00 ;Serviços de investigação ;1.1802.10.00 ;Serviços de investigação 
+1.1802.20.00 ;Serviços de consultoria em segurança ;1.1802.20.00 ;Serviços de consultoria em segurança 
+1.1802.30.00 ;Serviços de sistemas de segurança ;1.1802.30.00 ;Serviços de sistemas de segurança 
+1.1802.40.00 ;Serviços de transporte de valores ;1.1802.40.00 ;Serviços de carro-forte
+1.1802.50.00 ;Serviços de guarda e escolta armada ;1.1802.50.00 ;Serviços de guarda e escolta armada 
+1.1802.90.00 ;Outros serviços de segurança ;1.1802.90.00 ;Serviços de segurança não classificados em subposições anteriores
+1.1803;Serviços de limpeza ;;
+1.1803.10.00 ;Serviços de desinfecção e extermínio de pragas ;1.1803.21.00 ;Serviços de desinfecção e extermínio de pragas 
+1.1803.20.00 ;Serviços gerais de limpeza ;1.1803.10.00 ;Serviços gerais de limpeza  
+1.1803.30.00;Serviços especializados de limpeza;1.1803.22.00;Serviços de limpeza de janelas 
+;;1.1803.29.00 ;Serviços especializados de limpeza não classificados em subposições anteriores
+1.1804;"Serviços de planejamento de viagens e de operador de turismo; outros serviços relacionados ";;
+1.1804.1 ;Serviços de reservas em transportes ;;
+1.1804.11.00 ;Serviços de reservas em transportes aéreos ;1.1805.11.00 ;Serviços de reservas para transporte aéreo de passageiros
+1.1804.19.00 ;Outros serviços de planejamento e reserva em transportes ;1.1805.12.00;Serviços de reservas para transporte ferroviário de passageiros
+;;1.1805.13.00;Serviços de reservas para transporte rodoviário de passageiros
+;;1.1805.14.00;Serviços de reservas de carros de aluguel
+1.1804.19.00 ;Outros serviços de planejamento e reserva em transportes ;1.1805.19.00 ;Serviços de reservas para transporte de passageiros não classificados em subposições anteriores
+1.1804.2 ;Serviços de reservas de hospedagem, reservas em cruzeiros e reservas de pacotes turísticos ;;
+1.1804.21.00 ;Serviços de reservas de hospedagem ;1.1805.21.00 ;Serviços de reservas de hospedagem, exceto em unidades compartilhadas 
+;;1.1805.22.00;"Serviços de reservas e intercâmbio de unidades compartilhadas (""time-share"")  "
+1.1804.22.00 ;Serviços de reservas em cruzeiros ;1.1805.23.00 ;Serviços de reservas em cruzeiros 
+1.1804.23.00 ;Serviços de reservas de pacotes turísticos ;1.1805.24.00 ;Serviços de reservas de pacotes turísticos 
+1.1804.30.00 ;Outros serviços de reservas ;1.1805.31.00;Serviços de reservas para centros de convenções, auditórios e salas de exposições
+1.1804.40.00 ;Serviços de operadoras de turismo ;1.1805.40.00 ;Serviços de operadoras de turismo 
+1.1804.50.00 ;Serviços de guias turísticos ;1.1805.50.00 ;Serviços de guias turísticos 
+1.1804.6 ;Serviços de informação a visitantes e promoção turística ;;
+1.1804.61.00 ;Serviços de promoção turística ;1.1805.61.00 ;Serviços de promoção turística 
+1.1804.62.00 ;Serviços de informação a visitantes ;1.1805.62.00 ;Serviços de informação a visitantes 
+1.1805;Outros serviços de apoio ;;
+1.1805.10.00 ;Serviços de informação cadastral para fins de crédito ;1.1806.10.00 ;Serviços de informação cadastral e análise de crédito
+1.1805.20.00 ;Serviços de cobrança ;1.1806.20.00 ;Serviços de cobrança 
+1.1805.3 ;Serviços de apoio por meio de telefone ;;
+1.1805.31.00 ;Serviços de telemarketing, incluindo serviços de atendimento ao cliente ;1.1806.31.00 ;Serviços de call center 
+1.1805.39.00 ;Outros serviços de apoio por meio de telefone ;1.1806.39.00 ;Serviços de apoio às atividades empresariais por meio de telefone não classificados em subposições anteriores
+1.1805.40.00 ;Serviços combinados de escritório e apoio administrativo ;1.1806.40.00 ;Serviços combinados de escritório e apoio administrativo 
+1.1805.5 ;Serviços especializados de apoio a escritório ;;
+1.1805.51.00 ;Serviços de fotocópia ;1.1806.51.00 ;Serviços de fotocópias e outros serviços de reprodução de documentos
+1.1805.52.00 ;Serviços de execução de mala direta e de elaboração de listas de endereços ;1.1806.52.00 ;Serviços de execução e envio de mala direta e de elaboração de listas de endereços 
+1.1805.53.00 ;Serviços de preparação de documentos e outros serviços especializados de apoio a escritórios ;1.1806.53.00 ;Serviços de preparação de documentos 
+;;1.1806.59.00 ;Serviços especializados de apoio a escritório não classificados em subposições anteriores
+1.1805.6 ;Serviços de assistência e organização de convenções e de feiras de negócios ;;
+1.1805.61.00 ;Serviços de assistência e organização de convenções ;1.1806.61.00 ;Serviços de assistência e organização de convenções 
+1.1805.62.00 ;Serviços de assistência e organização de feiras de negócios ;1.1806.62.00 ;Serviços de assistência e organização de feiras de negócios
+1.1805.63.00 ;Serviços de exploração de centros de convenções, escritórios virtuais, estandes de qualquer natureza, auditórios e os demais assemelhados para realização de eventos ou negócios de qualquer natureza ;1.1805.31.00;Serviços de reservas para centros de convenções, auditórios e salas de exposições
+;;1.1806.61.00 ;Serviços de assistência e organização de convenções 
+;;1.1806.62.00 ;Serviços de assistência e organização de feiras de negócios
+;;1.1806.63.00 ;Serviços de assistência e organização de exposições e outros eventos 
+1.1805.69.00 ;Outros serviços de assistência e organização de feiras de negócios e convenções ;1.1806.63.00 ;Serviços de assistência e organização de exposições e outros eventos 
+1.1805.70.00 ;Serviços de jardinagem ;1.1806.70.00 ;Serviços de jardinagem  
+1.1805.90 ;Outros serviços de apoio não classificados em outra posição ;;
+1.1805.90.1 ;Serviços de leitura de medidores ;;
+1.1805.90.11 ;Serviços de leitura de medidores de eletricidade ;1.1806.90.00;Serviços de apoio não classificados em subposições anteriores
+1.1805.90.12 ;Serviços de leitura de medidores de gás ;1.1806.90.00;Serviços de apoio não classificados em subposições anteriores
+1.1805.90.13 ;Serviços de leitura de medidores de água ;1.1806.90.00;Serviços de apoio não classificados em subposições anteriores
+1.1805.90.20 ;Serviços de agências de modelos ;1.1806.81.00;Serviços de agenciamento de modelos
+1.1805.90.30 ;Serviços de distribuição e venda de bilhetes e demais produtos de loteria, cartões, pules ou cupons de apostas, sorteios, prêmios, inclusive os decorrentes de títulos de capitalização e congêneres. ;1.2505.90.00;Serviços desportivos e recreacionais desportivos não classificados em subposições anteriores
+1.1805.90.90 ;Outros serviços de apoio ;1.1806.90.00;Serviços de apoio não classificados em subposições anteriores
+;;1.1804.00.00;Serviços de acondicionamento e empacotamento
+;;1.1806.82.00;Serviços de agenciamento de artistas
+;;1.1806.83.00;Serviços de agenciamento de atletas
+1.19;Serviços de apoio às atividades agropecuárias, silvicultura, pesca, aquicultura, extração mineral, eletricidade, gás e água;;
+1.1901;Serviços de apoio a agricultura, pecuária, produção florestal (silvicultura), pesca e aquicultura;;
+1.1901.10.00;Serviços de apoio à agricultura;1.1901.10.00;Serviços de apoio à agricultura
+1.1901.20.00;Serviços de apoio à pecuária;1.1901.20.00;Serviços de apoio à pecuária
+1.1901.30.00;Serviços de apoio à produção florestal (silvicultura);1.1901.30.00;Serviços de apoio à produção florestal (silvicultura)
+1.1901.40.00;Serviços de apoio à pesca;1.1901.40.00;Serviços de apoio à pesca
+1.1901.50.00;Serviços de apoio à aquicultura;1.1901.50.00;Serviços de apoio à aquicultura
+1.1902;Serviços de apoio à mineração;;
+1.1902.10.00;Serviços de apoio à extração de petróleo e gás;1.1902.10.00;Serviços de apoio à extração de petróleo e gás
+1.1902.90.00;Outros serviços de apoio à mineração;1.1902.90.00;Serviços de apoio à mineração não classificados em subposições anteriores
+1.1903;Serviços de apoio à transmissão e distribuição de eletricidade, gás e água;;
+1.1903.1;Serviços de apoio à transmissão e distribuição de eletricidade;;
+1.1903.11.00;Serviços de apoio à transmissão de eletricidade;1.1903.11.00;Serviços de apoio à transmissão de eletricidade
+1.1903.12.00;Serviços de apoio à distribuição de eletricidade;1.1903.12.00;Serviços de apoio à distribuição de eletricidade
+1.1903.20.00;Serviços de apoio à distribuição de gás por meio de tubulações;1.1903.20.00;Serviços de apoio à distribuição de gás por meio de tubulações
+1.1903.30.00;Serviços de apoio à distribuição de água;1.1903.30.00;Serviços de apoio à distribuição de água por meio de tubulações, exceto vapor de água e água quente
+;;1.1903.50.00;Serviços de apoio à distribuição de água, exceto por meio de tubulações
+1.1903.40.00;Serviços de apoio à distribuição de ar condicionado, água quente e vapor por meio de tubulações;1.1903.40.00;Serviços de apoio à distribuição de vapor de água, água quente e ar condicionado por meio de tubulações
+1.20;Serviços de manutenção, reparação e instalação (exceto construção);;
+1.2001;Serviços de manutenção e reparação de produtos metálicos, maquinário e equipamentos ;;
+1.2001.10.00;Serviços de manutenção e reparação de produtos metálicos;1.2001.10.00;Serviços de manutenção e reparação de produtos metálicos, exceto maquinários e equipamentos
+1.2001.20.00;Serviços de manutenção e reparação de computadores e seus periféricos e maquinário de escritório ;1.2001.20.00;Serviços de manutenção e reparação de computadores e seus periféricos e de maquinário para escritório
+1.2001.3;Serviços de manutenção e reparação de maquinário e equipamentos de transporte ;;
+1.2001.31.00;Serviços de manutenção e reparação de veículos automotores rodoviários ;1.2001.31.10;Serviços de manutenção e reparação de veículos rodoviários motorizados
+1.2001.32.00;Serviços de manutenção e reparação de reboques (trailers), semirreboques (semi-trailers) e outros veículos não motorizados;1.2001.31.20;Serviços de manutenção e reparação de veículos rodoviários não motorizados
+1.2001.33.00;Serviços de manutenção e reparação de veículos militares ;1.2001.35.00;Serviços de manutenção e reparação de veículos militares
+1.2001.39;Serviços de manutenção e reparação de outros equipamentos de transporte ;;
+1.2001.39.1;Serviços de manutenção e reparação de aeronaves, inclusive foguetes e equipamentos aeroespaciais;;
+1.2001.39.11;Serviços de manutenção e reparação de motores, turborreatores e turbopropulsores aeronáuticos;1.2001.34.20;Serviços de manutenção e reparação de motores, turborreatores e turbopropulsores aeronáuticos
+1.2001.39.12;Serviços de manutenção e reparação de foguetes e equipamentos aeroespaciais ;1.2001.34.30;Serviços de manutenção e reparação  de foguetes e equipamentos aeroespaciais 
+1.2001.39.19;Outros serviços de manutenção e reparação de aeronaves;1.2001.34.10;Serviços de manutenção e reparação de aeronaves, exceto de motores, turborreatores e turbopropulsores aeronáuticos
+1.2001.39.2;Serviços de manutenção e reparação de embarcações;;
+1.2001.39.21;Serviços de manutenção e reparação de embarcações militares;1.2001.35.00;Serviços de manutenção e reparação de veículos militares
+1.2001.39.29;Outros serviços de manutenção e reparação de embarcações;1.2001.33.00;Serviços de manutenção e reparação de veículos aquaviários
+1.2001.39.30;Serviços de manutenção e reparação de equipamentos ferroviários e metroviários;1.2001.32.00;Serviços de manutenção e reparação de veículos sobre trilhos
+1.2001.39.90;Outros serviços de manutenção e reparação de outros equipamentos de transporte ;1.2001.39.00;Serviços de manutenção e reparação de maquinários e equipamentos de transporte não classificados em subposições anteriores
+1.2001.40.00;Serviços de manutenção e reparação de plataformas, inclusive navios-plataforma, para extração de petróleo e gás;1.2001.40.00;Serviços de manutenção e reparação de plataformas, inclusive navios-plataforma, para extração de petróleo e gás
+1.2001.5;Serviços de manutenção e reparação de outros maquinários e equipamentos ;;
+1.2001.51.00;Serviços de manutenção e reparação de aparelhos eletro-eletrônicos domésticos ;1.2001.81.00;Serviços de manutenção e reparação de aparelhos eletro-eletrônicos domésticos
+1.2001.52.00;Serviços de manutenção e reparação de equipamentos e aparelhos de telecomunicações;1.2001.70.00;Serviços de manutenção e reparação de equipamentos e aparelhos de telecomunicações
+1.2001.53.00;Serviços de manutenção e reparação de instrumentos e equipamentos médico-hospitalares, odontológicos, óticos e de precisão;1.2001.82.00;Serviços de manutenção e reparação de instrumentos e equipamentos médico-hospitalares, odontológicos, óticos e de precisão
+1.2001.54.00;Serviços de manutenção e reparação de equipamentos militares;1.2001.83.00;Serviços de manutenção e reparação de equipamentos militares
+1.2001.59;Outros serviços de manutenção e reparação de maquinário e equipamentos ;;
+1.2001.59.10;Serviços de manutenção e reparação de turbinas industriais;1.2001.50.00;Serviços de manutenção e reparação de maquinários e equipamentos de uso industrial
+1.2001.59.90;Outros serviços de manutenção e reparação de maquinário e equipamentos ;1.2001.60.00;Serviços de manutenção e reparação de maquinários e equipamentos de uso comercial
+;;1.2001.89.00;Serviços de manutenção e reparação de outros maquinários e equipamentos  não classificados em subposições anteriores
+1.2002;Serviços de manutenção e reparação de outros bens de consumo;;
+1.2002.10.00;Serviços de manutenção e reparação de produtos de couro, calçados, malas e bolsas;1.2002.10.00;Serviços de manutenção e reparação de produtos de couro, calçados, malas e bolsas
+1.2002.20.00;Serviços de manutenção e reparação de relógios e jóias;1.2002.20.00;Serviços de manutenção e reparação de relógios e joias
+1.2002.30.00;Serviços de manutenção e reparação de móveis;1.2002.30.00;Serviços de manutenção e reparação de móveis
+1.2002.90.00;Outros serviços de manutenção e reparação de outros bens de consumo;1.2002.40.00;Serviços de manutenção de roupas e outros produtos têxteis 
+;;1.2002.90.00;Serviços de manutenção e reparação de outros bens de consumo não classificados em subposições anteriores
+1.2003;Serviços de instalação, exceto os de construção;;
+1.2003.10.00;Serviços de instalação de produtos metálicos;1.2003.10.00;Serviços de instalação de produtos metálicos, exceto maquinário e equipamentos
+1.2003.2;Serviços de instalação de maquinário e equipamentos, industriais;;
+1.2003.21.00;Serviços de montagem sob encomenda de turbinas industriais;1.2003.21.10;Serviços de montagem sob encomenda de turbinas industriais
+1.2003.29.00;Outros serviços de instalação de maquinário e equipamentos, industriais;1.2003.21.90;Serviços de instalação de maquinários, aparelhos e equipamentos industriais não classificados em itens anteriores
+1.2003.30.00;Serviços de instalação de computadores e seus periféricos e maquinário de escritório;1.2003.22.00;Serviços de instalação de computadores e seus periféricos e maquinário de escritório
+1.2003.40.00;Serviços de instalação de equipamentos e aparelhos de comunicação, incluindo de rádio e de televisão ;1.2003.23.00;Serviços de instalação de equipamentos e aparelhos de comunicação, incluindo de rádio e de televisão
+1.2003.50.00;Serviços de instalação de maquinários, equipamentos, instrumentos e aparelhos médico-hospitalares, óticos e de precisão;1.2003.24.00;Serviços de instalação de maquinários, equipamentos, instrumentos e aparelhos médico-hospitalares, óticos e de precisão
+1.2003.60.00;Serviços de instalação de sensores e sistemas de armas;1.2003.25.10;Serviços de instalação de sensores e sistemas de armas
+1.2003.70.00;Serviços de instalação de maquinários e equipamentos de emprego militar;1.2003.25.20;Serviços de instalação de maquinários, aparelhos e equipamentos de emprego militar
+1.2003.80;Serviços de instalação de maquinários e equipamentos de transporte;;
+1.2003.80.10;Serviços de montagem sob encomenda de motores, turborreatores e turbopropulsores aeronáuticos;1.2003.26.10;Serviços de montagem sob encomenda de motores, turborreatores e turbopropulsores aeronáuticos
+1.2003.80.90;Outros serviços de instalação de maquinários e equipamentos de transporte;1.2003.26.90;Serviços de instalação de maquinários e equipamentos de transporte  não classificados em itens anteriores
+1.2003.90.00;Serviços de instalação de maquinários e equipamentos não classificados em outra posição ;1.2003.29.00;Serviços de instalação de maquinários, aparelhos e equipamentos não classificados em subposições anteriores
+1.21;Serviços de publicação, impressão e reprodução;;
+1.2101.10.00;Serviços de editoração;1.2101.10.00;Serviços de editoração
+1.2101.2;Serviços de impressão e reprodução de mídia gravada;;
+1.2101.21.00;Serviços de impressão;1.2101.21.00;Serviços de impressão
+1.2101.22.00;Serviços relacionados à impressão;1.2101.22.00;Serviços relacionados à impressão
+1.2101.23.00;Serviços de reprodução de mídia gravada;1.2101.23.00;Serviços de reprodução de mídia gravada
+1.2101.30.00;Serviços de apoio aos serviços de reprodução, impressão e editoração;1.2101.21.00;Serviços de impressão
+;;1.2101.22.00;Serviços relacionados à impressão
+;;1.2101.23.00;Serviços de reprodução de mídia gravada
+1.2101.90.00;Outros serviços de reprodução, impressão e editoração;1.2101.21.00;Serviços de impressão
+;;1.2101.22.00;Serviços relacionados à impressão
+;;1.2101.23.00;Serviços de reprodução de mídia gravada
+1.2190.00.00;Outros serviços de publicação;1.2101.30.00;Serviços de publicação 
+1.22;Serviços educacionais;;
+1.2201;Serviços de educação básica;;
+1.2201.1;Serviços de educação infantil;;
+1.2201.11.00;Serviços de creches ou de entidades equivalentes;1.2201.11.00;Serviços de creche ou de entidade equivalente
+1.2201.12.00;Serviços de pré-escola;1.2201.12.00;Serviços de pré-escola
+1.2201.19.00;Outros serviços de educação infantil;1.2201.19.00;Serviços de educação infantil não classificados em subposições anteriores
+1.2201.20.00;Serviços de ensino fundamental;1.2201.20.00;Serviços de ensino fundamental
+1.2201.30.00;Serviços de ensino médio;1.2201.30.00;Serviços de ensino médio
+1.2202.00.00;Serviços de educação técnica de nível médio;1.2202.00.00;Serviços de educação técnica de nível médio
+1.2203;Serviços de educação de jovens e adultos;;
+1.2203.10.00;Serviços de alfabetização de jovens e adultos;1.2203.10.00;Serviços de ensino fundamental de jovens e adultos
+1.2203.20.00;Serviços de ensino fundamental de jovens e adultos;1.2203.10.00;Serviços de ensino fundamental de jovens e adultos
+1.2203.30.00;Serviços de ensino médio de jovens e adultos;1.2203.20.00;Serviços de ensino médio de jovens e adultos
+1.2204;Serviços de educação superior;;
+1.2204.10.00;Serviços educacionais de graduação;1.2204.10.00;Serviços educacionais de graduação
+1.2204.20.00;Serviços educacionais de pós-graduação;1.2204.20.00;Serviços educacionais de pós-graduação
+1.2204.30.00;Serviços educacionais de extensão;1.2204.30.00;Serviços educacionais de extensão
+1.2204.40.00;Serviços educacionais de cursos sequenciais;1.2204.40.00;Serviços educacionais de cursos sequenciais
+1.2205.00.00;Serviços de educação especial;1.2201.11.00;Serviços de creche ou de entidade equivalente
+;;1.2201.12.00;Serviços de pré-escola
+;;1.2201.19.00;Serviços de educação infantil não classificados em subposições anteriores
+;;1.2201.20.00;Serviços de ensino fundamental
+;;1.2201.30.00;Serviços de ensino médio
+;;1.2202.00.00;Serviços de educação técnica de nível médio
+;;1.2203.10.00;Serviços de ensino fundamental de jovens e adultos
+;;1.2203.20.00;Serviços de ensino médio de jovens e adultos
+;;1.2204.10.00;Serviços educacionais de graduação
+;;1.2204.20.00;Serviços educacionais de pós-graduação
+;;1.2204.30.00;Serviços educacionais de extensão
+;;1.2204.40.00;Serviços educacionais de cursos sequenciais
+1.2290;Outros serviços educacionais, incluindo de treinamento, e serviços de apoio aos serviços educacionais;;
+1.2290.1;Outros serviços de educação, inclusive treinamento ;;
+1.2290.11.00;Serviços culturais, com enfoque educacional ;1.2205.11.00;Serviços de educação com enfoque cultural 
+1.2290.12.00;Serviços de educação desportiva e recreacional ;1.2205.12.00;Serviços de educação desportiva e recreacional 
+1.2290.13.00;Serviços de educação em línguas estrangeiras;1.2205.13.00;Serviços de educação em línguas estrangeiras e de sinais
+1.2290.19;Outros serviços de educação e treinamento não classificados em outra posição ;;
+1.2290.19.10;Serviços de palestras e conferências;1.2205.14.00;Serviços de palestras e conferências
+1.2290.19.90;Outros serviços de educação e treinamento;1.2205.19.00;Serviços de educação, inclusive treinamento não classificados em subposições anteriores
+1.2290.20.00;Serviços de apoio aos serviços educacionais ;1.2205.20.00;Serviços de apoio aos serviços educacionais 
+1.23;Serviços relacionados à saúde humana e de assistência social;;
+1.2301;Serviços de saúde humana ;;
+1.2301.1;Serviços hospitalares com ou sem internação;;
+1.2301.11.00;Serviços cirúrgicos ;1.2301.11.00;Serviços cirúrgicos 
+1.2301.12.00;Serviços ginecológicos e obstétricos ;1.2301.12.00;Serviços ginecológicos e obstétricos 
+1.2301.13.00;Serviços psiquiátricos ;1.2301.13.00;Serviços psiquiátricos 
+1.2301.14.00;Serviços cardiológicos;1.2301.19.00;Serviços hospitalares não classificados em subposições anteriores
+1.2301.15.00;Serviços oncológicos;1.2301.19.00;Serviços hospitalares não classificados em subposições anteriores
+1.2301.16.00;Serviços aos recém-nascidos;1.2301.15.00;Serviços de atendimento de urgência 
+;;1.2301.19.00;Serviços hospitalares não classificados em subposições anteriores
+1.2301.17.00;Serviços de ambulâncias, exceto aquelas sem envolver atendimento médico ao paciente e destinadas exclusivamente à remoção de enfermos ;1.2301.96.00;Serviços de ambulância 
+1.2301.18.00;Serviços prestados em unidades de terapia intensiva;1.2301.14.00;Serviços prestados em Unidades de Terapia Intensiva
+1.2301.19;Outros serviços hospitalares ;;
+1.2301.19.10;Serviços de atendimento de urgência;1.2301.15.00;Serviços de atendimento de urgência 
+1.2301.19.20;Serviços conexos à saúde pública;1.2301.19.00;Serviços hospitalares não classificados em subposições anteriores
+1.2301.19.90;Outros serviços hospitalares;1.2301.19.00;Serviços hospitalares não classificados em subposições anteriores
+1.2301.2;Serviços médicos e odontológicos, não hospitalares ;;
+1.2301.21.00;Serviços de clínica médica ;1.2301.21.00;Serviços de clínica médica 
+1.2301.22.00;Serviços médicos especializados ;1.2301.22.00;Serviços médicos especializados 
+1.2301.23.00;Serviços odontológicos;1.2301.23.00;Serviços odontológicos
+1.2301.9;Outros serviços de saúde humana ;;
+1.2301.91.00;Serviços de enfermagem ;1.2301.91.00;Serviços de enfermagem 
+1.2301.92.00;Serviços fisioterapêuticos ;1.2301.92.00;Serviços de fisioterapia 
+1.2301.93.00;Serviços laboratoriais ;1.2301.93.00;Serviços laboratoriais 
+1.2301.94.00;Serviços de diagnóstico por imagem;1.2301.94.00;Serviços de diagnóstico por imagem
+1.2301.95.00;Serviços de bancos de órgãos, esperma e sangue ;1.2301.95.00;Serviços de bancos de material biológico humano 
+1.2301.96.00;Serviços de bancos de leite, tecidos, olhos, ossos, óvulos e outros materiais biológicos;1.2301.95.00;Serviços de bancos de material biológico humano 
+1.2301.99.00;Outros serviços de saúde humana, exceto os serviços hospitalares ;1.2301.98.00;Serviços de psicologia
+;;1.2301.99.00;Outros serviços de saúde humana não classificados em subposições anteriores
+1.2302;Serviços de gestão hospitalar;;
+1.2302.10.00;Serviços de consultoria em saúde;1.1401.18.00;Serviços de consultoria em gestão hospitalar
+1.2302.90.00;Outros serviços de gestão hospitalar;1.1401.22.00;Serviços de gestão hospitalar
+1.2303.00.00;Serviços domiciliares de apoio a idosos, crianças, adolescentes, pessoas com transtornos mentais e com deficiências ;;* Os serviços domiciliares de apoio anteriormente classificados nesta posição devem ser classificados de acordo com o serviço profissional contratado. Por exemplo, serviços fisioterapêuticos, de enfermagem, de saúde humana, etc.
+1.2304.00.00;Serviços de apoio a idosos, crianças, adolescentes, pessoas com transtornos mentais e com deficiências, exceto domiciliar;1.2302.10.00;Serviços de cuidado em saúde em unidades de acolhimento
+;;1.2302.21.00;Serviços de assistência a idosos em unidades de acolhimento
+;;1.2302.22.00;Serviços de assistência a crianças e adolescentes com deficiência em unidades de acolhimento
+;;1.2302.23.00;Serviços de assistência a adultos com deficiência em unidades de acolhimento
+;;1.2304.20.00;Serviços de orientação e aconselhamento relacionados a crianças e adolescentes
+1.2305;Serviços de assistência social ;;
+1.2305.1;Serviços de proteção social básica;;
+1.2305.11.00;Serviços de atenção integral à família;1.2304.90.00;Serviços de assistência social sem acomodação não classificados em subposições anteriores
+1.2305.12.00;Serviços de convivência para crianças, adolescentes, jovens e idosos;1.2304.90.00;Serviços de assistência social sem acomodação não classificados em subposições anteriores
+1.2305.13.00;Serviços de apoio à autonomia e à convivência familiar e comunitária;1.2304.90.00;Serviços de assistência social sem acomodação não classificados em subposições anteriores
+1.2305.19.00;Outros serviços de proteção social básica;1.2304.90.00;Serviços de assistência social sem acomodação não classificados em subposições anteriores
+1.2305.2;Serviços de proteção social especial;;
+1.2305.21.00;Serviços de acolhida para adultos e idosos em albergues, abrigos ou moradias provisórias;1.2303.00.00;Serviços de assistência social com acomodação
+1.2305.22.00;Serviços de acolhida para crianças e adolescentes em repúblicas, casas de acolhida, abrigos ou com “família acolhedora”;1.2303.00.00;Serviços de assistência social com acomodação
+1.2305.23.00;Serviços especiais de referência para pessoas com necessidades especiais, em situação de abandono, vítimas de negligência, abusos e formas de violência;1.2303.00.00;Serviços de assistência social com acomodação
+1.2305.24.00;Serviços de apoio a situações de risco circunstanciais em decorrência de calamidades públicas e emergenciais;1.2303.00.00;Serviços de assistência social com acomodação
+1.2305.25.00;Serviços especiais de referência para adolescentes em cumprimento de medida socioeducativa de liberdade assistida e de prestação de serviços à comunidade;1.2303.00.00;Serviços de assistência social com acomodação
+1.2305.29;Outros serviços de assistência social;;
+1.2305.29.10;Serviços de reabilitação vocacional;1.2304.11.00;Serviços de reabilitação vocacional para pessoas com deficiência
+;;1.2304.12.00;Serviços de reabilitação vocacional para desempregados
+;;1.2304.19.00;Serviço de reabilitação vocacional não classificados nas subposições anteriores
+1.2305.29.90;Outros serviços de assistência social;1.2303.00.00;Serviços de assistência social com acomodação
+;;1.2304.90.00;Serviços de assistência social sem acomodação não classificados em subposições anteriores
+1.2306.00.00;Serviços de planos privados de assistência à saúde;1.0903.21.00;Serviços de seguro de saúde
+;;1.0910.10.00;Serviços de planos privados de assistência à saúde
+;;1.0910.20.00;Serviços de corretagem de planos privados de assistência à saúde
+;;1.0910.90.00;Serviços de planos privados de assistência à saúde e serviços relacionados não classificados em subposições anteriores
+1.24;Serviços de tratamento, eliminação e coleta de resíduos sólidos, saneamento, remediação e serviços ambientais;;
+1.2401.00.00 ;Serviços de tratamento de água ;1.2401.00.00 ;Serviços de tratamento de água 
+1.2402;Serviços de esgoto, tratamento de esgotos e limpeza de fossas sépticas ;;
+1.2402.10.00 ;Serviços de esgoto e tratamento de esgotos ;1.2402.10.00 ;Serviços de esgoto e tratamento de esgotos 
+1.2402.20.00 ;Serviços de esvaziamento e limpeza de fossas sépticas ;1.2402.20.00 ;Serviços de esvaziamento e limpeza de fossas sépticas 
+1.2403;Serviços de coleta de resíduos ;;
+1.2403.10.00;Serviços de coleta de resíduos sólidos perigosos, exceto de serviços de saúde;1.2403.12.00 ;Serviços de coleta de resíduos perigosos industriais, exceto  resíduos de serviços de saúde e outros resíduos biológicos
+;;1.2403.19.00;Serviços de coleta de outros resíduos perigosos não classificados em subposições anteriores
+1.2403.20.00;Serviços de coleta de resíduos de serviços de saúde;1.2403.11.00 ;Serviços de coleta de resíduos de serviços de saúde e outros resíduos biológicos 
+1.2403.3;Serviços de coleta de resíduos sólidos não perigosos, inertes ou não inertes;;
+1.2403.31.00 ;Serviços de coleta de resíduos sólidos de origem doméstica, comercial e de varrição ;1.2403.31.00;Serviços de coleta de resíduos gerais de origem doméstica
+;;1.2403.32.00;Serviços de coleta de resíduos gerais, exceto de origem doméstica
+1.2403.32.00 ;Serviços de coleta de resíduos sólidos de origem industrial ;1.2403.32.00;Serviços de coleta de resíduos gerais, exceto de origem doméstica
+1.2403.33.00 ;Serviços de coleta de resíduos sólidos recicláveis ;1.2403.21.00;Serviços de coleta de resíduos recicláveis, não perigosos, de origem doméstica  
+;;1.2403.22.00;Serviços de coleta de resíduos recicláveis, não perigosos, exceto de origem doméstica
+1.2403.39.00 ;Serviços de coleta de outros resíduos sólidos não perigosos, inertes ou não inertes ;1.2403.21.00;Serviços de coleta de resíduos recicláveis, não perigosos, de origem doméstica  
+;;1.2403.22.00;Serviços de coleta de resíduos recicláveis, não perigosos, exceto de origem doméstica
+;;1.2403.31.00;Serviços de coleta de resíduos gerais de origem doméstica
+;;1.2403.32.00;Serviços de coleta de resíduos gerais, exceto de origem doméstica
+1.2403.40.00 ;Serviços de coleta de resíduos líquidos ;1.2403.11.00 ;Serviços de coleta de resíduos de serviços de saúde e outros resíduos biológicos 
+;;1.2403.12.00 ;Serviços de coleta de resíduos perigosos industriais, exceto  resíduos de serviços de saúde e outros resíduos biológicos
+;;1.2403.22.00;Serviços de coleta de resíduos recicláveis, não perigosos, exceto de origem doméstica
+;;1.2403.31.00;Serviços de coleta de resíduos gerais de origem doméstica
+;;1.2403.32.00;Serviços de coleta de resíduos gerais, exceto de origem doméstica
+1.2403.90.00 ;Outros serviços de coleta de resíduos;1.2403.19.00;Serviços de coleta de outros resíduos perigosos não classificados em subposições anteriores
+;;1.2403.21.00;Serviços de coleta de resíduos recicláveis, não perigosos, de origem doméstica  
+;;1.2403.22.00;Serviços de coleta de resíduos recicláveis, não perigosos, exceto de origem doméstica
+;;1.2403.32.00;Serviços de coleta de resíduos gerais, exceto de origem doméstica
+1.2404;Serviços de disposição e tratamento de resíduos ;;
+1.2404.10.00 ;Serviços de triagem, preparação, consolidação, estocagem e outros tratamentos e disposição de resíduos sólidos perigosos, exceto os resíduos de serviços de saúde ;1.2404.11.00;Serviços de triagem, preparação, consolidação e estocagem de resíduos perigosos 
+;;1.2404.21.00;Serviços de tratamento de resíduos perigosos
+;;1.2404.22.00;Serviços de eliminação de resíduos perigosos
+1.2404.20.00 ;Serviços de triagem, preparação, consolidação, estocagem e outros tratamentos e disposição de resíduos de serviços de saúde;1.2404.11.00;Serviços de triagem, preparação, consolidação e estocagem de resíduos perigosos 
+;;1.2404.21.00;Serviços de tratamento de resíduos perigosos
+;;1.2404.22.00;Serviços de eliminação de resíduos perigosos
+1.2404.3;Serviços de triagem, preparação, consolidação, estocagem e outros tratamentos e disposição de resíduos sólidos não perigosos, inertes ou não inertes;;
+1.2404.31.00;Serviços de triagem, preparação, consolidação, estocagem e outros tratamentos e disposição de resíduos de origem doméstica, comercial e de varrição;1.2404.19.00;Serviços de triagem, preparação, consolidação e estocagem de resíduos não perigosos, exceto os recicláveis
+;;1.2404.31.00;Serviços de tratamento e eliminação de resíduos não perigosos em aterros sanitários
+;;1.2404.32.00;Serviços de tratamento e eliminação de resíduos não perigosos em  aterros, exceto os sanitários
+;;1.2404.33.00;Serviços de incineração de resíduos não perigosos
+;;1.2404.39.00;Serviços de tratamento e eliminação de resíduos não perigosos não classificados em subposições anteriores
+1.2404.32.00;Serviços de triagem, preparação, consolidação, estocagem e outros tratamentos e disposição de resíduos sólidos de origem industrial;1.2404.11.00;Serviços de triagem, preparação, consolidação e estocagem de resíduos perigosos 
+;;1.2404.19.00;Serviços de triagem, preparação, consolidação e estocagem de resíduos não perigosos, exceto os recicláveis
+;;1.2404.21.00;Serviços de tratamento de resíduos perigosos
+;;1.2404.22.00;Serviços de eliminação de resíduos perigosos
+;;1.2404.31.00;Serviços de tratamento e eliminação de resíduos não perigosos em aterros sanitários
+;;1.2404.32.00;Serviços de tratamento e eliminação de resíduos não perigosos em  aterros, exceto os sanitários
+;;1.2404.33.00;Serviços de incineração de resíduos não perigosos
+;;1.2404.39.00;Serviços de tratamento e eliminação de resíduos não perigosos não classificados em subposições anteriores
+1.2404.33.00;Serviços de triagem, preparação, consolidação, estocagem e outros tratamentos e disposição de resíduos sólidos recicláveis;1.2404.13.00;Serviços de triagem, preparação, consolidação e estocagem de resíduos recicláveis não perigosos
+;;1.2404.31.00;Serviços de tratamento e eliminação de resíduos não perigosos em aterros sanitários
+;;1.2404.32.00;Serviços de tratamento e eliminação de resíduos não perigosos em  aterros, exceto os sanitários
+;;1.2404.33.00;Serviços de incineração de resíduos não perigosos
+;;1.2404.39.00;Serviços de tratamento e eliminação de resíduos não perigosos não classificados em subposições anteriores
+1.2404.39.00;Serviços de triagem, preparação, consolidação, estocagem e outros tratamentos e disposição de outros resíduos sólidos não perigosos, inertes ou não inertes;1.2404.19.00;Serviços de triagem, preparação, consolidação e estocagem de resíduos não perigosos, exceto os recicláveis
+;;1.2404.31.00;Serviços de tratamento e eliminação de resíduos não perigosos em aterros sanitários
+;;1.2404.32.00;Serviços de tratamento e eliminação de resíduos não perigosos em  aterros, exceto os sanitários
+;;1.2404.33.00;Serviços de incineração de resíduos não perigosos
+;;1.2404.39.00;Serviços de tratamento e eliminação de resíduos não perigosos não classificados em subposições anteriores
+1.2404.40.00;Serviços de triagem, preparação, consolidação, estocagem e outros tratamentos e disposição de resíduos líquidos;1.2404.11.00;Serviços de triagem, preparação, consolidação e estocagem de resíduos perigosos 
+;;1.2404.13.00;Serviços de triagem, preparação, consolidação e estocagem de resíduos recicláveis não perigosos
+;;1.2404.19.00;Serviços de triagem, preparação, consolidação e estocagem de resíduos não perigosos, exceto os recicláveis
+;;1.2404.21.00;Serviços de tratamento de resíduos perigosos
+;;1.2404.22.00;Serviços de eliminação de resíduos perigosos
+;;1.2404.31.00;Serviços de tratamento e eliminação de resíduos não perigosos em aterros sanitários
+;;1.2404.32.00;Serviços de tratamento e eliminação de resíduos não perigosos em  aterros, exceto os sanitários
+;;1.2404.33.00;Serviços de incineração de resíduos não perigosos
+;;1.2404.39.00;Serviços de tratamento e eliminação de resíduos não perigosos não classificados em subposições anteriores
+1.2404.90.00;Outros serviços de triagem, preparação, consolidação, estocagem e outros tratamentos e disposição de resíduos;1.2404.19.00;Serviços de triagem, preparação, consolidação e estocagem de resíduos não perigosos, exceto os recicláveis
+;;1.2404.39.00;Serviços de tratamento e eliminação de resíduos não perigosos não classificados em subposições anteriores
+1.2405;Serviços de saneamento e similares ;;
+1.2405.10.00;Serviços de varrição e limpeza de ruas e outros locais públicos;1.2406.10.00;Serviços de varrição de vias e áreas públicas 
+1.2405.90.00;Outros serviços de saneamento;1.2406.90.00;Serviços de limpeza urbana e similares não classificados em subposições anteriores
+1.2406;Serviços ambientais;;
+1.2406.10.00;Serviços ambientais relacionados à água;1.2407.00.00;Serviços de proteção ambiental não classificados em posições anteriores
+1.2406.20.00;Serviços ambientais relacionados ao solo;1.2407.00.00;Serviços de proteção ambiental não classificados em posições anteriores
+1.2406.30.00;Serviços ambientais relacionados ao ar;1.2407.00.00;Serviços de proteção ambiental não classificados em posições anteriores
+1.2406.90.00;Outros serviços ambientais;1.2407.00.00;Serviços de proteção ambiental não classificados em posições anteriores
+1.2407;Serviços de remediação e contenção de contaminantes ;;
+1.2407.1 ;Serviços de remediação de áreas contaminadas ;;
+1.2407.11.00 ;Serviços de remediação do ar ;1.2405.11.00 ;Serviços de remediação e limpeza do ar 
+1.2407.12.00 ;Serviços de remediação de águas de superfície ;1.2405.12.00 ;Serviços de remediação e limpeza de águas de superfície 
+1.2407.13.00 ;Serviços de remediação do solo e águas subterrâneas ;1.2405.13.00 ;Serviços de remediação e limpeza do solo e de águas subterrâneas 
+1.2407.14.00 ;Serviços de remediação em edificações ;1.2405.14.00;Serviços de remediação em edificações 
+1.2407.20.00 ;Serviços de contenção de contaminantes  ;1.2405.20.00 ;Serviços de contenção, controle e monitoramento de áreas contaminadas
+1.2407.90.00 ;Outros serviços de remediação ;1.2405.90.00;Serviços de remediação não classificados em subposições anteriores
+1.25;Serviços recreativos, culturais e desportivos;;
+1.2501;Serviços de produção audiovisual, de apoio e relacionados;;
+1.2501.1;Serviços de gravação de som;;
+1.2501.11.00;Serviços de gravação de som em estúdio;1.2501.11.00;Serviços de gravação de som em estúdio
+1.2501.12.00;Serviços de gravação de som ao vivo;1.2501.12.00;Serviços de gravação de som ao vivo
+1.2501.2;Serviços de produção de programas de rádio e televisão, videoteipes e filmes;;
+1.2501.21.00;Serviços de produção de programas de televisão, videoteipes e filmes;1.2501.21.00;Serviços de produção de programas de televisão, videoteipes e filmes
+1.2501.22.00;Serviços de produção de programas de rádio;1.2501.22.00;Serviços de produção de programas de rádio
+1.2501.3;Serviços de pós-produção de obras audiovisuais;;
+1.2501.31.00;Serviços de edição de obras audiovisuais;1.2501.31.00;Serviços de edição de obras audiovisuais
+1.2501.32.00;Serviços de duplicação e transferência de obras audiovisuais;1.2501.32.00;Serviços de duplicação e transferência de obras audiovisuais
+1.2501.33.00;Serviços de correção de cor e restauração digital de obras audiovisuais;1.2501.33.00;Serviços de correção de cor e restauração digital de obras audiovisuais
+1.2501.34.00;Serviços de efeitos visuais em obras audiovisuais;1.2501.34.00;Serviços de efeitos visuais em obras audiovisuais
+1.2501.35.00;Serviços de animação;1.2501.35.00;Serviços de animação
+1.2501.36.00;Serviços de legendas, títulos e dublagem em obras audiovisuais;1.2501.36.00;Serviços de legendas, títulos e dublagem em obras audiovisuais
+1.2501.37.00;Serviços de projeto e edição de som em obras audiovisuais;1.2501.37.00;Serviços de projeto e edição de som em obras audiovisuais
+1.2501.39.00;Outros serviços de pós-produção em obras audiovisuais;1.2501.39.00;Serviços de pós-produção de obras audiovisuais não classificados em subposições anteriores
+1.2501.40.00;Serviços de agenciamento pela comercialização de obras audiovisuais;1.2501.40.00;Serviços de agenciamento para a comercialização de obras audiovisuais
+1.2501.50.00;Serviços de projeção de filmes;1.2501.50.00;Serviços de projeção de filmes
+1.2501.90.00;Outros serviços de produção audiovisual, de apoio e relacionados;1.2501.90.00;Serviços de produção audiovisual, de apoio e relacionados não classificados em subposições anteriores
+12.502;Serviços de apresentação e promoção de atuações artísticas e outros serviços de entretenimento ao vivo;;
+1.2502.10.00;Serviços de organização e promoção de atuações artísticas ao vivo;1.2502.10.00;Serviços de organização e promoção de atuações artísticas ao vivo
+1.2502.20.00;Serviços de produção e apresentação de atuações artísticas ao vivo;1.2502.20.00;Serviços de produção e apresentação de atuações artísticas ao vivo
+1.2502.30.00;Serviços de apoio para atuações artísticas ao vivo;1.2502.30.00;Serviços de apoio para atuações artísticas ao vivo
+1.2502.90.00;Outros serviços de entretenimento artístico ao vivo;1.2502.90.00;Serviços de apresentação e promoção de atuações artísticas e outros serviços de entretenimento ao vivo não classificados em subposições anteriores
+12.503;Serviços de atuação artística e outros serviços artísticos;;
+1.2503.10.00;Serviços de atuação artística;1.2503.10.00;Serviços de atuação artística
+1.2503.20.00;Serviços de autores, compositores, escultores, pintores e outros artistas, exceto os de atuação artística;1.2503.20.00;Serviços de autores, compositores, escultores, pintores e outros artistas, exceto os de atuação artística
+12.504;Serviços de museus e de preservação e serviços de reservas botânica, zoológica e natural;;
+1.2504.1;Serviços de museus e de preservação de locais e construções históricas;;
+1.2504.11.00;Serviços de museus;1.2504.11.00;Serviços de museus
+1.2504.12.00;Serviços de preservação e operação de locais e construções históricas;1.2504.12.00;Serviços de preservação e operação de locais e construções históricas
+1.2504.2;Serviços de reservas botânica, zoológica e natural;;
+1.2504.21.00;Serviços de jardins botânico e zoológico ;1.2504.21.00;Serviços de jardins botânico e zoológico 
+1.2504.22.00;Serviços de reserva natural, incluindo preservação de vida selvagem;1.2504.22.00;Serviços de reserva natural, incluindo preservação de vida selvagem
+12.505;Serviços desportivos e recreacionais desportivos;;
+1.2505.1;Serviços de organização e promoção de eventos desportivos e recreacionais desportivos;;
+1.2505.11.00;Serviços de organização e promoção de eventos desportivos e recreacionais desportivos;1.2505.10.00;Serviços de organização e promoção de eventos desportivos e recreacionais desportivos
+1.2505.12.00;Serviços de clubes desportivos;1.2505.20.00;Serviços de clubes desportivos
+1.2505.90.00;Outros serviços de desportes e de recreação desportiva;1.2505.90.00;Serviços desportivos e recreacionais desportivos não classificados em subposições anteriores
+1.2506.00.00;Serviços fornecidos por atletas e desportistas, por conta própria, e serviços de apoio relacionados com desportes e recreação desportiva;1.2506.00.00;Serviços fornecidos por atletas e desportistas, por conta própria, e serviços de apoio relacionados com desportes e recreação desportiva
+12.507;Serviços de parques de diversão;;
+1.2507.10.00;Serviços de parques temáticos de diversão;1.2507.10.00;Serviços de parques temáticos de diversão
+1.2507.90.00;Outros serviços de parques de diversão e atrações similares;1.2507.90.00;Serviços de parques de diversão e atrações similares não classificados em subposições anteriores
+1.2590.00.00;Outros serviços recreativos, culturais e desportivos;1.2508.00.00;Serviços recreativos, culturais e desportivos não classificados em posições anteriores
+1.26;Serviços pessoais;;
+1.2601;Serviços de lavanderia e tinturaria;;
+1.2601.10.00;Serviços de limpeza de têxteis, exceto quando realizados a seco;1.2601.10.00;Serviços de limpeza de têxteis, exceto quando realizados a seco
+1.2601.20.00;Serviços de limpeza a seco;1.2601.20.00;Serviços de limpeza a seco
+1.2601.30.00;Serviços de tinturaria;1.2601.30.00;Serviços de tinturaria
+1.2601.90.00;Outros serviços de lavanderia ;1.2601.40.00;Serviços de passadoria de roupas e outros artigos têxteis
+;;1.2601.90.00;Serviços de lavanderia não classificados em subposições anteriores
+1.2602;Serviços de tratamento de beleza e bem-estar físico ;;
+1.2602.10.00;Serviços de cabeleireiros e barbeiros ;1.2602.10.00;Serviços de cabeleireiros e barbeiros 
+1.2602.20.00;Serviços de manicure, pedicure e tratamento cosmético ;1.2602.20.00;Serviços de manicure, pedicure e tratamento cosmético 
+1.2602.30.00;Serviços de bem-estar físico ;1.2602.30.00;Serviços de bem-estar físico 
+1.2602.90.00;Outros tratamentos de beleza e bem-estar físico;1.2602.90.00;Serviços de tratamento de beleza e bem-estar físico não classificados em subposições anteriores
+1.2603.00.00;Serviços funerários, de cremação e de embalsamamento;1.2603.00.00;Serviços funerários, de cremação e de embalsamamento
+1.2690.00.00;Outros serviços pessoais ;1.2604.00.00;Serviços de confecção de roupas e outros artigos têxteis
+;;1.2605.00.00;Serviços domésticos
+;;1.2606.00.00;Serviços pessoais não classificados em posições anteriores
+1.27;Cessão de direitos de propriedade intelectual;;
+1.2701;Cessão de direitos de autor e direitos conexos;;
+1.2701.10.00;Cessão de direitos de obras literárias;1.1107.10.00;Cessão definitiva de direitos de obras literárias
+1.2701.20.00;Cessão de direitos sobre programas de computador;1.1107.20.00;Cessão definitiva de direitos sobre programas de computador (software)
+1.2701.3;Cessão de direitos de obras audiovisuais;;
+1.2701.31.00;Cessão de direitos de obras cinematográficas;1.1107.31.00;Cessão definitiva de direitos de obras cinematográficas
+1.2701.32.00;Cessão de direitos de obras jornalísticas;1.1107.32.00;Cessão definitiva de direitos de obras jornalísticas
+1.2701.33.00;Cessão de direitos de obras publicitárias;1.1107.33.00;Cessão definitiva de direitos de obras publicitárias
+1.2701.39.00;Cessão de direitos de outras obras audiovisuais;1.1107.39.00;Cessão definitiva de direitos de obras audiovisuais não classificada em subposições anteriores
+1.2701.40.00;Cessão de direitos de obras musicais e outros fonogramas;1.1107.40.00;Cessão definitiva de direitos de obras musicais e fonogramas
+1.2701.50.00;Cessão de direitos relacionados à radiodifusão;1.1107.50.00;Cessão definitiva de direitos relacionados à radiodifusão
+1.2701.90.00;Cessão de outros direitos de autor e outros direitos conexos;1.1107.90.00;Cessão definitiva de direitos de autor e de direitos conexos não classificada em subposições anteriores
+1.2702;Cessão de direitos sobre a propriedade industrial;;
+1.2702.10.00;Cessão de direitos sobre patentes;1.1108.10.00;Cessão definitiva de direitos sobre patentes
+1.2702.20.00;Cessão de direitos sobre marcas;1.1108.20.00;Cessão definitiva de direitos sobre marcas
+1.2702.30.00;Cessão de direitos sobre desenho industrial;1.1108.30.00;Cessão definitiva de direitos sobre desenho industrial
+1.2702.90.00;Cessão de outros direitos sobre a propriedade industrial;1.1108.90.00;"Cessão definitiva de direitos sobre a propriedade industrial não classificada em subposições anteriores 
+"
+1.2703.00.00;Cessão de direitos sobre cultivares;1.1109.10.00;Cessão definitiva de direitos sobre cultivares
+1.2704.00.00;Cessão de direitos sobre topografias de circuitos integrados;1.1109.20.00;Cessão definitiva de direitos sobre topografias de circuitos integrados
+1.2705.00.00;Cessão de direitos relativos à informação não divulgada;1.1109.30.00;Cessão definitiva de direitos relativos à informação não divulgada
+1.2790.00.00;Cessão de outros direitos de propriedade intelectual não classificados nas posições anteriores;1.1108.90.00;Cessão definitiva de direitos sobre a propriedade industrial não classificada em subposições anteriores
+;;1.1109.90.00;Cessão definitiva de outros direitos não classificada em subposições anteriores
+;;1.1107.90.00;Cessão definitiva de direitos de autor e de direitos conexos não classificada em subposições anteriores
