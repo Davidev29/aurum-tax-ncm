@@ -4,18 +4,77 @@ on:
   push:
   pull_request:
 
+# Menor permissão possível para o GITHUB_TOKEN do job.
+permissions:
+  contents: read
+
+# Cancela runs antigos quando alguém faz push em cima do mesmo branch —
+# evita fila de builds duplicados (fail-fast, sem custo extra).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Node 22: node:sqlite exige a flag; sem ela o setup.ts degenera
+  # silenciosamente (template sem integrity_check). Fixamos globalmente.
+  NODE_OPTIONS: --experimental-sqlite
+
 jobs:
-  build-test:
+  test:
+    name: Typecheck + Vitest (Node 22)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npx prisma generate
-      - run: npm run typecheck
-      - run: npx vitest run --coverage
-        env:
-          NODE_OPTIONS: --experimental-sqlite
+
+      - name: Instalar dependências ( lockfile congelado )
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Typecheck (app + electron)
+        run: npm run typecheck
+
+      - name: Vitest + coverage (172 suítes / 1.946 casos)
+        run: npx vitest run --coverage
+
+  release-build:
+    name: Release build (base → typecheck → vite → ofuscar → verificar)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências ( lockfile congelado )
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      # O espelho recursos-ia/embedding/vetores-ncm.json é git-ignored por design
+      # (12,6 MB), e `verificar-build` o exige byte-idêntico à cópia commitada
+      # em public/base/grafo/vetores.json. Sem este passo o [3/5] falha em
+      # todo checkout limpo (fail-closed, corretamente).
+      - name: Espelha vetores do grafo (cópia do artefato commitado)
+        run: |
+          mkdir -p recursos-ia/embedding
+          cp public/base/grafo/vetores.json recursos-ia/embedding/vetores-ncm.json
+
+      # Porta de release completa: base:completa (regenera + confere
+      # MANIFEST) → typecheck → vite build → esbuild → ofuscar-build
+      # → verificar-build (5 blocos). Idêntico ao `npm run dist:win`,
+      # sem empacotar (não assina, não publica).
+      - name: Build completo de release
+        run: npm run build

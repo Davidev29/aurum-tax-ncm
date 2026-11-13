@@ -1,0 +1,13 @@
+# Manutenção automática de Actions (segurança/deprecation).
+# npm fica de fora de propósito: atualizar dependências do app exige
+# testes + release; uma PR de dependência aqui contra a política de
+# releases manuais criaria ruído/risco. Adicione npm aqui quando o
+# processo de release automatizar o teste completo.
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
