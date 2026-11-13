@@ -9,6 +9,7 @@ import {
   comporCaminho,
   normalizarBusca,
   pontuarCandidato,
+  pontuarCandidatoParcial,
   pareceCodigoNcm,
   prefixosHierarquia,
   tokenizarBusca,
@@ -31,8 +32,8 @@ describe('normalizarBusca / tokenizarBusca', () => {
 })
 
 describe('hierarquia', () => {
-  it('gera prefixos 2/4/6/8', () => {
-    expect(prefixosHierarquia('04061010')).toEqual(['04', '0406', '040610', '04061010'])
+  it('gera prefixos 2/4/5/6/7/8 (inclui níveis intermediários da TEC)', () => {
+    expect(prefixosHierarquia('04061010')).toEqual(['04', '0406', '04061', '040610', '0406101', '04061010'])
     expect(prefixosHierarquia('04')).toEqual(['04'])
   })
 
@@ -100,6 +101,27 @@ describe('buscarNomenclaturaPorTexto (Dexie)', () => {
     expect(res[0].codigo).toBe('04061010')
   })
 
+  it('fase 1 (AND estrito) sempre vence a fase 2, mesmo com score menor', async () => {
+    // Fixture da auditoria: "Queijos ralados" vence a fase 1 por cobertura
+    // de tokens, mas é a fase 1 ("Mozarela") que deve encabeçar a lista.
+    await db.ncmNomenclatura.bulkPut([
+      { codigo: '04062000', codigoOriginal: '0406.20.00', descricao: 'Queijos ralados ou em pó', dataInicio: null, dataFim: null, ato: 'Ato' },
+      { codigo: '04063000', codigoOriginal: '0406.30.00', descricao: 'Queijos fundidos', dataInicio: null, dataFim: null, ato: 'Ato' },
+    ])
+    const res = await buscarNomenclaturaPorTexto('queijo mozarela')
+    expect(res[0].codigo).toBe('04061010')
+    expect(res[0].fase).toBe(1)
+  })
+
+  it('não casa substring solta de 3-4 letras no caminho (fOtOVOltaicos, leucovorina)', async () => {
+    // "ovo" não pode bater em "fotovoltaicos" nem "leucovorina" — exige token.
+    const res = await buscarNomenclaturaPorTexto('ovo de codorna')
+    for (const r of res) {
+      expect(r.caminhoTexto.toLowerCase()).not.toContain('fotovoltaico')
+      expect(r.caminhoTexto.toLowerCase()).not.toContain('leucovorina')
+    }
+  })
+
   it('retorna só 8 dígitos e enriquece com vínculos', async () => {
     await db.ncm.put({
       id: '02011000|200003|0',
@@ -123,5 +145,54 @@ describe('buscarNomenclaturaPorTexto (Dexie)', () => {
     expect(await buscarNomenclaturaPorTexto('q')).toEqual([])
     const res = await buscarNomenclaturaPorTexto('queijo', 1)
     expect(res).toHaveLength(1)
+  })
+})
+
+describe('normalização com tags HTML/XML da TEC', () => {
+  it('remove tags da descrição oficial (ex.: <i>Gallus domesticus</i>)', () => {
+    expect(normalizarBusca('Galinhas - <i>Gallus domesticus</i>')).toBe('galinhas gallus domesticus')
+    expect(normalizarBusca('<sup>*</sup> Quitosan')).toBe('quitosan')
+  })
+})
+
+describe('pontuarCandidato — casamento por TOKEN (não substring)', () => {
+  it('rejeita quando o token não existe como palavra no caminho', () => {
+    expect(pontuarCandidato(['ave'], 'aveia', 'cereais de aveia')).toBe(-1)
+    expect(pontuarCandidato(['milho'], 'saco de tomilho', 'tomilho farinha')).toBe(-1)
+  })
+
+  it('aceita plural/radical do token oficial', () => {
+    expect(pontuarCandidato(['queijo'], 'mozarela', 'queijos frescos mozarela')).toBeGreaterThanOrEqual(0)
+    expect(pontuarCandidato(['carne'], 'bovina', 'carnes de bovino')).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('pontuarCandidatoParcial — lastro de token', () => {
+  it('retorna -1 quando nenhum token do caminho casa', () => {
+    expect(pontuarCandidatoParcial(['ovo'], 'leucovorina', 'farmacos outros')).toBe(-1)
+    expect(pontuarCandidatoParcial(['milho'], 'tomilho', 'condimentos tomilho')).toBe(-1)
+  })
+
+  it('aceita cobertura parcial real com tokens oficiais', () => {
+    expect(
+      pontuarCandidatoParcial(['queijo', 'fundido'], 'queijos fundidos', 'queijos fundidos leite'),
+    ).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('comporCaminho — inclui níveis 5 e 7 da TEC', () => {
+  it('compõe ancestrais de 2/4/5/6/7 dígitos', () => {
+    const mapa: Record<string, string> = {
+      '01': 'Animais vivos',
+      '010229': 'Bovinos domésticos',
+      '0102291': 'Para reprodução',
+    }
+    const obter = (p: string) => mapa[p] ?? null
+    expect(comporCaminho('01022911', obter)).toEqual(['Animais vivos', 'Bovinos domésticos', 'Para reprodução'])
+  })
+
+  it('ignora níveis ausentes sem quebrar a ordem', () => {
+    const obter = (p: string) => ({ '04': 'Leite', '0406': 'Queijos' } as Record<string, string>)[p] ?? null
+    expect(comporCaminho('04061010', obter)).toEqual(['Leite', 'Queijos'])
   })
 })

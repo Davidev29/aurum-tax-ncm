@@ -2095,6 +2095,13 @@ async function responderNcm(pergunta: string, analise: AnaliseChat, historico: M
     const semDetalhe =
       slotsEfetivos.composicao == null && slotsEfetivos.destinacao == null && slotsEfetivos.uso == null
     if (!ehDeterministicoAlto && semDetalhe) {
+      // Animal vivo SEM detalhe nunca classifica — a destinação decide o
+      // capítulo (01 vivo × 02 carne); perguntar antes de chutar ("frango
+      // vivo" ≠ "frango vivo para abate"). Vale mesmo com gate forte.
+      if (temAnimalVivo(termoEfetivo)) {
+        const funil = responderFunilDesambiguacao(termoEfetivo, slotsEfetivos, t0)
+        if (funil) return funil
+      }
       // Gate fraco = hipótese provisória (confiança < 0.5 ou motivo ancorado/
       // fraco/empate). Match sólido (ex.: "tangerina" 0.6 ficha absoluta)
       // nunca vira funil; gibberish sem pista (zero candidatos + sem sugestão)

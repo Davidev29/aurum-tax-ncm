@@ -21,6 +21,8 @@
  */
 
 import { norm } from './format'
+import { nomeCapitulo } from '@/domain/constants/capitulos'
+import { limparTextoFiscal } from './texto-fiscal'
 
 /** Nível hierárquico de um código (2/4/6/7/8 dígitos ou inválido). */
 export type NivelNcm = 'capitulo' | 'posicao' | 'subposicao' | 'item' | 'exato' | 'invalido'
@@ -119,7 +121,7 @@ export function nivelDoCodigo(codigo: unknown): NivelNcm {
 export function prefixosDoNcm(codigo: unknown): string[] {
   const d = norm(codigo)
   if (d.length !== 8) return []
-  return [d.slice(0, 2), d.slice(0, 4), d.slice(0, 6), d.slice(0, 7), d]
+  return [d.slice(0, 2), d.slice(0, 4), d.slice(0, 5), d.slice(0, 6), d.slice(0, 7), d]
 }
 
 /** Rótulo legível do nível (`posicao` → "Posição SH4 0713"). */
@@ -175,12 +177,102 @@ export function mesmaFamilia(a: unknown, b: unknown, nivel: Exclude<NivelNcm, 'i
   return da.slice(0, tam) === db.slice(0, tam)
 }
 
+/** Nível visual de um segmento da trilha (breadcrumb do NCM). */
+export type NivelTrilha = 'capitulo' | 'posicao' | 'heading' | 'subposicao' | 'item'
+
+/** Um segmento da trilha (Cap. 07 · Produtos hortícolas › Pos. 0713 › …). */
+export interface TrilhaSegmento {
+  nivel: NivelTrilha
+  /** 2 a 7 dígitos do prefixo. */
+  prefixo: string
+  /** Rótulo curto, sempre correto: 'Cap. 07', 'Pos. 0713', '0713.33'. */
+  rotulo: string
+  /** Descrição oficial do nível (limp a: sem tags/hífens), '' quando ausente. */
+  descricao: string
+}
+
+/** Formatação de prefixos da trilha: 4 → `0713`, 5 → `0207.1`, 6 → `0713.33`, 7 → `0713.33.1`. */
+export function fmtPrefixoTrilha(prefixo: unknown): string {
+  const d = norm(prefixo)
+  switch (d.length) {
+    case 4:
+      return d
+    case 5:
+      return `${d.slice(0, 4)}.${d.slice(4)}`
+    case 6:
+      return `${d.slice(0, 4)}.${d.slice(4)}`
+    case 7:
+      return `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6)}`
+    case 8:
+      return `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6)}`
+    default:
+      return d
+  }
+}
+
+function limparDescTrilha(v: unknown): string {
+  return limparTextoFiscal(v)
+    // salda marcas de posição da TEC que sobreviveram à limpeza (ex.: ":" final)
+    .replace(/[:;]\s*$/, '')
+    .trim()
+}
+
+/**
+ * Trilha legível de um NCM: `Cap. 07 · {nome} › Pos. 0713 · {desc} ›
+ * 0713.33 › Item ...` — omite níveis ausentes na base e aceita prefixos
+ * incompletos (2–7 dígitos: a trilha cobre até o que foi digitado).
+ *
+ * `ancestrais`: mapa prefixo → descrição crua (ou ausente) — normalmente
+ * montado por `obterTrilhaNcm` (infra) com `buscarNomenclatura`; quando
+ * omitido, capítulos usam o nome oficial (`CAPITULOS_NCM`) e demais níveis
+ * só o prefixo. A descrição própria do item NÃO entra na trilha (ela vive
+ * em blocos dedicados do card).
+ */
+export function trilhaNcm(
+  codigo: unknown,
+  ancestrais?: Map<string, string> | Record<string, string | undefined> | null,
+): TrilhaSegmento[] {
+  const d = norm(codigo)
+  if (d.length < 2) return []
+  const obter = (p: string): string => {
+    if (!ancestrais) return ''
+    const cru =
+      ancestrais instanceof Map
+        ? ancestrais.get(p)
+        : (ancestrais as Record<string, string | undefined>)[p]
+    return limparDescTrilha(cru)
+  }
+  const segmentos: TrilhaSegmento[] = []
+  const tamMax = Math.min(d.length, 8)
+  const cortes: Array<[number, NivelTrilha]> = [
+    [2, 'capitulo'],
+    [4, 'posicao'],
+    [5, 'heading'],
+    [6, 'subposicao'],
+    [7, 'item'],
+  ]
+  for (const [tam, nivel] of cortes) {
+    if (tamMax < tam) break
+    const prefixo = d.slice(0, tam)
+    const propria = obter(prefixo)
+    if (nivel === 'capitulo') {
+      const nome = nomeCapitulo(prefixo) || propria
+      segmentos.push({ nivel, prefixo, rotulo: `Cap. ${prefixo}`, descricao: nome })
+    } else if (nivel === 'posicao') {
+      segmentos.push({ nivel, prefixo, rotulo: `Pos. ${prefixo}`, descricao: propria })
+    } else {
+      segmentos.push({ nivel, prefixo, rotulo: fmtPrefixoTrilha(prefixo), descricao: propria })
+    }
+  }
+  return segmentos
+}
+
 /**
  * Normaliza entrada truncada da Reforma (4–5 dígitos, ex.: subposição
  * abreviada da planilha) para o prefixo de família mais próximo.
  * - 2 dígitos → capítulo; 4 → posição; 6 → subposição;
- * - 3/5/7 dígitos → arredonda para baixo (2/4/6), pois a lei não opera
- *   nesses recortes — o motor classifica pela família que contém o recorte.
+ * - 3/5/7 dígitos → arredonda para baixo (2/4/6): a lei não opera nesses
+ *   recortes — o motor classifica pela família que contém o recorte;
  * - 8 → exato; demais → `null`.
  */
 export function prefixoDeEntradaTruncada(codigo: unknown): { prefixo: string; nivel: NivelNcm } | null {

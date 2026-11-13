@@ -38,8 +38,8 @@ describe('nivelDoCodigo', () => {
 })
 
 describe('prefixos e família', () => {
-  it('prefixosDoNcm em 5 níveis', () => {
-    expect(prefixosDoNcm('07133319')).toEqual(['07', '0713', '071333', '0713331', '07133319'])
+  it('prefixosDoNcm em 6 niveles (inclui o nivel 5)', () => {
+    expect(prefixosDoNcm('07133319')).toEqual(['07', '0713', '07133', '071333', '0713331', '07133319'])
   })
   it('fora de 8 dígitos devolve []', () => {
     expect(prefixosDoNcm('0713')).toEqual([])

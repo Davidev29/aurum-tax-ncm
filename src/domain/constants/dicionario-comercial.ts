@@ -63,6 +63,15 @@ export const DICIONARIO_COMERCIAL: EntradaDicionarioComercial[] = [
   // --- alimentos e bebidas (nome de mercado ∉ TEC) ---
   { ncm: '21069030', categoria: 'alimentos-bebidas', termos: ['whey', 'whey protein', 'creatina', 'suplemento whey'] },
   { ncm: '22030000', categoria: 'alimentos-bebidas', termos: ['cerveja', 'cerveja pilsen', 'cerveja latao', 'cerveja garrafa'] },
+  // --- ponte mercado → TEC (auditoria de precisão, nov/2026): TEC omite estes
+  // nomes de mercado; sem o pin o RAG nunca os alcança ---
+  { ncm: '04029900', categoria: 'alimentos-bebidas', termos: ['leite condensado', 'leite condensado com acucar', 'lata de leite condensado', 'leite moca', 'moca leite condensado', 'leitinho condensado'] },
+  { ncm: '17019900', categoria: 'alimentos-bebidas', termos: ['acucar cristal', 'acucar refinado', 'acucar de confeiteiro', 'acucar branco', 'acucar granulado', 'acucar granulado de cana'] },
+  { ncm: '10063021', categoria: 'alimentos-bebidas', termos: ['arroz branco', 'arroz tipo 1', 'arroz polido', 'arroz longo fino', 'arroz classe tipo 1', 'arroz agulhinha'] },
+  { ncm: '10063011', categoria: 'alimentos-bebidas', termos: ['arroz parboilizado', 'arroz parbolizado', 'arroz parboilizado longo fino'] },
+  { ncm: '25232910', categoria: 'construcao', termos: ['cimento cp ii', 'cimento cp2', 'cimento cp iii', 'cimento cp iii e', 'cimento comum', 'cimento cp v'] },
+  { ncm: '22042100', categoria: 'alimentos-bebidas', termos: ['vinho tinto', 'vinho tinto seco', 'vinho suave', 'vinho de mesa', 'vinho bordeaux'] },
+  { ncm: '22042910', categoria: 'alimentos-bebidas', termos: ['vinho reserva', 'vinho premium', 'vinho granel', 'vinho a granel', 'vinho bag in box'] },
   // --- vestuário e calçados (só frase com material/tipo; marca sozinha é ambígua) ---
   { ncm: '61091000', categoria: 'vestuario-calcados', termos: ['camiseta de algodao', 'babylook de algodao', 'regata de algodao', 'cropped de algodao'] },
   { ncm: '64041100', categoria: 'vestuario-calcados', termos: ['tenis de corrida', 'tenis esportivo', 'tenis nike', 'tenis adidas'] },

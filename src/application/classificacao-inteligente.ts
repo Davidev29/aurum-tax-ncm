@@ -41,6 +41,7 @@ import { pareceCodigoNcm } from '@/domain/services/busca-texto'
 import { detectarForaDeEscopo, MENSAGEM_FORA_DE_ESCOPO } from '@/domain/services/escopo-consulta'
 import { regraDoCapitulo, EXCECOES_FAMILIA } from '@/domain/services/regras-hierarquicas'
 import { secaoDoCapitulo } from '@/domain/services/hierarquia-fiscal'
+import { limparTextoFiscal } from '@/domain/services/texto-fiscal'
 import { db } from '@/infrastructure/db/schema'
 
 /**
@@ -498,8 +499,8 @@ export async function classificarPorDescricao(
   if (herdado?.aConfirmar && confianca === 'alta') confianca = 'media'
 
   const codigoFmt = fmtNcm(topo.cand.item.codigo)
-  const descricaoNcm = topo.cand.item.descricao || principal.descricao || ''
-  const caminho = topo.cand.item.caminho?.length ? ` (${topo.cand.item.caminho.join(' › ')})` : ''
+  const descricaoNcm = limparTextoFiscal(topo.cand.item.descricao || principal.descricao || '')
+  const caminho = topo.cand.item.caminho?.length ? ` (${topo.cand.item.caminho.map(limparTextoFiscal).filter(Boolean).join(' › ')})` : ''
 
   let excecao = false
   let tipoExcecao: string | null = null

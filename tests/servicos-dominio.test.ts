@@ -51,11 +51,12 @@ describe('hipoteseNbsParcial', () => {
 })
 
 describe('detector com 9 dígitos', () => {
-  it('9 dígitos numéricos = NBS exato', () => {
+  it('9 dígitos numéricos = avisa que é NBS (sem classificar na tela NCM)', () => {
     const i = detectarIntencaoConsulta('122011100')
     expect(i.tipo).toBe('numerica')
-    expect(i.deveClassificarExato).toBe(true)
-    expect(i.rotulo).toBe('🔢 NBS exato')
+    expect(i.deveClassificarExato).toBe(false)
+    expect(i.rotulo).toContain('NBS')
+    expect(i.rotulo).not.toBe('🔢 NBS exato')
   })
 
   it('8 dígitos continua NCM exato (sem regressão no domínio padrão)', () => {

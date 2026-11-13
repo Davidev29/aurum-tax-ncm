@@ -86,9 +86,9 @@ export function detectarIntencaoConsulta(entrada: unknown, dominio: DominioConsu
   if (ehNumerica) {
     const completaNcm = digitos.length === 8
     const completaNbs = digitos.length === 9
-    // No domínio NBS só 9 dígitos classificam: 8 dígitos é NCM (outro
-    // imposto, outra tela) — o selo orienta em vez de afirmar "NCM exato".
-    const completa = ehNbs ? completaNbs : completaNcm || completaNbs
+    // NCM: 9 dígitos NÃO classifica nem vira corte silencioso de 8 dígitos;
+    // o rótulo orienta para a tela de Serviços.
+    const completa = ehNbs ? completaNbs : completaNcm
     return {
       tipo: 'numerica',
       digitos,
@@ -97,12 +97,14 @@ export function detectarIntencaoConsulta(entrada: unknown, dominio: DominioConsu
       deveClassificarExato: completa,
       deveBuscarNome: false,
       deveBuscarDescricao: false,
-      rotulo: completaNbs
-        ? '🔢 NBS exato'
-        : completaNcm && !ehNbs
+      rotulo: ehNbs
+        ? completaNbs
+          ? '🔢 NBS exato'
+          : '⌨️ NBS tem 9 dígitos'
+        : completaNcm
           ? '🔢 NCM exato'
-          : ehNbs
-            ? '⌨️ NBS tem 9 dígitos'
+          : digitos.length === 9
+            ? '🔢 Isso é NBS (9 dígitos) — use a tela Serviços'
             : '🔢 Buscando por número…',
     }
   }
@@ -122,7 +124,7 @@ export function detectarIntencaoConsulta(entrada: unknown, dominio: DominioConsu
       temLetras: true,
       deveBuscarExato: true,
       // No domínio NBS, 8 dígitos no meio do texto também não classificam.
-      deveClassificarExato: ehNbs ? digitos.length === 9 : digitos.length === 8 || digitos.length === 9,
+      deveClassificarExato: ehNbs ? digitos.length === 9 : digitos.length === 8,
       deveBuscarNome,
       deveBuscarDescricao,
       rotulo: '🔀 Número + texto',

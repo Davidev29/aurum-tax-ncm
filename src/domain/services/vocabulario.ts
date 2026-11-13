@@ -1108,6 +1108,20 @@ export const SINONIMOS_FISCAIS: Record<string, string> = {
   piracanjuba: 'leite',
   elegê: 'leite',
   elege: 'leite',
+  // TEC chama o arroz "branqueado" — "branco" não existe no capítulo 10
+  branco: 'branquead',
+  branca: 'branquead',
+  brancos: 'branquead',
+  brancas: 'branquead',
+  branqueado: 'branquead',
+  branqueados: 'branquead',
+  branqueamento: 'branquead',
+  // TEC 2022 chama de "concentrados" o que o mercado chama de "condensados"
+  // (produto condensa/concentra água — "leite condensado" = "leite concentrado").
+  condensado: 'concentrado',
+  condensada: 'concentrado',
+  condensados: 'concentrado',
+  condensadas: 'concentrado',
   tody: 'cacau',
   sustagen: 'suplemento',
   ensure: 'suplemento',
@@ -1210,13 +1224,13 @@ export function radicalizar(token: string): string {
     else if (t.endsWith('aes')) t = t.slice(0, -3) + 'ao'
     else if (t.endsWith('ais')) t = t.slice(0, -3) + 'al'
     else if (t.endsWith('eis')) t = t.slice(0, -3) + 'el'
-    else if (t.endsWith('is')) t = t.slice(0, -2) + 'il'
     else if (t.endsWith('ns')) t = t.slice(0, -2) + 'm'
     else if (t.endsWith('es') && t.length > 4) t = t.slice(0, -2)
     else if (t.endsWith('s') && t.length > 3) t = t.slice(0, -1)
-    // diminutivos / aumentativos comuns
+    // diminutivos / aumentativos comuns (restante >=4 letras de raiz —
+    // senão "carneiro" vira "carn" e "carne" degenera em candidato errado)
     for (const suf of ['zinho', 'zinha', 'inhos', 'inhas', 'eiras', 'eira', 'eiro']) {
-      if (t.endsWith(suf) && t.length - suf.length >= 3) {
+      if (t.endsWith(suf) && t.length - suf.length >= 4) {
         t = t.slice(0, -suf.length)
         break
       }
@@ -1268,14 +1282,18 @@ export function casaToken(consulta: string, oficial: string): boolean {
   const o = String(oficial || '')
   if (!q || !o) return false
   if (q === o) return true
-  const minLen = Math.min(q.length, o.length)
-  // substring só com lastro (evita "de" casar com tudo e "nave" com "ave")
-  if (minLen >= 4 && (o.includes(q) || q.includes(o))) return true
+  // prefixo só no INÍCIO, com lastro por tamanho:
+  // - >=4 chars: diferença até 2 ("queij"→"queijos")
+  // - 3 chars: diferença até 1 ("ovo"→"ovos"); substring do meio nunca vale
+  if (o.startsWith(q) && o.length - q.length <= (q.length >= 4 ? 2 : 1)) return true
+  if (q.startsWith(o) && q.length - o.length <= (o.length >= 4 ? 2 : 1)) return true
   if (q.length < 4 || o.length < 4) return false
   if (radicalizar(q) === radicalizar(o)) return true
   const rQ = radicalizar(q)
   const rO = radicalizar(o)
-  if (rQ.length >= 4 && rO.length >= 4 && (rO.includes(rQ) || rQ.includes(rO))) return true
+  // radical prefixo no INÍCIO apenas ("carn" abre "carnes/carne"; "milho"
+  // não abre "tOMILHO") — substring do meio não vale
+  if (rQ.length >= 4 && rO.length >= 4 && (rO.startsWith(rQ) || rQ.startsWith(rO))) return true
   // typo: 1 edição para termos médios, 2 para longos
   if (q.length >= 5 && o.length >= 5) {
     const teto = q.length >= 8 && o.length >= 8 ? 2 : 1

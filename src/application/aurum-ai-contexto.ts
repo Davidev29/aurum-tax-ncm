@@ -21,6 +21,7 @@ import { CAPITULOS_ART_135 } from '@/domain/constants/tributarios'
 import { CAPITULOS_IN_NATURA, CAPITULOS_NCM } from '@/domain/constants/capitulos'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
 import { comporCaminho } from '@/domain/services/busca-texto'
+import { limparTextoFiscal } from '@/domain/services/texto-fiscal'
 import { norm } from '@/domain/services/format'
 import {
   buscarNomenclatura,
@@ -126,7 +127,7 @@ export async function montarFichaAbsoluta(codigo: unknown): Promise<FichaAbsolut
   } catch {
     caminho = []
   }
-  const caminhoTexto = [...caminho, nomenclatura?.descricao ?? ''].filter(Boolean).join(' › ')
+  const caminhoTexto = [...caminho, nomenclatura?.descricao ?? ''].filter(Boolean).map(limparTextoFiscal).join(' › ')
 
   return {
     codigo: c,

@@ -25,6 +25,7 @@ import {
   pontuarCandidatoParcial,
   tokensRelevantes,
 } from '@/domain/services/busca-texto'
+import { limparTextoFiscal } from '@/domain/services/texto-fiscal'
 import { expandirSinonimoFiscal } from '@/domain/services/vocabulario'
 import { norm } from '@/domain/services/format'
 import { db } from '../db/schema'
@@ -93,15 +94,18 @@ export async function sugerirNomenclatura(
 ): Promise<NomenclaturaNcm[]> {
   const t = norm(prefixo)
   if (t.length < 2) return []
-  // Busca folga extra para ordenar vigentes antes dos extintos ("negados")
-  // sem ocultar os extintos (o usuário pode estar com o NCM antigo na nota).
-  const folga = Math.min(limite + 20, 100)
+  // Sem `.limit()` ANTES da ordenação (o motor fatiaria por posição de
+  // inserção, descartando metade dos resultados de capítulos amplos como
+  // "84" com ~1,6 mil linhas). Traz tudo, ordena, fatia no fim.
   const achados = await db.ncmNomenclatura
     .where('codigo')
     .between(t, `${t}\uffff`, true, true)
-    .limit(folga)
     .toArray()
-  achados.sort((a, b) => Number(Boolean(a.dataFim)) - Number(Boolean(b.dataFim)))
+  achados.sort(
+    (a, b) =>
+      Number(Boolean(a.dataFim)) - Number(Boolean(b.dataFim)) ||
+      a.codigo.localeCompare(b.codigo),
+  )
   return achados.slice(0, limite)
 }
 
@@ -117,6 +121,8 @@ export interface ResultadoBuscaTexto extends NomenclaturaNcm {
   totalClassificacoes: number
   /** Pontuação interna (maior = melhor match). */
   score: number
+  /** Fase que o elegeu: 1 = AND estrito (precisão), 2 = tolerante (cobertura). */
+  fase?: 1 | 2
 }
 
 /** Cache em memória da nomenclatura para a busca textual ser fluida. */
@@ -132,10 +138,11 @@ interface EntradaIndiceTexto {
 let _indiceBuscaTexto: EntradaIndiceTexto[] | null = null
 let _cacheBuscaTextoTotal = -1
 
-/** Invalida o cache da busca textual (chamar após importar/apagar a base). */
+/** Invalida o cache da busca textual e das trilhas de breadcrumb. */
 export function invalidarCacheBuscaTexto(): void {
   _indiceBuscaTexto = null
   _cacheBuscaTextoTotal = -1
+  invalidarCacheTrilha()
 }
 
 /** Carrega (uma vez) e pré-normaliza o índice de busca textual. */
@@ -179,8 +186,9 @@ async function indiceBuscaTexto(): Promise<EntradaIndiceTexto[]> {
  * - Somente NCMs de 8 dígitos (os únicos classificáveis);
  * - match sobre o caminho hierárquico completo (pais + item), insensível a
  *   acento/caixa — `0406.10.10` ("Mozarela") é achado por "queijo";
- * - vigentes antes dos extintos; com vínculo antes dos sem vínculo;
- *   genéricos ("Outros") por último;
+ * - bucket antes de tudo: fase 1 (AND estrito) sempre vence a fase 2 (tolerante);
+ *   dentro do bucket, vigentes antes dos extintos, depois score — genéricos
+ *   ("Outros" secos) perdem 20 pontos, então só aparecem quando não há opção;
  * - enriquece com a contagem de vínculos da Reforma (`totalClassificacoes`).
  */
 export async function buscarNomenclaturaPorTexto(
@@ -200,28 +208,29 @@ export async function buscarNomenclaturaPorTexto(
 
   const porCodigo = new Map<string, ResultadoBuscaTexto>()
 
-  function oferecer(item: (typeof indice)[number], score: number): void {
+  function oferecer(item: (typeof indice)[number], score: number, fase: 1 | 2): void {
     if (score < 0) return
     const atual = porCodigo.get(item.item.codigo)
     if (!atual || score > atual.score) {
       porCodigo.set(item.item.codigo, {
         ...item.item,
         caminho: item.caminho,
-        caminhoTexto: [...item.caminho, item.item.descricao].filter(Boolean).join(' › '),
+        caminhoTexto: [...item.caminho, item.item.descricao].filter(Boolean).map(limparTextoFiscal).join(' › '),
         totalClassificacoes: 0,
         score,
+        fase,
       })
     }
   }
 
   // Fase 1 — AND estrito (tokens originais + expandidos).
   for (const e of indice) {
-    oferecer(e, pontuarCandidato(tokens, e.normPropria, e.normCaminho))
+    oferecer(e, pontuarCandidato(tokens, e.normPropria, e.normCaminho), 1)
   }
   if (tokensExpandidos) {
     for (const e of indice) {
       if (porCodigo.has(e.item.codigo)) continue
-      oferecer(e, pontuarCandidato(tokensExpandidos, e.normPropria, e.normCaminho))
+      oferecer(e, pontuarCandidato(tokensExpandidos, e.normPropria, e.normCaminho), 1)
     }
   }
 
@@ -234,7 +243,7 @@ export async function buscarNomenclaturaPorTexto(
     for (const toks of listas) {
       for (const e of indice) {
         if (porCodigo.has(e.item.codigo)) continue
-        oferecer(e, pontuarCandidatoParcial(toks, e.normPropria, e.normCaminho))
+        oferecer(e, pontuarCandidatoParcial(toks, e.normPropria, e.normCaminho), 2)
         if (porCodigo.size >= teto * 3) break
       }
       if (porCodigo.size >= teto * 3) break
@@ -243,6 +252,10 @@ export async function buscarNomenclaturaPorTexto(
 
   const candidatos = [...porCodigo.values()]
   candidatos.sort((a, b) => {
+    // Bucket primeiro (fase 1 sempre vence a fase 2); vigência como desempate
+    // DENTRO do bucket; extintos nunca soterrados pelo score bruto.
+    const fase = (a.fase ?? 2) - (b.fase ?? 2)
+    if (fase !== 0) return fase
     const vig = Number(Boolean(a.dataFim)) - Number(Boolean(b.dataFim))
     if (vig !== 0) return vig
     if (b.score !== a.score) return b.score - a.score
@@ -564,6 +577,45 @@ export async function resolverPorPrefixo(
   }
 }
 
+/* ------------------------------------- trilha NCM para breadcrumb (UI) -- */
+
+import { trilhaNcm, type TrilhaSegmento } from '@/domain/services/hierarquia-fiscal'
+
+/** Cache de trilhas por código — TEC é estática na sessão. */
+const _cacheTrilha = new Map<string, TrilhaSegmento[]>()
+
+/** Invalida as trilhas em cache (chamar após importar/apagar a base). */
+export function invalidarCacheTrilha(): void {
+  _cacheTrilha.clear()
+}
+
+/**
+ * Trilha legível do NCM (Cap. › Pos. › Sub › Item) com descrição oficial
+ * limpa. Níveis ausentes na base são omitidos; sem dados, degrada para
+ * rótulos de dígitos + nome do capítulo. Resultado fica em cache.
+ */
+export async function obterTrilhaNcm(codigo: unknown): Promise<TrilhaSegmento[]> {
+  const c = norm(codigo)
+  if (c.length < 2) return []
+  const hit = _cacheTrilha.get(c)
+  if (hit) return hit
+  const prefixos = [2, 4, 5, 6, 7].filter((t) => c.length > t).map((t) => c.slice(0, t))
+  const ancestrais = new Map<string, string>()
+  await Promise.all(
+    prefixos.map(async (p) => {
+      try {
+        const n = await buscarNomenclatura(p)
+        if (n?.descricao) ancestrais.set(p, n.descricao)
+      } catch {
+        /* nível ausente na base — omite */
+      }
+    }),
+  )
+  const trilha = trilhaNcm(c, ancestrais)
+  _cacheTrilha.set(c, trilha)
+  return trilha
+}
+
 /* ------------------------------------------------- NBS · serviços (Phase 7) -- */
 
 import { classificacaoRegraGeralNbs } from '@/domain/services/classificacao-nbs'
@@ -584,6 +636,8 @@ export interface ResultadoBuscaTextoNbs {
   /** Quantos vínculos da Reforma existem para este NBS. */
   totalClassificacoes: number
   score: number
+  /** Fase que o elegeu: 1 = AND estrito, 2 = tolerante. */
+  fase?: 1 | 2
 }
 
 interface EntradaIndiceTextoNbs {
@@ -699,7 +753,7 @@ export async function buscarNbsPorTexto(
 
   const porCodigo = new Map<string, ResultadoBuscaTextoNbs>()
 
-  function oferecer(e: EntradaIndiceTextoNbs, score: number): void {
+  function oferecer(e: EntradaIndiceTextoNbs, score: number, fase: 1 | 2): void {
     if (score < 0) return
     const atual = porCodigo.get(e.vinculo.codigo)
     if (!atual || score > atual.score) {
@@ -711,17 +765,18 @@ export async function buscarNbsPorTexto(
         documentos: e.vinculo.documentos ?? '',
         totalClassificacoes: 0,
         score,
+        fase,
       })
     }
   }
 
   for (const e of indice) {
-    oferecer(e, pontuarCandidato(tokens, e.normTitulo, e.normRico))
+    oferecer(e, pontuarCandidato(tokens, e.normTitulo, e.normRico), 1)
   }
   if (tokensExpandidos) {
     for (const e of indice) {
       if (porCodigo.has(e.vinculo.codigo)) continue
-      oferecer(e, pontuarCandidato(tokensExpandidos, e.normTitulo, e.normRico))
+      oferecer(e, pontuarCandidato(tokensExpandidos, e.normTitulo, e.normRico), 1)
     }
   }
 
@@ -731,7 +786,7 @@ export async function buscarNbsPorTexto(
     for (const toks of listas) {
       for (const e of indice) {
         if (porCodigo.has(e.vinculo.codigo)) continue
-        oferecer(e, pontuarCandidatoParcial(toks, e.normTitulo, e.normRico))
+        oferecer(e, pontuarCandidatoParcial(toks, e.normTitulo, e.normRico), 2)
         if (porCodigo.size >= teto * 3) break
       }
       if (porCodigo.size >= teto * 3) break
@@ -740,6 +795,8 @@ export async function buscarNbsPorTexto(
 
   const candidatos = [...porCodigo.values()]
   candidatos.sort((a, b) => {
+    const fase = (a.fase ?? 2) - (b.fase ?? 2)
+    if (fase !== 0) return fase
     if (b.score !== a.score) return b.score - a.score
     return a.codigo.localeCompare(b.codigo)
   })
