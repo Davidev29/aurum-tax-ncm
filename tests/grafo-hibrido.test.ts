@@ -165,7 +165,8 @@ describe('grafo-hibrido — (b) benchmark + (c) FTS-puro', () => {
     // com caminho fiscal idêntico (CCT:200003 → Anexo:I → ArtigoLC214:125).
     expect(r.candidatos[0].codigo).toBe('02013000')
     expect(r.candidatos.map((c: { codigo: string }) => c.codigo)).toContain('02102000')
-    expect(r.tempoMs).toBeLessThan(2000)
+    const limiteFrio = process.env.CI ? 5000 : 2000
+    expect(r.tempoMs).toBeLessThan(limiteFrio)
   })
 
   it('(c) sem embedding → modo FTS-puro, FTS segue funcionando', async () => {

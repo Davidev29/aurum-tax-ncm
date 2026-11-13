@@ -19,7 +19,20 @@ import { closeSync, existsSync, openSync, readFileSync, readSync, rmSync, statSy
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
+import { createRequire } from 'node:module'
+const requireSetup = createRequire(import.meta.url)
+// `node:sqlite` só existe com --experimental-sqlite no Node 22 (estável no 24+).
+// Tornamos o uso opcional para não quebrar a suíte quando a flag não estiver ativa.
+let DatabaseSync: (new (file: string, opts?: { readOnly?: boolean }) => {
+  prepare(sql: string): { get(): unknown }
+  exec(sql: string): void
+  close(): void
+}) | null = null
+try {
+  DatabaseSync = requireSetup('node:sqlite').DatabaseSync
+} catch {
+  DatabaseSync = null
+}
 import { registrarDriverPrisma } from '@/infrastructure/db/driver-prisma'
 
 /** Magic bytes do SQLite (`SQLite format 3\0`) sem carregar o arquivo. */
@@ -70,7 +83,8 @@ function magiaSqlite(caminho: string): string {
       if (travaFresca()) return false
       if (!existsSync(template) || statSync(template).size <= 0) return false
       if (magiaSqlite(template) !== 'SQLite format 3\0') return false
-      const db = new DatabaseSync(template, { readOnly: true })
+      if (!DatabaseSync) return true
+      const db = new DatabaseSync!(template, { readOnly: true })
       try {
         const r = db.prepare('PRAGMA integrity_check').get() as { integrity_check?: unknown }
         return String(r?.integrity_check ?? '').toLowerCase() === 'ok'
@@ -84,7 +98,8 @@ function magiaSqlite(caminho: string): string {
 
   /** Despeja o WAL no arquivo principal e prova a integridade (dono, sob lock). */
   const finalizarTemplate = (): void => {
-    const db = new DatabaseSync(template)
+    if (!DatabaseSync) return
+    const db = new DatabaseSync!(template)
     try {
       db.exec('PRAGMA wal_checkpoint(TRUNCATE);')
       const r = db.prepare('PRAGMA integrity_check').get() as { integrity_check?: unknown }

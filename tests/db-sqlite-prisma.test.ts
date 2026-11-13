@@ -604,15 +604,22 @@ describe('snapshot pré-restore', () => {
 
   async function contarTabelas(caminho: string): Promise<number> {
     // Leitura só-leitura: conta tabelas de dados (ignora internas do SQLite/Prisma).
-    const { DatabaseSync } = await import('node:sqlite')
-    const bd = new DatabaseSync(caminho, { readOnly: true })
     try {
-      const linha = bd.prepare(
-        "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma%'",
-      ).get() as { n: number }
-      return linha.n
-    } finally {
-      bd.close()
+      const { DatabaseSync } = await import('node:sqlite')
+      const bd = new DatabaseSync(caminho, { readOnly: true })
+      try {
+        const linha = bd.prepare(
+          "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma%'",
+        ).get() as { n: number }
+        return linha.n
+      } finally {
+        bd.close()
+      }
+    } catch {
+      const { execFileSync } = await import('node:child_process')
+      const script = "const{DatabaseSync}=require('node:sqlite');const bd=new DatabaseSync(process.argv[1],{readOnly:true});try{const l=bd.prepare(\"SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma%'\").get();process.stdout.write(String(l.n));}finally{bd.close();}"
+      const out = execFileSync(process.execPath, ['--experimental-sqlite', '-e', script, caminho], { encoding: 'utf8' })
+      return Number(out.trim())
     }
   }
 
