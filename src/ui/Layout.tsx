@@ -165,9 +165,10 @@ function Sidebar() {
         </div>
 
         {/* O menu é fixo: só rola internamente se não couber na altura da
-            janela (desktop com zoom alto / viewport curto). */}
+            janela (desktop com zoom alto / viewport curto). SEM `key` de
+            remontagem no toggle — antes desmontava a nav a cada
+            abrir/fechar e reexecutava a animação em cascata dos itens. */}
         <nav
-          key={recolhida ? 'recolhida' : 'expandida'}
           className={`scroll-elegante min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4 ${
             recolhida ? '' : 'animar-entrada'
           }`}
