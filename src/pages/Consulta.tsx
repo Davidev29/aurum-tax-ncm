@@ -112,10 +112,7 @@ export function Consulta() {
   const basePronta = useBase((s) => s.pronta)
 
   const [paraSalvar, setParaSalvar] = useState<Classificacao | null>(null)
-  // Acervo geral de produtos salvos — sugestão destacada na pesquisa de NCM.
-  const [produtosSalvosNcm, setProdutosSalvosNcm] = useState<Produto[]>([])
-  // Sugestão destacada durante a digitação (acervo geral).
-  const [produtosSalvosDigitacao, setProdutosSalvosDigitacao] = useState<Produto[]>([])
+  // (sugestão de produtos salvos agora vive no dropdown quick)
   const prefillSalvar = useConsulta((s) => s.prefillSalvar)
   const setPrefillSalvar = useConsulta((s) => s.setPrefillSalvar)
   const [reclassificando, setReclassificando] = useState(false)
@@ -126,11 +123,11 @@ export function Consulta() {
   // Dropdown instantâneo (texto ou número): leitura direta, sem commitar store.
   const [quickNum, setQuickNum] = useState<{ codigo: string; codigoOriginal: string; descricao: string; dataFim?: string | null }[]>([])
   const [quickTxt, setQuickTxt] = useState<ResultadoBuscaTexto[]>([])
+  const [quickProdutos, setQuickProdutos] = useState<Produto[]>([])
   const [quickFam, setQuickFam] = useState<{ prefixo: string; totalVigentes: number; unanime: boolean; cst: string | null; cClassTrib: string | null } | null>(null)
   const [quickAtivo, setQuickAtivo] = useState(-1)
   const [quickAberto, setQuickAberto] = useState(false)
   const quickSeq = useRef(0)
-  const produtosSalvosSeq = useRef(0)
   const wrapBuscaRef = useRef<HTMLDivElement>(null)
 
   const intencao = useMemo(() => detectarIntencaoConsulta(entrada), [entrada])
@@ -152,55 +149,7 @@ export function Consulta() {
     }
   }, [codigo, entrada, setEntradaStore])
 
-  // Sugestão destacada: produtos do acervo geral com o mesmo NCM.
-  useEffect(() => {
-    const ncm = nomenclatura?.codigo ? norm(nomenclatura.codigo) : ''
-    if (!ncm) {
-      setProdutosSalvosNcm([])
-      return
-    }
-    let vivo = true
-    void (async () => {
-      try {
-        const lista = await listarProdutos(null)
-        if (!vivo) return
-        setProdutosSalvosNcm(lista.filter((p) => norm(p.ncm) === ncm))
-      } catch {
-        if (vivo) setProdutosSalvosNcm([])
-      }
-    })()
-    return () => {
-      vivo = false
-    }
-  }, [nomenclatura])
 
-  // Sugestão destacada durante a digitação: produtos do acervo geral que
-  // batem com o texto (SKU, nome ou NCM).
-  useEffect(() => {
-    const t = entrada.trim().toLowerCase()
-    if (t.length < 2) {
-      setProdutosSalvosDigitacao([])
-      return
-    }
-    const seq = ++produtosSalvosSeq.current
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const lista = await listarProdutos(null)
-          if (seq !== produtosSalvosSeq.current) return
-          const filtrados = lista.filter((p) => {
-            const blob = `${p.codigo} ${p.nome} ${p.ncm}`.toLowerCase()
-            return blob.includes(t) || norm(p.ncm).startsWith(t.replace(/\D/g, ''))
-          }).slice(0, 8)
-          if (seq !== produtosSalvosSeq.current) return
-          setProdutosSalvosDigitacao(filtrados)
-        } catch {
-          if (seq === produtosSalvosSeq.current) setProdutosSalvosDigitacao([])
-        }
-      })()
-    }, 300)
-    return () => window.clearTimeout(timer)
-  }, [entrada])
 
   // Espelho externo → local (limpar, escolherUnificada, navegar): quando a
   // store muda por outra via que não o commit debounced, reflete no input.
@@ -263,6 +212,7 @@ export function Consulta() {
       setQuickNum([])
       setQuickTxt([])
       setQuickFam(null)
+      setQuickProdutos([])
       setQuickAberto(false)
       setQuickAtivo(-1)
       return
@@ -306,11 +256,27 @@ export function Consulta() {
               txts = []
             }
           }
+          // Produtos salvos no acervo geral que batem com a digitação.
+          let prods: Produto[] = []
+          try {
+            const lista = await listarProdutos(null)
+            const t = atual.trim().toLowerCase()
+            prods = lista.filter((p) => {
+              const blob = `${p.codigo} ${p.nome} ${p.ncm}`.toLowerCase()
+              const digits = t.replace(/\D/g, '')
+              const porTexto = blob.includes(t)
+              const porNcm = digits.length >= 2 && norm(p.ncm).startsWith(digits)
+              return porTexto || porNcm
+            }).slice(0, 5)
+          } catch {
+            prods = []
+          }
           if (seq !== quickSeq.current) return
           setQuickNum(nums)
           setQuickTxt(txts)
           setQuickFam(fam)
-          setQuickAberto(nums.length > 0 || txts.length > 0 || fam != null)
+          setQuickProdutos(prods)
+          setQuickAberto(nums.length > 0 || txts.length > 0 || fam != null || prods.length > 0)
           setQuickAtivo(-1)
         } catch {
           /* dropdown nunca quebra a digitação */
@@ -622,6 +588,36 @@ export function Consulta() {
                         </button>
                       )
                     })}
+                  {quickProdutos.length > 0 ? (
+                    <div className="border-t border-aurum-200/60 pt-1 dark:border-aurum-800/60">
+                      {quickProdutos.map((p, k) => {
+                        const idx = (quickFam?.unanime && quickFam.cst ? 1 : 0) + quickNum.length + quickTxt.filter((r) => !quickNum.some((n) => n.codigo === r.codigo)).length + k
+                        return (
+                          <button
+                            key={`qp-${p.id ?? p.codigo}`}
+                            id={`quick-item-${idx}`}
+                            type="button"
+                            role="option"
+                            aria-selected={idx === quickAtivo}
+                            className={`sugg-item${idx === quickAtivo ? ' is-active' : ''}`}
+                            onMouseEnter={() => setQuickAtivo(idx)}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => {
+                              setEntradaLocal(fmtNcm(norm(p.ncm)) || p.ncm)
+                              void consultarUnificada(fmtNcm(norm(p.ncm)) || p.ncm)
+                            }}
+                            title={`Produto salvo: ${p.nome}`}
+                          >
+                            <span className="font-mono text-xs font-black text-aurum-700 dark:text-aurum-200">{fmtNcm(norm(p.ncm))}</span>
+                            <span className="min-w-0 flex-1 truncate text-xs font-semibold text-slate-700 dark:text-slate-200">
+                              <Destacar texto={p.nome} termo={entrada} />
+                            </span>
+                            <span className="sugg-selo">📦 salvo</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ) : null}
                   <div className="sugg-dica">↑↓ navega · Enter escolhe ou pesquisa · clique classifica oficialmente</div>
                 </div>
               ) : null}
@@ -688,24 +684,6 @@ export function Consulta() {
         </Entrada>
       ) : (
         <Revelar className={`mt-6 space-y-4${quickAberto ? ' conteudo-esmaecido' : ''}`} inert={quickAberto ? true : undefined} aria-hidden={quickAberto || undefined}>
-          {produtosSalvosDigitacao.length ? (
-            <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-aurum-200 bg-aurum-50/50 px-3 py-2 text-xs dark:border-aurum-800 dark:bg-aurum-950/20">
-              <span className="font-black text-aurum-700 dark:text-aurum-200">📦 salvos:</span>
-              {produtosSalvosDigitacao.map((p) => (
-                <button
-                  key={p.id ?? p.codigo}
-                  type="button"
-                  onClick={() => {
-                    setEntradaLocal(fmtNcm(norm(p.ncm)) || p.ncm)
-                    void consultarUnificada(fmtNcm(norm(p.ncm)) || p.ncm)
-                  }}
-                  className="rounded-full bg-white px-2 py-0.5 font-semibold text-slate-700 shadow-sm transition hover:bg-aurum-100 dark:bg-slate-900 dark:text-slate-200"
-                >
-                  {p.nome}
-                </button>
-              ))}
-            </div>
-          ) : null}
           {/* UMA resposta protagonista por vez — resto colapsado. */}
           {prioridadeIA ? (
             <section aria-label="Resposta automática" className="space-y-3">
@@ -759,17 +737,6 @@ export function Consulta() {
             </section>
           ) : null}
 
-          {/* Sugestao compacta de produtos salvos com este NCM. */}
-          {produtosSalvosNcm.length ? (
-            <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-aurum-200 bg-aurum-50/50 px-3 py-2 text-xs dark:border-aurum-800 dark:bg-aurum-950/20">
-              <span className="font-black text-aurum-700 dark:text-aurum-200">📦 salvos:</span>
-              {produtosSalvosNcm.map((p) => (
-                <span key={p.id ?? p.codigo} className="rounded-full bg-white px-2 py-0.5 font-semibold text-slate-700 shadow-sm dark:bg-slate-900 dark:text-slate-200">
-                  {p.nome}
-                </span>
-              ))}
-            </div>
-          ) : null}
 
           {/* Outras correspondências: UMA seção colapsada (número + nome). */}
           {(mostrarExata && !intencao.deveClassificarExato) || mostrarNome ? (

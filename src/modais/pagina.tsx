@@ -235,7 +235,7 @@ export function ModalSalvarClass({
               {produtosSalvos.map((p) => (
                 <div
                   key={p.codigo}
-                  className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm shadow-sm dark:bg-slate-900"
+                  className="flex items-center gap-2 rounded-lg bg-aurum-100/40 px-3 py-2 text-sm dark:bg-aurum-950/30"
                 >
                   <span className="font-mono text-xs font-bold text-aurum-700 dark:text-aurum-200">{p.codigo}</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-100">{p.nome}</span>
