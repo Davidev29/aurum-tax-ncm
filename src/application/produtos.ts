@@ -394,13 +394,22 @@ export async function salvarProdutosEmLote(
   const contagem: ContagemLote = { salvos: 0, atualizados: 0, ignorados: 0 }
   const fila: Produto[] = []
 
+  // Deduplicação intra-lote: nunca gravar o mesmo SKU duas vezes numa mesma
+  // importação (last-wins). Sem isso, um arquivo com SKU repetido gerava
+  // linhas duplicadas no cadastro.
+  const porSkuLote = new Map<string, ItemLoteGravavel>()
   for (const it of itens) {
     const codigo = it.codigo?.trim()
     if (!codigo || !it.classificacao) {
       contagem.ignorados++
       continue
     }
-    const snapshot = snapshotDe(it.classificacao)
+    porSkuLote.set(codigo, { ...it, codigo })
+  }
+
+  for (const it of porSkuLote.values()) {
+    const codigo = (it.codigo as string).trim()
+    const snapshot = snapshotDe(it.classificacao!)
     const fluxo = normalizarFluxo(it as EntradaProduto)
     const comum: Omit<Produto, 'id' | 'criadoEm' | 'atualizadoEm'> = {
       empresaId,
@@ -414,12 +423,12 @@ export async function salvarProdutosEmLote(
       ...fluxo,
       quantidade: it.quantidade ?? 0,
       valorUnitario: it.valorUnitario ?? 0,
-      cstReforma: it.classificacao.cst,
-      cClassTrib: it.classificacao.cClassTrib,
-      regraGeral: it.classificacao.regraGeral,
-      classificacaoManual: it.classificacao.manual != null,
+      cstReforma: it.classificacao!.cst,
+      cClassTrib: it.classificacao!.cClassTrib,
+      regraGeral: it.classificacao!.regraGeral,
+      classificacaoManual: it.classificacao!.manual != null,
       classificacaoSnapshot: snapshot,
-      baseLegal: it.classificacao.baseLegal,
+      baseLegal: it.classificacao!.baseLegal,
     }
     const anterior = porSku.get(codigo)
     if (anterior) {
