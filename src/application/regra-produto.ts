@@ -29,11 +29,12 @@ export type MapaRegraProduto = Map<string, RegraProduto>
 export async function mapaRegrasProdutos(
   empresaId: number | null | undefined,
 ): Promise<MapaRegraProduto> {
+  // Acervo geral: produtos não são vinculados a empresa — carrega todos.
+  void empresaId
   const mapa: MapaRegraProduto = new Map()
-  if (empresaId == null) return mapa
   let lista: { codigo: string; ncm: string; cstReforma: string; cClassTrib: string }[] = []
   try {
-    lista = await db.produtos.where('empresaId').equals(empresaId).toArray()
+    lista = await db.produtos.toArray()
   } catch {
     return mapa
   }

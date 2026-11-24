@@ -21,7 +21,8 @@
  * - "Salvar como produto" abre o modal da página, nunca escreve direto;
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Classificacao } from '@/domain/entities'
+import type { Classificacao, Produto } from '@/domain/entities'
+import { listarProdutos } from '@/application/produtos'
 import { fmtConfiancaAurumAI, nivelDeConfianca } from '@/domain/aurum-ai'
 import { fmtMoeda, fmtNcm, MASK, norm } from '@/domain/services/format'
 import { detectarIntencaoConsulta } from '@/domain/services/detector-consulta'
@@ -111,6 +112,8 @@ export function Consulta() {
   const basePronta = useBase((s) => s.pronta)
 
   const [paraSalvar, setParaSalvar] = useState<Classificacao | null>(null)
+  // Acervo geral de produtos salvos — sugestão destacada na pesquisa de NCM.
+  const [produtosSalvosNcm, setProdutosSalvosNcm] = useState<Produto[]>([])
   const prefillSalvar = useConsulta((s) => s.prefillSalvar)
   const setPrefillSalvar = useConsulta((s) => s.setPrefillSalvar)
   const [reclassificando, setReclassificando] = useState(false)
@@ -145,6 +148,28 @@ export function Consulta() {
       setEntradaLocal(fmt)
     }
   }, [codigo, entrada, setEntradaStore])
+
+  // Sugestão destacada: produtos do acervo geral com o mesmo NCM.
+  useEffect(() => {
+    const ncm = nomenclatura?.codigo ? norm(nomenclatura.codigo) : ''
+    if (!ncm) {
+      setProdutosSalvosNcm([])
+      return
+    }
+    let vivo = true
+    void (async () => {
+      try {
+        const lista = await listarProdutos(null)
+        if (!vivo) return
+        setProdutosSalvosNcm(lista.filter((p) => norm(p.ncm) === ncm))
+      } catch {
+        if (vivo) setProdutosSalvosNcm([])
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [nomenclatura])
 
   // Espelho externo → local (limpar, escolherUnificada, navegar): quando a
   // store muda por outra via que não o commit debounced, reflete no input.
@@ -682,6 +707,31 @@ export function Consulta() {
                   onReclassificar={() => setReclassificando(true)}
                 />
               )}
+            </section>
+          ) : null}
+
+          {/* Acervo geral: produtos salvos com este NCM (destaque). */}
+          {produtosSalvosNcm.length ? (
+            <section aria-label="Produtos salvos no sistema" className="space-y-2">
+              <h3 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <span className="inline-flex items-center gap-1.5 rounded bg-aurum-100 px-1.5 py-0.5 text-aurum-800 dark:bg-aurum-950/60 dark:text-aurum-200">
+                  📦 Produtos salvos no sistema
+                </span>
+                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black normal-case text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  {produtosSalvosNcm.length}
+                </span>
+              </h3>
+              <div className="space-y-1.5 rounded-xl border-2 border-aurum-300 bg-aurum-50/60 p-3 dark:border-aurum-700 dark:bg-aurum-950/30">
+                {produtosSalvosNcm.map((p) => (
+                  <div key={p.id ?? p.codigo} className="flex flex-wrap items-center gap-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-xs dark:bg-slate-900/60">
+                    <span className="font-mono font-bold text-aurum-700 dark:text-aurum-200">{p.codigo}</span>
+                    <span className="text-slate-700 dark:text-slate-200">{p.nome}</span>
+                    <span className="ml-auto rounded-full bg-aurum-200 px-2 py-0.5 text-[10px] font-black text-aurum-900 dark:bg-aurum-900/60 dark:text-aurum-100">
+                      salvo
+                    </span>
+                  </div>
+                ))}
+              </div>
             </section>
           ) : null}
 

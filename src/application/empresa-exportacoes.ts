@@ -13,9 +13,11 @@ export type FormatoEmpresa = 'csv' | 'xlsx' | 'pdf'
 
 /** Produtos da empresa (ordenados por SKU, como no resumo do detalhe). */
 export async function produtosDaEmpresa(empresaId: number): Promise<Produto[]> {
+  // Acervo geral: produtos não são vinculados a empresa — retorna todos.
+  void empresaId
   const { db } = await import('@/infrastructure/db/schema')
   try {
-    const lista = await db.produtos.where('empresaId').equals(empresaId).toArray()
+    const lista = await db.produtos.toArray()
     return lista.sort((a, b) => String(a.codigo).localeCompare(String(b.codigo), 'pt-BR'))
   } catch {
     return []

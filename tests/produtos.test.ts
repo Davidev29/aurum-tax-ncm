@@ -173,37 +173,25 @@ describe('salvarProduto', () => {
     expect(await db.produtos.count()).toBe(0)
   })
 
-  it('o SKU é comparado dentro da empresa ativa', async () => {
+  it('o SKU é global no acervo (não depende de empresa)', async () => {
     expect((await salvarProduto(entrada())).ok).toBe(true)
-    expect((await salvarProduto(entrada())).ok).toBe(false) // mesma empresa (null)
+    expect((await salvarProduto(entrada())).ok).toBe(false) // mesmo SKU
 
+    // Mesmo com empresaId informado, o produto é gravado no acervo geral.
     const outra = await salvarProduto(entrada({ empresaId: 7 }))
-    expect(outra.ok).toBe(true)
+    expect(outra.ok).toBe(false) // SKU já existe no acervo
 
-    expect(await db.produtos.count()).toBe(2)
+    expect(await db.produtos.count()).toBe(1)
     expect((await produtoPorSku(null, 'SKU-0001'))?.empresaId).toBeNull()
-    expect((await produtoPorSku(7, 'SKU-0001'))?.empresaId).toBe(7)
-    expect(await produtoPorSku(8, 'SKU-0001')).toBeUndefined()
   })
 
-  it('sem empresa ativa não reaproveita SKU de outra empresa (escopo exato)', async () => {
-    await salvarProduto(entrada({ empresaId: 7 }))
-    // Mesmo SKU, agora no escopo "sem empresa": deve criar uma linha nova.
-    const r = await salvarProduto(entrada())
-    expect(r.ok).toBe(true)
-    expect(await db.produtos.count()).toBe(2)
-    expect((await produtoPorSku(null, 'SKU-0001'))?.empresaId).toBeNull()
-    expect((await produtoPorSku(7, 'SKU-0001'))?.empresaId).toBe(7)
-  })
-
-  it('listarProdutos separa por empresa e ordena por SKU', async () => {
+  it('listarProdutos retorna o acervo geral ordenado por SKU', async () => {
     await salvarProduto(entrada({ codigo: 'B' }))
     await salvarProduto(entrada({ codigo: 'A' }))
     await salvarProduto(entrada({ codigo: 'C', empresaId: 3 }))
 
     expect((await listarProdutos(null)).map((p) => p.codigo)).toEqual(['A', 'B', 'C'])
-    expect((await listarProdutos(3)).map((p) => p.codigo)).toEqual(['C'])
-    expect(await listarProdutos(9)).toEqual([])
+    expect((await listarProdutos(3)).map((p) => p.codigo)).toEqual(['A', 'B', 'C'])
   })
 })
 
@@ -294,12 +282,11 @@ describe('apresentação', () => {
     expect(linha.empresaNome).toBeNull()
   })
 
-  it('produtoLinha resolve o nome da empresa', async () => {
-    const r = await salvarProduto(entrada({ empresaId: 4 }))
-    if (!r.ok) throw new Error('falha')
-    const linha = produtoLinha(r.produto, new Map([[4, 'Empresa X']]))
+  it('produtoLinha resolve o nome da empresa', () => {
+    const p = { empresaId: 4 } as any
+    const linha = produtoLinha(p as never, new Map([[4, 'Empresa X']]))
     expect(linha.empresaNome).toBe('Empresa X')
-    expect(produtoLinha({ ...r.produto, empresaId: 5 }, new Map()).empresaNome).toBe('Empresa #5')
+    expect(produtoLinha({ ...p, empresaId: 5 } as never, new Map()).empresaNome).toBe('Empresa #5')
   })
 
   it('entradaProdutoDeFormulario aplica as máscaras da v1', () => {

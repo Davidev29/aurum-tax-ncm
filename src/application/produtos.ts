@@ -114,7 +114,9 @@ export type ResultadoSalvar =
 
 /** Lista os produtos da empresa (ou todos quando `empresaId` é `null`). */
 export async function listarProdutos(empresaId: number | null): Promise<Produto[]> {
-  const lista = empresaId === null ? await db.produtos.toArray() : await db.produtos.where('empresaId').equals(empresaId).toArray()
+  // Acervo geral: produtos não são vinculados a uma empresa — retorna todos.
+  void empresaId
+  const lista = await db.produtos.toArray()
   return lista.sort((a, b) => String(a.codigo).localeCompare(String(b.codigo), 'pt-BR'))
 }
 
@@ -124,8 +126,9 @@ export async function listarProdutos(empresaId: number | null): Promise<Produto[
  * a base inteira para exibição.
  */
 async function produtosNoEscopo(empresaId: number | null): Promise<Produto[]> {
-  const lista = await listarProdutos(empresaId)
-  return empresaId === null ? lista.filter((p) => (p.empresaId ?? null) === null) : lista
+  // Acervo geral: ignora escopo de empresa.
+  void empresaId
+  return listarProdutos(null)
 }
 
 export async function buscarProduto(id: number): Promise<Produto | undefined> {
@@ -241,7 +244,8 @@ export async function salvarProduto(
   const fluxo = normalizarFluxo(e)
 
   const base: Omit<Produto, 'id' | 'criadoEm'> = {
-    empresaId: e.empresaId,
+    // Acervo geral: produto não é vinculado a empresa.
+    empresaId: null,
     codigo: e.codigo.trim(),
     nome: e.nome.trim(),
     ncm,
@@ -412,7 +416,8 @@ export async function salvarProdutosEmLote(
     const snapshot = snapshotDe(it.classificacao!)
     const fluxo = normalizarFluxo(it as EntradaProduto)
     const comum: Omit<Produto, 'id' | 'criadoEm' | 'atualizadoEm'> = {
-      empresaId,
+      // Acervo geral: produto não é vinculado a empresa.
+      empresaId: null,
       codigo,
       nome: it.nome?.trim() || codigo,
       ncm: norm(it.ncm),
