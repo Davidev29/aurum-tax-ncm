@@ -689,35 +689,22 @@ export function Consulta() {
       ) : (
         <Revelar className={`mt-6 space-y-4${quickAberto ? ' conteudo-esmaecido' : ''}`} inert={quickAberto ? true : undefined} aria-hidden={quickAberto || undefined}>
           {produtosSalvosDigitacao.length ? (
-            <section aria-label="Produtos salvos (sugestão)" className="space-y-2">
-              <h3 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <span className="inline-flex items-center gap-1.5 rounded bg-aurum-100 px-1.5 py-0.5 text-aurum-800 dark:bg-aurum-950/60 dark:text-aurum-200">
-                  📦 Produtos salvos no sistema
-                </span>
-                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black normal-case text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                  {produtosSalvosDigitacao.length}
-                </span>
-              </h3>
-              <div className="flex flex-wrap gap-1.5 rounded-xl border-2 border-aurum-300 bg-aurum-50/60 p-3 dark:border-aurum-700 dark:bg-aurum-950/30">
-                {produtosSalvosDigitacao.map((p) => (
-                  <button
-                    key={p.id ?? p.codigo}
-                    type="button"
-                    onClick={() => {
-                      setEntradaLocal(fmtNcm(norm(p.ncm)) || p.ncm)
-                      void consultarUnificada(fmtNcm(norm(p.ncm)) || p.ncm)
-                    }}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-aurum-800 shadow-sm transition hover:bg-aurum-100 dark:bg-slate-900 dark:text-aurum-200"
-                  >
-                    <span className="font-mono">{fmtNcm(norm(p.ncm))}</span>
-                    <span className="max-w-[160px] truncate">{p.codigo}</span>
-                    <span className="rounded-full bg-aurum-200 px-1.5 py-0.5 text-[9px] font-black text-aurum-900 dark:bg-aurum-900/60 dark:text-aurum-100">
-                      salvo
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
+            <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-aurum-200 bg-aurum-50/50 px-3 py-2 text-xs dark:border-aurum-800 dark:bg-aurum-950/20">
+              <span className="font-black text-aurum-700 dark:text-aurum-200">📦 salvos:</span>
+              {produtosSalvosDigitacao.map((p) => (
+                <button
+                  key={p.id ?? p.codigo}
+                  type="button"
+                  onClick={() => {
+                    setEntradaLocal(fmtNcm(norm(p.ncm)) || p.ncm)
+                    void consultarUnificada(fmtNcm(norm(p.ncm)) || p.ncm)
+                  }}
+                  className="rounded-full bg-white px-2 py-0.5 font-semibold text-slate-700 shadow-sm transition hover:bg-aurum-100 dark:bg-slate-900 dark:text-slate-200"
+                >
+                  {p.nome}
+                </button>
+              ))}
+            </div>
           ) : null}
           {/* UMA resposta protagonista por vez — resto colapsado. */}
           {prioridadeIA ? (
@@ -772,29 +759,16 @@ export function Consulta() {
             </section>
           ) : null}
 
-          {/* Acervo geral: produtos salvos com este NCM (destaque). */}
+          {/* Sugestao compacta de produtos salvos com este NCM. */}
           {produtosSalvosNcm.length ? (
-            <section aria-label="Produtos salvos no sistema" className="space-y-2">
-              <h3 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <span className="inline-flex items-center gap-1.5 rounded bg-aurum-100 px-1.5 py-0.5 text-aurum-800 dark:bg-aurum-950/60 dark:text-aurum-200">
-                  📦 Produtos salvos no sistema
+            <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-aurum-200 bg-aurum-50/50 px-3 py-2 text-xs dark:border-aurum-800 dark:bg-aurum-950/20">
+              <span className="font-black text-aurum-700 dark:text-aurum-200">📦 salvos:</span>
+              {produtosSalvosNcm.map((p) => (
+                <span key={p.id ?? p.codigo} className="rounded-full bg-white px-2 py-0.5 font-semibold text-slate-700 shadow-sm dark:bg-slate-900 dark:text-slate-200">
+                  {p.nome}
                 </span>
-                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black normal-case text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                  {produtosSalvosNcm.length}
-                </span>
-              </h3>
-              <div className="space-y-1.5 rounded-xl border-2 border-aurum-300 bg-aurum-50/60 p-3 dark:border-aurum-700 dark:bg-aurum-950/30">
-                {produtosSalvosNcm.map((p) => (
-                  <div key={p.id ?? p.codigo} className="flex flex-wrap items-center gap-2 rounded-lg bg-white/70 px-2.5 py-1.5 text-xs dark:bg-slate-900/60">
-                    <span className="font-mono font-bold text-aurum-700 dark:text-aurum-200">{p.codigo}</span>
-                    <span className="text-slate-700 dark:text-slate-200">{p.nome}</span>
-                    <span className="ml-auto rounded-full bg-aurum-200 px-2 py-0.5 text-[10px] font-black text-aurum-900 dark:bg-aurum-900/60 dark:text-aurum-100">
-                      salvo
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
+              ))}
+            </div>
           ) : null}
 
           {/* Outras correspondências: UMA seção colapsada (número + nome). */}

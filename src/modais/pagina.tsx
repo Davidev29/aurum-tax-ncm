@@ -19,7 +19,7 @@ import {
   parseMoeda,
   parseQtd,
 } from '@/domain/services/format'
-import { salvarProduto, type EntradaProduto } from '@/application/produtos'
+import { listarProdutos, salvarProduto, type EntradaProduto } from '@/application/produtos'
 import { useProdutos } from '@/store/produtos'
 import { useSessao } from '@/store/sessao'
 import { confirmar as confirmarDialogo } from '@/store/dialogo'
@@ -71,6 +71,7 @@ export function ModalSalvarClass({
 }) {
   const [form, setForm] = useState<FormSalvarClass>(FORM_INICIAL)
   const [salvando, setSalvando] = useState(false)
+  const [produtosSalvos, setProdutosSalvos] = useState<Array<{ codigo: string; nome: string }>>([])
   const editando = inicial?.editarId != null
 
   // Abertura sempre parte de um formulário limpo — ou do pré-preenchimento
@@ -78,6 +79,36 @@ export function ModalSalvarClass({
   useEffect(() => {
     if (aberto) setForm({ ...FORM_INICIAL, ...(inicial ?? {}) })
   }, [aberto, inicial])
+
+  // Sugestão destacada: produtos do acervo geral com o mesmo NCM.
+  useEffect(() => {
+    if (!aberto || !classificacao) {
+      setProdutosSalvos([])
+      return
+    }
+    const ncm = norm(classificacao.codigo)
+    if (!ncm) {
+      setProdutosSalvos([])
+      return
+    }
+    let vivo = true
+    void (async () => {
+      try {
+        const lista = await listarProdutos(null)
+        if (!vivo) return
+        setProdutosSalvos(
+          lista
+            .filter((p) => norm(p.ncm) === ncm)
+            .map((p) => ({ codigo: p.codigo, nome: p.nome })),
+        )
+      } catch {
+        if (vivo) setProdutosSalvos([])
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [aberto, classificacao])
 
   if (!classificacao) return null
 
@@ -191,6 +222,34 @@ export function ModalSalvarClass({
             <strong>Classificação:</strong> {descricao}
           </div>
         </div>
+
+        {produtosSalvos.length ? (
+          <div className="rounded-xl border-2 border-aurum-300 bg-aurum-50/70 p-4 dark:border-aurum-700 dark:bg-aurum-950/30">
+            <div className="mb-2 flex items-center gap-2">
+              <Pill cor="brand">📦 Produtos salvos com este NCM</Pill>
+              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {produtosSalvos.length}
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {produtosSalvos.map((p) => (
+                <div
+                  key={p.codigo}
+                  className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm shadow-sm dark:bg-slate-900"
+                >
+                  <span className="font-mono text-xs font-bold text-aurum-700 dark:text-aurum-200">{p.codigo}</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">{p.nome}</span>
+                  <span className="ml-auto rounded-full bg-aurum-200 px-2 py-0.5 text-[9px] font-black text-aurum-900 dark:bg-aurum-900/60 dark:text-aurum-100">
+                    salvo
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-[11px] text-slate-600 dark:text-slate-400">
+              Estes produtos já usam esta classificação. Evite duplicar o SKU.
+            </div>
+          </div>
+        ) : null}
 
         <section>
           <TituloSecao>Identificação</TituloSecao>
