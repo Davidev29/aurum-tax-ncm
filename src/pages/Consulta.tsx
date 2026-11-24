@@ -130,6 +130,7 @@ export function Consulta() {
   const [quickAtivo, setQuickAtivo] = useState(-1)
   const [quickAberto, setQuickAberto] = useState(false)
   const quickSeq = useRef(0)
+  const produtosSalvosSeq = useRef(0)
   const wrapBuscaRef = useRef<HTMLDivElement>(null)
 
   const intencao = useMemo(() => detectarIntencaoConsulta(entrada), [entrada])
@@ -181,20 +182,20 @@ export function Consulta() {
       setProdutosSalvosDigitacao([])
       return
     }
-    const seq = ++quickSeq.current
+    const seq = ++produtosSalvosSeq.current
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
           const lista = await listarProdutos(null)
-          if (seq !== quickSeq.current) return
+          if (seq !== produtosSalvosSeq.current) return
           const filtrados = lista.filter((p) => {
             const blob = `${p.codigo} ${p.nome} ${p.ncm}`.toLowerCase()
             return blob.includes(t) || norm(p.ncm).startsWith(t.replace(/\D/g, ''))
           }).slice(0, 8)
-          if (seq !== quickSeq.current) return
+          if (seq !== produtosSalvosSeq.current) return
           setProdutosSalvosDigitacao(filtrados)
         } catch {
-          if (seq === quickSeq.current) setProdutosSalvosDigitacao([])
+          if (seq === produtosSalvosSeq.current) setProdutosSalvosDigitacao([])
         }
       })()
     }, 300)
