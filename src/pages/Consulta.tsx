@@ -114,6 +114,8 @@ export function Consulta() {
   const [paraSalvar, setParaSalvar] = useState<Classificacao | null>(null)
   // Acervo geral de produtos salvos — sugestão destacada na pesquisa de NCM.
   const [produtosSalvosNcm, setProdutosSalvosNcm] = useState<Produto[]>([])
+  // Sugestão destacada durante a digitação (acervo geral).
+  const [produtosSalvosDigitacao, setProdutosSalvosDigitacao] = useState<Produto[]>([])
   const prefillSalvar = useConsulta((s) => s.prefillSalvar)
   const setPrefillSalvar = useConsulta((s) => s.setPrefillSalvar)
   const [reclassificando, setReclassificando] = useState(false)
@@ -170,6 +172,34 @@ export function Consulta() {
       vivo = false
     }
   }, [nomenclatura])
+
+  // Sugestão destacada durante a digitação: produtos do acervo geral que
+  // batem com o texto (SKU, nome ou NCM).
+  useEffect(() => {
+    const t = entrada.trim().toLowerCase()
+    if (t.length < 2) {
+      setProdutosSalvosDigitacao([])
+      return
+    }
+    const seq = ++quickSeq.current
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const lista = await listarProdutos(null)
+          if (seq !== quickSeq.current) return
+          const filtrados = lista.filter((p) => {
+            const blob = `${p.codigo} ${p.nome} ${p.ncm}`.toLowerCase()
+            return blob.includes(t) || norm(p.ncm).startsWith(t.replace(/\D/g, ''))
+          }).slice(0, 8)
+          if (seq !== quickSeq.current) return
+          setProdutosSalvosDigitacao(filtrados)
+        } catch {
+          if (seq === quickSeq.current) setProdutosSalvosDigitacao([])
+        }
+      })()
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [entrada])
 
   // Espelho externo → local (limpar, escolherUnificada, navegar): quando a
   // store muda por outra via que não o commit debounced, reflete no input.
@@ -657,6 +687,37 @@ export function Consulta() {
         </Entrada>
       ) : (
         <Revelar className={`mt-6 space-y-4${quickAberto ? ' conteudo-esmaecido' : ''}`} inert={quickAberto ? true : undefined} aria-hidden={quickAberto || undefined}>
+          {produtosSalvosDigitacao.length ? (
+            <section aria-label="Produtos salvos (sugestão)" className="space-y-2">
+              <h3 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <span className="inline-flex items-center gap-1.5 rounded bg-aurum-100 px-1.5 py-0.5 text-aurum-800 dark:bg-aurum-950/60 dark:text-aurum-200">
+                  📦 Produtos salvos no sistema
+                </span>
+                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black normal-case text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  {produtosSalvosDigitacao.length}
+                </span>
+              </h3>
+              <div className="flex flex-wrap gap-1.5 rounded-xl border-2 border-aurum-300 bg-aurum-50/60 p-3 dark:border-aurum-700 dark:bg-aurum-950/30">
+                {produtosSalvosDigitacao.map((p) => (
+                  <button
+                    key={p.id ?? p.codigo}
+                    type="button"
+                    onClick={() => {
+                      setEntradaLocal(fmtNcm(norm(p.ncm)) || p.ncm)
+                      void consultarUnificada(fmtNcm(norm(p.ncm)) || p.ncm)
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1 text-xs font-bold text-aurum-800 shadow-sm transition hover:bg-aurum-100 dark:bg-slate-900 dark:text-aurum-200"
+                  >
+                    <span className="font-mono">{fmtNcm(norm(p.ncm))}</span>
+                    <span className="max-w-[160px] truncate">{p.codigo}</span>
+                    <span className="rounded-full bg-aurum-200 px-1.5 py-0.5 text-[9px] font-black text-aurum-900 dark:bg-aurum-900/60 dark:text-aurum-100">
+                      salvo
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
           {/* UMA resposta protagonista por vez — resto colapsado. */}
           {prioridadeIA ? (
             <section aria-label="Resposta automática" className="space-y-3">
