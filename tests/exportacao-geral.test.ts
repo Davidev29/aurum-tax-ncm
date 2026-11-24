@@ -65,9 +65,8 @@ describe('exportacao-geral', () => {
     for (const fora of ['nbs', 'cnae', 'empresas', 'nfeNotas', 'audit_log', 'anexos']) {
       expect(produto).not.toContain(fora)
     }
-    for (const dentro of ['produtos', 'cfop', 'cstIcms', 'cstPisCofins', 'cest', 'ncm', 'referencia']) {
-      expect(produto).toContain(dentro)
-    }
+    // Escopo produto: apenas "Produtos" — uma única aba, sem tabelas auxiliares.
+    expect(produto).toEqual(['produtos'])
   })
   it('CFOP entrada × saída discriminados: o usuário escolhe as colunas', async () => {
     const linhas = await coletarTabela('produtos', { texto: '', empresaId: null })
