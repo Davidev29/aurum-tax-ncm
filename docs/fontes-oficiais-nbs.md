@@ -130,7 +130,7 @@
 | `CNAE X ANEXO.json` | Arquivo vivo do projeto (sem URL oficial única) — CNAE × Anexo Simples + Fator R | manter no projeto |
 | `CNAE X NBS.qualclasstrib.json` | **qualclasstrib.com.br** (captura manual de 2026-10-05; 508 CNAEs × 6.641 links) | **não-oficial** — links são candidatos; verdade fiscal só do resolvedor oficial (CFF/LC 214/2025) |
 | `NBS SERVIÇOS.json` | Derivado do CFF (Anexo II LC 214/2025), mantido como arquivo vivo | oficial, mas o CFF é manual |
-| `cest.json`, `cfop.json`, `cnae.json`, `mei_cnaes.json` | Arquivos vivos/legados do projeto | CFOP é vivo (módulo XML); `cnae.json` e `mei_cnaes.json` soltos são ignorados pela compilação |
+| `cest.json`, `cfop.json`, `cnae.json`, `mei_cnaes.json` | Arquivos vivos/legados do projeto | `cnae.json` e `mei_cnaes.json` soltos são ignorados pela compilação |
 
 Atualização da ponte qualclasstrib: re-captura manual sob demanda (quando o Simples ou a NBS mudarem). Documentar no commit a data de captura.
 

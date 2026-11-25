@@ -23,11 +23,11 @@
 | Tailwind CSS | `^4.3.3` (`@tailwindcss/vite`) | Estilos (`src/index.css`, tokens `brand`/`aurum`) |
 | Zustand | `^5.0.15` | Estado global — 17 stores em `src/store/*` + stores em `simples/` e `simples-projection/` |
 | Prisma ORM | `^6.19.3` | Banco SQLite no **main** (`electron/main/db.ts`); IPC `db:op` — o renderer nunca importa o client |
-| Chart.js | `^4.5.1` (`react-chartjs-2 ^5.3.1`) | Gráficos (módulo XML + Simples) |
+| Chart.js | `^4.5.1` (`react-chartjs-2 ^5.3.1`) | Gráficos (Simples) |
 | Framer Motion | `^13.4.6` | Animações |
 | pdfmake | `^0.3.11` | Relatórios PDF |
 | SheetJS (`xlsx`) | `^0.18.5` | Import/export lote |
-| `fast-xml-parser` | `^5.11.1` | Parse NF-e |
+
 | `electron-updater` | `^6.8.9` | Auto-update via GitHub Releases |
 
 ## Build & Tooling
@@ -44,7 +44,7 @@
 
 ## Dependencies (diretas, runtime)
 
-`react`, `react-dom`, `zustand`, `@prisma/client`, `xlsx`, `fast-xml-parser`, `pdfmake`, `chart.js` + `react-chartjs-2`, `framer-motion`, `electron-updater`.
+`react`, `react-dom`, `zustand`, `@prisma/client`, `xlsx`, `pdfmake`, `chart.js` + `react-chartjs-2`, `framer-motion`, `electron-updater`.
 
 Dev: electron, electron-builder, vite, @vitejs/plugin-react, tailwindcss, typescript, vitest, esbuild, @vitest/coverage-v8.
 

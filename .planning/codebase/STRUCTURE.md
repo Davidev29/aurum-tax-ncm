@@ -23,15 +23,15 @@ Top 3 níveis (`node_modules/`, `build/`, `dist/`, `release/`, `electron/dist/` 
 │   ├── modais/       ← globais (Empresas/Config/Backup/Atualização/Aparência), pagina, reclassificacao,
 │   │                     escolha-tributacao, produto-manual
 │   ├── store/        ← 17 stores (ui, sessao, consulta(+servicos,+cnaes), referencia, lote, nfe,
-│   │                    produtos, auxiliares, base, ia, fundo, novidades, conferencia-xml, novidades,
+│   │                    produtos, auxiliares, base, ia, fundo, novidades,
 │   │                    tutorial, dialogo)
 │   ├── domain/       ← entities, legislacao, capitulos, services/ (calculo, classificacao(+ia), busca-texto,
 │   │                    detector-*, cnae(+nbs), referencia-service, format, hierarquia-fiscal, revogacao, vigencia…)
 │   ├── application/  ← base, atualizacao, backup, auditoria, reclassificacao, revalidacao, produtos,
-│   │                    empresas, emitente, notas-xml, ncm-sync, cff-sync, classificacao-inteligente…,
+│   │                    empresas, emitente, ncm-sync, cff-sync, classificacao-inteligente…,
 │   │                    aurum-ai-* (orquestrador RAG+tools determinístico), grafo-consumo, auxiliares, aux-meta
 │   ├── infrastructure/ ← db/ (schema=types, db-protocolo, driver-prisma, validacao…), base/, ia/,
-│   │                     nfe/, sped/, siscomex/, cff/, receita/brasilapi, parsers/lote, arquivos/xml-storage,
+│   │                     siscomex/, cff/, receita/brasilapi, parsers/lote,
 │   │                     exporters/relatorios, pdf/, bridge, fundo/pexels, legislacao-texto
 │   ├── ai/           ← guards de segurança (injection, PII) — os únicos guards sobreviventes da era Aurum AI
 │   ├── aurum/        ← (removido na v1.1.0 — era o módulo de licença/conta Aurumbit)
@@ -60,7 +60,7 @@ Top 3 níveis (`node_modules/`, `build/`, `dist/`, `release/`, `electron/dist/` 
 | `index.html` | Shell web: `#raiz`, anti-flash de tema, ícones |
 | `src/main.tsx` | Bootstrap React; `useBase.iniciar()` + `useSessao.iniciar()` não-bloqueantes |
 | `src/App.tsx` | Shell de views por `store/ui` (9 views lazy-load + ErroFatal por tela) |
-| `electron/main.ts` | Janela, menu nativo, IPC, auto-update, sandboxes (base/xml) |
+| `electron/main.ts` | Janela, menu nativo, IPC, auto-update, sandboxes (base) |
 | `electron/main/db.ts` | `db:op`/`db:transaction`/`db:snapshot` — acesso Prisma no main |
 | `electron/preload.ts` | `window.aurum` via `contextBridge` (`sandbox:false` — hardening pendente) |
 | `src/infrastructure/bridge.ts` | `AurumBridge` + fallback web |
@@ -94,7 +94,7 @@ Top 3 níveis (`node_modules/`, `build/`, `dist/`, `release/`, `electron/dist/` 
 | `public/base/grafo/grafo.lbug` | versionado | ~6,1 MB | Grafo fiscal (FTS + 2-hops + PageRank) |
 | `public/base/grafo/vetores.json` | versionado | ~12 MB | Vetores 384-d (não embarcados no instalador) |
 | `public/base/parametros.json` | versionado | ~0,5 KB | IBS/CBS de referência (editável na UI) |
-| XMLs de usuário | `<userData>/xml/<cnpj>/<chave>.xml` | — | Runtime |
+
 | `aurum.db` | `<userData>` | — | SQLite (empresas/produtos/notas/…) |
 
 Fluxo de build de dados: `npm run base` lê as fontes em `bases-fonte/` → normaliza/valida → `public/base/` → `vite build` copia para `dist/base` (consumido pelo main via `diretorioBase()`).

@@ -25,7 +25,7 @@ Arquitetura: renderer com `contextIsolation: true`, `nodeIntegration: false` —
 | `base:ler` / `base:ler-base64` | renderer → main | `relPath → texto/base64` | Ler `public/base` (dev) / `dist/base` (prod); anti-traversão |
 | `rede:buscar-texto` | renderer → main | `url → texto` | Fetch de norma oficial (só HTTPS + allowlist, sem fragmento, teto 15 MB, timeout 90 s) |
 | `arquivo:escolher` / `:escolher-pasta` / `:salvar` | renderer → main | filtros → caminho/conteúdo base64 | Diálogos nativos + leitura/escrita na escolha do usuário |
-| `xml:salvar` / `xml:ler` / `xml:remover` | renderer → main | `{ cnpj, chave44 }` / relPath | XMLs em `<userData>/xml/<cnpj>/<chave>.xml` (chave `^\d{44}$`) |
+
 | `db:op` | renderer → main | `DbOp → resultado` | Banco SQLite via Prisma; allowlist de 11 ops/tabelas + validação de domínio + tetos |
 | `db:transaction` | renderer → main | `DbOp[] → resultado[]` | Transação SQLite real (tudo-ou-nada), ≤500 ops |
 | `db:snapshot` | renderer → main | `→ { ok, caminho }` | Snapshot pré-restore rotativo (`pre-restore-*.bak`) |
@@ -52,7 +52,7 @@ Contrato e fallback:
 | SQLite (`aurum.db`) | Prisma schema (`prisma/schema.prisma`) | IPC `db:op` (bridge) ou Prisma direto em scripts | 27 tabelas (empresas, produtos, notas, audit_log, cest, cfop, auxiliares…) |
 | Siscomex vigente | JSON ~3 MB | `ncm-sync.ts` (hash canônico, merge) | `ncmNomenclatura` |
 | CFF/DFe | JSON/endpoint | `cff-sync.ts` (hash/etag) | `cst`, `cstClassTrib`, `referencia` |
-| XML NF-e do usuário | NF-e XML | `xml:*` + `fast-xml-parser` | `nfeNotas` |
+
 | Cadastro de empresas | digitação + BrasilAPI | `application/empresas.ts` | `empresas` |
 | Sementes auxiliares | geradas | `scripts/gen-seeds.cjs` | `cfop`, `cst*`, `cest` |
 
@@ -64,7 +64,7 @@ Contrato e fallback:
 | CSV (produtos) | manual | `infrastructure/exporters/relatorios.ts` | `;`, CRLF, BOM; escape de aspas |
 | JSON (backup) | nativo | `application/backup.ts` | Transacional, tudo-ou-nada, snapshot rotativo pré-restore |
 | PDF | `pdfmake ^0.3.11` | `infrastructure/exporters/relatorios.ts`, `infrastructure/pdf/*` | Lazy import (~1,9 MB sob demanda); emitente timbrado |
-| XML NF-e/SPED (import) | `fast-xml-parser ^5` | `infrastructure/nfe/*`, `infrastructure/sped/*` | Análise fiscal + apuração assistida IBS/CBS |
+
 | Download navegador | `Blob + <a download>` | `relatorios.ts` | Fallback web |
 | Clipboard | `navigator.clipboard` | telas | Copiar chave/URL |
 
@@ -76,4 +76,4 @@ Contrato e fallback:
 | `VITE_DEV_SERVER_URL` | Só dev (via `cross-env`) | Escolhe `loadURL(:5173)` vs. `loadFile(dist/index.html)` |
 | `--aurum-versao=` | `additionalArguments` (main → preload) | Versão do app no renderer |
 | Chaves/API keys | **Nenhuma no código** | Endpoints públicos sem autenticação; CFF mTLS exige certificado do usuário (nunca no repo); exceção: chave Pexels embutida (pendente de rotação) |
-| Segredos locais | `localStorage`: `tema`, `aurum:sidebar-recolhida`, `aurum_empresa_ativa_id`, `xml-layout`, `TOUR_KEY` (`aurum:tour-guiado-visto`); SQLite: dados fiscais; `userData/xml`: XMLs | Tudo 100% na máquina; **o aceite de contrato e o gate de licença foram removidos na v1.1.0** |
+| Segredos locais | `localStorage`: `tema`, `aurum:sidebar-recolhida`, `aurum_empresa_ativa_id`, `TOUR_KEY` (`aurum:tour-guiado-visto`); SQLite: dados fiscais | Tudo 100% na máquina; **o aceite de contrato e o gate de licença foram removidos na v1.1.0** |

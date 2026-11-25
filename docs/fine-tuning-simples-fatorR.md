@@ -142,7 +142,7 @@ o modelo sugere slots, o motor calcula.
   2 guias + `Regras aplicadas:` transparente; análise final sempre retornada.
 - Roteamento: guarda anti-roubo no refino de NCM (`%`/despesa + conversa
   Simples não vira NCM) e rede dados→simples ("receita tem redução" não vai
-  aos XMLs).
+  ).
 - Testes: `tests/chat-simples-hibrido-reducao.test.ts` (11 testes).
 
 ## 5. Limites conhecidos (documentados, não bugs)

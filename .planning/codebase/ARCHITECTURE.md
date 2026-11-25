@@ -15,12 +15,12 @@
 |---|---|---|
 | Main process | `electron/main.ts` | Cria `BrowserWindow` (1440×900, `show:false` → `ready-to-show`); menu nativo; auto-update (`electron-updater`, 30s após abrir + 6h); IPC mínimo; sandboxes `resolverNoBase`/`resolverNoXml` anti-traversão; `will-navigate` travado; `setWindowOpenHandler` deny |
 | Main DB | `electron/main/db.ts` | Singleton Prisma no main; IPC `db:op` (allowlist de 11 ops/tabelas + `where` estruturado + tetos lote 2000/4 MB/500 ops), `db:transaction` (tudo-ou-nada), `db:snapshot` rotativo (`pre-restore-*.bak`) |
-| Preload / IPC | `electron/preload.ts` + `src/infrastructure/bridge.ts` | Contrato `AurumBridge`: `base:ler[-base64]`, `arquivo:*`, `xml:*`, `rede:buscar-texto`, `ia:grafo[-uso]`, `atualizacao:*`, `menu:acao` |
+| Preload / IPC | `electron/preload.ts` + `src/infrastructure/bridge.ts` | Contrato `AurumBridge`: `base:ler[-base64]`, `arquivo:*`, `rede:buscar-texto`, `ia:grafo[-uso]`, `atualizacao:*`, `menu:acao` |
 | Renderer React | `src/App.tsx`, `src/pages/`, `src/ui/`, `src/modais/` | 9 views lazy-loaded com `ErroFatal` por tela; code-splitting; Suspense+skeleton |
 | Estado (Zustand) | `src/store/` + `simples/store.ts` + `simples-projection/store.ts` | Um store por domínio de tela; limpeza ao trocar view (`registrarLimpeza`) |
 | Persistência | `src/infrastructure/db/*` (+ `electron/main/db.ts`) | `driver-prisma.ts` (`DriverIpc`) é a única porta do renderer para o SQLite |
 | Domínio puro | `src/domain/` | `entities`, `services/calculo`, `services/classificacao`, `services/busca-texto`, `constants/` (`REGRA_GERAL`, `REF_DEFAULT IBS 19 / CBS 11,3 (sobrescrito pela tabela viva/override)`, links oficiais). Sem I/O — testável |
-| Aplicação / Infra | `src/application/`, `src/infrastructure/` | Orquestração (`backup`, `auditoria`, `reclassificacao`, `revalidacao`, `atualizacao`, `aurum-ai-*` determinísticos) sobre repos, parsers (lote/NF-e/SPED), exporters, PDF |
+| Aplicação / Infra | `src/application/`, `src/infrastructure/` | Orquestração (`backup`, `auditoria`, `reclassificacao`, `revalidacao`, `atualizacao`, `aurum-ai-*` determinísticos) sobre repos, parsers (lote), exporters, PDF |
 
 ## Data Flow
 
@@ -34,7 +34,7 @@ JSONs brutos (bases-fonte/)
   → SQLite (via IPC db:op)
   → engine de classificação (resolvedor único: vínculo NCM + CST + cClassTrib + referência + nomenclatura)
   → stores Zustand → páginas UI
-  → export: xlsx / pdfmake / CSV-ERP · backup/restore JSON · XMLs em userData/xml
+  → export: xlsx / pdfmake / CSV-ERP · backup/restore JSON
 ```
 
 - **Classificação (`domain/services/classificacao.ts`):** `montarClassificacao` (vínculo oficial), `montarRegraGeral` (fallback `000/000001`), vigência de NCM/cClassTrib, herança por família (SH6/SH4/capítulo) com confiança.
@@ -48,7 +48,7 @@ JSONs brutos (bases-fonte/)
 - `src/simples/calculo.ts` + `src/domain/simples/nucleo.ts` — motor DAS (LC 123) isolado de propósito
 - `src/application/aurum-ai-chat.ts` — orquestrador Aurum AI (determinístico, tool-calling auditável) — **monstro de 253 KB; refatorar pendente**
 - `src/application/backup.ts` + `electron/main/db.ts` — backup/restore transacional validado
-- `src/infrastructure/nfe/*` — parse/análise NF-e (apuração IBS/CBS, crédito efetivo do XML)
+
 - `src/store/*` — ~17 stores por tela/domínio
 - `scripts/build-base.mjs` — compila as bases (3FN)
 - `electron/ia/grafo-service.cjs` — grafo fiscal (LadybugDB) no processo main

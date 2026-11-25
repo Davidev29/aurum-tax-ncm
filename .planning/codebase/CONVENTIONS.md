@@ -13,7 +13,7 @@
 
 ## Naming
 
-- **Arquivos:** kebab-case para camadas (`notas-xml.ts`, `cff-sync.ts`); PascalCase para componentes UI (`Consulta.tsx`, `NfeXml.tsx`, `Layout.tsx`); `modais/*.tsx` minúsculo (há inconsistência pontual — aceitar naquele estilo).
+- **Arquivos:** kebab-case para camadas (`cff-sync.ts`); PascalCase para componentes UI (`Consulta.tsx`, `Layout.tsx`); `modais/*.tsx` minúsculo (há inconsistência pontual — aceitar naquele estilo).
 - **Componentes/páginas:** PascalCase, named exports (`export function App()`). Sem `default exports` na amostra.
 - **Stores:** substantivo minúsculo em `src/store/` (`ui.ts`, `consulta.ts`, `sessao.ts`...) além dos stores de feature (`simples/store.ts`, `simples-projection/store.ts`, `aurum` — **removido na v1.1.0**); hook `use<Nome>` via Zustand `create<State>()`.
 - **Tipos:** interfaces PascalCase; `Registro = Record<string, unknown>` nas fronteiras dinâmicas.
@@ -40,7 +40,7 @@
 - **Design system próprio "marinho + ouro"** (`brand` = marinho, `aurum` = ouro; ouro nunca como texto corrido no tema claro).
 - **Tema claro/escuro por classe `.dark`** no `<html>`; `--surface/--surface-2/--line/--ink/...` por tema.
 - **Componentes utilitários em `index.css`** (`.btn`, `.panel`, `.tbl`, `.anexo-*`, `.modal-backdrop`, `.glass-box`...) — telas combinam Tailwind inline + essas classes; `prefers-reduced-motion` respeitado.
-- **Sem CSS Modules/styled-components/Radix.** Framer Motion para animações; Chart.js para gráficos do módulo XML.
+- **Sem CSS Modules/styled-components/Radix.** Framer Motion para animações.
 
 ## Git & Commits
 

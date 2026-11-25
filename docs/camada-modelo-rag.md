@@ -55,7 +55,7 @@ Regras:
     de chars derivado do `contextSize` do perfil (ficha > dados > memória).
   - `pacoteParaTexto()` serializa compacto para injeção em prompt.
 - Mapa das fontes: `recursos-ia/conhecimento/catalogo-rag.json` (11 fontes:
-  índice NCM, base IA, NBS, CNAE, LC214, curadoria, glossário PT-EN, XML,
+  índice NCM, base IA, NBS, CNAE, LC214, curadoria, glossário PT-EN,
   empresas, Simples, motor IBS/CBS) — validado por
   `scripts/gerar-catalogo-rag.mjs` contra o registro TS.
 - Orquestrador atual (`aurum-ai-chat.ts`) inalterado por padrão: continua

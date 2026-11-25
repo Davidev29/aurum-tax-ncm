@@ -11,7 +11,7 @@
 
 ### Crítico
 
-- **CSP inexistente** (0 ocorrências no repo). Única `dangerouslySetInnerHTML` ativo (`src/ui/ModalLegislacao.tsx`) depende de sanitizador artesanal; se houver XSS, o renderer herda a ponte IPC inteira (`db:op`/`apagarTudo`, `xml:remover`, `arquivo:salvar`, `atualizacao:instalar`). Fix: CSP (meta no `index.html` ou `onHeadersReceived`), idealmente + `dompurify`.
+- **CSP inexistente** (0 ocorrências no repo). Única `dangerouslySetInnerHTML` ativo (`src/ui/ModalLegislacao.tsx`) depende de sanitizador artesanal; se houver XSS, o renderer herda a ponte IPC inteira (`db:op`/`apagarTudo`, `arquivo:salvar`, `atualizacao:instalar`). Fix: CSP (meta no `index.html` ou `onHeadersReceived`), idealmente + `dompurify`.
 - **Auto-update sem assinatura/verificação** (`electron-updater`; Windows sem `publisherName`/cert, mac `identity:null`, Linux sem GPG; repo público). Comprometimento do release = RCE em todas as máquinas. Fix: Authenticode (Azure Trusted Signing) + publicação assinada; notarização mac; ou release interno com checksum assinado.
 
 ### Alto
@@ -30,7 +30,7 @@
 
 ## Tech Debt
 
-- **Monstros de código**: `aurum-ai-chat.ts` (253 KB), `pages/NfeXml.tsx` (195 KB), `modais/globais.tsx` (106 KB), `simples/page.tsx` (104 KB) — e `NfeXmlPolida.tsx` duplica a clássica sob toggle `xml-layout`. Decidir vencedor e deletar o perdedor.
+- **Monstros de código**: `aurum-ai-chat.ts`, `modais/globais.tsx`, `simples/page.tsx`.
 - **Clean Architecture nominal**: `infrastructure` é namespace universal (109 imports em `application/`, 32 em `pages/`, …); `domain/` importa infra (11) e a feature `simples/` (3). Refatorar = portas + composition root.
 - **Erros engolidos**: ~195 catches "best-effort" com comentário no corpo (bancos/rede falham em silêncio). Zero `console.log` em runtime, mas silêncio ≠ higiene — ao menos log local estruturado nas camadas de infra.
 - **Motores paralelos/duplicação**: `round2` ×6, `aliqIBS/aliqCBS` ×7 sítios, fonte única de referência IBS/CBS (tabela viva `parametros.json` + override do usuário em Configurações → Alíquotas; fallback embarcado 19/11,3) + re-exports "compat" em `simples/`, duplicação `NfeXml` × `NfeXmlPolida`.
@@ -53,7 +53,7 @@
 ## Fragile Areas
 
 - **`parsers/lote.ts`** (CSV/XLSX oficial): ordem de parsing (XLSX antes de CSV), latin1/cp1252 (acentos), regex de colunas fora do dicionário — exige tratamento cuidadoso.
-- **XML NF-e**: `fast-xml-parser` — avaliar limites (tamanho, entidades) antes de parser de XML arbitrário; validar bem-formação antes de `xml:salvar`.
+
 - **`modal globais/auxiliares`**: campos NCM/cClassTrib como texto — validação de domínio existe na escrita (`db:op`), mas a UX não avisa inline sempre.
 - **`store/ui.ts` e `aplicacao`**: efeitos colaterais em import-time (tema aplicado no módulo). Ordem de import importa.
 - **`.planning`**: já foi reescrito 2026-11-13; antes disso era desatualizado — manter os docs em sincrono a cada release (essa é uma regra de processo recomendada).

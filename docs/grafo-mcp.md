@@ -68,6 +68,6 @@ Se a sua versão do `codingest` tiver flags diferentes, consulte
 - **MUST NOT** importar `.kgl`/`.kgl.json` no app Electron (renderer, main ou
   worker quente) — runtime fiscal é só LadybugDB + Dexie.
 - **MUST NOT** vazar PII para MCP remoto: o servidor MCP do grafo roda **só
-  via stdio local**; nenhuma nota XML, empresa ou CNPJ sai da máquina.
+  via stdio local**; nenhum dado sensível sai da máquina.
 - Sem `.kgl`: o agente usa `recursos-ia/grafo/describe.txt` (sempre gerado,
   mesmo sem `pip install kglite`).

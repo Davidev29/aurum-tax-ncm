@@ -26,7 +26,7 @@
 | Tema | Suítes |
 |---|---|
 | IA/grafo/RAG/chat | ~70 |
-| Cálculo fiscal / Simples / NF-e / SPED | ~46 |
+| Cálculo fiscal / Simples | ~46 |
 | Serviços/domínio NCM + CNAE/NBS | ~19 |
 | DB/Prisma/SQLite | 6 |
 | PDF/relatório/exportação | 9 |

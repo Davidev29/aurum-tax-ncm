@@ -245,7 +245,7 @@ Filtro de ingestão: `codigo.length >= 2`.
 
 ## 2.3 Fluxo de decisão: 0, 1 ou N classificações
 
-| Qtd | Consulta NCM (`renderResultadoNcm`, l.993) | Formulário (`carregarClassificacoesForm`, l.1048) | Modal calc custom (`carregarCcClassificacoes`, l.1190) | Lote (l.1227) | SPED (`Sped.analisar`, l.1477) |
+| Qtd | Consulta NCM (`renderResultadoNcm`, l.993) | Formulário (`carregarClassificacoesForm`, l.1048) | Modal calc custom (`carregarCcClassificacoes`, l.1190) | Lote (l.1227) |
 |---|---|---|---|---|---|
 | **NCM ≠ 8 dígitos** | mensagem "Informe um NCM de 8 dígitos." | placeholder "Informe um NCM de 8 dígitos para carregar as classificações." | "Informe um NCM de 8 dígitos." | `classificacoes=[]`, `escolhida=null` → **inválido** | ramo `else` → objeto sintético |
 | **0** | `classificacaoRegraGeral` + card `htmlCardTributacaoIntegral`; `ncmResultados=[rg]`, `rg.__uid='class-0-default'` | `ncmEncontrados=[rg]`, `ncmEscolhido=rg`, alerta âmbar + radio único "CST 000 · 000001" pré-marcado, badge visível, Salvar habilitado | `calcCustomClass = rg`, aviso "⚠ Sem classificação específica — regra geral." | `escolhida = rg`, `regraGeral=true` | `classificacao = rg`, `regraGeral=true` |
@@ -254,7 +254,7 @@ Filtro de ingestão: `codigo.length >= 2`.
 
 **R2.8** — Ordem das classificações é **a ordem do índice `codigo`** (ordem de gravação/importação), **sem ordenação** por redução, anexo ou CST.
 
-**R2.9** — Só há fallback para `CST 000 / cClassTrib 000001` quando `buscarClassificacoesDoNcm` devolve `[]` **e** o NCM tem 8 dígitos; para NCM inválido o SPED usa o objeto sintético:
+**R2.9** — Só há fallback para `CST 000 / cClassTrib 000001` quando `buscarClassificacoesDoNcm` devolve `[]` **e** o NCM tem 8 dígitos; para NCM inválido usa-se o objeto sintético:
 
 ```js
 { cst:'000', cClassTrib:'000001',
@@ -267,7 +267,7 @@ Filtro de ingestão: `codigo.length >= 2`.
 **R2.10** — Para vínculos importados, `resumo` vem **pronto do JSON** (`mapNcm` copia `n.resumo` integralmente). Não há cálculo em tempo de leitura.
 **R2.11** — Para regra geral, `resumo` é **construído** conforme R2.5 (anexo `null`, url `null`, reduções herdadas de `cctDet.pRedIBS/pRedCBS`).
 **R2.12** — A UI usa `r.percentualReducaoIBS ?? cct.pRedIBS ?? 0` (`htmlCardClassificacao`, l.977) — ou seja, **fallback duplo** para o detalhe do cClassTrib quando o `resumo` vier incompleto.
-**R2.13** — `anexo` exibido no card: `r.anexo || n.referencia?.['Número do Anexo'] || null` (l.978). **Não** é recalculado na UI de consulta (diferente do SPED, R3.3).
+**R2.13** — `anexo` exibido no card: `r.anexo || n.referencia?.['Número do Anexo'] || null` (l.978). **Não** é recalculado na UI de consulta.
 
 ## 2.5 Capítulos, `in natura` e observações legais
 
@@ -349,15 +349,15 @@ senão → 'isento'
 
 Chamadores (todos passam os dois tributos): `sped/analisar`, `nfe/analisar`, `application/reclassificacao`, `modais/reclassificacao`. Rótulos de badge (`ANEXO_LABELS`): `'0'` → "🟢 Alíquota zero"; `'80'…'30'` → faixas; `'misto'` → "🟣 Redução IBS ≠ CBS"; `'isento'` → "⚪ Sem redução".
 
-ATENÇÃO — duas famílias, nunca misturar: o `AnexoBadge` dos cartões de consulta recebe o anexo **oficial** da base (`Número do Anexo`: "1".."15", "9xxxx") e o rotula via `rotuloAnexoOficial` ("Anexo IX — LC 214/2025" / "Ref. oficial 9xxxx"); o derivado acima só vale para SPED/NF-e/Lote.
+ATENÇÃO — duas famílias, nunca misturar: o `AnexoBadge` dos cartões de consulta recebe o anexo **oficial** da base (`Número do Anexo`: "1".."15", "9xxxx") e o rotula via `rotuloAnexoOficial` ("Anexo IX — LC 214/2025" / "Ref. oficial 9xxxx"); o derivado acima só vale para Lote.
 
 **R3.4** — `carga` (carga efetiva) = `(vIBS+vCBS)/base * 100`, ou `0` quando `base === 0`. Na UI é formatada com `toFixed(2).replace('.',',') + '%'`.
 
-**R3.5** — `state.rateIBS/rateCBS` são lidos **também** por: cards de consulta (`htmlCalculadoraIBS`, `htmlCardTributacaoIntegral`), SPED (`Sped.analisar` → `calcularTributos`), exportações de produto e SPED. Ou seja, **todo o sistema usa as mesmas duas alíquotas globais** (ver [BUG] L973).
+**R3.5** — `state.rateIBS/rateCBS` são lidos **também** por: cards de consulta (`htmlCalculadoraIBS`, `htmlCardTributacaoIntegral`), exportações de produto. Ou seja, **todo o sistema usa as mesmas duas alíquotas globais** (ver [BUG] L973).
 
 ---
 
-# 4. MÓDULO SPED
+# 4. MÓDULO SPED (REMOVIDO DA VERSÃO ATUAL)
 
 ## 4.1 `lerArquivoTexto(file)` (l.1252–1256) — decodificação em cascata
 

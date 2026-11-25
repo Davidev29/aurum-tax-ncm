@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Sistema de classificação tributária para a Reforma Tributária Brasileira (LC 214/2025), distribuído como aplicativo desktop **Windows/macOS/Linux** (Electron) e web (Vite). Analisa XML de NF-e/NFC-e, classifica por NCM/NBS/CNAE (LC 214/2025), simula IBS/CBS e Simples Nacional, e gera relatórios PDF/CSV/JSON timbrados. Persistência e cálculo 100% local (SQLite no processo main via Prisma; IPC validado; bases embutidas no instalador).
+Sistema de classificação tributária para a Reforma Tributária Brasileira (LC 214/2025), distribuído como aplicativo desktop **Windows/macOS/Linux** (Electron) e web (Vite). Classifica por NCM/NBS/CNAE (LC 214/2025), simula IBS/CBS e Simples Nacional, e gera relatórios PDF/CSV/JSON timbrados. Persistência e cálculo 100% local (SQLite no processo main via Prisma; IPC validado; bases embutidas no instalador).
 
 ## Core Value
 
@@ -14,7 +14,7 @@ Classificação tributária precisa e automatizada que garante conformidade com 
 
 - [x] Base oficial embutida versionada (NCM, CST × cClassTrib, nomenclatura, NBS, CNAE, vínculo NCM×Classificação) — gerada por `npm run base`, validada por `scripts/verificar-build.mjs`
 - [x] Classificação determinística local (CST · cClassTrib · % redução · anexo oficial · base legal · herança por família) com resolvedor oficial como única verdade
-- [x] Parsing lote CSV/XLSX + classificação em lote; XML NF-e/NFC-e com 2 layouts (Polida/Clássica) e conferência por produto
+- [x] Parsing lote CSV/XLSX + classificação em lote
 - [x] Consulta NCM com simulação IBS/CBS + Simples Nacional (DAS, Fator R, sublimite, híbrido, projeção dividida v2)
 - [x] Simulação: anexos derivados de redução (0/30/…/100), diferimento Anexo IX condicional, tributação integral como última opção de segurança
 - [x] Consulta NCM / Serviços NBS / CNAEs (busca local, fan-out número/nome)
@@ -37,7 +37,7 @@ Classificação tributária precisa e automatizada que garante conformidade com 
 ### Out of Scope
 
 - Integração direta com ERPs (SAP, Totvs, ContaAzul) — fazer via exportação padrão
-- Cálculo de crédito tributário completo como módulo próprio (escopo de apuração) — o app simula IBS/CBS e assiste a apuração no XML, não substitui o módulo fiscal
+- Cálculo de crédito tributário completo como módulo próprio (escopo de apuração) — o app simula IBS/CBS, não substitui o módulo fiscal
 - Versão SaaS multi-tenant — desktop-first (a modalidade SaaS é coberta pelo "Aurum Omni", produto à parte)
 - Serviços para atividades prestadas exclusivamente sob LC 116 com lista própria externa (NCM é bens; NBS/servidores cobertas na base embutida)
 
@@ -45,7 +45,7 @@ Classificação tributária precisa e automatizada que garante conformidade com 
 
 - **Reforma Tributária**: LC 214/2025 institui CBS, IBS e IS, substituindo PIS, Cofins, IPI, ICMS, ISS (EC 132/2023; Decreto 12.955/2026; Res. CGIBS 6/2026; NT 2025.002). Base em transição — o software é ferramenta de apoio; vale o texto oficial.
 - **NCM**: 8 dígitos, Mercosul. **NBS**: 9 dígitos (serviços). **CNAE**: 7 dígitos.
-- **Stack real**: React 19 + TypeScript 5.9 strict · Vite 8 · Electron 44 · TailwindCSS 4 · Zustand 5 · Prisma 6 + SQLite (`aurum.db` em `userData`) · xlsx · fast-xml-parser · pdfmake · Chart.js · Framer Motion · Vitest 5 (environment node) — **não** é mais Dexie/IndexedDB (decisão revisitada na reconstrução para a v1.0.0).
+- **Stack real**: React 19 + TypeScript 5.9 strict · Vite 8 · Electron 44 · TailwindCSS 4 · Zustand 5 · Prisma 6 + SQLite (`aurum.db` em `userData`) · xlsx · pdfmake · Chart.js · Framer Motion · Vitest 5 (environment node) — **não** é mais Dexie/IndexedDB (decisão revisitada na reconstrução para a v1.0.0).
 - **Dados oficiais**: portal CFF/DFe (classificação tributária), Siscomex (nomenclatura), planilhas vivas do projeto (CNAE×Anexo, NBS serviços).
 - **Usuários-alvo**: contadores, analistas fiscais, consultorias tributárias, departamentos fiscais.
 

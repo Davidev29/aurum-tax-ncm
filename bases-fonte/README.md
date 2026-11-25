@@ -80,7 +80,7 @@ Vale o que o log chama de `origem efetiva`. Confira sempre essa linha.
 | `NBS DE-PARA (oficial).json` | Não (vivo, **automático**) | De-para NBS 1.1 ↔ 2.0 (1.391 linhas; 876 mapeadas, 325 extintas, 253 novas na 2.0, 63 linhas duplicadas removidas). Gerada por `npm run fontes:sync` a partir do CSV bruto abaixo | MDIC — Correlações NBS: https://www.gov.br/mdic/pt-br/assuntos/sdic/comercio-e-servicos/nbs-nomenclatura-brasileira-de-servicos/correlacoes |
 | `NBSa_DE-PARAa_COMPILADOa_FINALa_05a_deza_2018(Planilha1).csv` | Fonte bruta do de-para (1391 → 1454 linhas) | CSV Latin-1 exportado da aba "Planilha1" da planilha oficial de correlação (mesmo link acima; `.xlsx` → CSV `;`) | Mesmo link MDIC Correlações |
 | `FONTES.json` | Gerado por `npm run fontes:sync` | Mapa auditável das fontes (nome, arquivo, origem, url, licença, sha256, frescor) | Gerado em toda sincronização |
-| `cfop.json` | Não (vivo) | Tabela CFOP oficial — 619 operações (CFOP, descrição, grupo, âmbito) para o módulo XML comparar natureza/CFOP × crédito (venda × diferente de venda × imobilizado × imunidades LC 214/2025) | Arquivo vivo mantido no projeto (não entra no `npm run base`; a curadoria fiscal fica em `src/infrastructure/nfe/cfop.ts`) |
+| `cfop.json` | Não (vivo) | Tabela CFOP oficial — 619 operações (CFOP, descrição, grupo, âmbito) | Arquivo vivo mantido no projeto (não entra no `npm run base`) |
 
 > `cnae.json` e `mei_cnaes.json`, se existirem soltos nesta pasta, são **ignorados**
 > pela compilação (sobras/derivados antigos — pode apagar). O `cnae.json` que

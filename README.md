@@ -8,7 +8,7 @@
 
 ### Classificador fiscal da Reforma Tributária — LC 214/2025
 
-**Analise XML · Classifique por NCM / NBS / CNAE · Simule IBS / CBS e Simples · Gere relatórios**
+**Classifique por NCM / NBS / CNAE · Simule IBS / CBS e Simples · Gere relatórios**
 
 <br/>
 
@@ -43,12 +43,12 @@
 
 | Sinal | Valor real (árvore de trabalho) |
 |---|---|
-| 🖥️ Views no menu | **9** — Consulta NCM · Simples Nacional · Serviços (NBS) · Consulta de CNAEs · Classificação em lote · Notas Fiscais (XML) · Produtos · Tabelas auxiliares · Legislação |
+| 🖥️ Views no menu | **8** — Consulta NCM · Simples Nacional · Serviços (NBS) · Consulta de CNAEs · Classificação em lote · Produtos · Tabelas auxiliares · Legislação |
 | 🧪 Testes | **173 arquivos** · **1.951 casos** — `npm test` → **tudo passando** · `npm run typecheck` limpo (app + electron) |
 | ✅ Tipos | `npm run typecheck` (`tsc --noEmit` + `tsc -p tsconfig.electron.json`) — **limpo** |
 | 📦 Instaladores locais | `release/` com `Setup 1.2.0` + `Portátil 1.2.0` (ignorado no git, gerado por `npm run dist:win`) |
 | 🗄️ Base embutida | `public/base/` versionada: `reforma.json` 1,5 MB · `nomenclatura.json` 2,8 MB · `classificacoes-consolidadas.json` 1,7 MB · `cnae-nbs.json` 1,3 MB · `nbs-nomenclatura.json` (NBS 2.00 oficial) · `nbs-depara.json` (DE-PARA 1.1↔2.0) · `parametros.json` (IBS 19 + CBS 9 de referência, editável) · grafo `grafo.lbug` 6,1 MB · `vetores.json` 12 MB (versionado p/ busca local; não empacotado no instalador) |
-| 📥 Formatos de entrada | **XML de NF-e/NFC-e** (modelo 55/65) + **CSV/XLSX de lote** (`COD/SKU; NOME; NCM; CFOP; CST; PIS; COFINS`) |
+| 📥 Formatos de entrada | **CSV/XLSX de lote** (`COD/SKU; NOME; NCM; CFOP; CST; PIS; COFINS`) |
 
 ### ◆ Arquitetura em uma figura
 
@@ -56,7 +56,7 @@
 flowchart LR
     subgraph UI["◈ UI — React 19 + Tailwind 4"]
         S[Simples Nacional] --> P[Projeção dividida v2]
-        N[NF-e XML Polida/Clássica] --> L[Lote CSV/XLSX]
+        L[Lote CSV/XLSX]
     end
     subgraph DOM["● Domínio puro"]
         R[Resolvedor NCM/NBS] --> H[Herança por família]
@@ -64,7 +64,7 @@ flowchart LR
     end
     subgraph INF["▲ Infraestrutura"]
         D[(SQLite + Prisma no main)] --- B[Base embutida versionada]
-        X[fast-xml-parser] --- E[pdfmake / SheetJS]
+        E[pdfmake / SheetJS]
     end
     UI --> DOM --> INF
 ```
@@ -186,17 +186,6 @@ O instalador leva **só o app**: interface + base tributária embutida + grafo f
 </details>
 
 <details>
-<summary><b>🧾 5 · Notas Fiscais (XML)</b></summary>
-
-1. Selecione a empresa ativa, vá em **Notas Fiscais (XML)**.
-2. Arraste 1 ou N `.xml` (NF-e 55 / NFC-e 65; duplicadas ignoradas, quarentena separada).
-3. Hero executivo: **veredito** (A pagar / Saldo credor / Zerado) + base + IBS+CBS + carga + barra de cobertura.
-4. Explore as 5 abas: **Notas** · **Fornecedores** · **Produtos** · **NCM** · **Insights**. Confira **Naturezas da operação** e o selo **CEST/ST** por item.
-5. Vale o **crédito efetivo** do XML; estimativa via NCM é informativa com divergência. Ações: vincular produtos, filtros, relatório, alíquotas editáveis, alternância **Polida ↔ Clássica** (`xml-layout`).
-
-</details>
-
-<details>
 <summary><b>📦 6 · Produtos, 🏢 Empresas, 📚 Auxiliares, ⚙️ Configurações</b></summary>
 
 - **Produtos:** filtro SKU/nome/NCM, exports CSV/JSON/PDF, edite/exclua. Respeita a empresa ativa.
@@ -212,7 +201,7 @@ O instalador leva **só o app**: interface + base tributária embutida + grafo f
 
 ### IBS / CBS (LC 214 — redução de alíquota)
 
-Fórmula única em Consulta / Lote / XML:
+Fórmula única em Consulta / Lote:
 
 ```text
 aliqIBS = 19 × (1 − redIBS/100)
@@ -315,7 +304,7 @@ aurum-tax-ncm/
 ├── bases-fonte/         # JSONs-fonte oficiais + vivos (ver tabela abaixo)
 ├── scripts/             # build-base, build-grafo, gerar-indice-ia (lexical),
 │                        #  cobertura, ofuscar, verificar, after-pack…
-├── tests/               # 173 suítes · 1.951 casos (tudo passando)
+├── tests/               # 144 suítes · 1.675 casos (tudo passando)
 ├── docs/                # SPEC, arquitetura, diagnósticos, manuais (.docx fora do installer)
 ├── public/base/         # base JSON embutida versionada + MANIFEST + grafo
 ├── build/               # icon.ico/png/icns, LICENCA.rtf/txt (NSIS PT-BR; icns p/ mac, png p/ linux)
@@ -328,7 +317,7 @@ Arquitetura: **React + Clean Architecture** — `domain` (regras puras) → `app
 
 - **Desktop:** Electron 44 + electron-builder (NSIS PT-BR, DMG, AppImage)
 - **Front:** React 19, Vite 8 (`base: './'` p/ file://), TailwindCSS 4, Zustand 5, Framer Motion, Chart.js
-- **Dados:** SQLite via Prisma 6 — 27 tabelas em `aurum.db` (`%APPDATA%`), Prisma no processo main + IPC, validação de domínio em toda escrita, seed transacional por lote, snapshot pré-restore, `integrity_check` + quarentena no boot. XLSX (SheetJS), pdfmake, fast-xml-parser
+- **Dados:** SQLite via Prisma 6 — tabelas em `aurum.db` (`%APPDATA%`), Prisma no processo main + IPC, validação de domínio em toda escrita, seed transacional por lote, snapshot pré-restore, `integrity_check` + quarentena no boot. XLSX (SheetJS), pdfmake
 - **Busca local:** léxico + sinônimos curados + dicionário comercial + grafo fiscal local (FTS + 2-hops + PageRank, com fallback lexical idêntico) + resolvedor oficial como única verdade. O assistente Aurum AI responde por templates validados — todo número exibido vem do motor (IBS/CBS, DAS, RBT12)
 - **Qualidade:** TypeScript strict, Vitest + SQLite/Prisma (banco por arquivo), esbuild, ofuscação + verificação de build, CI no GitHub Actions (`typecheck` + `vitest --coverage`)
 
@@ -371,13 +360,13 @@ Não para o uso diário. Só legislação externa, sync Siscomex/CFF/BrasilAPI e
 Não. Todo o processamento é local (SQLite no processo main do Electron). Não há backend, não há telemetria, nada é enviado para nuvem. As únicas chamadas de rede são opt-in com fallback manual: legislação externa, sync Siscomex/CFF/BrasilAPI e verificação de atualização. Os logs locais (`logs/*.jsonl`, com rotação e remoção de PII) também nunca saem da máquina.
 
 **E se meu NCM tiver 2 classificações?**
-Na Consulta você vê os N cards; no Lote você escolhe no select. No XML o sistema respeita a prioridade **base oficial › manual › regra do produto (SKU+empresa) › 1ª oficial/regra geral** — se você já salvou uma regra para aquele SKU naquela empresa (ou usou a **escolha de tributação**), ela vale; senão, usa a primeira da base. A 🛡 **tributação integral aparece como última opção de segurança**, nunca como provável. Itens do Anexo IX condicional mostram ainda a **2ª opção de diferimento** (CST 515, 0%) por operação.
+Na Consulta você vê os N cards; no Lote você escolhe no select. A 🛡 **tributação integral aparece como última opção de segurança**, nunca como provável. Itens do Anexo IX condicional mostram ainda a **2ª opção de diferimento** (CST 515, 0%) por operação.
 
 **Posso usar no navegador sem instalar?**
 Sim: `npm run dev:web` ou sirva `dist/` após `npm run build`. O Electron adiciona janela nativa, menu e instalador.
 
-**Onde ficam meus XMLs e meu banco?**
-XMLs em `%APPDATA%/Aurum Tax NCM/xml/<cnpj>/<chave>.xml`; banco (empresas, produtos, auxiliares) no SQLite local (`aurum.db`). Nada se perde ao atualizar.
+**Onde fica meu banco?**
+Banco (empresas, produtos, auxiliares) no SQLite local (`aurum.db`) em `%APPDATA%`. Nada se perde ao atualizar.
 
 **Como recebo tabelas novas?**
 Junto com a atualização do programa (**Configurações → Atualização**). Como complemento, o app sincroniza a tabela Siscomex e as tabelas CFF quando há internet (alguns endpoints CFF exigem certificado ICP-Brasil — baixe o JSON no portal e importe manualmente).

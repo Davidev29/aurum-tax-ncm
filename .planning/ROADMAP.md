@@ -2,7 +2,7 @@
 
 ## Overview
 
-Do fundação até um classificador tributário completo e **entregue**: base NCM oficial embutida, classificação determinística pela LC 214/2025, XML NF-e, lote, Simples Nacional, NBS/CNAE e grafo fiscal local. Histórico de execução abaixo — mantido como registro das fases; **todo o v1 está IMPLEMENTADO e VERIFICADO**.
+Do fundação até um classificador tributário completo e **entregue**: base NCM oficial embutida, classificação determinística pela LC 214/2025, lote, Simples Nacional, NBS/CNAE e grafo fiscal local. Histórico de execução abaixo — mantido como registro das fases; **todo o v1 está IMPLEMENTADO e VERIFICADO**.
 
 ## Phases
 
@@ -31,7 +31,7 @@ Resolvedor oficial único (`montarClassificacao` / `montarRegraGeral`), manual o
 
 ### Phase 3: Search & UI — CONCLUÍDA
 
-9 views (Consulta NCM, Simples Nacional, Consulta NCM, Serviços NBS, Consulta de CNAEs, Lote, XML NF-e (2 layouts), Produtos, Tabelas auxiliares, Legislação), code-splitting por tela, busca local (léxico+grafo), telas multi-entidade com paginação/filtro.
+8 views (Consulta NCM, Simples Nacional, Serviços NBS, Consulta de CNAEs, Lote, Produtos, Tabelas auxiliares, Legislação), code-splitting por tela, busca local (léxico+grafo), telas multi-entidade com paginação/filtro.
 
 ### Phase 4: Reporting & Export — CONCLUÍDA
 
