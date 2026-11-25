@@ -60,7 +60,6 @@ export type DestinoNavegar =
   | 'consulta'
   | 'servicos'
   | 'lote'
-  | 'nfe'
   | 'produtos'
   | 'auxiliares'
   | 'legislacao'
@@ -344,7 +343,6 @@ const TERMOS_CONCEITO = [
   'reforma', 'tribut', 'imposto', 'aliquota', 'reducao', 'credito', 'debito',
   'diferimento', 'vigencia', 'cnae', 'cnpj', 'lc 116', 'lc116', 'iss',
   'lista de servicos',
-  'sped', 'xml', 'nfe',
 ]
 
 /** Comparação entre anexos/regimes ("qual vale mais a pena?"). */
@@ -927,7 +925,6 @@ function extrairDestino(n: string): DestinoNavegar {
   if (/consulta|ncm/.test(n)) return 'consulta'
   if (/simples|das/.test(n)) return 'simples'
   if (/lote/.test(n)) return 'lote'
-  if (/nfe|nota|xml/.test(n)) return 'nfe'
   if (/produto/.test(n)) return 'produtos'
   if (/auxiliar|tabela/.test(n)) return 'auxiliares'
   if (/legisla|norma|lei/.test(n)) return 'legislacao'

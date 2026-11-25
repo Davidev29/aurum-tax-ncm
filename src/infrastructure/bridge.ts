@@ -186,15 +186,6 @@ export interface AurumBridge {
    * no navegador, cai no `fetch` direto (sujeito a CORS).
    */
   buscarTexto(url: string): Promise<TextoRemoto>
-  /**
-   * Guarda o XML importado em `userData/xml/<cnpj>/<chave>.xml`.
-   * Devolve o caminho relativo (`<cnpj>/<chave>.xml`) gravado na nota.
-   */
-  salvarXml(op: { cnpj: string; chave: string; conteudo: string }): Promise<string>
-  /** Lê um XML guardado (caminho relativo de `salvarXml`). */
-  lerXml(caminho: string): Promise<string>
-  /** Remove um XML guardado; inexistente não é erro. */
-  removerXml(caminho: string): Promise<void>
   /** Assina eventos de menu nativo (ex.: "abrir", "exportar", "tema", "atualizar"). */
   onMenu(cb: (acao: string) => void): void
   /**

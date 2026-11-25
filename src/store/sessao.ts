@@ -47,14 +47,7 @@ export const useSessao = create<SessaoState>((set, get) => ({
   iniciar: async () => {
     set({ carregando: true })
     const [empresas, emitente] = await Promise.all([listarEmpresas(), carregarEmitente()])
-    // Migração silenciosa: quarentenas legadas gravadas no cadastro errado
-    // voltam ao dono (isolamento por perfil). Best-effort, nunca trava o boot.
-    try {
-      const { realocarQuarentenaLegada } = await import('@/application/notas-xml')
-      await realocarQuarentenaLegada()
-    } catch {
-      /* base antiga sem índice — segue o jogo */
-    }
+
     const id = empresaAtivaId()
     const ativa = id === null ? null : (empresas.find((e) => e.id === id) ?? null)
     if (id !== null && !ativa) definirEmpresaAtivaSessao(null)

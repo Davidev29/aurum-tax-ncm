@@ -322,58 +322,6 @@ function registrarIpc(): void {
     },
   )
 
-  /** `xml:salvar` — guarda o XML da nota em `userData/xml/<cnpj>/<chave>.xml`. */
-  ipcMain.handle(
-    'xml:salvar',
-    async (
-      _evento,
-      opcao: { cnpj?: string; chave?: string; conteudo?: string },
-    ): Promise<string> => {
-      const cnpj = String(opcao?.cnpj ?? '').replace(/\D/g, '')
-      const chave = String(opcao?.chave ?? '').trim()
-      const conteudo = String(opcao?.conteudo ?? '')
-      if (!cnpj) throw new Error('CNPJ da empresa não informado para guardar o XML.')
-      if (!/^\d{44}$/.test(chave)) throw new Error('Chave de acesso inválida para guardar o XML.')
-      if (!conteudo) throw new Error('Conteúdo do XML vazio.')
-
-      const relativo = `${cnpj}/${chave}.xml`
-      const destino = resolverNoXml(relativo)
-      await fsp.mkdir(path.dirname(destino), { recursive: true })
-      try {
-        await fsp.writeFile(destino, conteudo, 'utf8')
-      } catch (erro) {
-        throw new Error(`Não foi possível guardar o XML "${relativo}": ${mensagemDeErro(erro)}`)
-      }
-      return relativo
-    },
-  )
-
-  /** `xml:ler` — lê um XML guardado (caminho relativo). */
-  ipcMain.handle('xml:ler', async (_evento, caminhoRelativo: string): Promise<string> => {
-    const caminho = resolverNoXml(caminhoRelativo)
-    try {
-      return await fsp.readFile(caminho, 'utf8')
-    } catch (erro) {
-      throw new Error(
-        `Não foi possível ler o XML "${caminhoRelativo}": ${mensagemDeErro(erro)}`,
-      )
-    }
-  })
-
-  /** `xml:remover` — remove um XML guardado; inexistente não é erro. */
-  ipcMain.handle('xml:remover', async (_evento, caminhoRelativo: string): Promise<void> => {
-    const caminho = resolverNoXml(caminhoRelativo)
-    try {
-      await fsp.unlink(caminho)
-    } catch (erro) {
-      if ((erro as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-        throw new Error(
-          `Não foi possível remover o XML "${caminhoRelativo}": ${mensagemDeErro(erro)}`,
-        )
-      }
-    }
-  })
-
   /** `atualizacao:versao` — versão instalada + plataforma (para a aba Atualização). */
   ipcMain.handle('atualizacao:versao', () => ({
     versao: app.getVersion(),
@@ -538,44 +486,6 @@ function configurarAtualizador(): void {
     },
     6 * 60 * 60 * 1000,
   )
-}
-
-// ---------------------------------------------------------------------------
-// Diretório de XMLs importados (userData — gravável e preservado no update)
-// ---------------------------------------------------------------------------
-
-/**
- * Raiz dos XMLs: `<userData>/xml` (`%APPDATA%` no Windows, equivalente nas
- * demais plataformas). A pasta de instalação (`.asar`/`Program Files`) é
- * somente-leitura — nunca é usada para dados.
- */
-function diretorioXml(): string {
-  return path.join(app.getPath('userData'), 'xml')
-}
-
-/**
- * Resolve um caminho relativo (`<cnpj>/<chave>.xml`) dentro do diretório de
- * XMLs, com a mesma trava anti-traversão do diretório base.
- */
-function resolverNoXml(caminhoRelativo: string): string {
-  if (typeof caminhoRelativo !== 'string' || !caminhoRelativo.trim()) {
-    throw new Error('Caminho do XML não informado.')
-  }
-  const normalizado = caminhoRelativo.replace(/\\/g, '/')
-  if (normalizado.startsWith('/') || /^[a-zA-Z]:/.test(normalizado)) {
-    throw new Error(`Caminho absoluto não é permitido: "${caminhoRelativo}".`)
-  }
-  if (
-    normalizado.split('/').some((parte) => parte === '..' || parte === '' || parte === '.')
-  ) {
-    throw new Error(`Acesso negado: "${caminhoRelativo}" sai do diretório de XMLs.`)
-  }
-  const base = path.resolve(diretorioXml())
-  const completo = path.resolve(base, normalizado)
-  if (completo !== base && !completo.startsWith(base + path.sep)) {
-    throw new Error(`Acesso negado: "${caminhoRelativo}" sai do diretório de XMLs.`)
-  }
-  return completo
 }
 
 // ---------------------------------------------------------------------------

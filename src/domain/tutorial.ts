@@ -35,7 +35,7 @@ export const TRILHAS_TOUR: TrilhaTour[] = [
     titulo: 'Organizar dados',
     descricao: 'Produtos, planilhas e notas',
     icone: '🗂️',
-    passos: ['cnaes', 'produtos', 'lote', 'nfe'],
+    passos: ['cnaes', 'produtos', 'lote'],
   },
   {
     id: 'dominar',
@@ -170,22 +170,6 @@ export const PASSOS_TOUR: PassoTour[] = [
     acao: 'Abrir Classificação em lote',
   },
   {
-    id: 'nfe',
-    menu: 'Notas Fiscais (XML)',
-    icone: '🧾',
-    trilha: 'organizar',
-    promessa: 'Em 1 minuto: do XML ao veredito A pagar / Saldo credor.',
-    oQueFaz: 'Importe XMLs de NF-e/NFC-e e veja veredito, confronto Antigo × Novo, ranking de fornecedores e apuração assistida.',
-    comoUsar: [
-      'Selecione a empresa ativa e arraste 1 ou N arquivos .xml — duplicadas vão para quarentena (lista de repetidas, sem duplicar).',
-      'Leia o topo executivo: veredito + base + IBS/CBS + carga + barra de cobertura.',
-      'Explore as abas: Notas · Fornecedores · Produtos · NCM · Insights.',
-    ],
-    dica: 'Vale o crédito efetivo do XML; a estimativa via NCM é informativa. Alterne o layout Polida ↔ Clássica — a escolha fica salva.',
-    resultado: 'Você concluiu quando vê o veredito no topo após importar 1 XML.',
-    acao: 'Abrir Notas Fiscais (XML)',
-  },
-  {
     id: 'auxiliares',
     menu: 'Tabelas auxiliares',
     icone: '📚',
@@ -244,9 +228,7 @@ export function secaoDoPasso(id: ViewId): { secao: string; pos: number; de: numb
     case 'cnaes':
       return { secao: 'Trabalho', pos: 4, de: 6 }
     case 'lote':
-      return { secao: 'Trabalho', pos: 5, de: 6 }
-    case 'nfe':
-      return { secao: 'Trabalho', pos: 6, de: 6 }
+      return { secao: 'Trabalho', pos: 5, de: 5 }
     case 'produtos':
       return { secao: 'Dados', pos: 1, de: 2 }
     case 'auxiliares':

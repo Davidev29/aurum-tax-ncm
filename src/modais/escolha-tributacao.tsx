@@ -122,16 +122,7 @@ export function ModalEscolhaTributacao({
       const { useProdutos } = await import('@/store/produtos')
       await useProdutos.getState().carregar().catch(() => undefined)
     } catch { /* sem cadastro — nada a recarregar */ }
-    try {
-      const { useNfe } = await import('@/store/nfe')
-      const st = useNfe.getState()
-      await st.carregar().catch(() => undefined)
-      const aberta = useNfe.getState().notaAberta
-      if (aberta?.id != null) {
-        const fresca = useNfe.getState().notas.find((x) => x.id === aberta.id) ?? null
-        useNfe.setState({ notaAberta: fresca })
-      }
-    } catch { /* sem notas — nada a recarregar */ }
+
     const partes = []
     if (prop.produtos) partes.push(`${prop.produtos} produto(s)`)
     if (prop.itens) partes.push(`${prop.itens} item(ns) em ${prop.notas} nota(s)`)

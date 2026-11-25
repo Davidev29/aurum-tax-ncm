@@ -13,7 +13,6 @@ export type ViewId =
   | 'servicos'
   | 'cnaes'
   | 'lote'
-  | 'nfe'
   | 'produtos'
   | 'auxiliares'
   | 'legislacao'
@@ -38,10 +37,6 @@ export const VIEW_META: Record<ViewId, { titulo: string; subtitulo: string }> = 
   lote: {
     titulo: 'Classificação em lote',
     subtitulo: 'Envie CSV ou Excel para classificar vários produtos',
-  },
-  nfe: {
-    titulo: 'Notas Fiscais (XML)',
-    subtitulo: 'Importe XMLs de NF-e/NFC-e e acompanhe o histórico por período',
   },
   produtos: {
     titulo: 'Produtos cadastrados',

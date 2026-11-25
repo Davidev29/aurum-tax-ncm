@@ -640,7 +640,7 @@ function ModalDetalheEmpresa({
     })()
   }
 
-  const irPara = (destino: 'nfe' | 'produtos') => {
+  const irPara = (destino: 'produtos') => {
     if (id == null) return
     void (async () => {
       // Garante o escopo antes de navegar: a tela abre já filtrada pela empresa.
@@ -1070,28 +1070,6 @@ function ModalDetalheEmpresa({
               <Btn tam="sm" carregando={exportando === 'pdf-rico'} onClick={() => exportarProdutos('pdf-rico')}>
                 {exportando === 'pdf-rico' ? 'Exportando…' : 'PDF completo (IBS/CBS)'}
               </Btn>
-            </div>
-          </section>
-
-          <section>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className="text-xs font-black uppercase tracking-wide text-slate-500">Documentos fiscais · para conferência</h3>
-              {(vinculos?.notas ?? 0) > 0 ? (
-                <Btn tam="sm" onClick={() => irPara('nfe')}>
-                  Conferir notas →
-                </Btn>
-              ) : null}
-            </div>
-            <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
-              {carregando ? (
-                <p className="text-xs text-slate-400">Contando documentos…</p>
-              ) : (vinculos?.notas ?? 0) > 0 ? (
-                <p className="text-xs leading-relaxed">
-                  <strong className="font-mono text-sm">{vinculos!.notas}</strong> documento(s) fiscal(is) importado(s) desta empresa — abra a tela de notas com a empresa selecionada para conferir.
-                </p>
-              ) : (
-                <p className="text-xs text-slate-400">Nenhum documento fiscal importado desta empresa ainda.</p>
-              )}
             </div>
           </section>
 

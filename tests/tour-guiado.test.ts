@@ -6,16 +6,15 @@ import { PASSOS_TOUR, TRILHAS_TOUR } from '@/domain/tutorial'
 
 describe('tour guiado — cobertura menu a menu', () => {
   it('cobre os 9 menus do sistema, sem repetir', () => {
-    expect(PASSOS_TOUR).toHaveLength(9)
+    expect(PASSOS_TOUR).toHaveLength(8)
     const ids = PASSOS_TOUR.map((p) => p.id)
-    expect(new Set(ids).size).toBe(9)
+    expect(new Set(ids).size).toBe(8)
     for (const esperada of [
       'consulta',
       'simples',
       'servicos',
       'cnaes',
       'lote',
-      'nfe',
       'produtos',
       'auxiliares',
       'legislacao',

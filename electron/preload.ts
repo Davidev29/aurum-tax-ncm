@@ -70,15 +70,6 @@ const aurum: AurumBridge = {
   /** Baixa texto remoto (norma oficial) sem CORS. */
   buscarTexto: (url) => ipcRenderer.invoke('rede:buscar-texto', url),
 
-  /** Guarda o XML da nota em `userData/xml/<cnpj>/<chave>.xml`. */
-  salvarXml: (op) => ipcRenderer.invoke('xml:salvar', op),
-
-  /** Lê um XML guardado (caminho relativo). */
-  lerXml: (caminho) => ipcRenderer.invoke('xml:ler', caminho),
-
-  /** Remove um XML guardado; inexistente não é erro. */
-  removerXml: (caminho) => ipcRenderer.invoke('xml:remover', caminho),
-
   /** Assina as ações do menu nativo (canal `menu:acao`). */
   onMenu: (cb) => {
     // Assinatura única: novas chamadas substituem a anterior, evitando que

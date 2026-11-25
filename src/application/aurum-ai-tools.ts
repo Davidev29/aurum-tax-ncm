@@ -515,10 +515,10 @@ export function extrairContextoConversa(historico: MensagemHistorico[] = []): Co
     houveCalculo: /ibs|quanto fica|calcula|calcule|calculo|simula|\bncm\b/i.test(textoBaixo),
     houveSimples: /das|anexo|rbt12|rbt|fator r|sublimite|simples/i.test(textoBaixo),
     houveCnpj: ultimoCnpj != null || /cnpj|consultar.*empresa|atividades.*cnpj/i.test(textoBaixo),
-    ultimoFiltroDados: /xml|nota fiscal|nfe|fornecedor|cliente|diferid|reducao|redução|produto.*(credito|debito)|filtro/i.test(textoBaixo)
+    ultimoFiltroDados: /fornecedor|cliente|diferid|reducao|redução|produto.*(credito|debito)|filtro/i.test(textoBaixo)
       ? falasUsuario.slice(-3).join(' ').slice(0, 300)
       : null,
-    houveDados: /xml|nota fiscal|\bnfe\b|fornecedor|diferid|reducao|redução|\bcliente/.test(textoBaixo),
+    houveDados: /fornecedor|diferid|reducao|redução|\bcliente/.test(textoBaixo),
     ultimaEmpresaMencionada,
     ultimoProdutoMencionado,
   };

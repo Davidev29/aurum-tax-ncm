@@ -12,7 +12,6 @@ import {
   localizarProdutoEmNotas,
   resolverEmpresaAlvo,
 } from '@/application/aurum-ai-empresa'
-import { extrairFiltrosDados } from '@/application/aurum-ai-dados'
 import { refinarIntencaoComContexto, toolParaIntencao } from '@/application/aurum-ai-tools'
 import { responderChat } from '@/application/aurum-ai-chat'
 
@@ -93,10 +92,6 @@ describe('fine-tuning v3 — empresa × produto × cálculo', () => {
   it('sem menção usa a ativa ou todas (avisando)', () => {
     expect(resolverEmpresaAlvo(null, empresas, 3).tipo).toBe('sem_mencao_com_ativa')
     expect(resolverEmpresaAlvo(null, empresas, null).tipo).toBe('sem_mencao_todas')
-  })
-  it('filtros entendem "produtos da Padaria Pão Dourado"', () => {
-    const f = extrairFiltrosDados('quais produtos da Padaria Pão Dourado mais venderam?')
-    expect(f.clienteTexto).toMatch(/Padaria/i)
   })
   it('localiza produto específico nos itens (fuzzy)', () => {
     const itens = [

@@ -125,7 +125,6 @@ const SITUACAO_CNAE = ['Permitido', 'Permitido com ressalvas', 'Depende da ativi
 const ESTADO_NBS = ['mapeado', 'sem-mapeamento', 'divergencia'] as const
 const FONTE_DESCRICAO = ['oficial', 'qualclasstrib', 'auxiliar'] as const
 const FONTE_LINK = ['por_codigo', 'triangulacao'] as const
-const DIRECAO_NOTA = ['entrada', 'saida', 'quarentena'] as const
 const OPERACAO_AUDIT = ['criar', 'atualizar', 'excluir'] as const
 const REGIME_TRIB = ['simples', 'mei', 'normal'] as const
 const CONTADOR_TIPO = ['pf', 'pj'] as const
@@ -276,41 +275,6 @@ const VALIDADORES: Record<string, (r: Rec) => void> = {
   cfop: (r) => validaAuxiliar(r, 'cfop'),
   cstIcms: (r) => validaAuxiliar(r, 'cstIcms'),
   cstPisCofins: (r) => validaAuxiliar(r, 'cstPisCofins'),
-  nfeNotas: (r) => {
-    if (r.id !== undefined) inteiro(r.id, 'nfeNotas', 'id')
-    inteiro(r.empresaId, 'nfeNotas', 'empresaId')
-    digitos(r.chave, 'nfeNotas', 'chave', [44])
-    texto(r.numero, 'nfeNotas', 'numero', 50, false)
-    texto(r.serie, 'nfeNotas', 'serie', 50, false)
-    texto(r.modelo, 'nfeNotas', 'modelo', 20, false)
-    texto(r.natOp, 'nfeNotas', 'natOp', 500, false)
-    texto(r.dataEmissao, 'nfeNotas', 'dataEmissao', 50)
-    digitos(r.emitCnpj, 'nfeNotas', 'emitCnpj', [14], true)
-    texto(r.emitNome, 'nfeNotas', 'emitNome', 500, false)
-    enumeracao(r.direcao, 'nfeNotas', 'direcao', DIRECAO_NOTA)
-    if (typeof r.destDoc === 'string' && r.destDoc !== '') {
-      if (!/^\d{11}$/.test(r.destDoc) && !/^\d{14}$/.test(r.destDoc)) {
-        falha('nfeNotas', 'destDoc-formato')
-      }
-    }
-    // Fixtures/testes gravam notas só com `itensAnalisados`; nada no app lê
-    // `itens` cru (só `itensAnalisados ?? []`). Ausentes viram NULL.
-    if (r.itens !== undefined && r.itens !== null) arr(r.itens, 'nfeNotas', 'itens')
-    if (r.itensAnalisados !== undefined && r.itensAnalisados !== null) {
-      arr(r.itensAnalisados, 'nfeNotas', 'itensAnalisados')
-    }
-    for (const c of ['valorProdutos', 'valorTotal', 'refIBS', 'refCBS', 'totalIBS', 'totalCBS', 'totalTributos']) {
-      numero(r[c], 'nfeNotas', c)
-    }
-    for (const c of ['totalIbsXml', 'totalCbsXml', 'totalCreditoIbsCbsXml']) {
-      if (r[c] !== undefined) numeroOuNulo(r[c], 'nfeNotas', c)
-    }
-    texto(r.importadoEm, 'nfeNotas', 'importadoEm', 100)
-    if (r.arquivo !== undefined) textoOuNulo(r.arquivo, 'nfeNotas', 'arquivo', 500)
-    if (r.xmlConteudo !== undefined && r.xmlConteudo !== null && typeof r.xmlConteudo !== 'string') {
-      falha('nfeNotas', 'xmlConteudo-nao-texto')
-    }
-  },
   reclassificacoesManuais: (r) => {
     digitos(r.ncm, 'reclassificacoesManuais', 'ncm', [8])
     digitos(r.cst, 'reclassificacoesManuais', 'cst', [3])

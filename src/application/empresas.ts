@@ -210,13 +210,8 @@ export async function cadastrarEmpresa(dados: DadosCadastroEmpresa): Promise<Res
  * `completarEmpresa` daqui).
  */
 async function adotarNotasBestEffort(empresa: Empresa): Promise<{ adotadas: number } | null> {
-  try {
-    const mod = await import('./notas-xml')
-    const r = await mod.adotarNotasParaEmpresa(empresa)
-    return { adotadas: r.adotadas }
-  } catch {
-    return null
-  }
+  void empresa
+  return null
 }
 
 /** Converte o retorno da BrasilAPI em patch de cadastro. */
@@ -344,15 +339,12 @@ export interface VinculosEmpresa {
  * Nunca lança: banco fechado/ausente conta como 0.
  */
 export async function contarVinculosEmpresa(id: number): Promise<VinculosEmpresa> {
-  const contar = async (tabela: 'produtos' | 'nfeNotas'): Promise<number> => {
-    try {
-      return await db.table(tabela).where('empresaId').equals(id).count()
-    } catch {
-      return 0
-    }
+  try {
+    const produtos = await db.produtos.where('empresaId').equals(id).count()
+    return { produtos, notas: 0 }
+  } catch {
+    return { produtos: 0, notas: 0 }
   }
-  const [produtos, notas] = await Promise.all([contar('produtos'), contar('nfeNotas')])
-  return { produtos, notas }
 }
 
 /** Prévia dos produtos da empresa para o modal de detalhes (ordenados por SKU). */
@@ -382,7 +374,6 @@ export async function excluirEmpresa(id: number): Promise<VinculosEmpresa> {
   const vinculos = await contarVinculosEmpresa(id)
   const ops: DbOp[] = [
     { op: 'removerOnde', tabela: 'produtos', where: { tipo: 'equals', campo: 'empresaId', valor: id } },
-    { op: 'removerOnde', tabela: 'nfeNotas', where: { tipo: 'equals', campo: 'empresaId', valor: id } },
     { op: 'remover', tabela: 'empresas', chave: id },
   ]
   const driver = resolverDriver()

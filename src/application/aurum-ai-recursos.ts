@@ -63,13 +63,6 @@ export const VIEWS_AURUM_AI: RecursoView[] = [
     navegavel: true,
   },
   {
-    view: 'nfe',
-    rotulo: 'Notas Fiscais (XML)',
-    descricao: 'Importe XMLs de NF-e/NFC-e, apure IBS/CBS e gere relatório com IA.',
-    acoes: ['importar XMLs', 'filtrar por período/CFOP/fornecedor', 'ver apuração e créditos', 'gerar relatório PDF/CSV'],
-    navegavel: true,
-  },
-  {
     view: 'produtos',
     rotulo: 'Produtos',
     descricao: 'Produtos cadastrados por empresa — o chat cadastra de forma assistida (conferência + SIM explícito) e orienta a exportar.',

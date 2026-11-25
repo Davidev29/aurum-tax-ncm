@@ -97,7 +97,6 @@ export const STORES = {
   CFOP: 'cfop',
   CSTICMS: 'cstIcms',
   CSTPISCOFINS: 'cstPisCofins',
-  NFENOTAS: 'nfeNotas',
   RECLASS: 'reclassificacoesManuais',
   CLASSPROD: 'classificacaoProduto',
   /** Anexos por NCM/NBS (CFF `anexos`, formato real). */

@@ -44,7 +44,6 @@ export const TABELAS_EXPORTAVEIS: TabelaExportavel[] = [
   { store: 'reclassificacoesManuais', titulo: 'Reclassificações manuais', icone: '✋', descricao: 'Ajustes do usuário por NCM', escopo: 'geral' },
   // Fora do contexto produto: empresas, notas, CNAE, anexos (NCM+NBS), auditoria e NBS (serviços).
   { store: 'empresas', titulo: 'Empresas', icone: '🏢', descricao: 'Empresas do usuário', escopo: 'geral' },
-  { store: 'nfeNotas', titulo: 'Notas Fiscais (XML)', icone: '🧾', descricao: 'Notas importadas + análise', escopo: 'geral' },
   { store: 'cnae', titulo: 'CNAE', icone: '🏭', descricao: 'CNAE × Anexo Simples', escopo: 'geral' },
   { store: 'anexos', titulo: 'Anexos', icone: '📎', descricao: 'Restrições oficiais por NCM/NBS', escopo: 'geral' },
   { store: 'audit_log', titulo: 'Auditoria', icone: '🧾', descricao: 'Log imutável (últimos 2.000)', escopo: 'geral' },
@@ -210,7 +209,7 @@ export async function coletarTabela(store: string, filtro: FiltroExportacao): Pr
     return []
   }
   if (store === 'meta') return []
-  if (store === 'produtos' || store === 'nfeNotas') {
+  if (store === 'produtos') {
     if (filtro.empresaId != null) {
       linhas = linhas.filter((r) => (r as Record<string, unknown>).empresaId === filtro.empresaId)
     }

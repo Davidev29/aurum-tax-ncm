@@ -29,7 +29,7 @@ describe('PRESETS_TRANSICAO', () => {
 
 describe('trocarView + transicaoSeq', () => {
   it('avança o carrossel a cada troca real e nunca repete em sequência', () => {
-    const passeio: ViewId[] = ['consulta', 'simples', 'lote', 'nfe', 'produtos', 'consulta', 'simples']
+    const passeio: ViewId[] = ['consulta', 'simples', 'lote', 'produtos', 'consulta', 'simples']
     const nomes: string[] = []
     for (const v of passeio) {
       useUi.getState().trocarView(v)

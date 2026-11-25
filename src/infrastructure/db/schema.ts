@@ -45,7 +45,6 @@ import type {
   VinculoNcm,
   ReferenciaCClassTrib,
 } from '@/domain/entities'
-import type { NotaXml } from '../nfe/tipos'
 import { TODAS_STORES } from './db-protocolo'
 import {
   abortarColetaTransacao,
@@ -132,9 +131,6 @@ class BancoLocal {
   cfop = new Tabela<TabelaAuxiliarSimples, string>('cfop')
   cstIcms = new Tabela<TabelaAuxiliarSimples, string>('cstIcms')
   cstPisCofins = new Tabela<TabelaAuxiliarSimples, string>('cstPisCofins')
-
-  /** Notas fiscais importadas de XML (itens + análise embutidos). */
-  nfeNotas = new Tabela<NotaXml, number>('nfeNotas')
 
   /** Reclassificações manuais do usuário por NCM (chave `ncm`). */
   reclassificacoesManuais = new Tabela<ReclassificacaoManual, string>('reclassificacoesManuais')
@@ -280,7 +276,6 @@ const TABELAS_POR_NOME: Record<string, Tabela<Record<string, unknown>, string | 
   [STORES.CFOP]: db.cfop as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.CSTICMS]: db.cstIcms as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.CSTPISCOFINS]: db.cstPisCofins as unknown as Tabela<Record<string, unknown>, string | number>,
-  [STORES.NFENOTAS]: db.nfeNotas as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.RECLASS]: db.reclassificacoesManuais as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.CLASSPROD]: db.classificacaoProduto as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.AUDIT]: db.auditLog as unknown as Tabela<Record<string, unknown>, string | number>,
@@ -334,7 +329,7 @@ export async function contarTodos(): Promise<Record<string, number>> {
   }
   const [
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
-    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
+    cfop, cstIcms, cstPisCofins, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
     anexos, produtosDfe, cnae, consultasCnpj, conversasEmitente,
     cnaeNbs, lcNbs, classificacoesConsolidadas, grafometa, meta,
   ] = await Promise.all([
@@ -349,7 +344,6 @@ export async function contarTodos(): Promise<Record<string, number>> {
     contar(STORES.CFOP),
     contar(STORES.CSTICMS),
     contar(STORES.CSTPISCOFINS),
-    contar(STORES.NFENOTAS),
     contar(STORES.RECLASS),
     contar(STORES.CLASSPROD),
     contar(STORES.AUDIT),
@@ -368,7 +362,7 @@ export async function contarTodos(): Promise<Record<string, number>> {
   ])
   return {
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
-    cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
+    cfop, cstIcms, cstPisCofins, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
     anexos, produtosDfe, cnae, consultasCnpj, conversasEmitente,
     cnaeNbs, lcNbs, classificacoesConsolidadas, grafometa, meta,
   }

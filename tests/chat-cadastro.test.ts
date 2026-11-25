@@ -52,7 +52,6 @@ function stubBrasil() {
 beforeEach(async () => {
   await db.empresas.clear()
   await db.produtos.clear()
-  await db.nfeNotas.clear()
   limparCacheBrasilApi()
   vi.unstubAllGlobals()
   await semearBaseIa()

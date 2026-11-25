@@ -2,7 +2,7 @@
  * CEST × Substituição Tributária — consulta estática/offline.
  *
  * O XML já traz `prod/CEST` (7 dígitos, parse em
- * `src/infrastructure/nfe/parse.ts`). Aqui o código do item é cruzado com
+ * (módulo XML removido). Aqui o código do item é cruzado com
  * a lista ST embutida (`src/domain/constants/cest-dados.ts`, 1010
  * registros): bateu = marcador de possível ST com segmento + descrição
  * oficial. Não bateu = sem marcador (sem afirmar nada).

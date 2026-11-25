@@ -119,7 +119,7 @@ const SINAIS_SISTEMA = new Set([
   'folha', 'prolabore', 'pro-labore', 'receita', 'faturamento',
   'tributo', 'tributario', 'tributaria', 'imposto', 'fiscal',
   'reforma', '214', '123', 'calculadora', 'calculo', 'simulacao',
-  'relatorio', 'lote', 'xml', 'nfe', 'nfce', 'sped', 'efd',
+  'relatorio', 'lote',
   'cnpj', 'cnae', 'produto', 'servico', 'consulta', 'tabela',
   'legislacao', 'lei', 'aliquota', 'reducao', 'credito', 'debito',
   'cliente', 'clientes', 'fornecedor', 'fornecedores', 'diferido', 'diferimento',

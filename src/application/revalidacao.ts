@@ -13,12 +13,9 @@
  *   vigente; a tela aberta de SPED é remendada pelo modal de reclassificação.
  * - Best-effort por etapa: falha numa store não aborta as demais.
  */
-import { REF_DEFAULT } from '@/domain/constants'
-import { calcularTributos, anexoReal, observacoesFiscais, round2 } from '@/domain/services/calculo'
 import { norm } from '@/domain/services/format'
 import { resolverClassificacoes } from '@/infrastructure/base/classificacao-repo'
 import type { Classificacao, NomenclaturaNcm, Produto } from '@/domain/entities'
-import type { NotaXml, ResultadoItemNfe } from '@/infrastructure/nfe/tipos'
 import { db } from '@/infrastructure/db/schema'
 import { snapshotDe } from './produtos'
 
@@ -94,64 +91,7 @@ export async function revalidarBaseGravada(
     /* store ausente — segue para as notas */
   }
 
-  // --- notas de XML (itens + totais, com o refIBS/refCBS de cada nota) ---
-  try {
-    onProgress?.('Revalidando notas de XML', 55)
-    const notas: NotaXml[] = await db.nfeNotas.toArray()
-    const sujas: NotaXml[] = []
-    for (const n of notas) {
-      const lista = n.itensAnalisados ?? []
-      if (!lista.length) continue
-      const refIBS = Number(n.refIBS) || REF_DEFAULT.IBS
-      const refCBS = Number(n.refCBS) || REF_DEFAULT.CBS
-      let tocada = false
-      const refeitos: ResultadoItemNfe[] = []
-      for (const it of lista) {
-        const r = await resolver(it.ncm)
-        if (!r) {
-          refeitos.push(it)
-          continue
-        }
-        // Manual vigente (registro ainda existe) recalcula mantendo a manual.
-        const redIBS = Number(r.cl.resumo?.percentualReducaoIBS) || 0
-        const redCBS = Number(r.cl.resumo?.percentualReducaoCBS) || 0
-        const base = Number(it.vlTotal) || 0
-        const calc = calcularTributos(base, redIBS, redCBS, refIBS, refCBS)
-        tocada = true
-        total.itens++
-        refeitos.push({
-          ...it,
-          ncm: norm(it.ncm),
-          classificacao: r.cl,
-          regraGeral: r.regraGeral,
-          manual: r.manual,
-          redIBS,
-          redCBS,
-          ibs: calc.vIBS,
-          cbs: calc.vCBS,
-          totalTributos: calc.total,
-          carga: calc.carga,
-          anexo: anexoReal(r.cl.resumo?.anexo ?? (r.cl as { referencia?: { anexo?: unknown } }).referencia?.anexo, redIBS, redCBS),
-          nomenclatura: r.nomenclatura,
-          observacoes: observacoesFiscais(norm(it.ncm), r.cl, r.nomenclatura),
-        })
-      }
-      if (!tocada) continue
-      let totalIBS = 0
-      let totalCBS = 0
-      for (const it of refeitos) {
-        totalIBS = round2(totalIBS + (Number(it.ibs) || 0))
-        totalCBS = round2(totalCBS + (Number(it.cbs) || 0))
-      }
-      sujas.push({ ...n, itensAnalisados: refeitos, totalIBS, totalCBS, totalTributos: round2(totalIBS + totalCBS) })
-    }
-    if (sujas.length) {
-      await db.nfeNotas.bulkPut(sujas)
-      total.notas = sujas.length
-    }
-  } catch {
-    /* sem notas — nada a remendar */
-  }
+  // Módulo XML removido: não há notas para revalidar.
 
   onProgress?.('Concluído', 100)
   return total

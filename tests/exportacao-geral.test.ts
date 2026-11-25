@@ -32,7 +32,7 @@ beforeEach(async () => {
 describe('exportacao-geral', () => {
   it('expõe todas as tabelas principais', () => {
     const stores = TABELAS_EXPORTAVEIS.map((t) => t.store)
-    for (const s of ['produtos', 'empresas', 'nfeNotas', 'cfop', 'cstIcms', 'cstPisCofins', 'audit_log']) {
+    for (const s of ['produtos', 'empresas', 'cfop', 'cstIcms', 'cstPisCofins', 'audit_log']) {
       expect(stores).toContain(s)
     }
   })

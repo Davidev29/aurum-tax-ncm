@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { Layout } from '@/ui/Layout';
 import { ErroFatal, SkeletonPagina } from '@/ui/ErroFatal';
 import { useUi } from '@/store/ui';
@@ -10,8 +10,6 @@ const Consulta = lazy(() => import('@/pages/Consulta').then((m) => ({ default: m
 const ConsultaServicos = lazy(() => import('@/pages/ConsultaServicos').then((m) => ({ default: m.ConsultaServicos })));
 const ConsultaCnaes = lazy(() => import('@/pages/ConsultaCnaes').then((m) => ({ default: m.ConsultaCnaes })));
 const Lote = lazy(() => import('@/pages/Lote').then((m) => ({ default: m.Lote })));
-const NfeXml = lazy(() => import('@/pages/NfeXml').then((m) => ({ default: m.NfeXml })));
-const NfeXmlPolida = lazy(() => import('@/pages/NfeXmlPolida').then((m) => ({ default: m.NfeXmlPolida })));
 const Produtos = lazy(() => import('@/pages/Produtos').then((m) => ({ default: m.Produtos })));
 const Auxiliares = lazy(() => import('@/pages/Auxiliares').then((m) => ({ default: m.Auxiliares })));
 const Legislacao = lazy(() => import('@/pages/Legislacao').then((m) => ({ default: m.Legislacao })));
@@ -21,14 +19,7 @@ const Legislacao = lazy(() => import('@/pages/Legislacao').then((m) => ({ defaul
  */
 export function App() {
   const view = useUi((s) => s.view);
-  // Layout do XML lido 1× fora do render crítico (vira estado inicial).
-  const [layoutXml] = useState(() => {
-    try {
-      return typeof localStorage !== 'undefined' ? localStorage.getItem('xml-layout') : null;
-    } catch {
-      return null;
-    }
-  });
+  // (layout XML removido junto com o módulo de NF-e)
 
   // GRAFO-08: job incremental do overlay ao abrir + ocioso (<1s, nunca
   // rebuild diário — só poda TTL + teto). Best-effort, nunca lança.
@@ -90,9 +81,6 @@ export function App() {
       break;
     case 'lote':
       pagina = <Lote />;
-      break;
-    case 'nfe':
-      pagina = layoutXml === 'polida' ? <NfeXmlPolida /> : <NfeXml />;
       break;
     case 'produtos':
       pagina = <Produtos />;

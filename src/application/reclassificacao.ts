@@ -16,9 +16,7 @@
  * vigente automaticamente; a tela de SPED aberta é remendada em memória pelo
  * modal (ver `ModalReclassificacao`).
  */
-import { REF_DEFAULT } from '@/domain/constants'
 import type { ClassificacaoSnapshot } from '@/domain/entities'
-import { anexoReal, calcularTributos, observacoesFiscais, round2 } from '@/domain/services/calculo'
 import { norm } from '@/domain/services/format'
 import { resolverClassificacoes } from '@/infrastructure/base/classificacao-repo'
 import { db } from '@/infrastructure/db/schema'
@@ -78,64 +76,9 @@ export async function propagarClassificacaoNcm(codigoInput: unknown): Promise<Re
     /* tabela ausente em testes parciais — segue para as notas */
   }
 
-  // Notas de XML: remenda os itens do NCM e recalcula os totais da nota.
-  let notas = 0
-  let itens = 0
-  try {
-    const todas = await db.nfeNotas.toArray()
-    const redIBS = Number(resumo?.percentualReducaoIBS) || 0
-    const redCBS = Number(resumo?.percentualReducaoCBS) || 0
-    const sujas = []
-    for (const n of todas) {
-      const lista = n.itensAnalisados ?? []
-      if (!lista.some((it) => norm(it.ncm) === cod)) continue
-      const refIBS = Number(n.refIBS) || REF_DEFAULT.IBS
-      const refCBS = Number(n.refCBS) || REF_DEFAULT.CBS
-      let tocados = 0
-      const refeitos = lista.map((it) => {
-        if (norm(it.ncm) !== cod) return it
-        tocados++
-        const base = Number(it.vlTotal) || 0
-        const calc = calcularTributos(base, redIBS, redCBS, refIBS, refCBS)
-        return {
-          ...it,
-          ncm: cod,
-          classificacao: cl,
-          regraGeral: r.regraGeral,
-          manual: manualFlag,
-          redIBS,
-          redCBS,
-          ibs: calc.vIBS,
-          cbs: calc.vCBS,
-          totalTributos: calc.total,
-          carga: calc.carga,
-          anexo: anexoReal(cl.resumo?.anexo ?? (cl as { referencia?: { anexo?: unknown } }).referencia?.anexo, redIBS, redCBS),
-          nomenclatura: r.nomenclatura,
-          observacoes: observacoesFiscais(cod, cl, r.nomenclatura),
-        }
-      })
-      let totalIBS = 0
-      let totalCBS = 0
-      for (const it of refeitos) {
-        totalIBS = round2(totalIBS + (Number(it.ibs) || 0))
-        totalCBS = round2(totalCBS + (Number(it.cbs) || 0))
-      }
-      sujas.push({
-        ...n,
-        itensAnalisados: refeitos,
-        totalIBS,
-        totalCBS,
-        totalTributos: round2(totalIBS + totalCBS),
-      })
-      itens += tocados
-    }
-    if (sujas.length) {
-      await db.nfeNotas.bulkPut(sujas)
-      notas = sujas.length
-    }
-  } catch {
-    /* sem notas no banco — nada a remendar */
-  }
+  // Módulo XML removido: não há notas para remendar.
+  const notas = 0
+  const itens = 0
 
   return { produtos, notas, itens }
 }

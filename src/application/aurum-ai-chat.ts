@@ -85,18 +85,15 @@ import {
 } from '@/domain/services/basico-chat'
 import {
   alvoGraficoCalculo,
-  alvoGraficoDados,
   alvoGraficoSimples,
   alvoGraficoSimplesTodos,
   aplicarTipoPreferido,
   detectarPedidoGrafico,
   graficoCalculoIBS,
-  graficoClientes,
   graficoComparativoAnexos,
   graficoConvHibTodosAnexos,
   graficoConvXHibrido,
   graficoReparticaoDAS,
-  planejarGraficoDados,
   sugestaoGrafico,
   type GraficoChat,
 } from './aurum-ai-graficos'
@@ -153,7 +150,7 @@ export interface DadosConsulta {
   escopo: string
   geradoEm: string
   /** Agregações já calculadas do escopo (números do motor, nunca da conversa). */
-  payload: import('./aurum-ai-dados-pdf').DadosRelatorioIA
+  payload: any
 }
 
 export interface RelatorioOpcoes {
@@ -2909,32 +2906,9 @@ async function responderCalculo(pergunta: string, analise: AnaliseChat, historic
   // localiza o produto nos XMLs do escopo e usa o NCM real dele — nunca chuta.
   let prefixoEmpresaCalc = ''
   let notaAncoragem = ''
-  try {
-    const dadosMod = await import('./aurum-ai-dados')
-    const filtroCalc = dadosMod.extrairFiltrosDados(pergunta)
-    const mencaoProdutoCalc = filtroCalc.produto ?? analise.produtoMencionado ?? ctx.ultimoProdutoMencionado ?? null
-    const mencaoEmpresaCalc = filtroCalc.clienteTexto ?? analise.empresaMencionada ?? ctx.ultimaEmpresaMencionada ?? null
-    if (mencaoEmpresaCalc && !prefixoEmpresaCalc) prefixoEmpresaCalc = `**Empresa:** ${mencaoEmpresaCalc}\n\n`
-    if ((!codigo || codigo.length !== 8) && mencaoProdutoCalc) {
-      const escopoCalc = await dadosMod.notasDoEscopo({ ...filtroCalc, clienteTexto: mencaoEmpresaCalc ?? filtroCalc.clienteTexto }).catch(() => null)
-      const itensCalc = (escopoCalc?.notas ?? []).flatMap((nn) => nn.itensAnalisados ?? [])
-      if (itensCalc.length) {
-        const { localizarProdutoEmNotas } = await import('./aurum-ai-empresa')
-        const achados = localizarProdutoEmNotas(
-          mencaoProdutoCalc,
-          itensCalc.map((it) => ({ descricao: String(it.descricao ?? ''), codProd: String(it.codProd ?? ''), ncm: String(it.ncm ?? '').replace(/\D+/g, '') })),
-          3,
-        )
-        const ncmAchado = (achados[0]?.ncm ?? '').replace(/\D+/g, '')
-        if (ncmAchado.length === 8) {
-          codigo = ncmAchado
-          notaAncoragem = ` (produto "${mencaoProdutoCalc}" localizado nos XMLs${mencaoEmpresaCalc ? ` de ${mencaoEmpresaCalc}` : ''} — NCM ${fmtNcm(ncmAchado)})`
-        }
-      }
-    }
-  } catch {
-    /* ancoragem é best-effort — segue o fluxo padrão */
-  }
+  // Módulo de dados (XML) removido: ancoragem desabilitada.
+  void prefixoEmpresaCalc
+  void notaAncoragem
   if (!codigo || codigo.length !== 8) {
     // Multi-intenção ("ncm de banana e quanto fica 2 mil"): com valor na
     // frase, classifica primeiro e já calcula — sem pedir o que já foi dito.
@@ -3527,458 +3501,26 @@ async function responderSimples(pergunta: string, historico: MensagemHistorico[]
   }
 }
 
-/* --------------------------------------------- clientes + dados (XML) -- */
-
-function botoesDados(): BotaoChat[] {
-  return [
-    { rotulo: 'Ir para Notas Fiscais', acao: 'navegar', alvo: 'nfe' },
-    { rotulo: 'Ir para Produtos', acao: 'navegar', alvo: 'produtos' },
-  ]
-}
-
-/** Rótulo curto do motor de ações (para o "ver raciocínio" honesto). */
-function acaoRotuloCurto(acao: string): string {
-  const mapa: Record<string, string> = {
-    inventario: 'inventário',
-    ranking_fornecedores: 'rank-fornecedores',
-    ranking_produtos_geral: 'rank-produtos',
-    ranking_produtos_credito: 'prod-credito',
-    ranking_produtos_debito: 'prod-debito',
-    listar_produtos: 'listar-produtos',
-    diferidos: 'diferidos',
-    reducoes: 'reduções',
-    tributacao_ncm: 'trib-ncm',
-    apuracao: 'apuração',
-    filtros: 'filtros',
-    panorama: 'panorama',
-  }
-  return mapa[acao] ?? acao
-}
-
 /**
- * Intenção `clientes`: inventário do CADASTRO (quem são, quantos, com/sem XML).
- * Vice-versa com XML: para cada cliente mostra se há notas e quantas.
+ * Módulo de dados (XML) removido da ferramenta — funções stub.
  */
 async function responderClientes(pergunta: string): Promise<RespostaChat> {
-  const t0 = Date.now()
-  try {
-    const { listarClientesComMovimento } = await import('./aurum-ai-dados')
-    const clientes = await listarClientesComMovimento()
-    if (!clientes.length) {
-      return {
-        texto:
-          `Ainda não há **nenhum cliente (empresa) cadastrado** no sistema — por isso não tenho XMLs para mostrar.\n\n` +
-          `**Como resolver:** cadastre pelo CNPJ em Empresas (puxa da BrasilAPI em 1 clique) e importe os XMLs em Notas Fiscais. Depois me pergunte de novo — ex.: "tem XML de algum cliente?".`,
-        confianca: 1, nivel: 'alta',
-        fontes: ['Base de empresas do sistema'],
-        sugestoes: ['O que você pode fazer?', 'Quais atividades o CNPJ 53.795.990/0001-68 tem?'],
-        botoes: [
-          { rotulo: 'Qual fornecedor me dá mais crédito?', acao: 'perguntar', alvo: 'Qual fornecedor me dá mais crédito?' },
-          ...botoesDados(),
-        ],
-        pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Clientes: nenhum cadastro', Date.now() - t0),
-      }
-    }
-    const comNotas = clientes.filter((c) => c.qtdNotas > 0)
-    const semNotas = clientes.filter((c) => c.qtdNotas === 0)
-    const linhas = clientes.slice(0, 10).map((c, i) => {
-      const nome = c.fantasia && c.fantasia !== c.razaoSocial ? `${c.razaoSocial} (${c.fantasia})` : c.razaoSocial
-      const xml = c.qtdNotas > 0
-        ? `${c.qtdNotas} nota(s) · base ${fmtMoeda(c.base)}`
-        : 'sem XML importado'
-      return `${i + 1}. **${nome}**${c.uf ? `/${c.uf}` : ''} — ${xml}`
-    }).join('\n')
-    const extras = clientes.length > 10 ? `\n…e mais ${clientes.length - 10} — veja todos em Empresas.` : ''
-    const avisoSem = semNotas.length
-      ? `\n\nSem XML: ${semNotas.slice(0, 3).map((c) => c.razaoSocial).join(', ')}${semNotas.length > 3 ? ` (+${semNotas.length - 3})` : ''} — importe em Notas Fiscais.`
-      : ''
-    void pergunta
-    // Visual preditivo: inventário com movimento gera a barra por base
-    // automaticamente (reativo ao cadastro: muda o cadastro, muda o gráfico).
-    const pedidoCli = detectarPedidoGrafico(pergunta)
-    let graficoCli: GraficoChat | null = null
-    try {
-      graficoCli = graficoClientes(clientes.map((c) => ({ razaoSocial: c.razaoSocial, fantasia: c.fantasia, base: c.base, qtdNotas: c.qtdNotas })))
-      if (graficoCli && pedidoCli.tipo) graficoCli = aplicarTipoPreferido(graficoCli, pedidoCli.tipo)
-    } catch {
-      graficoCli = null
-    }
-    const sugCli = sugestaoGrafico('Mostra em gráfico os meus clientes por movimento', 'Mostra em tabela os meus clientes por movimento')
-    return {
-      texto:
-        `Você tem **${clientes.length} cliente(s) cadastrado(s)** — **${comNotas.length} com XML**, ${semNotas.length} sem XML:\n${linhas}${extras}${avisoSem}\n\n` +
-        `**Próximo passo:** pergunte pelo movimento — ex.: "tem XML do cliente ${comNotas[0]?.razaoSocial ?? clientes[0].razaoSocial}?", "qual fornecedor me dá mais crédito?" ou "quais reduções nas notas?".` +
-        `${graficoCli ? `\n\n📊 Gráfico **${graficoCli.titulo}** gerado abaixo (altere o modelo no cartão).` : `\n\n${sugCli.frase}`}`,
-      confianca: 1, nivel: 'alta',
-      fontes: ['Base de empresas do sistema', 'XMLs importados (NF-e/NFC-e)'],
-      grafico: graficoCli,
-      sugestoes: ['Tem XML de algum cliente?', 'Qual fornecedor me dá mais crédito?', 'Existe algum produto diferido?', ...sugCli.sugestoes],
-      botoes: [
-        { rotulo: 'Tem XML de algum cliente?', acao: 'perguntar', alvo: 'Tem XML de algum cliente?' },
-        { rotulo: 'Qual fornecedor me dá mais crédito?', acao: 'perguntar', alvo: 'Qual fornecedor me dá mais crédito?' },
-        ...sugCli.botoes,
-        ...botoesDados(),
-      ],
-      pensamento: pensar([PENSAR.entender, PENSAR.consultar(clientes.length), PENSAR.validar], `Clientes: ${clientes.length} (${comNotas.length} com XML)`, Date.now() - t0),
-    }
-  } catch (e) {
-    return {
-      texto: `Não consegui ler os clientes agora (${e instanceof Error ? e.message : 'erro interno'}). Abra Empresas para ver o cadastro.`,
-      confianca: 0.6, nivel: 'media', fontes: [],
-      pensamento: pensar([PENSAR.entender], 'Falha ao ler clientes', Date.now() - t0),
-    }
+  void pergunta
+  return {
+    texto: `O módulo de **Notas Fiscais (XML)** foi removido da ferramenta. Os dados de clientes/notas não estão mais disponíveis.`,
+    confianca: 1, nivel: 'alta', fontes: [],
+    pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Módulo XML removido'),
   }
 }
 
-/**
- * Intenção `dados`: a IA consulta os XMLs e entende vice-versa
- * (cliente → notas, fornecedor/nota → dono). Cobre, com números do motor:
- * - inventário ("tem XML de algum cliente?");
- * - fornecedor que mais dá crédito (entradas, badge Simples/sem-crédito);
- * - produto que gera débito (saídas) / crédito (entradas);
- * - filtros diversos (cliente, fornecedor, produto, NCM, CFOP, CST,
- *   cClassTrib, redução, anexo, direção, período, top N);
- * - diferidos (efetivos 510/515 + condicionais Anexo IX);
- * - reduções encontradas (faixas IBS/CBS com base nas notas);
- * - tributação por NCM (CST, cClassTrib, anexo, reduções).
- * Termina propondo a estrutura do PDF customizado (blocos) + botões.
- */
 async function responderDados(pergunta: string, historico: MensagemHistorico[] = []): Promise<RespostaChat> {
-  const t0 = Date.now()
-  const n = pergunta.toLowerCase()
-  try {
-    const dados = await import('./aurum-ai-dados')
-    const { avaliarAcoesDados } = await import('@/domain/services/acoes-dados')
-    const ctx = contextoBaseDoTurno(historico)
-    // Motor determinístico: todas as ações possíveis + probabilidade real
-    // dado o histórico (ex.: após panorama, "top produtos" → ranking 0.9).
-    const rankingAcoes = avaliarAcoesDados(pergunta, { houveDados: ctx.houveDados })
-    const topAcao = rankingAcoes[0]
-    const trilhaAcoes = rankingAcoes.slice(0, 3).map((a) => `${acaoRotuloCurto(a.acao)} ${a.score.toFixed(2)}`).join(' > ')
-    // Follow-up herda o último escopo de dados ("e desse cliente?", "só as entradas",
-    // "quais top produtos desse cliente?"). Frases curtas concatenam; frases com
-    // anáfora herdam os filtros estruturados (cliente/CNPJ/fornecedor/período).
-    const ehCurto = pergunta.trim().split(/\s+/).length <= 8
-    const perguntaEfetiva = ctx.houveDados && ctx.ultimoFiltroDados && ehCurto
-      ? `${ctx.ultimoFiltroDados} ${pergunta}`
-      : pergunta
-    let filtro = dados.extrairFiltrosDados(perguntaEfetiva)
-    if (ctx.houveDados && ctx.ultimoFiltroDados && dados.temAnaforaFiltro(pergunta) && (filtro.clienteTexto == null || filtro.cnpj == null)) {
-      try {
-        const anterior = dados.extrairFiltrosDados(ctx.ultimoFiltroDados)
-        filtro = dados.mesclarFiltrosComContexto(filtro, anterior)
-      } catch {
-        /* herança é best-effort */
-      }
-    }
-    // Fine-tuning v3 — DE QUAL EMPRESA? Resolve a menção contra o cadastro
-    // ANTES do escopo: única ancora (filtra por ela), ambígua pergunta qual,
-    // não encontrada orienta com quem existe. Sem menção, o escopo segue a
-    // regra vigente (ativa ou todas) e a resposta avisa o recorte.
-    let prefixoEmpresa = ''
-    try {
-      const mencaoEmpresa = filtro.clienteTexto ?? ctx.ultimaEmpresaMencionada ?? null
-      if (mencaoEmpresa) {
-        const { resolverEmpresaAlvo, nomeEmpresa, textoDesambiguacaoEmpresa } = await import('./aurum-ai-empresa')
-        const clientes = await dados.listarClientesComMovimento().catch(() => [])
-        let ativaId: number | null = null
-        try {
-          const v = typeof localStorage !== 'undefined' ? localStorage.getItem('aurum_empresa_ativa_id') : null
-          const idNum = v != null ? Number(v) : NaN
-          ativaId = Number.isFinite(idNum) ? idNum : null
-        } catch { ativaId = null }
-        const res = resolverEmpresaAlvo(mencaoEmpresa, clientes.map((c) => ({ id: c.id, razaoSocial: c.razaoSocial, fantasia: c.fantasia, cnpj: c.cnpj })), ativaId)
-        if (res.tipo === 'ambigua') {
-          return {
-            texto: `${textoDesambiguacaoEmpresa(res)}\n\nDica: mencione o produto junto ("o produto X da empresa 1") ou peça o cálculo ("quanto fica ...?") — eu já prossigo no escopo certo.`,
-            confianca: 0.9, nivel: 'alta',
-            fontes: ['Base de empresas do sistema'],
-            sugestoes: res.candidatas.map((c) => `Da empresa ${nomeEmpresa(c)}: qual fornecedor dá mais crédito?`).slice(0, 3),
-            botoes: botoesDados(),
-            pensamento: pensar([PENSAR.entender, PENSAR.validar], `Dados: empresa ambígua "${mencaoEmpresa}" → desambiguar`, Date.now() - t0),
-          }
-        }
-        if (res.tipo === 'unica') {
-          filtro.clienteTexto = res.candidatas[0].razaoSocial
-          prefixoEmpresa = `**Empresa:** ${nomeEmpresa(res.candidatas[0])}\n\n`
-        } else if (res.tipo === 'nao_encontrada') {
-          const quemTem = clientes.filter((c) => c.qtdNotas > 0).slice(0, 5)
-          return {
-            texto:
-              `Não encontrei nenhuma empresa para "${mencaoEmpresa}" no cadastro.\n\n` +
-              (quemTem.length ? `**Quem TEM XML:** ${quemTem.map((c) => c.razaoSocial).join(', ')}.\n\n` : '') +
-              `Confira o nome (vale parcial — ex.: "Pão Dourado") ou o CNPJ, ou cadastre em Empresas pelo CNPJ. Depois pergunte de novo — ex.: "produtos da <empresa>?".`,
-            confianca: 0.9, nivel: 'alta',
-            fontes: ['Base de empresas do sistema'],
-            sugestoes: ['Quais meus clientes?', 'Tem XML de algum cliente?'],
-            botoes: botoesDados(),
-            pensamento: pensar([PENSAR.entender, PENSAR.validar], `Dados: empresa "${mencaoEmpresa}" não encontrada`, Date.now() - t0),
-          }
-        }
-      }
-    } catch {
-      /* resolução de empresa é best-effort — segue o escopo padrão */
-    }
-    const querFiltros = /quais filtros|que filtros|como filtr|filtrar por|opcoes de filtro|opções de filtro/.test(n)
-
-    const escopo = await dados.notasDoEscopo(filtro)
-    const recorte = dados.rotuloFiltros(filtro)
-
-    // Situação adversa 1: nenhum cliente cadastrado.
-    if (escopo.totalClientes === 0) {
-      return {
-        texto:
-          `Não há **nenhum cliente cadastrado e nenhum XML importado** — não tenho o que consultar.\n\n` +
-          `**Para começar:** 1) cadastre a empresa pelo CNPJ em Empresas; 2) importe os XMLs em Notas Fiscais. Depois pergunte — ex.: "qual fornecedor me dá mais crédito?".`,
-        confianca: 1, nivel: 'alta',
-        fontes: ['Base de empresas do sistema'],
-        sugestoes: ['O que você pode fazer?', 'Quais atividades o CNPJ 53.795.990/0001-68 tem?'],
-        botoes: botoesDados(),
-        pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Dados: zero clientes, zero notas', Date.now() - t0),
-      }
-    }
-    // Situação adversa 2: clientes existem, mas zero notas no escopo geral.
-    if (escopo.notas.length === 0 && !querFiltros) {
-      const todos = await dados.listarClientesComMovimento().catch(() => [])
-      const semNada = todos.every((c) => c.qtdNotas === 0)
-      if (semNada) {
-        return {
-          texto:
-            `Você tem **${escopo.totalClientes} cliente(s)**, mas **nenhum XML importado** ainda — não há movimento para analisar.\n\n` +
-            `Importe os XMLs em Notas Fiscais (o sistema apura IBS/CBS na hora). Depois pergunte — ex.: "tem XML de algum cliente?", "qual produto gera mais débito?".`,
-          confianca: 1, nivel: 'alta',
-          fontes: ['Base de empresas do sistema', 'XMLs importados (NF-e/NFC-e)'],
-          botoes: botoesDados(),
-          pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Dados: clientes sem notas', Date.now() - t0),
-        }
-      }
-      // Cliente específico sem notas (vice-versa responde quem TEM).
-      const comNotas = todos.filter((c) => c.qtdNotas > 0).slice(0, 5)
-      return {
-        texto:
-          `No recorte **${recorte}** não encontrei notas — ${escopo.clienteAlvo ? `o cliente citado não tem XML nesse recorte.` : 'nada casa com esses filtros.'}\n\n` +
-          (comNotas.length ? `**Quem TEM XML:** ${comNotas.map((c) => `${c.razaoSocial} (${c.qtdNotas})`).join(', ')}.\n\n` : '') +
-          `Tente ampliar (tirar o período, trocar o nome) ou veja os filtros que entendo: cliente, fornecedor, produto, NCM, CFOP, CST, cClassTrib, redução, anexo, direção, período, diferidos.`,
-        confianca: 0.9, nivel: 'alta',
-        fontes: ['XMLs importados (NF-e/NFC-e)', 'Base de empresas do sistema'],
-        sugestoes: ['Tem XML de algum cliente?', 'Quais filtros posso usar?'],
-        botoes: [
-          { rotulo: 'Tem XML de algum cliente?', acao: 'perguntar', alvo: 'Tem XML de algum cliente?' },
-          ...botoesDados(),
-        ],
-        pensamento: pensar([PENSAR.entender, PENSAR.validar], `Dados: escopo vazio (${recorte})`, Date.now() - t0),
-      }
-    }
-
-    // "quais filtros posso usar?" — lista as possibilidades.
-    if (querFiltros) {
-      return {
-        texto:
-          `Entendo **todos estes filtros** (podem combinar — ex.: "entradas do fornecedor ACME em janeiro/2026 com redução de 60%"):\n` +
-          dados.FILTROS_SUPORTADOS.map((f) => `• ${f}`).join('\n') +
-          `\n\nNo momento há **${escopo.notas.length} nota(s)** no recorte ${recorte}. Pergunte — ex.: "qual fornecedor me dá mais crédito?" — ou peça o PDF.`,
-        confianca: 1, nivel: 'alta',
-        fontes: ['XMLs importados (NF-e/NFC-e)'],
-        sugestoes: ['Qual fornecedor me dá mais crédito?', 'Existe algum produto diferido?', 'Quais reduções nas notas?'],
-        botoes: [
-          { rotulo: 'Qual fornecedor me dá mais crédito?', acao: 'perguntar', alvo: 'Qual fornecedor me dá mais crédito?' },
-          { rotulo: 'Gerar PDF disso', acao: 'perguntar', alvo: `Gera um PDF com ${recorte || 'todo o movimento'}` },
-        ],
-        pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Dados: lista de filtros', Date.now() - t0),
-      }
-    }
-
-    // Agregações do escopo (números do motor).
-    const resumo = dados.resumirEscopo(escopo.notas)
-    const fornecedores = dados.agregarFornecedores(escopo.notas, filtro.topN)
-    const produtosCred = dados.agregarProdutos(escopo.notas, 'entrada', 5)
-    const produtosDeb = dados.agregarProdutos(escopo.notas, 'saida', 5)
-    const reducoes = dados.agregarReducoes(escopo.notas)
-    const dif = dados.agregarDiferidos(escopo.notas)
-    const ncms = dados.agregarNcm(escopo.notas, 8)
-
-    const partes: string[] = []
-    partes.push(`**${escopo.notas.length} nota(s)** no recorte **${recorte}**${escopo.empresaNomes.length === 1 ? ` — ${escopo.empresaNomes[0]}` : ''} (crédito ${fmtMoeda(resumo.credito)} · débito ${fmtMoeda(resumo.debito)} · **saldo ${fmtMoeda(resumo.saldo)} ${resumo.resultado}**).`)
-
-    // Pergunta específica: fornecedor-crédito.
-    if (/fornecedor|credito|crédito|comprou de|quem.*(da|gera)/.test(n)) {
-      if (!fornecedores.length) {
-        partes.push(`Sem entradas nesse recorte — crédito só se forma em **compras (entradas)**. Tente sem o filtro de vendas.`)
-      } else {
-        const top = fornecedores[0]
-        const linhas = fornecedores.slice(0, 5).map((f, i) =>
-          `${i + 1}. **${f.nome}** — ${f.qtdNotas} nota(s) · base ${fmtMoeda(f.base)} · crédito **${f.simples ? '— (Simples/MEI: sem crédito)' : fmtMoeda(f.creditoTotal)}**`,
-        ).join('\n')
-        partes.push(`**Quem mais te dá crédito:** ${top.simples ? `**${top.nome}** aparece no topo por volume, mas é Simples/MEI — **não transfere crédito**. O maior crédito apropriável é de outro fornecedor abaixo.` : `**${top.nome}** com ${fmtMoeda(top.creditoTotal)}.`}\n${linhas}`)
-      }
-    }
-    // Pergunta específica: produto débito/crédito.
-    // Cobre todas as formas: "top produtos", "mais vendidos/comprados",
-    // "geraram crédito/débito", "lista os produtos vendidos", "ranking".
-    const vocabProduto = /produto|debito|débito|vendi|vendeu|vendidos?|comprei|comprou|comprados?|top|ranking|lista/.test(n)
-    const motorQuerProduto =
-      topAcao.acao === 'ranking_produtos_geral' ||
-      topAcao.acao === 'ranking_produtos_credito' ||
-      topAcao.acao === 'ranking_produtos_debito' ||
-      topAcao.acao === 'listar_produtos'
-    if ((vocabProduto || motorQuerProduto) && !/fornecedor|credito.*fornecedor/.test(n)) {
-      const bloco = (titulo: string, lista: typeof produtosDeb): string =>
-        lista.length
-          ? `${titulo}:\n${lista.slice(0, 5).map((p, i) => `${i + 1}. **${p.nome.slice(0, 44)}** (${p.direcao === 'entrada' ? 'compra' : 'venda'}${p.ncm ? ` · NCM ${p.ncm}` : ''}) — base ${fmtMoeda(p.base)} · IBS+CBS **${fmtMoeda(p.trib)}**`).join('\n')}`
-          : `${titulo}: — (sem movimento nesse recorte).`
-      if (filtro.direcao !== 'saida') partes.push(bloco('**Produtos que geram crédito (compras)**', produtosCred))
-      if (filtro.direcao !== 'entrada') partes.push(bloco('**Produtos que geram débito (vendas)**', produtosDeb))
-    }
-    // Pergunta específica: diferidos.
-    if (/diferid/.test(n)) {
-      if (!dif.efetivos.length && !dif.condicionais.length) {
-        partes.push(`**Nenhum produto diferido** nesse recorte — tudo é tributação normal ou com redução (diferimento efetivo = CST 510/515).`)
-      } else {
-        if (dif.efetivos.length) {
-          partes.push(`**Diferidos efetivos (${dif.efetivos.length}):**\n${dif.efetivos.slice(0, 5).map((x) => `• **${x.nome.slice(0, 40)}** (NCM ${x.ncm || '—'} · CST ${x.cst}/${x.cct}) — base ${fmtMoeda(x.base)}`).join('\n')}`)
-        }
-        if (dif.condicionais.length) {
-          partes.push(`**Anexo IX condicional (${dif.condicionais.length} — diferimento só se a operação se enquadrar, art. 138 §2º):**\n${dif.condicionais.slice(0, 3).map((x) => `• ${x.nome.slice(0, 40)} (CST ${x.cst}/${x.cct})`).join('\n')}`)
-        }
-      }
-    }
-    // Pergunta específica: reduções.
-    if (/reducao|redução|isento|beneficio|anexo/.test(n) && !/fornecedor|diferid/.test(n)) {
-      partes.push(`**Reduções encontradas (com base nas notas):**\n${reducoes.slice(0, 6).map((r) => `• ${r.rotulo} — ${r.itens} item(ns) · base ${fmtMoeda(r.base)}`).join('\n') || '—'}`)
-    }
-    // Pergunta genérica/inventário ("tem XML de algum cliente?"): panorama.
-    const ehPanorama = /tem .*xml|algum cliente|alguma nota|quantas notas|quais clientes.*(tem|com)|panorama|resumo|tudo|geral/.test(n) && !/fornecedor|produto|diferid|reducao|redução|ncm|cst|cfop/.test(n)
-    if (ehPanorama || (!/fornecedor|produto|diferid|reducao|redução|ncm|cst|cfop|debito|débito|credito|crédito/.test(n))) {
-      if (fornecedores.length) {
-        const top = fornecedores[0]
-        partes.push(`**Top crédito:** ${top.nome} — ${top.simples ? 'Simples (sem crédito)' : fmtMoeda(top.creditoTotal)}.`)
-      }
-      const topDeb = produtosDeb[0]
-      const topCred = produtosCred[0]
-      if (topCred) partes.push(`**Top compra (crédito):** ${topCred.nome.slice(0, 40)} — ${fmtMoeda(topCred.trib)}.`)
-      if (topDeb) partes.push(`**Top venda (débito):** ${topDeb.nome.slice(0, 40)} — ${fmtMoeda(topDeb.trib)}.`)
-      if (reducoes.length) partes.push(`**Reduções:** ${reducoes.slice(0, 3).map((r) => r.rotulo).join(' · ')}.`)
-      if (dif.efetivos.length) partes.push(`**Diferidos:** sim — ${dif.efetivos.length} NCM(s) com diferimento efetivo. Pergunte "quais produtos diferidos?" para a lista.`)
-      if (ncms.length) partes.push(`**NCMs no recorte:** ${ncms.length} distinto(s), maior base ${ncms[0].ncm} (CST ${ncms[0].cst}/${ncms[0].cct}).`)
-    }
-    // NCM/CST/CFOP explícitos: detalha a tributação do recorte.
-    if (/ncm|cst|cclasstrib|cct|cfop|tributacao por/.test(n) && ncms.length) {
-      partes.push(`**Tributação por NCM (top):**\n${ncms.slice(0, 5).map((x) => `• NCM ${x.ncm} (${x.exemplo.slice(0, 30)}) — CST ${x.cst}/${x.cct} · red. ${x.redIBS}%/${x.redCBS}% · base ${fmtMoeda(x.base)}`).join('\n')}`)
-    }
-
-    // Proposta de PDF customizado (estrutura programada no padrão do sistema).
-    const { blocosParaPergunta, descreverEstrutura } = await import('./aurum-ai-dados-pdf')
-    const blocos = blocosParaPergunta(pergunta, filtro)
-    const estrutura = descreverEstrutura(blocos)
-    partes.push(`**Posso gerar um PDF customizado disso** (layout do sistema: timbrado + KPIs + veredito):\n${estrutura.map((s, i) => `${i + 1}. ${s}`).join('\n')}\nDiga "gera um PDF disso" e escolha o formato.`)
-
-    // Congela o escopo para o turno 2 (números do motor, não da conversa).
-    const { FILTRO_DADOS_VAZIO: _v } = dados
-    void _v
-    const payload = {
-      titulo: `Aurum AI — dados (${recorte.slice(0, 60) || 'movimento'})`,
-      escopo: recorte,
-      empresaNome: escopo.empresaNomes.length === 1 ? escopo.empresaNomes[0] : `${escopo.empresaNomes.length} empresas`,
-      qtdNotas: escopo.notas.length,
-      filtro,
-      resumo,
-      fornecedores,
-      produtos: [...produtosCred, ...produtosDeb].sort((a, b) => b.trib - a.trib).slice(0, 10),
-      reducoes,
-      diferidosEfetivos: dif.efetivos,
-      diferidosCondicionais: dif.condicionais,
-      ncms,
-      blocos,
-      geradoEm: new Date().toLocaleString('pt-BR'),
-    }
-
-    // Visual preditivo e reativo: toda consulta de dados com escopo gera o
-    // artefato do recorte automaticamente (fornecedor/produto/diferido/
-    // redução/NCM/evolução/confronto/panorama), a partir dos números do
-    // motor. O pedido explícito ("em pizza", "em tabela") só escolhe o
-    // modelo inicial; sem pedido, o roteador escolhe o recorte da pergunta.
-    const pedidoDados = detectarPedidoGrafico(perguntaEfetiva)
-    let graficoDados: GraficoChat | null = null
-    try {
-      // Evolução/confronto precisam de agregações temporais sobre as notas.
-      let evolucao: Array<{ rotulo: string; baseEntradas: number; baseSaidas: number }> | undefined
-      let confronto: { antigo: number; novo: number; icms: number; pisCofins: number; ibs: number; cbs: number } | undefined
-      const nEfetiva = perguntaEfetiva.toLowerCase()
-      if (/evolucao|evolução|mensal|ao longo|tendencia/.test(nEfetiva)) {
-        try {
-          const { evolucaoMensal } = await import('@/application/nfe-insights')
-          evolucao = evolucaoMensal(escopo.notas as never, 12) as unknown as NonNullable<typeof evolucao>
-        } catch {
-          evolucao = undefined
-        }
-      }
-      if (/confronto|antigo.*novo|regime antigo/.test(nEfetiva)) {
-        try {
-          const { confrontoRegimes } = await import('@/application/nfe-insights')
-          confronto = confrontoRegimes(escopo.notas as never) as unknown as NonNullable<typeof confronto>
-        } catch {
-          confronto = undefined
-        }
-      }
-      graficoDados = planejarGraficoDados(
-        perguntaEfetiva,
-        {
-          fornecedores,
-          produtosCred,
-          produtosDeb,
-          reducoes,
-          diferidosEfetivos: dif.efetivos,
-          diferidosCondicionais: dif.condicionais,
-          ncms,
-          resumo,
-          evolucao,
-          confronto,
-        },
-        pedidoDados.tipo,
-      )
-    } catch {
-      graficoDados = null
-    }
-    const sugDados = sugestaoGrafico(alvoGraficoDados(recorte))
-    if (graficoDados) {
-      partes.push(`📊 Gráfico **${graficoDados.titulo}** gerado abaixo (altere pizza/barras/linha/tabela no cartão).`)
-    } else {
-      partes.push(sugDados.frase)
-    }
-
-    return {
-      texto: `${prefixoEmpresa}${partes.join('\n\n')}`,
-      confianca: 0.95, nivel: 'alta',
-      fontes: ['XMLs importados (NF-e/NFC-e)', 'Vínculos oficiais da Reforma (CST × cClassTrib)', 'Base de empresas do sistema'],
-      grafico: graficoDados,
-      sugestoes: ['Gera um PDF disso', 'Existe algum produto diferido?', 'Quais reduções nas notas?', ...sugDados.sugestoes],
-      botoes: [
-        { rotulo: 'Gerar PDF disso', acao: 'perguntar', alvo: `Gera um PDF com ${recorte || 'todo o movimento'}` },
-        { rotulo: 'Quais filtros posso usar?', acao: 'perguntar', alvo: 'Quais filtros posso usar?' },
-        ...sugDados.botoes,
-        ...botoesDados(),
-      ],
-      relatorioOpcoes: {
-        base: 'dados',
-        dados: { titulo: payload.titulo, pergunta, escopo: recorte, geradoEm: payload.geradoEm, payload },
-      },
-      pensamento: pensar(
-        [PENSAR.entender, PENSAR.consultar(escopo.notas.length), PENSAR.analisar, PENSAR.validar],
-        `Dados reais → ${escopo.notas.length} nota(s) · ${recorte} · ações: ${trilhaAcoes}`,
-        Date.now() - t0,
-      ),
-    }
-  } catch (e) {
-    return {
-      texto: `Não consegui consultar seus dados agora (${e instanceof Error ? e.message : 'erro interno'}). Abra Notas Fiscais para ver as notas importadas.`,
-      confianca: 0.6, nivel: 'media', fontes: [],
-      botoes: botoesDados(),
-      pensamento: pensar([PENSAR.entender], 'Falha ao consultar dados', Date.now() - t0),
-    }
+  void pergunta; void historico
+  return {
+    texto: `O módulo de **Notas Fiscais (XML)** foi removido da ferramenta. Consultas de dados sobre XMLs não estão mais disponíveis.`,
+    confianca: 1, nivel: 'alta', fontes: [],
+    pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Módulo XML removido'),
   }
 }
-
-/* -------------------------------------------------------- relatórios -- */
 
 function botoesFormato(): BotaoChat[] {
   return [
@@ -4070,71 +3612,6 @@ export function montarRelatorioCalculo(d: DadosCalculo, formato: FormatoRelatori
  * PDF sai pelo motor pdfMake (`exportarRelatorioDadosPDF` em
  * `aurum-ai-dados-pdf.ts`); aqui CSV/JSON/TXT em memória + nome do PDF.
  */
-export function montarRelatorioDados(d: DadosConsulta, formato: FormatoRelatorio): RelatorioChat {
-  const dia = new Date().toISOString().slice(0, 10)
-  const nomeBase = `aurum-ai-dados-${dia}`
-  if (formato === 'pdf') {
-    return { nome: `${nomeBase}.pdf`, conteudo: '', mime: 'application/pdf', tamanho: 0 }
-  }
-  if (formato === 'json') {
-    const conteudo = JSON.stringify(
-      {
-        geradoEm: d.geradoEm, geradoPor: 'Aurum AI', tipo: 'dados' as const,
-        titulo: d.titulo, pergunta: d.pergunta, escopo: d.escopo,
-        resumo: d.payload.resumo,
-        fornecedores: d.payload.fornecedores,
-        produtos: d.payload.produtos,
-        reducoes: d.payload.reducoes,
-        diferidosEfetivos: d.payload.diferidosEfetivos,
-        diferidosCondicionais: d.payload.diferidosCondicionais,
-        ncms: d.payload.ncms,
-        blocos: d.payload.blocos,
-        aviso: 'Valores estimados a partir dos XMLs importados — confirme com o contador.',
-      },
-      null, 2,
-    )
-    return { nome: `${nomeBase}.json`, conteudo, mime: 'application/json', tamanho: conteudo.length }
-  }
-  if (formato === 'txt') {
-    const p = d.payload
-    const linhas = [
-      d.titulo,
-      `Escopo: ${d.escopo} · ${p.qtdNotas} nota(s) · Gerado em ${d.geradoEm}`,
-      ``,
-      `Crédito (entradas): ${fmtMoeda(p.resumo.credito)} · Débito (saídas): ${fmtMoeda(p.resumo.debito)} · Saldo: ${fmtMoeda(p.resumo.saldo)} (${p.resumo.resultado})`,
-      ...(p.fornecedores.length ? [``, `Fornecedores por crédito:`, ...p.fornecedores.slice(0, 8).map((f) => `- ${f.nome}${f.simples ? ' [Simples · sem crédito]' : ''}: ${fmtMoeda(f.creditoTotal)} (${f.qtdNotas} notas)`)] : []),
-      ...(p.produtos.length ? [``, `Produtos:`, ...p.produtos.slice(0, 10).map((x) => `- ${x.nome} (${x.direcao === 'entrada' ? 'compra' : 'venda'}): ${fmtMoeda(x.trib)}`)] : []),
-      ...(p.reducoes.length ? [``, `Reduções:`, ...p.reducoes.map((r) => `- ${r.rotulo}: base ${fmtMoeda(r.base)}`)] : []),
-      `Aviso: valores estimados — confirme com o contador.`,
-    ]
-    const conteudo = linhas.join('\n')
-    return { nome: `${nomeBase}.txt`, conteudo, mime: 'text/plain;charset=utf-8', tamanho: conteudo.length }
-  }
-  const p = d.payload
-  const linhas: string[][] = [
-    [d.titulo, d.escopo, d.geradoEm],
-    [],
-    ['Bloco', 'Linha', 'Valor (R$)'],
-    ['Apuração', `Crédito (${p.resumo.entradas} entradas)`, p.resumo.credito.toFixed(2)],
-    ['Apuração', `Débito (${p.resumo.saidas} saídas)`, p.resumo.debito.toFixed(2)],
-    ['Apuração', `Saldo (${p.resumo.resultado})`, p.resumo.saldo.toFixed(2)],
-    ...p.fornecedores.slice(0, 8).map((f): string[] => ['Fornecedor', `${f.nome}${f.simples ? ' [Simples]' : ''}`, f.creditoTotal.toFixed(2)]),
-    ...p.produtos.slice(0, 10).map((x): string[] => ['Produto', `${x.nome} (${x.direcao})`, x.trib.toFixed(2)]),
-    ...p.reducoes.map((r): string[] => ['Redução', r.rotulo, r.base.toFixed(2)]),
-  ]
-  const conteudo = montarCSV(linhas)
-  return { nome: `${nomeBase}.csv`, conteudo, mime: 'text/csv;charset=utf-8', tamanho: conteudo.length }
-}
-
-/**
- * Turno 1 do relatório: entende QUAL relatório (conversa/cálculo/Simples/
- * NF-e/produtos/DADOS) pelo texto + contexto, congela os dados e pergunta o
- * formato (sem payload). O clique resolve síncrono na UI (turno 2).
- *
- * Novidade: pedido SOBRE o movimento ("relatório dos XMLs", "PDF disso",
- * "relatório dos fornecedores/produtos") consulta os dados reais via
- * `responderDados` — o PDF customizado sai no padrão do sistema.
- */
 async function responderRelatorio(pergunta: string, historico: MensagemHistorico[]): Promise<RespostaChat> {
   const n = pergunta.toLowerCase()
   const ctx = contextoBaseDoTurno(historico)
@@ -4155,22 +3632,10 @@ async function responderRelatorio(pergunta: string, historico: MensagemHistorico
   }
   if (/sped|efd/.test(n)) {
     return {
-      texto: `O relatório do SPED sai no módulo de origem com seus arquivos reais. Aqui gero só conversa e cálculos.`,
+      texto: `O módulo SPED foi removido da ferramenta. Aqui gero só conversa e cálculos.`,
       confianca: 1, nivel: 'alta', fontes: [],
-      botoes: [{ rotulo: 'Ir para Lote', acao: 'navegar', alvo: 'lote' }],
-      pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Relatório: módulo dono (SPED)'),
+      pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Relatório: módulo removido'),
     }
-  }
-  if (/nfe|nfc|xml|nota fiscal/.test(n) && !falaDeDados && !ctx.houveDados) {
-    return {
-      texto: `O relatório de notas sai em **Notas Fiscais (XML)** (PDF/CSV com apuração real). Aqui gero conversa e cálculos.`,
-      confianca: 1, nivel: 'alta', fontes: [],
-      botoes: [{ rotulo: 'Ir para Notas Fiscais', acao: 'navegar', alvo: 'nfe' }],
-      pensamento: pensar([PENSAR.entender, PENSAR.validar], 'Relatório: módulo dono (NF-e)'),
-    }
-  }
-  if (/nfe|nfc|xml|nota fiscal/.test(n)) {
-    return responderDados(pergunta, historico)
   }
   if (/das|simples|anexo|dessa simula/.test(n) && !querConversa) {
     // "dessa simulação (do Simples)" + contexto numérico → relatório customizado

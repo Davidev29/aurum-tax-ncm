@@ -37,7 +37,6 @@ const LOJA_BACKUP: StoreName[] = [
   'cfop',
   'cstIcms',
   'cstPisCofins',
-  'nfeNotas',
   'reclassificacoesManuais',
   'classificacaoProduto',
   'anexos',
@@ -72,7 +71,6 @@ export interface Backup {
   cfop: unknown[]
   cstIcms: unknown[]
   cstPisCofins: unknown[]
-  nfeNotas: unknown[]
   reclassificacoesManuais?: unknown[]
   classificacaoProduto?: unknown[]
   anexos?: unknown[]
@@ -122,7 +120,7 @@ export async function montarBackup(): Promise<Backup> {
       return []
     }
   }
-  const [ncm, cst, cstClassTrib, referencia, nbs, cest, auditLog, ncmNomenclatura, empresas, produtos, cfop, cstIcms, cstPisCofins, nfeNotas, reclassificacoesManuais, classificacaoProduto, anexos, produtosDfe, iaFeedback] =
+  const [ncm, cst, cstClassTrib, referencia, nbs, cest, auditLog, ncmNomenclatura, empresas, produtos, cfop, cstIcms, cstPisCofins, reclassificacoesManuais, classificacaoProduto, anexos, produtosDfe, iaFeedback] =
     await Promise.all([
       ler('ncm', db.ncm.toArray() as Promise<unknown[]>),
       ler('cst', db.cst.toArray() as Promise<unknown[]>),
@@ -137,7 +135,6 @@ export async function montarBackup(): Promise<Backup> {
       ler('cfop', db.cfop.toArray() as Promise<unknown[]>),
       ler('cstIcms', db.cstIcms.toArray() as Promise<unknown[]>),
       ler('cstPisCofins', db.cstPisCofins.toArray() as Promise<unknown[]>),
-      ler('nfeNotas', db.nfeNotas.toArray() as Promise<unknown[]>),
       ler('reclassificacoesManuais', db.reclassificacoesManuais.toArray() as Promise<unknown[]>),
       ler('classificacaoProduto', db.classificacaoProduto.toArray() as Promise<unknown[]>),
       ler('anexos', db.table('anexos').toArray() as Promise<unknown[]>),
@@ -178,7 +175,6 @@ export async function montarBackup(): Promise<Backup> {
     cfop,
     cstIcms,
     cstPisCofins,
-    nfeNotas,
     reclassificacoesManuais,
     classificacaoProduto,
     anexos,
@@ -231,7 +227,6 @@ export async function restaurarBackup(b: Backup, opts?: { confirmarParcial?: boo
     ['cfop', b.cfop],
     ['cstIcms', b.cstIcms],
     ['cstPisCofins', b.cstPisCofins],
-    ['nfeNotas', b.nfeNotas],
     ['reclassificacoesManuais', b.reclassificacoesManuais],
     ['classificacaoProduto', b.classificacaoProduto],
     ['anexos', b.anexos],
@@ -291,7 +286,6 @@ export async function restaurarBackup(b: Backup, opts?: { confirmarParcial?: boo
   enfileirar('cfop', b.cfop)
   enfileirar('cstIcms', b.cstIcms)
   enfileirar('cstPisCofins', b.cstPisCofins)
-  enfileirar('nfeNotas', b.nfeNotas)
   enfileirar('reclassificacoesManuais', b.reclassificacoesManuais)
   enfileirar('classificacaoProduto', b.classificacaoProduto)
   enfileirar('anexos', b.anexos)
