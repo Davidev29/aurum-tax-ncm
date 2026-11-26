@@ -1,9 +1,19 @@
 # Proposta de Refatoração Completa — Módulo Simples Nacional
 
-> **Status:** proposta (nenhum arquivo de código foi alterado)  
+> **Status:** proposta **implementada** em 26/11/2026 — ver §"Status de implementação" abaixo  
 > **Data:** 2026-11-26  
 > **Alvo:** `src/simples/` (núcleo), `src/simples-projection/` (projeção), `src/application/aurum-ai-*` (chat/IA)  
 > **Fluxo agentico executado:** 4 agentes em paralelo — (1) mapeamento do módulo, (2) diagnóstico arquitetural, (3) impacto da obrigatoriedade do Fator R, (4) proposta de UX/exibição de resultados. Este documento é a consolidação dos quatro relatórios.
+
+---
+
+## Status de implementação (26/11/2026)
+
+**Implementado:** fases 0–7 do plano — testes de caracterização, extração de widgets, `cena.ts` como fonte única de derivação, hooks de wizard/relatório/exportação, Fator R obrigatório com guarda pura e flags na store, wizard e resultado redesenhados, invalidação centralizada e suíte de testes. `page.tsx` passou de ~1.717 para ~630 linhas; o resultado segue `Veredito → Memória → Composição → Cenários → Ações`, com o DAS como primeiro elemento e veredito do Fator R ao vivo na entrada.
+
+**Verificação:** `npx tsc --noEmit` limpo; `npm test` → 147 arquivos, 1.701 testes passando (1 skippado).
+
+**Fora desta rodada (decisões pendentes da §3.5):** chat Aurum AI, coletor exploratório e projeção mãe × nova mantiveram o comportamento anterior (folha opcional/opt-in), para não invalidar os vetores de conversa já existentes. Relatório, insights e exports seguem registrando a folha; a guarda nova garante que ela esteja sempre informada no módulo.
 
 ---
 

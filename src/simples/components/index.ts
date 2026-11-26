@@ -1,0 +1,13 @@
+/** Barrel dos componentes isolados do módulo Simples Nacional. */
+export { BarraReparticao } from './BarraReparticao'
+export { CampoMoeda } from './CampoMoeda'
+export { CartaoFatorR, LinhaFatorR } from './CartaoFatorR'
+export { CartaoVeredito } from './CartaoVeredito'
+export { DespesaValor } from './DespesaValor'
+export { EtapaValores } from './EtapaValores'
+export { LimiteErroGrafico } from './LimiteErroGrafico'
+export { Passo } from './Passo'
+export { ResultadoSimples } from './ResultadoSimples'
+export { SeletorRegraCredito, OPCOES_REGRA } from './SeletorRegraCredito'
+export { Stepper } from './Stepper'
+export { SubCard } from './SubCard'

@@ -603,7 +603,7 @@ Sanitiza glifos não suportados pela Roboto embutida (✓, ⚠, ✕, setas, −,
 ## 20. UI / FLUXO DO USUÁRIO
 
 ### Wizard de 3 etapas
-1. **Valores base**: RBT12 (máscara moeda, teto 4,8M), Receita do mês, Sublimite automático (badge verde/âmbar), Folha 12m (opcional, Fator R), previsão III/V. Valida `RBT12>0 && receitaMes>0`.
+1. **Valores base**: RBT12 (máscara moeda, teto 4,8M), Receita do mês, Sublimite automático (badge verde/âmbar), Folha 12m (**obrigatória**, Fator R — guarda `exigirFolha12` em `src/domain/simples/validacao.ts`), veredito III/V ao vivo. Valida `RBT12>0 && receitaMes>0 && folha12 informada`.
 2. **Anexo / Atividade**:
    - Manual: grade 2×5 de anexos I–V.
    - CNPJ: input CNPJ + Buscar; razão social; lista aberta de CNAEs; atividade focada; NBS informativos.

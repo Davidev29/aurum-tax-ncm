@@ -5,8 +5,8 @@
  * Fluxo em etapas (refino):
  * - Passo 1: escolher Anexo (manual) ou CNPJ+CNAE (automático).
  *   Restante só aparece após essa escolha.
- * - Folha (Fator R) só aparece quando Anexo V está envolvido:
- *   manual com V, ou CNAE que traz V.
+ * - Folha 12m é coletada em TODAS as simulações (I–V, manual ou CNPJ);
+ *   o Fator R só altera o anexo quando a atividade é sujeita (III/V).
  * - Relatório lateral só após "Visualizar cálculo com Aurum AI".
  * - Híbrido só quando o usuário opta por comparar.
  */
@@ -25,7 +25,12 @@ import {
   type ResultadoHibrido,
 } from './calculo';
 import { fatorCreditoDespesa } from '@/domain/simples/creditos';
-import { exigirRbtReceita } from '@/domain/simples/validacao';
+import {
+  exigirFolha12,
+  exigirRbtReceita,
+  validarFolhaObrigatoria,
+  type ParamsValidacaoFatorR,
+} from '@/domain/simples/validacao';
 import { codigo7De } from '@/domain/services/cnae';
 import {
   ANO_REFERENCIA_PADRAO,
@@ -88,7 +93,13 @@ interface SimplesState {
   escolheuAnexo: boolean;
   rbt12: number;
   receitaMes: number;
+  /** Compatibilidade: 0 continua sendo o estado "não informado" na store. */
   folha12: number;
+  /** Auditoria: folha > 0 informada explicitamente (ou confirmada como zero). */
+  folhaInformada: boolean;
+  semFolhaConfirmado: boolean;
+  /** false = Anexo III puro / atividade dispensada do Fator R. */
+  sujeitaFatorR: boolean;
   rba: number;
   usarRba: boolean;
   cbsRef: number;
@@ -252,13 +263,49 @@ export function refsForaDoAnexo(anexoId: AnexoSimplesId): Array<'ICMS' | 'ISS'> 
   return out;
 }
 
-export const useSimples = create<SimplesState>((set, get) => ({
+/**
+ * Chaves que representam ENTRADA do usuário. Qualquer uma delas invalida o
+ * relatório publicado. Resultados (`convencional`, `hibrido`, `debitosCBS`,
+ * `creditosCBS`) NUNCA são apagados por invalidação — o botão Editar depende
+ * deles mesmo com o relatório escondido.
+ */
+const CHAVES_DE_ENTRADA = new Set<keyof SimplesState>([
+  'modo',
+  'anexoId',
+  'escolheuAnexo',
+  'rbt12',
+  'receitaMes',
+  'folha12',
+  'folhaInformada',
+  'semFolhaConfirmado',
+  'sujeitaFatorR',
+  'rba',
+  'usarRba',
+  'cbsRef',
+  'aliqRefICMS',
+  'aliqRefISS',
+  'despesas',
+  'compararHibrido',
+  'cnpj',
+  'buscandoCnpj',
+  'empresaNome',
+  'opcaoSimples',
+  'opcoes',
+  'cnaeEscolhido',
+  'segAtivo',
+  'segParcelas',
+]);
+
+export const useSimples = create<SimplesState>((rawSet, get) => ({
   modo: 'manual',
   anexoId: 'I',
   escolheuAnexo: false,
   rbt12: 0,
   receitaMes: 0,
   folha12: 0,
+  folhaInformada: false,
+  semFolhaConfirmado: false,
+  sujeitaFatorR: true,
   rba: 0,
   usarRba: false,
   cbsRef: CBS_REF_PADRAO,
@@ -281,37 +328,76 @@ export const useSimples = create<SimplesState>((set, get) => ({
   segParcelas: [],
 
   set: (p) => {
-    // Trocar de modo esconde o relatório (novo passo 1).
+    const proximo: Partial<SimplesState> = { ...p };
+
+    // (b) Folha informada automaticamente quando o valor é > 0. Isso mantém
+    // compatibilidade com quem usa `setState({ folha12: X })` sem flags: a
+    // guarda de domínio também trata folha > 0 como informada.
+    if (Object.prototype.hasOwnProperty.call(p, 'folha12')) {
+      const folha = Number(p.folha12);
+      if (Number.isFinite(folha) && folha > 0) proximo.folhaInformada = true;
+      else if (!(p.folhaInformada === true || p.semFolhaConfirmado === true)) proximo.folhaInformada = false;
+    }
+
+    // (a) Invalidação centralizada: NUNCA mexe em convencional/hibrido.
+    if (Object.keys(proximo).some((k) => CHAVES_DE_ENTRADA.has(k as keyof SimplesState))) {
+      proximo.relatorioVisivel = false;
+    }
+
+    // Comportamento especial preservado: trocar de modo reabre o passo 1.
     if (p.modo && p.modo !== get().modo) {
-      set({ ...p, relatorioVisivel: false });
+      rawSet({ ...proximo, relatorioVisivel: false });
       return;
     }
-    set(p);
+    rawSet(proximo);
   },
 
   setAnexo: (a) => {
-    set({ anexoId: a, escolheuAnexo: true, relatorioVisivel: false });
+    get().set({ anexoId: a, escolheuAnexo: true, relatorioVisivel: false });
   },
 
   setDespesas: (d) => {
-    set({ despesas: d, relatorioVisivel: false });
+    get().set({ despesas: d, relatorioVisivel: false });
   },
 
-  tocarEntrada: () => set({ relatorioVisivel: false }),
+  tocarEntrada: () => get().set({ relatorioVisivel: false }),
 
   calcular: () => {
     const s = get();
-    // Guarda fail-closed (fonte: `@/domain/simples/validacao`): Infinity,
-    // <= 0 ou RBT12 > 4.8M geram mensagem explícita e NUNCA DAS 0 exibível
-    // (relatório escondido, resultados zerados).
+    // Entrada da guarda da folha: no modo CNPJ usamos os anexos do CNAE
+    // escolhido; no manual, o anexo selecionado. Flags de auditoria viajam
+    // junto para o domínio decidir sujeição sem depender da UI.
+    const opCnpj = s.modo === 'cnpj' && s.cnaeEscolhido ? s.opcoes.find((o) => o.cnae7 === s.cnaeEscolhido) : undefined;
+    const entradaFolha: ParamsValidacaoFatorR = {
+      folha12: s.folha12,
+      folhaInformada: s.folhaInformada,
+      semFolhaConfirmado: s.semFolhaConfirmado,
+      rbt12: s.rbt12,
+      anexos: s.modo === 'cnpj' ? (opCnpj?.anexos ?? []) : [s.anexoId],
+      cnaeFatorR: Boolean(opCnpj?.exigeFatorR || opCnpj?.tabela?.fatorR),
+      sujeitaFatorR: s.sujeitaFatorR,
+    };
+    // Guardas fail-closed (fonte: `@/domain/simples/validacao`): Infinity,
+    // <= 0, RBT12 > 4.8M e folha ausente/inválida geram mensagem explícita e
+    // NUNCA DAS 0 exibível (relatório escondido, resultados zerados).
     try {
       exigirRbtReceita(s.rbt12, s.receitaMes);
+      exigirFolha12(entradaFolha);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      const codigo = msg.split(':')[0];
+      const msgFolha =
+        codigo === 'folha12-invalida'
+          ? 'Não foi possível calcular: folha 12m inválida. Use um número maior ou igual a zero (ex.: 150000).'
+          : codigo === 'rbt12-invalido'
+            ? 'Não foi possível calcular: folha 12m não validada — informe RBT12 maior que zero.'
+            : 'Não foi possível calcular: folha 12m não informada. Volte à etapa 1 e preencha o campo.';
       toast(msg.startsWith('desenquadramento-simples')
         ? 'RBT12 acima de R$ 4.800.000: empresa desenquadrada do Simples — revise os valores.'
-        : 'Informe RBT12 e receita do mês maiores que zero para calcular o DAS.', 'warn');
-      set({ convencional: null, hibrido: null, debitosCBS: 0, creditosCBS: 0, relatorioVisivel: false });
+        : msg.startsWith('rbt12-') || msg.startsWith('receita-')
+          ? 'Informe RBT12 e receita do mês maiores que zero para calcular o DAS.'
+          : msgFolha, 'warn');
+      rawSet({ convencional: null, hibrido: null, debitosCBS: 0, creditosCBS: 0, relatorioVisivel: false });
       return;
     }
     // Sublimite estadual (passo 1): RBT12/RBA acima de R$ 3,6M tira
@@ -319,9 +405,11 @@ export const useSimples = create<SimplesState>((set, get) => ({
     // sozinho (o usuário pode desmarcar) — é o cálculo que faz sentido.
     const estourado = sublimiteEstourado(s);
     const comparar = s.compararHibrido || estourado;
-    // Fator R SOMENTE quando Anexo V envolvido.
+    // Fator R SOMENTE quando a sujeição foi confirmada pelo domínio (III/V
+    // sujeitos). Fora disso a folha fica registrada, sem efeito no anexo.
+    const validacaoFolha = validarFolhaObrigatoria(entradaFolha);
     let anexoEfetivo = s.anexoId;
-    if (envolveAnexoV(s) && s.folha12 > 0 && s.rbt12 > 0) {
+    if (validacaoFolha.aplicavel && s.rbt12 > 0) {
       anexoEfetivo = fatorR(s.folha12, s.rbt12).anexo;
     }
     const conv = calcularConvencional({
@@ -332,15 +420,17 @@ export const useSimples = create<SimplesState>((set, get) => ({
       aliqRefICMS: s.aliqRefICMS,
       aliqRefISS: s.aliqRefISS,
     });
+    // Publicação usa o setter cru: `compararHibrido` é chave de entrada e,
+    // pelo `set` público, esconderia o relatório que acabamos de calcular.
     if (!comparar) {
-      set({ convencional: conv, hibrido: null, debitosCBS: 0, creditosCBS: 0, relatorioVisivel: true });
+      rawSet({ convencional: conv, hibrido: null, debitosCBS: 0, creditosCBS: 0, relatorioVisivel: true });
       return;
     }
     const debitos = debitoCBS(s.receitaMes, 'cheia', s.cbsRef);
     const creditos =
       Math.round(s.despesas.reduce((acc, d) => acc + (Number(d.valor) || 0) * (Number(s.cbsRef) || 0) * fatorDespesa(d), 0) * 100) / 100;
     const hib = calcularHibrido({ convencional: conv, debitosCBS: debitos, creditosCBS: creditos });
-    set({ convencional: conv, hibrido: hib, debitosCBS: debitos, creditosCBS: creditos, relatorioVisivel: true, compararHibrido: comparar });
+    rawSet({ convencional: conv, hibrido: hib, debitosCBS: debitos, creditosCBS: creditos, relatorioVisivel: true, compararHibrido: comparar });
   },
 
   buscarPorCnpj: async (opts) => {
@@ -353,7 +443,7 @@ export const useSimples = create<SimplesState>((set, get) => ({
     // Ano de referência do enriquecimento NBS (09-04, default 2033 — regime
     // pleno). Só precifica o bloco INFORMATIVO; o DAS (`calculo.ts`) nem vê.
     const ano = normalizarAnoReferencia(opts?.anoReferencia ?? ANO_REFERENCIA_PADRAO);
-    set({ buscandoCnpj: true });
+    get().set({ buscandoCnpj: true });
     try {
       const dados = await buscarCnpj(dig);
       const todos: { codigo: string; descricao: string; principal: boolean }[] = [];
@@ -414,7 +504,7 @@ export const useSimples = create<SimplesState>((set, get) => ({
       // Fluxo sem scroll: NÃO pré-seleciona. O usuário escolhe 1 CNAE na lista
       // ("Qual atividade usar?") e só então o Passo 2 aparece. Isso oculta os
       // cálculos inicialmente e evita rolagem com todas as atividades + campos.
-      set({
+      get().set({
         empresaNome: dados.razaoSocial,
         opcaoSimples: dados.opcaoSimples,
         opcoes,
@@ -427,7 +517,7 @@ export const useSimples = create<SimplesState>((set, get) => ({
     } catch (e) {
       toast(e instanceof Error ? e.message : String(e), 'err');
     } finally {
-      set({ buscandoCnpj: false });
+      get().set({ buscandoCnpj: false });
     }
   },
 
@@ -435,7 +525,7 @@ export const useSimples = create<SimplesState>((set, get) => ({
     const s = get();
     const op = s.opcoes.find((o) => o.cnae7 === cnae7);
     if (!op) {
-      set({ cnaeEscolhido: cnae7, relatorioVisivel: false });
+      get().set({ cnaeEscolhido: cnae7, relatorioVisivel: false });
       return;
     }
     const validos = normalizarListaAnexosSimples(op.anexos).filter((a) => (ANEXOS_SIMPLES as Record<string, unknown>)[a]);
@@ -448,16 +538,29 @@ export const useSimples = create<SimplesState>((set, get) => ({
     } else if (validos.length > 1) {
       sugerido = (validos[0] as AnexoSimplesId) ?? s.anexoId;
     }
-    set({ cnaeEscolhido: cnae7, anexoId: sugerido, relatorioVisivel: false });
+    // Trocar CNAE NÃO apaga a folha (nem as flags de auditoria): apenas
+    // recalcula a sujeição a partir do CNAE. Opt-out explícito (Anexo III
+    // puro) deve ser reaplicado via `set({ sujeitaFatorR: false })` depois
+    // da escolha.
+    const usaFatorR = validos.includes('III') || validos.includes('V') || op.exigeFatorR || Boolean(op.tabela?.fatorR);
+    get().set({
+      cnaeEscolhido: cnae7,
+      anexoId: sugerido,
+      sujeitaFatorR: usaFatorR,
+      relatorioVisivel: false,
+    });
   },
 
   limpar: () =>
-    set({
+    get().set({
       anexoId: 'I',
       escolheuAnexo: false,
       rbt12: 0,
       receitaMes: 0,
       folha12: 0,
+      folhaInformada: false,
+      semFolhaConfirmado: false,
+      sujeitaFatorR: true,
       rba: 0,
       usarRba: false,
       aliqRefICMS: null,
