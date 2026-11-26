@@ -131,7 +131,7 @@ interface EntradaIndiceTexto {
   caminho: string[]
   normPropria: string
   normCaminho: string
-  /** Tokens pré-computados (evita split O(docs) por consulta no RAG). */
+  /** Tokens pré-computados (evita split O(docs) por consulta no busca lexical). */
   toksPropria: string[]
   toksCaminho: string[]
 }
@@ -175,7 +175,7 @@ async function indiceBuscaTexto(): Promise<EntradaIndiceTexto[]> {
 /**
  * Busca NCMs pelo **nome do produto** (ex.: "queijo mozarela").
  *
- * RAG em 2 fases (proativo, sem inventar NCM):
+ * busca lexical em 2 fases (proativo, sem inventar NCM):
  * - Fase 1 (precisão): AND estrito (`pontuarCandidato`) sobre tokens RELEVANTES
  *   (sem stopwords: "ração PARA cães" vira ["racao","caes"]) + variação com
  *   sinônimos ("boi"→"bovin", "celular"→"telefone");
@@ -727,7 +727,7 @@ export async function sugerirNbs(prefixo: unknown, limite = 30): Promise<Vinculo
 /**
  * Busca NBS pelo **nome/descrição do serviço**.
  *
- * RAG em 2 fases (paridade com `buscarNomenclaturaPorTexto`):
+ * busca lexical em 2 fases (paridade com `buscarNomenclaturaPorTexto`):
  * - Fase 1 (precisão): AND estrito sobre tokens relevantes + variação com
  *   sinônimos de serviços;
  * - Fase 2 (cobertura): OR tolerante até encher.

@@ -15,7 +15,7 @@
  *    destinação/adquirente/evento (`CCTS_CONDICIONAIS`) só viram hipótese
  *    "a confirmar", nunca herança automática;
  * 3. **Seção sozinha nunca decide**: seção (I–XXI) é ampla demais — serve
- *    só de contexto para a IA (RAG/lexical) e para hipóteses, jamais para
+ *    só de contexto para a busca (busca lexical/lexical) e para hipóteses, jamais para
  *    herdar alíquota;
  * 4. Herança automática exige **unanimidade dos irmãos vinculados** +
  *    cobertura mínima dos vigentes do prefixo + mínimo de irmãos;

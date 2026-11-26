@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Constantes de domínio — valores fixos compartilhados por toda a aplicação.
  * Espelham SPEC-LOGICA-NEGOCIO §1.1.
  */
@@ -105,22 +105,20 @@ export const STORES = {
   PRODUTOSDFE: 'produtosDfe',
   AUDIT: 'audit_log',
   CEST: 'cest',
-  /** Feedback "Não é esse" da Sugestão IA (store `ia_feedback`). */
-  IAFEEDBACK: 'ia_feedback',
+  /** Feedback "Não é esse" da Sugestão busca (store `feedback_busca`). */
+  FEEDBACK_BUSCA: 'feedback_busca',
   /** CNAE × Anexo Simples + Fator R (Phase 7, arquivo vivo `CNAE X ANEXO.json`). */
   CNAE: 'cnae',
   /** Cache de consultas por CNPJ (Phase 7, BrasilAPI + TTL 30 dias). */
   CONSULTAS_CNPJ: 'consultasCnpj',
-  /** Conversas da Aurum AI por emitente (Phase 8, memória longo prazo). */
-  CONVERSAS_EMITENTE: 'conversasEmitente',
+  /** Conversas da busca automática por emitente (Phase 8, memória longo prazo). */
   /** Links CNAE → NBS da fonte ponte (Phase 9, `CNAE X NBS.qualclasstrib.json`). */
   CNAE_NBS: 'cnaeNbs',
   /** Relações LC 116 → NBS da fonte ponte (Phase 9, `fallback-relations.json`). */
   LC_NBS: 'lcNbs',
   /** Templates consolidados por CNAE (Phase 9, conferência entre fontes). */
   CLASS_CONSOLIDADA: 'classificacoesConsolidadas',
-  /** Metadados do grafo fiscal local (Phase 10-01, `MANIFEST.grafo.json`). */
-  GRAFOMETA: 'grafometa',
+  /** Metadados do base fiscal local (Phase 10-01, `MANIFEST.grafo.json`). */
 } as const
 
 export type StoreName = (typeof STORES)[keyof typeof STORES]
@@ -189,3 +187,4 @@ export const LINK_SEFAZCE_LEGISLACAO = 'https://www.ce.gov.br/sefaz/legislacao-t
 
 /** Re-exporta constantes da API CFF */
 export * from './cff-apis'
+

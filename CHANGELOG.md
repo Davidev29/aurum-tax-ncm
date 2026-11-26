@@ -5,7 +5,7 @@
 - **Consulta NCM — precisão de busca + exibição redesenhada (família/capítulo).** A busca por nome e por número foi reescrita para eliminar o "dados nada a ver" e a exibição dos resultados passou a mostrar a família completa do NCM (Seção do SH → capítulo → posição → subposição → item) com descrições limpas.
   - Busca: (1) ordenação em buckets `fase 1 (AND exato, tokens-inteiros) > fase 2 (tolerante)`; (2) casamento por **token inteiro** (não substring solto) — "gavetas" não casa mais "ave", `tomilho` não casa `milho`, `leite condensado`→`concentrado` (sinonímia TEC), `branco`→`branqueado`; (3) caminho hierárquico passa a incluir os **níveis 5 e 7** da TEC (`prefixosHierarquia`/`comporCaminho`) — "feijão preto" (nível 7) volta a achar; (4) Fase 2 com lastro de token real (radical ≥4 + fuzzy ≤2 confirmado por `casaPrefixo`), pré-filtro alinhado (`||len diff|| ≤ 2`); (5) `sugerirNomenclatura` sem `limit-then-sort` (capítulo "84" (~1,6 mil linhas) voltou a ser ordenado corretamente antes de fatiar); (6) radical aceita diferença de tamanho livre (`semente` ⊂ `sementeira`), plurais de 3 letras valem (`ovo`→`ovos`)
   - Exibição: novo card de resultado (`src/ui/ncm-resultado.tsx`) com eyebrow "Seção do SH", chip Família SH6, código hero em mono, selos de vigência/1-N enquadramentos/regra geral (**AA**), barra lateral de estado, descrição clamp-2 com realce, breadcrumb Cap. → Pos. → Sub → Item e botão **copiar código**; `CartaoEnxuto`/`CartaoMultiplo` ganham bloco de contexto (`src/ui/ncm-contexto.tsx`: Seção + família + código + vigência + breadcrumb + ato oficial); `ModalDetalheFiscal` usa o mesmo breadcrumb; copas/hífens hierárquicos e tags `<i>` nunca mais aparecem (`limparTextoFiscal` em `src/ui/ncm-resultado.tsx` e listas)
-  - Chat/IA: gás animal vivo sem destinação **sempre** pergunta (nunca chuta 0105/3002) — mantido o contrato "frango vivo → pergunta o que é"; descrição do chat/justificativa sem tags HTML
+  - Busca determinística local: gás animal vivo sem destinação **sempre** pergunta (nunca chuta 0105/3002) — mantido o contrato "frango vivo → pergunta o que é"; justificativa sem tags HTML
   - NCM com 9 dígitos na tela de Consulta NCM **não** vira corte silencioso de 8 dígitos — o rótulo orienta para a tela Serviços; clique em sugestão de prefixo (ex.: `0201`) refina a busca em vez de no-op; dicionário comercial ganhou pins `leite condensado`→0402.99.00, `arroz branco`→1006.30.21, `açúcar cristal/refinado`→1701.99.00, `cimento CP II/III`→2523.29.10, `vinho tinto`→2204.21.00, `vinho a granel`→2204.29.10, `arroz parboilizado`→1006.30.11
   - Testes: +18 asserções novas (fase 1 vence fase 2 — "Mozarela" nº 1; tags removidas de `caminho`; token-boundary em pontuação; trilhas/breadcrumb — `trilha-ncm.test.ts`); 174 → **175 suítes · 1.977 casos**; verificado no navegador: `feijão preto` → 0713.33.11 nº 1, `queijo mozarela` → 0406.10.10 nº 1
 
@@ -36,7 +36,7 @@
 ### Changed
 - **Consulta NCM em primeiro lugar no menu** e como tela inicial (`useUi.view = 'consulta'`)
 - Alíquotas de referência IBS/CBS passam a viver em `store/referencia.ts` (tabela viva `parametros.json`, estimativa 19/9 como fallback) — o Simulador rápido dos cartões segue idêntico
-- IA: Chat direciona "me leva para a calculadora" para a Consulta NCM; textos/botões de "Abrir Calculadora" viram "Abrir Consulta NCM"; exemplos do roteador atualizados
+- Busca determinística local: textos/botões de "Abrir Calculadora" viram "Abrir Consulta NCM"
 - Testes: tour 9 passos, navegação sem calculadora; `motor-unico` sem o assert da conversão removida
 
 ## v1.1.0 — 2026-11-13
@@ -65,6 +65,6 @@
 
 ## v1.0.0 — 2026-10-12
 
-Primeira entrega pública. 10 módulos: Calculadora IBS/CBS, Simples Nacional (+ projeção dividida v2), Consulta NCM, Serviços (NBS) + Consulta de CNAEs, Classificação em lote, Notas Fiscais (XML), Produtos, Tabelas auxiliares, Legislação, Produtos/Empresas multi-CNPJ, backup/restore transacional, atualização via GitHub Releases, Aurum AI determinística (léxico + grafo fiscal + resolvedor oficial).
+Primeira entrega pública. 10 módulos: Calculadora IBS/CBS, Simples Nacional (+ projeção dividida v2), Consulta NCM, Serviços (NBS) + Consulta de CNAEs, Classificação em lote, Notas Fiscais (XML), Produtos, Tabelas auxiliares, Legislação, Produtos/Empresas multi-CNPJ, backup/restore transacional, atualização via GitHub Releases, busca determinística local (léxico + resolvedor oficial).
 
 **Nota:** as releases do produto são marcadas no GitHub Releases deste repositório.

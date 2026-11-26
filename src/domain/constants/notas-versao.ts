@@ -10,7 +10,7 @@
  *   1. Suba `version` em `package.json` (ex.: 1.0.0 -> 1.0.1).
  *   2. Adicione uma entrada aqui com a MESMA chave:
  *        "1.0.1": {
- *          novidades: ["Aurinha com 3 reações novas ao exportar", "..."],
+ *          novidades: ["busca automática com 3 reações novas ao exportar", "..."],
  *          comentario: "Só quando houver aviso — ex.: ação necessária após atualizar.",
  *        },
  *   3. `comentario` é opcional: omita quando não houver aviso (o bloco some).

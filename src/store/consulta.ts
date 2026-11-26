@@ -1,9 +1,10 @@
-/**
+﻿/**
  * Tela **Consulta NCM**: busca, sugestões e painel de classificações (0/1/N).
  *
  * O painel devolve `__uid` estável por card para que o simulador rápido
  * embutido consiga referenciar a fonte de redução sem efeitos colaterais.
  */
+import type { ViaClassificacao } from '@/infrastructure/busca/classificacao-repo'
 import { create } from 'zustand'
 import { SUGGEST_LIMITS } from '@/domain/constants'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
@@ -20,10 +21,9 @@ import type {
   EntradaDescricao,
   SugestaoNcmJson,
 } from '@/application/classificacao-inteligente'
-import { classificarComIA, registrarFeedbackIa } from '@/infrastructure/ia/classificacao-ia-repo'
-import type { CandidatoIa } from '@/infrastructure/bridge'
+import { classificarComBusca, registrarFeedbackBusca } from '@/infrastructure/busca/classificacao-repo'
+import type { CandidatoBusca } from '@/infrastructure/busca/classificacao-repo'
 import type { ResultadoCalculo } from '@/domain/entities'
-import type { ViaClassificacao } from '@/store/ia'
 import { registrarLimpeza } from './ui'
 
 export interface ResultadoConsulta {
@@ -93,30 +93,20 @@ interface ConsultaState {
   /**
    * Camada automática (Phase 6 / 06-06): `via` indica se o determinístico venceu
    * (`deterministico`) ou o seletor automático acionou (`ia`).
-   * Phase 10-05: `grafo` quando o grafo fiscal participou.
-   * Só quando `via` é `ia`/`grafo`/`grafo+ia` a UI exibe a seção "Resultado automático".
+   * Phase 10-05: `base local` quando o base fiscal participou.
+   * Só quando `via` é `ia`/`base local`/`base local+ia` a UI exibe a seção "Resultado automático".
    */
   via: ViaClassificacao | null
-  candidatosIa: CandidatoIa[]
-  decisaoIa: Classificacao | null
-  nomenclaturaIa: NomenclaturaNcm | null
-  regraGeralIa: boolean
-  calculoIa: ResultadoCalculo | null
-  codigoIa: string | null
-  confiancaIa: number
-  motivoIa: string | null
-  mockIa: boolean
-  feedbackIaEnviado: boolean
-  fichaIa: import('@/application/aurum-ai-contexto').FichaAbsoluta | null
-  vereditoIa: import('@/application/aurum-ai-contexto').VereditoAurumAI | null
-  fontesIa: string[]
-  /** Trilha do grafo (`via:grafo` auditável — cypher + caminho + proveniência). */
-  grafoCypherIa: string | null
-  graphPathsIa: string[][]
-  caminhoGrafoIa: string[] | null
-  provenienciaGrafoIa: Array<{ de: string; para: string; tipo: string; origem: string; confianca: number; anoReferencia?: number | null }> | null
-  boostGrafoIa: 'uso_local' | null
-  boostValorGrafoIa: number
+  candidatosBusca: CandidatoBusca[]
+  decisaoBusca: Classificacao | null
+  nomenclaturaBusca: NomenclaturaNcm | null
+  regraGeralBusca: boolean
+  calculoBusca: ResultadoCalculo | null
+  codigoBusca: string | null
+  confiancaBusca: number
+  motivoBusca: string | null
+  feedbackEnviado: boolean
+  fontesBusca: string[]
 
   setCodigo: (v: string) => void
   consultar: (codigo?: string) => Promise<void>
@@ -126,14 +116,14 @@ interface ConsultaState {
   buscarTexto: (termo?: string) => Promise<void>
   /** Escolhe um NCM achado pelo nome e classifica imediatamente. */
   escolherTexto: (codigo: string) => Promise<void>
-  /** Define a entrada única e dispara os 3 workers conforme a intenção. */
+  /** Define a entrada única e dispara os 3 motors conforme a intenção. */
   setEntrada: (v: string) => void
   /**
    * Orquestrador da busca unificada (fan-out robusto):
    * - dígitos → sugestões de prefixo + classificação exata (8 dígitos);
    * - texto → busca por nome;
    * - frase expressiva → predição assistiva por descrição.
-   * Cada worker tem guarda de geração própria; só o mais recente escreve.
+   * Cada motor tem guarda de geração própria; só o mais recente escreve.
    */
   consultarUnificada: (entrada?: string) => Promise<void>
   /** Escolhe um NCM de qualquer seção e ancora no painel oficial. */
@@ -148,10 +138,10 @@ interface ConsultaState {
   classificarDescricao: (entrada?: EntradaDescricao) => Promise<void>
   /** Classifica oficialmente o NCM sugerido (ancora a sugestão na base). */
   usarSugestao: () => Promise<void>
-  /** Usa a decisão IA validada (ancora o NCM escolhido pelo fallback). */
-  usarSugestaoIa: () => Promise<void>
-  /** Registra "Não é esse" para a sugestão IA atual (Dexie `ia_feedback`). */
-  feedbackIaNegativo: () => Promise<void>
+  /** Usa a decisão busca validada (ancora o NCM escolhido pelo fallback). */
+  usarSugestaoBusca: () => Promise<void>
+  /** Registra "Não é esse" para a sugestão busca atual (Dexie `ia_feedback`). */
+  feedbackNegativo: () => Promise<void>
   limpar: () => void
 }
 
@@ -173,7 +163,7 @@ let seqSugestoes = 0
 /** Geração da busca unificada — invalida fan-outs anteriores. */
 let seqUnificada = 0
 
-/** Geração da predição/IA — só a mais recente escreve (evita worker velho cobrindo o novo). */
+/** Geração da predição/IA — só a mais recente escreve (evita motor velho cobrindo o novo). */
 let seqDescricao = 0
 
 export const useConsulta = create<ConsultaState>((set, get) => ({
@@ -201,25 +191,16 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
   classificandoDescricao: false,
 
   via: null,
-  candidatosIa: [],
-  decisaoIa: null,
-  nomenclaturaIa: null,
-  regraGeralIa: false,
-  calculoIa: null,
-  codigoIa: null,
-  confiancaIa: 0,
-  motivoIa: null,
-  mockIa: true,
-  feedbackIaEnviado: false,
-  fichaIa: null,
-  vereditoIa: null,
-  fontesIa: [],
-  grafoCypherIa: null,
-  graphPathsIa: [],
-  caminhoGrafoIa: null,
-  provenienciaGrafoIa: null,
-  boostGrafoIa: null,
-  boostValorGrafoIa: 0,
+  candidatosBusca: [],
+  decisaoBusca: null,
+  nomenclaturaBusca: null,
+  regraGeralBusca: false,
+  calculoBusca: null,
+  codigoBusca: null,
+  confiancaBusca: 0,
+  motivoBusca: null,
+  feedbackEnviado: false,
+  fontesBusca: [],
 
   setCodigo: (v) => set({ codigo: v }),
 
@@ -326,25 +307,16 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
         sugestao: null,
         classificandoDescricao: false,
         via: null,
-        candidatosIa: [],
-        decisaoIa: null,
-        nomenclaturaIa: null,
-        regraGeralIa: false,
-        calculoIa: null,
-        codigoIa: null,
-        confiancaIa: 0,
-        motivoIa: null,
-        mockIa: true,
-        feedbackIaEnviado: false,
-        fichaIa: null,
-        vereditoIa: null,
-        fontesIa: [],
-        grafoCypherIa: null,
-        graphPathsIa: [],
-        caminhoGrafoIa: null,
-        provenienciaGrafoIa: null,
-        boostGrafoIa: null,
-        boostValorGrafoIa: 0,
+        candidatosBusca: [],
+        decisaoBusca: null,
+        nomenclaturaBusca: null,
+        regraGeralBusca: false,
+        calculoBusca: null,
+        codigoBusca: null,
+        confiancaBusca: 0,
+        motivoBusca: null,
+        feedbackEnviado: false,
+        fontesBusca: [],
       })
       return
     }
@@ -389,24 +361,16 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
         sugestao: null,
         classificandoDescricao: false,
         via: null,
-        candidatosIa: [],
-        decisaoIa: null,
-        nomenclaturaIa: null,
-        regraGeralIa: false,
-        calculoIa: null,
-        codigoIa: null,
-        confiancaIa: 0,
-        motivoIa: null,
-        feedbackIaEnviado: false,
-        fichaIa: null,
-        vereditoIa: null,
-        fontesIa: [],
-        grafoCypherIa: null,
-        graphPathsIa: [],
-        caminhoGrafoIa: null,
-        provenienciaGrafoIa: null,
-        boostGrafoIa: null,
-        boostValorGrafoIa: 0,
+        candidatosBusca: [],
+        decisaoBusca: null,
+        nomenclaturaBusca: null,
+        regraGeralBusca: false,
+        calculoBusca: null,
+        codigoBusca: null,
+        confiancaBusca: 0,
+        motivoBusca: null,
+        feedbackEnviado: false,
+        fontesBusca: [],
       })
     }
     await Promise.allSettled(tarefas)
@@ -432,19 +396,6 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
     seqDescricao++
     set({ modo: 'ncm', entrada: fmtNcm(digitos) })
     await get().consultar(digitos)
-    // GRAFO-08: escolha da consulta alimenta o overlay (termo → NCM).
-    try {
-      const termo = get().entrada || get().descricao || digitos
-      void import('@/application/grafo-overlay').then((m) => {
-        try {
-          m.registrarEscolhaUso(String(termo).slice(0, 120), digitos)
-        } catch {
-          /* best-effort */
-        }
-      }).catch(() => undefined)
-    } catch {
-      /* overlay nunca quebra a consulta */
-    }
   },
 
   setPrefillSalvar: (p) => set({ prefillSalvar: p }),
@@ -467,71 +418,44 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
         sugestao: null,
         classificandoDescricao: false,
         via: null,
-        candidatosIa: [],
-        decisaoIa: null,
-        nomenclaturaIa: null,
-        regraGeralIa: false,
-        calculoIa: null,
-        codigoIa: null,
-        confiancaIa: 0,
-        motivoIa: null,
-        feedbackIaEnviado: false,
-        fichaIa: null,
-        vereditoIa: null,
-        fontesIa: [],
-        grafoCypherIa: null,
-        graphPathsIa: [],
-        caminhoGrafoIa: null,
-        provenienciaGrafoIa: null,
-        boostGrafoIa: null,
-        boostValorGrafoIa: 0,
+        candidatosBusca: [],
+        decisaoBusca: null,
+        nomenclaturaBusca: null,
+        regraGeralBusca: false,
+        calculoBusca: null,
+        codigoBusca: null,
+        confiancaBusca: 0,
+        motivoBusca: null,
+        feedbackEnviado: false,
+        fontesBusca: [],
       })
       return
     }
     const seq = ++seqDescricao
-    set({ classificandoDescricao: true, feedbackIaEnviado: false })
+    set({ classificandoDescricao: true, feedbackEnviado: false })
     try {
-      // GATE Aurum AI como camada superior: determinístico primeiro; worker só no
+      // GATE busca automática como camada superior: determinístico primeiro; motor só no
       // fallback (baixa/null). O fan-out exato/descritivo/preditivo segue
       // intacto — só a predição passa a carregar `via`/candidatos/calculo/ficha.
-      const r = await classificarComIA(e)
+      const r = await classificarComBusca(e)
       if (seq !== seqDescricao) return
       set({
         sugestao: r.sugestao,
         classificandoDescricao: false,
         via: r.via,
-        candidatosIa: r.candidatos,
-        decisaoIa: r.decisao,
-        nomenclaturaIa: r.nomenclatura,
-        regraGeralIa: r.regraGeral,
-        calculoIa: r.calculo,
-        codigoIa: r.codigoEscolhido,
-        confiancaIa: r.confiancaIa,
-        motivoIa: r.motivo,
-        mockIa: r.mock,
-        feedbackIaEnviado: false,
-        fichaIa: r.ficha,
-        vereditoIa: r.veredito,
-        fontesIa: r.fontes,
-        grafoCypherIa: r.grafoCypher ?? null,
-        graphPathsIa: r.graphPaths ?? [],
-        caminhoGrafoIa: r.caminhoGrafo ?? null,
-        provenienciaGrafoIa: r.provenienciaGrafo ?? null,
-        boostGrafoIa: r.boostGrafo ?? null,
-        boostValorGrafoIa: r.boostValorGrafo ?? 0,
+        candidatosBusca: r.candidatos,
+        decisaoBusca: r.decisao,
+        nomenclaturaBusca: r.nomenclatura,
+        regraGeralBusca: r.regraGeral,
+        calculoBusca: r.calculo,
+        codigoBusca: r.codigoEscolhido,
+        confiancaBusca: r.confianca,
+        motivoBusca: r.motivo,
+        feedbackEnviado: false,
+        fontesBusca: r.fontes,
       })
-      // Observabilidade do grafo (10-03): espelha a trilha no store da IA.
       try {
-        const { useIa } = await import('./ia')
-        const st = useIa.getState()
-        if (r.grafoCypher) {
-          st.setGrafoSnapshot({ graphPaths: r.graphPaths ?? [], cypher: r.grafoCypher })
-          st.registrarUsoGrafo(true)
-        } else if (r.via === 'ia' || r.via === 'grafo' || r.via === 'grafo+ia') {
-          st.registrarUsoGrafo(false)
-        }
       } catch {
-        /* observabilidade nunca quebra */
       }
     } catch {
       if (seq !== seqDescricao) return
@@ -539,24 +463,16 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
         sugestao: null,
         classificandoDescricao: false,
         via: null,
-        candidatosIa: [],
-        decisaoIa: null,
-        nomenclaturaIa: null,
-        regraGeralIa: false,
-        calculoIa: null,
-        codigoIa: null,
-        confiancaIa: 0,
-        motivoIa: null,
-        feedbackIaEnviado: false,
-        fichaIa: null,
-        vereditoIa: null,
-        fontesIa: [],
-        grafoCypherIa: null,
-        graphPathsIa: [],
-        caminhoGrafoIa: null,
-        provenienciaGrafoIa: null,
-        boostGrafoIa: null,
-        boostValorGrafoIa: 0,
+        candidatosBusca: [],
+        decisaoBusca: null,
+        nomenclaturaBusca: null,
+        regraGeralBusca: false,
+        calculoBusca: null,
+        codigoBusca: null,
+        confiancaBusca: 0,
+        motivoBusca: null,
+        feedbackEnviado: false,
+        fontesBusca: [],
       })
     }
   },
@@ -568,30 +484,29 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
     await get().consultar(s)
   },
 
-  usarSugestaoIa: async () => {
-    const s = get().codigoIa
+  usarSugestaoBusca: async () => {
+    const s = get().codigoBusca
     if (!s) return
     set({ modo: 'ncm', entrada: s })
     await get().consultar(s)
   },
 
-  feedbackIaNegativo: async () => {
+  feedbackNegativo: async () => {
     const s = get()
-    if (!s.codigoIa && s.via !== 'ia' && s.via !== 'grafo' && s.via !== 'grafo+ia') return
-    if (s.feedbackIaEnviado) return
+    if (!s.codigoBusca) return
+    if (s.feedbackEnviado) return
     try {
-      await registrarFeedbackIa({
+      await registrarFeedbackBusca({
         descricao: s.entrada || s.descricao,
-        via: s.via ?? 'ia',
-        decisao: s.codigoIa,
-        confianca: s.confiancaIa,
+        via: s.via ?? 'sem-resultado',
+        decisao: s.codigoBusca,
+        confianca: s.confiancaBusca,
         motivo: 'feedback-negativo',
-        mock: s.mockIa,
       })
     } catch {
       /* feedback é best-effort */
     }
-    set({ feedbackIaEnviado: true })
+    set({ feedbackEnviado: true })
   },
 
   limpar: () =>
@@ -616,27 +531,20 @@ export const useConsulta = create<ConsultaState>((set, get) => ({
       sugestao: null,
       classificandoDescricao: false,
       via: null,
-      candidatosIa: [],
-      decisaoIa: null,
-      nomenclaturaIa: null,
-      regraGeralIa: false,
-      calculoIa: null,
-      codigoIa: null,
-      confiancaIa: 0,
-      motivoIa: null,
-      mockIa: true,
-      feedbackIaEnviado: false,
-      fichaIa: null,
-      vereditoIa: null,
-      fontesIa: [],
-      grafoCypherIa: null,
-      graphPathsIa: [],
-      caminhoGrafoIa: null,
-      provenienciaGrafoIa: null,
-      boostGrafoIa: null,
-      boostValorGrafoIa: 0,
+      candidatosBusca: [],
+      decisaoBusca: null,
+      nomenclaturaBusca: null,
+      regraGeralBusca: false,
+      calculoBusca: null,
+      codigoBusca: null,
+      confiancaBusca: 0,
+      motivoBusca: null,
+      feedbackEnviado: false,
+      fontesBusca: [],
     }),
 }))
 
 /** Ao sair da Consulta, a próxima visita começa em branco. */
 registrarLimpeza('consulta', () => useConsulta.getState().limpar())
+
+

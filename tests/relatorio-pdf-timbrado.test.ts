@@ -14,7 +14,7 @@ import pdfMake from 'pdfmake/build/pdfmake';
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
 import type { Emitente } from '@/domain/entities';
 import { orquestrarRelatorio, type RelatorioInput } from '@/simples/relatorio-analitico';
-import { gerarInsightsFallback } from '@/simples/ia-insights';
+import { gerarInsights } from '@/simples/insights';
 import {
   exportarRelatorioAnaliticoPDF,
   iconeNivel,
@@ -130,7 +130,7 @@ describe('relatório analítico — PDF padrão com ícones', () => {
 
   it('ramo dual: timbrado padrão + ícones + texto seguro + PDF válido', async () => {
     const report = orquestrarRelatorio(inputBase());
-    const insights = gerarInsightsFallback(report);
+    const insights = gerarInsights(report);
     await exportarRelatorioAnaliticoPDF(report, insights, emitente);
 
     const gerado = capturados[capturados.length - 1];
@@ -165,7 +165,7 @@ describe('relatório analítico — PDF padrão com ícones', () => {
         contexto: { modo: 'manual', anexoSelecionado: 'I', anexosElegiveis: ['I'] },
       }),
     );
-    const insights = gerarInsightsFallback(report);
+    const insights = gerarInsights(report);
     await exportarRelatorioAnaliticoPDF(report, insights, emitente);
 
     const gerado = capturados[capturados.length - 1];

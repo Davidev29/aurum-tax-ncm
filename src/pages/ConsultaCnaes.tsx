@@ -268,10 +268,10 @@ export function ConsultaCnaes() {
                 {consulta.estadoNbs === 'mapeado' ? (
                   <span
                     className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
-                    title="NBS vinculadas via caminho do grafo CNAE→NBS→CCT (multi-hop auditável). O resolvedor validou cada NBS."
+                    title="NBS vinculadas por regra CNAE→NBS→CCT, validadas pelo resolvedor."
                     role="status"
                   >
-                    via:grafo · {consulta.vereditos.length.toLocaleString('pt-BR')} NBS
+                    vínculos oficiais · {consulta.vereditos.length.toLocaleString('pt-BR')} NBS
                   </span>
                 ) : null}
               </div>

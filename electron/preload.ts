@@ -14,7 +14,6 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AurumBridge,
   EventoAtualizacao,
-  ResultadoGrafoBridge,
 } from '../src/infrastructure/bridge'
 import type { DbOp } from '../src/infrastructure/db/db-protocolo'
 
@@ -106,32 +105,6 @@ const aurum: AurumBridge = {
     }
     ipcRenderer.on('atualizacao:evento', handler)
     return () => ipcRenderer.removeListener('atualizacao:evento', handler)
-  },
-
-  /**
-   * Busca local (grafo fiscal via processo principal).
-   *
-   * O modelo de linguagem foi removido: a classificação é 100%
-   * determinística (RAG lexical + grafo + resolvedor oficial). Aqui só o
-   * round-trip IPC do grafo (`ia:grafo`/`ia:grafo-uso`).
-   */
-  ia: {
-    /**
-     * Grafo fiscal local (Phase 10-02 / GRAFO-02, híbrido em 10-03): FTS +
-     * vetor + 2-hops no worker (`utilityProcess`) via canal `ia:grafo`.
-     * Sem `.lbug` → `ok:false` + `fallback:'lexical'` (fail-closed, nunca
-     * mock). `opts.modoVetor:'fts-puro'` força o modo lexical (toggle DebugIA).
-     */
-    grafoConsultar: (texto: string, k?: number, anoReferencia?: number, opts?: { modoVetor?: 'hibrido' | 'fts-puro' }): Promise<ResultadoGrafoBridge> =>
-      ipcRenderer.invoke('ia:grafo', { texto, k, anoReferencia, modoVetor: opts?.modoVetor }),
-    /**
-     * Overlay de aprendizado (Phase 10-05 / GRAFO-08): escritor
-     * `registrarUso({tipo, termo, codigo, emitente, peso})` com TTL 90d + teto
-     * 5000 + demote. Best-effort (sem canal → rejeita, o renderer cai no
-     * `localStorage`).
-     */
-    registrarUsoGrafo: (evento: { tipo: string; termo?: string | null; codigo?: string | null; emitente?: string | null; peso?: number }) =>
-      ipcRenderer.invoke('ia:grafo-uso', evento),
   },
 }
 

@@ -40,12 +40,12 @@ um anexo — perdiam o benefício e caíam em tributação integral.
 Recortes de 3/5 dígitos (ex.: subposição abreviada da planilha) são
 normalizados por `prefixoDeEntradaTruncada` para a família que os contém.
 
-## 3. Seções SH (contexto da IA, nunca decisão)
+## 3. Seções SH (contexto da busca determinística, nunca decisão)
 
 21 seções (I–XXI) agrupando os capítulos — ver `SECOES_NCM` em
 `hierarquia-fiscal.ts`. A seção é **ampla demais para decidir benefício**:
-serve só de contexto para o RAG/lexical (desempate +5, trilha) e para
-hipóteses. Nenhum fluxo herda por seção.
+serve só de contexto para a busca lexical determinística (desempate +5,
+trilha) e para hipóteses. Nenhum fluxo herda por seção.
 
 ## 4. Regras cadastradas (`REGRAS_CAPITULO`)
 
@@ -98,7 +98,7 @@ Herança **nunca** automática quando:
    Entrada truncada (2–7 dígitos) classifica pela família via
    `resolverPorPrefixo` em vez de lista vazia.
 
-## 8. Fine-tuning IA (RAG + lexical)
+## 8. Busca determinística (ranking lexical)
 
 - **Etapa 1** (`classificador-descricao`): `secoesPrioritarias` (derivadas
   dos capítulos) + `excecoesFamiliaAtivas` + RGI de Notas de Seção/Capítulo
@@ -107,7 +107,7 @@ Herança **nunca** automática quando:
   `+25` capítulo curado (lastro normativo), `+5` seção prioritária,
   `-1000` extinto.
 - **Etapa 3/3b**: reaproveita herança/hipótese do resolvedor por
-  candidato; trilha `Herança por família (RAG + lexical)` + `Exceções de
+  candidato; trilha `Herança por família (busca determinística)` + `Exceções de
   família`; herdado "a confirmar" trava a confiança em **média**; hipótese
   sem vínculo entra na justificativa como "a confirmar" (regra geral +
   hipótese visível — nenhum grupo com possível benefício é ocultado).

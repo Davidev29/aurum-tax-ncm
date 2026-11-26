@@ -1,8 +1,8 @@
 /**
  * Relatório Analítico e Inteligente — orquestrador determinístico.
  *
- * ÚNICA fonte de verdade numérica do relatório (tela, IA e PDF consomem
- * o `ReportAnalitico` daqui). Nenhum cálculo é feito na IA ou na UI.
+ * ÚNICA fonte de verdade numérica do relatório (tela, busca e PDF consomem
+ * o `ReportAnalitico` daqui). Nenhum cálculo é feito na busca ou na UI.
  *
  * Fórmulas (espelham `calculo.ts` + planilhas):
  * - aliquotaEfetiva = (RBT12 × nominal − deduzir) / RBT12
@@ -531,7 +531,7 @@ export function orquestrarRelatorio(input: RelatorioInput): ReportAnalitico {
         'CBS_FORA=max(0; débitos CBS−créditos CBS DRE)',
       ],
       fontes: ['LC 123/2006 Art. 18', 'LC 214/2025 Arts. 28–45', 'Tabelas Anexos I–V (vigência 2027–2028)'],
-      aviso: 'Valores calculados pelo motor determinístico. A IA atua em modo leitura e não altera valores.',
+      aviso: 'Valores calculados pelo motor determinístico. A busca atua em modo leitura e não altera valores.',
     },
   };
 
@@ -543,7 +543,7 @@ export function orquestrarRelatorio(input: RelatorioInput): ReportAnalitico {
   };
 }
 
-/** Todos os números citáveis pela IA (para o validador anti-alucinação). */
+/** Todos os números citáveis pela busca (para o validador anti-alucinação). */
 export function coletarNumerosPermitidos(report: ReportAnalitico): number[] {
   const nums: number[] = [];
   const push = (v: unknown): void => {

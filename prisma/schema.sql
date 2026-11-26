@@ -310,7 +310,7 @@ CREATE TABLE "TabelaCest" (
 );
 
 -- CreateTable
-CREATE TABLE "IaFeedback" (
+CREATE TABLE "FeedbackBusca" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     "quando" TEXT NOT NULL,
     "descricao" TEXT NOT NULL,
@@ -342,17 +342,6 @@ CREATE TABLE "ConsultaCnpj" (
     "cnaePrincipal" TEXT,
     "cnaesSecundarios" JSONB NOT NULL,
     "quando" TEXT NOT NULL
-);
-
--- CreateTable
-CREATE TABLE "ConversaEmitente" (
-    "conversaId" TEXT NOT NULL PRIMARY KEY,
-    "emitenteId" TEXT NOT NULL,
-    "empresaAtivaId" INTEGER,
-    "titulo" TEXT NOT NULL,
-    "mensagens" JSONB NOT NULL,
-    "updatedAt" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL
 );
 
 -- CreateTable
@@ -393,16 +382,6 @@ CREATE TABLE "ClassificacaoConsolidada" (
     "beneficiosReforma" JSONB NOT NULL,
     "divergencia" JSONB,
     "estadoNbs" TEXT NOT NULL
-);
-
--- CreateTable
-CREATE TABLE "GrafoMeta" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "hash" TEXT NOT NULL,
-    "versao" TEXT NOT NULL,
-    "nodos" INTEGER NOT NULL,
-    "arestas" INTEGER NOT NULL,
-    "geradoEm" TEXT NOT NULL
 );
 
 -- CreateIndex
@@ -490,16 +469,10 @@ CREATE INDEX "AuditLog_tabela_idx" ON "AuditLog"("tabela");
 CREATE INDEX "TabelaCest_ncm_idx" ON "TabelaCest"("ncm");
 
 -- CreateIndex
-CREATE INDEX "IaFeedback_quando_idx" ON "IaFeedback"("quando");
+CREATE INDEX "FeedbackBusca_quando_idx" ON "FeedbackBusca"("quando");
 
 -- CreateIndex
 CREATE INDEX "CnaeAnexo_descricao_idx" ON "CnaeAnexo"("descricao");
-
--- CreateIndex
-CREATE INDEX "ConversaEmitente_emitenteId_idx" ON "ConversaEmitente"("emitenteId");
-
--- CreateIndex
-CREATE INDEX "ConversaEmitente_updatedAt_idx" ON "ConversaEmitente"("updatedAt");
 
 -- CreateIndex
 CREATE INDEX "CnaeNbsLink_cnae7_idx" ON "CnaeNbsLink"("cnae7");
@@ -515,7 +488,4 @@ CREATE INDEX "LcNbsRelation_lc_idx" ON "LcNbsRelation"("lc");
 
 -- CreateIndex
 CREATE INDEX "LcNbsRelation_nbs_idx" ON "LcNbsRelation"("nbs");
-
--- CreateIndex
-CREATE INDEX "GrafoMeta_hash_idx" ON "GrafoMeta"("hash");
 

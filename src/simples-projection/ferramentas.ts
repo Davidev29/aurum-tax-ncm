@@ -1,7 +1,7 @@
 /**
- * Adaptador de ferramentas para a LLM (Etapa 5 — implementado).
+ * Adaptador de ferramentas para a serviço externo (Etapa 5 — implementado).
  *
- * Espelha o padrão de `src/application/aurum-ai-registro-ferramentas.ts`:
+ * Espelha o padrão de `src/application/resultado-auto-registro-ferramentas.ts`:
  * spec { nome, descricao, dominio, leitura, parametros, exemplos, guardrail }
  * + conversor OpenAI-compatível + dispatcher isolado.
  * NÃO registra nada no núcleo sozinho: o plug é explícito pelo orquestrador
@@ -81,7 +81,7 @@ export const SPECS_FERRAMENTAS_PROJECAO: SpecFerramentaProjecao[] = [
       custoMensalNova: { type: 'number', description: 'Custo operacional mensal da nova (payback líquido).', exemplo: '5000' },
     },
     exemplos: ['simularCenarioDividido({"mesInicio":"2026-01","receitaTotalMensal":[...],"percentualNova":0.3,"anexoMae":"III","anexoNova":"III"})'],
-    guardrail: 'Sem receita/percentual/anexos, PERGUNTA os valores — nunca simula com exemplo. Insights qualitativos são da LLM, não do motor.',
+    guardrail: 'Sem receita/percentual/anexos, PERGUNTA os valores — nunca simula com exemplo. Insights qualitativos são da serviço externo, não do motor.',
   },
   {
     nome: 'prepararEntradaProjecao',
@@ -101,7 +101,7 @@ export const SPECS_FERRAMENTAS_PROJECAO: SpecFerramentaProjecao[] = [
   },
 ];
 
-/** Specs no padrão do projeto para registro/LLM. */
+/** Specs no padrão do projeto para registro/serviço externo. */
 export function specsFerramentasProjecao(): SpecFerramentaProjecao[] {
   return SPECS_FERRAMENTAS_PROJECAO;
 }

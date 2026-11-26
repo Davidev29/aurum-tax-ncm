@@ -5,7 +5,7 @@
  * - `HipoteseLegal`: benefício da LC 214 que o texto do CNAE sugere, VINDO
  *   DA REFERÊNCIA OFICIAL (nunca inventado). Quando não há NBS mapeado para
  *   ele, é exibido como hipótese a verificar — jamais como decisão;
- * - `verificarCoerenciaServico`: a decisão NBS da IA é coerente com as
+ * - `verificarCoerenciaServico`: a decisão NBS da busca é coerente com as
  *   hipóteses? Divergência vira aviso âmbar, nunca bloqueio silencioso.
  */
 import type { ReferenciaCClassTrib } from '../entities'

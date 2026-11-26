@@ -69,12 +69,12 @@ export interface AnaliseDescricao {
   ambiguidades: string[]
   /** Capítulos NCM prioritários para desempate (ex.: ['01']). */
   capitulosPrioritarios: string[]
-  /** Seções SH prioritárias (derivadas dos capítulos — contexto p/ RAG/lexical). */
+  /** Seções SH prioritárias (derivadas dos capítulos — contexto p/ busca lexical/lexical). */
   secoesPrioritarias: string[]
   /**
    * Exceções de família ativas: condições presentes no texto que QUEBRAM a
    * herança automática do benefício (sal, cozido, destinação condicional…).
-   * A IA deve citar o alerta em vez de herdar em silêncio.
+   * A busca deve citar o alerta em vez de herdar em silêncio.
    */
   excecoesFamiliaAtivas: string[]
   /** Variações de consulta para a busca textual oficial. */
@@ -104,7 +104,7 @@ const STOPWORDS = new Set([
  * (`bovin` casa com bovino/bovina/bovinos; `suin` com suíno/suína/suínos).
  * Multi-termo só quando os termos coocorrem no oficial (ex.: `cães` + `gatos`
  * em 2309.10.00). Termo sem correspondente oficial cai no fallback tolerante
- * (2ª fase OR + fuzzy do RAG).
+ * (2ª fase OR + fuzzy do busca lexical).
  */
 const SINONIMOS: Record<string, string> = SINONIMOS_FISCAIS
 
@@ -154,7 +154,7 @@ const REGRAS_SINAL: { sinal: SinalFiscal; gatilhos: string[]; capitulos: string[
   // de 8 dígitos é chute — o sinal força o refino antes do ranque.
   { sinal: 'ESTADO_CORTE', gatilhos: ['pedaco', 'pedacos', 'cortada', 'cortado', 'cortadas', 'cortados', 'carcaca', 'carcacas', 'desossada', 'desossado', 'desossadas', 'desossados', 'miudeza', 'miudezas', 'quarto', 'quartos', 'perna', 'pernas', 'pe', 'asa', 'coxa', 'sobrecoxa', 'inteiro', 'inteira', 'parte', 'partes'], capitulos: ['02', '03'] },
   { sinal: 'ESTADO_CONSERVACAO', gatilhos: ['congelada', 'congelado', 'congeladas', 'congelados', 'refrigerada', 'refrigerado', 'refrigeradas', 'refrigerados', 'resfriada', 'resfriado', 'resfriadas', 'resfriados', 'fresca', 'fresco', 'frescas', 'frescos'], capitulos: ['02', '03'] },
-  // --- preditivo animal (RAG + lexical + grafo): silvestre × doméstico,
+  // --- preditivo animal (busca lexical + lexical + base local): silvestre × doméstico,
   // ovos e partes. Cada família tem capítulo próprio (01 vivo · 02 carne ·
   // 0407 ovos · 0206/0210/05 partes) — o sinal ancora o desempate antes
   // do resolvedor, sem inventar NCM.
@@ -333,7 +333,7 @@ export function analisarDescricao(entrada: EntradaDescricao): AnaliseDescricao {
     ),
   ]
 
-  // Fine-tuning família (RAG + lexical): seção como contexto e exceções que
+  // Calibragem família (busca lexical + lexical): seção como contexto e exceções que
   // quebram a herança. Seção nunca decide benefício sozinha (ampla demais),
   // mas orienta o desempate lexical e a trilha auditável.
   // `vivo-sem-destinacao` só vale SEM destinação (com REPRODUTOR/ABATE o uso
@@ -416,7 +416,7 @@ export function perguntasComplementares(analise: AnaliseDescricao): string[] {
   if (analise.sinais.includes('SEMENTE_PLANTIO')) {
     perguntas.push('É semente para semeadura (plantio) ou grão para consumo/industrialização?')
   }
-  // Fine-tuning família: exceção ativa sem pergunta específica acima ganha
+  // Calibragem família: exceção ativa sem pergunta específica acima ganha
   // uma pergunta de confirmação (a herança exige destinação/composição).
   if (analise.excecoesFamiliaAtivas.includes('destinacao-condicional') && !analise.sinais.includes('SEMENTE_PLANTIO')) {
     perguntas.push('Qual a destinação do produto (plantio, consumo, ração, produtor rural, adm. pública)? O benefício da família depende do uso real.')
@@ -446,7 +446,7 @@ export function perguntasComplementares(analise: AnaliseDescricao): string[] {
     perguntas.push('É instrumento médico, ótica ou musical? Informe o uso (diagnóstico, medição, correção visual?) e o tipo.')
   }
   if (!perguntas.length && analise.tokens.length <= 2) {
-    perguntas.push('Descreva com mais 1–2 detalhes (material, uso, estado) para a Aurum AI desempatar entre os candidatos.')
+    perguntas.push('Descreva com mais 1–2 detalhes (material, uso, estado) para a busca automática desempatar entre os candidatos.')
   }
   return perguntas
 }

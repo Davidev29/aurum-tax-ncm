@@ -1,7 +1,7 @@
 # simples-projection — Projeção Financeira Multi-Empresa
 
-> ⚠️ **Nota (08/10/2026):** as menções abaixo a "LLM preenche insights" são legado.
-> Hoje não há LLM em runtime — `insightsSugeridos` permanece vazio e nenhum texto
+> ⚠️ **Nota (08/10/2026):** as menções abaixo a "serviço externo preenche insights" são legado.
+> Hoje não há serviço externo em runtime — `insightsSugeridos` permanece vazio e nenhum texto
 > qualitativo é gerado. Todo número exibido vem do motor determinístico.
 
 Camada **ADITIVA** ao módulo estável `src/simples/` (nunca alterado).
@@ -82,7 +82,7 @@ input manual/CNPJ
       ├─ veredito = compensa | nao-compensa | empate-tecnico (|econ| ≤ margem, margem > 0)
       └─ alertas (sublimite 3.6M, 4.8M, Fator R, empresa nova, consolidação)
   → RelatorioProjecao { serieMensal, payback, economiaTotal, alertas, insightsSugeridos: [] }
-  → LLM preenche insights (motor nunca gera texto qualitativo)
+  → serviço externo preenche insights (motor nunca gera texto qualitativo)
 ```
 
 ## Regras fiscais aplicadas (LC 123/2006, art. 18)
@@ -145,16 +145,16 @@ if (!r.ok) console.error(r.erro, r.instrucao); // nunca inventa dados
 else simularCenarioDividido(r.params);
 ```
 
-## Guia de integração com a LLM
+## Guia de integração com a serviço externo
 
-Padrão do projeto: `src/application/aurum-ai-registro-ferramentas.ts`
+Padrão do projeto: `src/application/busca-registro-ferramentas.ts`
 (`SpecFerramenta` + `listarFerramentasParaModelo` + `executarFerramenta`).
 Esta camada expõe adaptador isolado — **não auto-registra** no núcleo.
 
 Opção A — plug manual (recomendado, 5 linhas, sem tocar o núcleo além de 1 import):
 
 ```ts
-import { REGISTRO_FERRAMENTAS, listarFerramentasParaModelo } from '@/application/aurum-ai-registro-ferramentas';
+import { REGISTRO_FERRAMENTAS, listarFerramentasParaModelo } from '@/application/busca-registro-ferramentas';
 import { SPECS_FERRAMENTAS_PROJECAO } from '@/simples-projection/ferramentas';
 
 // Em tempo de bootstrap do chat (não no módulo simples):
@@ -172,10 +172,10 @@ const tools = listarFerramentasProjecaoParaModelo(); // OpenAI-compatível
 const out = await executarFerramentaProjecao('simularCenarioDividido', { mesInicio: '2026-01', ... });
 ```
 
-Fine-tuning / guardrails da LLM (obrigatório no prompt do sistema):
+Calibragem / guardrails da serviço externo (obrigatório no prompt do sistema):
 
 1. Todo número exibido deve vir de `serieMensal`/`payback`/`economiaTotal` (whitelist como `coletarNumerosPermitidos`).
-2. `insightsSugeridos` começa vazio — a LLM preenche, o motor nunca gera texto qualitativo.
+2. `insightsSugeridos` começa vazio — a serviço externo preenche, o motor nunca gera texto qualitativo.
 3. Sem receita/percentual/anexos → perguntar, nunca simular com exemplo.
 4. BrasilAPI não fornece faturamento — CNPJ válido sem receita manual = `dados-insuficientes`.
 5. Alertas são sinalização, não bloqueio; consolidação de grupo exige contador.

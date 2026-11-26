@@ -7,7 +7,7 @@
  *   Restante só aparece após essa escolha.
  * - Folha 12m é coletada em TODAS as simulações (I–V, manual ou CNPJ);
  *   o Fator R só altera o anexo quando a atividade é sujeita (III/V).
- * - Relatório lateral só após "Visualizar cálculo com Aurum AI".
+ * - Relatório lateral só após "Visualizar cálculo com busca automática".
  * - Híbrido só quando o usuário opta por comparar.
  */
 import { create } from 'zustand';
@@ -119,7 +119,7 @@ interface SimplesState {
   opcaoSimples: boolean | null;
   opcoes: CnaeOpcao[];
   cnaeEscolhido: string;
-  // resultado (só visível após botão Aurum AI)
+  // resultado (só visível após botão busca automática)
   relatorioVisivel: boolean;
   convencional: ResultadoConvencional | null;
   hibrido: ResultadoHibrido | null;

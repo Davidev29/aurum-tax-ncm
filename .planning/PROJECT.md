@@ -30,7 +30,7 @@ Classificação tributária precisa e automatizada que garante conformidade com 
 - [ ] Publicar a release 1.1.0 no GitHub Releases (a atualização em máquinas instaladas depende disso)
 - [ ] Assinar o instalador (Windows Authenticode / mac notarização) antes de distribuir amplamente
 - [ ] Endurecer o renderer (CSP) e revisar o IPC do processo main — ver assessment 2026-11-13 (sandbox, `openExternal`, allowlist, redirects do `rede:buscar-texto`)
-- [ ] Refatorar monstros de código (`aurum-ai-chat.ts`, `NfeXml.tsx`) e reduzir dívidas da avaliação 2026-11-13 (catches engolidos, Clean Architecture nominal, CI mínimo)
+- [ ] Refatorar monstros de código (`NfeXml.tsx`) e reduzir dívidas da avaliação 2026-11-13 (catches engolidos, Clean Architecture nominal, CI mínimo)
 - [ ] Avaliar a extração do módulo Simples como calculadora standalone (`docs/PROMPT_TECNICO_CALCULADORA_SIMPLES_NACIONAL.md`)
 - [ ] Decidir publicação do pacote no npm/GitHub Releases vs. interno (LICENSE-MIT vs `private`/`UNLICENSED`)
 
@@ -65,7 +65,7 @@ Classificação tributária precisa e automatizada que garante conformidade com 
 | ~~Dexie (IndexedDB) sobre SQLite~~ → **Prisma + SQLite** | Banco robusto, transações reais (`db:transaction`), migração legada com backup, backup JSON 27 tabelas | ✓ Good (rework v1.0.0) |
 | Classificação client-side | Dados sensíveis nunca saem da máquina; cálculo 100% local | ✓ Good |
 | Tailwind CSS 4 | Design system enxuto | ✓ Good |
-| Determinismo acima de IA | Classificador oficial = resolvedor; Aurum AI apenas roteamento/contexto | ✓ Good |
+| Busca determinística | Classificador oficial = resolvedor; nenhum modelo externo nem serviço remoto | ✓ Good |
 | Venda avulsa (sem conta/chave) | Simplicidade para o cliente; menos superfície de ataque e suporte | ✓ Good (v1.1.0) |
 | Bases embutidas renovadas só via update do app | Cadeia de fornecimento controlada; sem drift de tabelas | ✓ Good |
 | Electron + NSIS PT-BR por usuário | Sem admin; atalhos padrão | ✓ Good |

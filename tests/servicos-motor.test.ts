@@ -1,5 +1,5 @@
 /**
- * Phase 7 — motor NBS + determinístico + GATE Aurum AI de serviços.
+ * Phase 7 — motor NBS + classificação determinística de serviços.
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/infrastructure/db/schema'
@@ -10,7 +10,6 @@ import {
   sugerirNbs,
 } from '@/infrastructure/base/classificacao-repo'
 import { classificarServicoPorDescricao } from '@/application/classificacao-inteligente-servicos'
-import { classificarComIaServicos } from '@/application/classificacao-ia-servicos'
 
 const noop = () => undefined
 
@@ -157,33 +156,3 @@ describe('classificarServicoPorDescricao (determinístico)', () => {
   })
 })
 
-describe('GATE Aurum AI de serviços', () => {
-  it('determinístico-alta não acorda worker', async () => {
-    await semear()
-    let usou: boolean | null = null
-    const g = await classificarComIaServicos(
-      { descricao: 'aula de inglês online para adultos' },
-      { aoWorker: (u) => { usou = u } },
-    )
-    expect(g.via).toBe('deterministico')
-    expect(usou).toBe(false)
-    expect(g.nbsValidado).toBe('122011100')
-  })
-
-  it('fallback IA decide ancorado com mock fora do Electron', async () => {
-    await semear()
-    const g = await classificarComIaServicos({ descricao: 'educação' })
-    expect(g.via).toBe('ia')
-    expect(g.mock).toBe(true)
-    expect(g.nbsValidado).toBe('122011100')
-    expect(g.confiancaIa).toBeGreaterThan(0)
-    expect(g.fontes.length).toBeGreaterThan(0)
-  })
-
-  it('NÃO SEI sem lastro: sem código, sem decisão', async () => {
-    await semear()
-    const g = await classificarComIaServicos({ descricao: 'nave espacial quântica' })
-    expect(g.codigoEscolhido).toBeNull()
-    expect(g.nbsValidado).toBeNull()
-  })
-})

@@ -3,7 +3,7 @@
  * - Motor reproduz a planilha centavo a centavo (golden vectors).
  * - Fator r gap determinístico.
  * - Matriz III×V SOMENTE em CNPJ dual; senão, duelo Conv × Hib do anexo em foco.
- * - IA read-only: fallback só cita números do JSON; validador rejeita invenção.
+ * - Insights determinísticos (read-only): só citam números do JSON; validador rejeita invenção.
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -14,9 +14,9 @@ import {
 } from '@/simples/relatorio-analitico';
 import {
   extrairNumerosDoTexto,
-  gerarInsightsFallback,
+  gerarInsights,
   validarInsights,
-} from '@/simples/ia-insights';
+} from '@/simples/insights';
 
 function inputBase(over: Partial<RelatorioInput> = {}): RelatorioInput {
   return {
@@ -147,10 +147,10 @@ describe('relatório analítico — motor determinístico', () => {
   });
 });
 
-describe('relatório analítico — IA read-only', () => {
+describe('relatório analítico — insights determinísticos (read-only)', () => {
   it('fallback dual só cita números do JSON canônico', () => {
     const r = orquestrarRelatorio(inputBase());
-    const insights = gerarInsightsFallback(r);
+    const insights = gerarInsights(r);
     expect(insights.length).toBeGreaterThan(0);
     const permitidos = coletarNumerosPermitidos(r);
     for (const ins of insights) {
@@ -168,7 +168,7 @@ describe('relatório analítico — IA read-only', () => {
     const r = orquestrarRelatorio(
       inputBase({ contexto: { modo: 'cnpj', anexoSelecionado: 'I', anexosElegiveis: ['I'] } }),
     );
-    const insights = gerarInsightsFallback(r);
+    const insights = gerarInsights(r);
     expect(insights.length).toBe(3);
     expect(insights[0].titulo).toMatch(/Anexo I/);
     const permitidos = coletarNumerosPermitidos(r);

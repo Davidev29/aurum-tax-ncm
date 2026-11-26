@@ -122,7 +122,7 @@ export function classificarErroRede(erro: unknown): { codigo: NonNullable<NcmSyn
         'Fale com o TI para liberar portalunico.siscomex.gov.br ou importe o JSON baixado no navegador.',
     }
   }
-  if (/failed to fetch|networkerror|network request failed|load failed/i.test(texto)) {
+  if (/failed to fetch|netmotorror|network request failed|load failed/i.test(texto)) {
     return {
       codigo: 'cors',
       mensagem:

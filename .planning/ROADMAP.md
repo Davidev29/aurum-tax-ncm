@@ -2,7 +2,7 @@
 
 ## Overview
 
-Do fundação até um classificador tributário completo e **entregue**: base NCM oficial embutida, classificação determinística pela LC 214/2025, lote, Simples Nacional, NBS/CNAE e grafo fiscal local. Histórico de execução abaixo — mantido como registro das fases; **todo o v1 está IMPLEMENTADO e VERIFICADO**.
+Do fundação até um classificador tributário completo e **entregue**: base NCM oficial embutida, classificação determinística pela LC 214/2025, lote, Simples Nacional, NBS/CNAE e busca local determinística. Histórico de execução abaixo — mantido como registro das fases; **todo o v1 está IMPLEMENTADO e VERIFICADO**.
 
 ## Phases
 
@@ -11,11 +11,11 @@ Do fundação até um classificador tributário completo e **entregue**: base NC
 - [x] **Phase 3: Search & UI** — busca/filtro, telas, rotas — implementada
 - [x] **Phase 4: Reporting & Export** — PDF/CSV/JSON, backup/restore — implementada
 - [x] **Phase 5: Calculadora Tributária & Validação Avançada** — implementada
-- [x] **Phase 6: IA Determinística 8 dígitos** — implementada (2026-10)
+- [x] **Phase 6: Busca determinística local (8 dígitos)** — implementada (2026-10)
 - [x] **Phase 7: Menu Serviços (NBS + CNAE + CNPJ)** — IMPLEMENTADA (2026-10-03)
-- [x] **Phase 8: Refinos Aurum AI** — IMPLEMENTADA (2026-10)
-- [x] **Phase 9: Consulta de CNAEs** — IMPLEMENTADA (2026-10-05; chaos 22/22)
-- [x] **Phase 10: Grafo Fiscal Híbrido (LadybugDB + KGLite)** — IMPLEMENTADA (2026-10-06; chaos 22/22)
+- [x] **Phase 8: Refinos do Simples Nacional (Fator R obrigatório)** — IMPLEMENTADA (2026-10)
+- [x] **Phase 9: Consulta de CNAEs** — IMPLEMENTADA (2026-10-05; chaos 20/20)
+- [x] **Phase 10: Fase de indexação avançada — REMOVIDA** (substituída pela busca determinística local)
 - [x] **Release v1.0.0** — 2026-10-12 (instalador Windows; tag `1.0` no origin)
 - [x] **v1.1.0 — Venda avulsa** — 2026-11-13: remoção do assistente de instalação e do portão de licença (Aurumbit); app entra direto; `npm test` corrigido; docs/`.planning`/contrato atualizados; instalador 1.1.0 gerado
 
@@ -31,7 +31,7 @@ Resolvedor oficial único (`montarClassificacao` / `montarRegraGeral`), manual o
 
 ### Phase 3: Search & UI — CONCLUÍDA
 
-8 views (Consulta NCM, Simples Nacional, Serviços NBS, Consulta de CNAEs, Lote, Produtos, Tabelas auxiliares, Legislação), code-splitting por tela, busca local (léxico+grafo), telas multi-entidade com paginação/filtro.
+8 views (Consulta NCM, Simples Nacional, Serviços NBS, Consulta de CNAEs, Lote, Produtos, Tabelas auxiliares, Legislação), code-splitting por tela, busca local determinística (léxico + resolvedor), telas multi-entidade com paginação/filtro.
 
 ### Phase 4: Reporting & Export — CONCLUÍDA
 
@@ -41,25 +41,25 @@ Relatórios PDF/CSV/JSON timbrados (pdfmake/SheetJS), emitente configurável, ex
 
 Redução explícita por item (% com base legal), N cards/análise comparativa (via Consulta), selo/ST por item (1.010 registros CEST), simulador editável, atualização automática das bases pelo release do programa (decisão arquitetural documentada).
 
-### Phase 6: IA Determinística (Aurum AI) — CONCLUÍDA
+### Phase 6: Busca determinística local — CONCLUÍDA
 
-LLM embutido **removido** (spike 06-00 → NO-GO). Ficou a Aurum AI determinística: orquestrador de tools + P(anexo) + memória por emitente, tudo auditável com `via`; 10 suítes de IA no portfólio de testes; docs em `docs/arquitetura-ia.md` e `docs/grafo-*.md`.
+Busca por descrição baseada em tokenização, dicionário comercial, sinônimos e resolvedor oficial como única verdade. Sem lastro, aplica a regra geral honesta; nenhum modelo externo é consultado.
 
 ### Phase 7 — Serviços (NBS + CNAE + CNPJ) — CONCLUÍDA (2026-10-03)
 
 Base viva CNAE×Anexo (1.090) + NBS serviços + ponte heurística (teto por Situação) + CNPJ via BrasilAPI; consulta NBS manual ou por CNPJ; paridade UX com a Consulta NCM.
 
-### Phase 8 — Refinos Aurum AI (Simples, Tools, Probabilístico, Memória) — CONCLUÍDA
+### Phase 8 — Refinos do Simples Nacional (Fator R obrigatório) — CONCLUÍDA
 
-Fator R correto por anexo; inferência de anexo por atividade com perguntas; dispatcher determinístico + P(anexo) calibrado (0.75/0.40); memória por emitente; chaos 22/22 (90,9%); dataset de regressão `tests/fixtures/simples-finetuning-*.jsonl`.
+Fator R correto por anexo, coleta obrigatória da folha 12m, veredito imediato na entrada e resultado reorganizado. Regras determinísticas, sem modelos externos.
 
 ### Phase 9 — Consulta de CNAEs (CNAE → NBS → Reforma) — CONCLUÍDA (2026-10-05)
 
-Duas camadas (regra sempre nos 1.090; NBS condicional nos 508 × qualclasstrib), veredito por ano 2026/2027/2033, chaos 22/22, CNPJ e chat enriquecidos.
+Duas camadas (regra sempre nos 1.090; NBS condicional nos 508 × qualclasstrib), veredito por ano 2026/2027/2033, chaos 20/20, consulta por CNPJ enriquecida.
 
-### Phase 10 — Grafo Fiscal Híbrido — CONCLUÍDA (2026-10-06)
+### Phase 10 — Fase de indexação avançada — REMOVIDA
 
-LadybugDB FTS + HNSW (all-MiniLM) + 2-hops + PageRank, overlay de aprendizado local com "por que sugeriu" (boost ≤0.3, TTL 90d, teto 5.000), modo FTS-puro de fallback, `via:grafo` auditável; 1621/1621 testes naquele marco.
+Fase descontinuada: suas responsabilidades de ranking foram absorvidas pela busca determinística local (índice lexical + resolvedor oficial). Nenhum artefato desta fase permanece no produto.
 
 ### v1.1.0 — Venda avulsa — CONCLUÍDA (2026-11-13)
 
@@ -72,11 +72,11 @@ LadybugDB FTS + HNSW (all-MiniLM) + 2-hops + PageRank, overlay de aprendizado lo
 
 | Marco | Release | Estado | Data |
 |-------|---------|--------|------|
-| Fases 1–10 | v1.0.0 | Implementado e verificado | 2026-10-12 |
+| Fases 1–9 | v1.0.0 | Implementado e verificado | 2026-10-12 |
 | Venda avulsa + limpeza release + docs | v1.1.0 | Concluído; instalador gerado; publicação pendente | 2026-11-13 |
 | Menu enxuto — Calculadora removida; Consulta NCM inicial | v1.2.0 | Concluído | 2026-11-13 |
 
-**Execution order:** Fases 1 → 10 concluídas; releases 1.0.0 → 1.1.0.
+**Execution order:** Fases 1 → 9 concluídas; releases 1.0.0 → 1.1.0.
 
 ## Próximas etapas (backlog de manutenção, sem fase aberta)
 

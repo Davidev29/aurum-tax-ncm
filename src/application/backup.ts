@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Backup e restauração completos do banco local (SPEC §10.6).
  *
  * - **Backup** exporta as 27 stores + emitente num único JSON
@@ -41,15 +41,13 @@ const LOJA_BACKUP: StoreName[] = [
   'classificacaoProduto',
   'anexos',
   'produtosDfe',
-  'ia_feedback',
+  'feedback_busca',
   'meta',
   'cnae',
   'consultasCnpj',
-  'conversasEmitente',
   'cnaeNbs',
   'lcNbs',
   'classificacoesConsolidadas',
-  'grafometa',
 ]
 
 /** Manifesto do backup: por tabela, a quantidade exportada ou `erro:<motivo>`. */
@@ -75,17 +73,15 @@ export interface Backup {
   classificacaoProduto?: unknown[]
   anexos?: unknown[]
   produtosDfe?: unknown[]
-  /** Feedback IA — opcional para backups antigos. */
-  iaFeedback?: unknown[]
+  /** Feedback busca — opcional para backups antigos. */
+  feedbackBusca?: unknown[]
   /** Cobertura total (27 stores): metadados, CNAE/ponte e dados de usuário. */
   meta?: unknown[]
   cnae?: unknown[]
   consultasCnpj?: unknown[]
-  conversasEmitente?: unknown[]
   cnaeNbs?: unknown[]
   lcNbs?: unknown[]
   classificacoesConsolidadas?: unknown[]
-  grafometa?: unknown[]
   /**
    * Manifesto de cobertura: `{ tabela: count | 'erro:<motivo>' }`. Tabela
    * que falhou na leitura exporta `[]` e registra o erro aqui — nenhuma
@@ -101,7 +97,7 @@ export interface Backup {
 
 /**
  * Prefixos de `meta` que NUNCA entram no backup (segredo de dispositivo +
- * resumos sensíveis — ver teste `chat-artefatos.test.ts`).
+ * resumos sensíveis — ver teste `testes de segurança`).
  */
 export const META_SENSIVEL_PREFIXOS = ['aurum_kek_', 'aurum_artefato_'] as const
 
@@ -120,7 +116,7 @@ export async function montarBackup(): Promise<Backup> {
       return []
     }
   }
-  const [ncm, cst, cstClassTrib, referencia, nbs, cest, auditLog, ncmNomenclatura, empresas, produtos, cfop, cstIcms, cstPisCofins, reclassificacoesManuais, classificacaoProduto, anexos, produtosDfe, iaFeedback] =
+  const [ncm, cst, cstClassTrib, referencia, nbs, cest, auditLog, ncmNomenclatura, empresas, produtos, cfop, cstIcms, cstPisCofins, reclassificacoesManuais, classificacaoProduto, anexos, produtosDfe, feedbackBusca] =
     await Promise.all([
       ler('ncm', db.ncm.toArray() as Promise<unknown[]>),
       ler('cst', db.cst.toArray() as Promise<unknown[]>),
@@ -139,18 +135,16 @@ export async function montarBackup(): Promise<Backup> {
       ler('classificacaoProduto', db.classificacaoProduto.toArray() as Promise<unknown[]>),
       ler('anexos', db.table('anexos').toArray() as Promise<unknown[]>),
       ler('produtosDfe', db.table('produtosDfe').toArray() as Promise<unknown[]>),
-      ler('ia_feedback', db.table('ia_feedback').toArray() as Promise<unknown[]>),
+      ler('feedback_busca', db.table('feedback_busca').toArray() as Promise<unknown[]>),
     ])
-  const [metaBruta, cnae, consultasCnpj, conversasEmitente, cnaeNbs, lcNbs, classificacoesConsolidadas, grafometa] =
+  const [metaBruta, cnae, consultasCnpj, cnaeNbs, lcNbs, classificacoesConsolidadas] =
     await Promise.all([
       ler('meta', db.meta.toArray() as Promise<unknown[]>),
       ler('cnae', db.cnae.toArray() as Promise<unknown[]>),
       ler('consultasCnpj', db.consultasCnpj.toArray() as Promise<unknown[]>),
-      ler('conversasEmitente', db.conversasEmitente.toArray() as Promise<unknown[]>),
       ler('cnaeNbs', db.cnaeNbs.toArray() as Promise<unknown[]>),
       ler('lcNbs', db.lcNbs.toArray() as Promise<unknown[]>),
       ler('classificacoesConsolidadas', db.classificacoesConsolidadas.toArray() as Promise<unknown[]>),
-      ler('grafometa', db.grafometa.toArray() as Promise<unknown[]>),
     ])
   // Chaves sensíveis (KEK/resumos) ficam fora do backup por construção.
   const meta = (metaBruta as Array<{ chave?: unknown }>).filter((r) => {
@@ -179,15 +173,13 @@ export async function montarBackup(): Promise<Backup> {
     classificacaoProduto,
     anexos,
     produtosDfe,
-    iaFeedback,
+    feedbackBusca,
     meta,
     cnae,
     consultasCnpj,
-    conversasEmitente,
     cnaeNbs,
     lcNbs,
     classificacoesConsolidadas,
-    grafometa,
     manifesto,
     parcial,
   }
@@ -231,15 +223,13 @@ export async function restaurarBackup(b: Backup, opts?: { confirmarParcial?: boo
     ['classificacaoProduto', b.classificacaoProduto],
     ['anexos', b.anexos],
     ['produtosDfe', b.produtosDfe],
-    ['ia_feedback', b.iaFeedback],
+    ['feedback_busca', b.feedbackBusca],
     ['meta', b.meta],
     ['cnae', b.cnae],
     ['consultasCnpj', b.consultasCnpj],
-    ['conversasEmitente', b.conversasEmitente],
     ['cnaeNbs', b.cnaeNbs],
     ['lcNbs', b.lcNbs],
     ['classificacoesConsolidadas', b.classificacoesConsolidadas],
-    ['grafometa', b.grafometa],
   ]
   for (const [store, itens] of plano) {
     if (!Array.isArray(itens) || !itens.length) continue
@@ -290,16 +280,14 @@ export async function restaurarBackup(b: Backup, opts?: { confirmarParcial?: boo
   enfileirar('classificacaoProduto', b.classificacaoProduto)
   enfileirar('anexos', b.anexos)
   enfileirar('produtosDfe', b.produtosDfe)
-  enfileirar('ia_feedback', b.iaFeedback)
+  enfileirar('feedback_busca', b.feedbackBusca)
   enfileirar('audit_log', b.auditLog)
   enfileirar('meta', b.meta)
   enfileirar('cnae', b.cnae)
   enfileirar('consultasCnpj', b.consultasCnpj)
-  enfileirar('conversasEmitente', b.conversasEmitente)
   enfileirar('cnaeNbs', b.cnaeNbs)
   enfileirar('lcNbs', b.lcNbs)
   enfileirar('classificacoesConsolidadas', b.classificacoesConsolidadas)
-  enfileirar('grafometa', b.grafometa)
 
   if (b.emitente) {
     ops.push({
@@ -332,3 +320,4 @@ export function ehBackup(dado: unknown): dado is Backup {
   const b = dado as Record<string, unknown>
   return typeof b.exportadoEm === 'string' && Array.isArray(b.ncm)
 }
+

@@ -5,7 +5,7 @@
  */
 import { useMemo } from 'react'
 import { orquestrarRelatorio } from '../relatorio-analitico'
-import { gerarInsightsFallback } from '../ia-insights'
+import { gerarInsights } from '../insights'
 import { exportarRelatorioAnaliticoPDF } from '../export-relatorio-analitico'
 import { normalizarListaAnexosSimples } from '../store'
 import type { SimplesState } from '../types'
@@ -62,7 +62,7 @@ export function useRelatorioAnalitico(
   ])
 
   const insights = useMemo(
-    () => (relatorio ? gerarInsightsFallback(relatorio) : []),
+    () => (relatorio ? gerarInsights(relatorio) : []),
     [relatorio]
   )
 

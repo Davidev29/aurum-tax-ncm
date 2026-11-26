@@ -11,7 +11,7 @@ import type {
   VinculoNcm,
 } from '@/domain/entities'
 import { lerArquivoBase } from '../bridge'
-import { bulkPut, db, INSERIR, type GrafoMeta, type MetaRecord } from '../db/schema'
+import { bulkPut, db, INSERIR, type MetaRecord } from '../db/schema'
 import { invalidarCacheBuscaTexto } from './classificacao-repo'
 import { fingerprintBase, type TipoBase } from './formatos'
 import {
@@ -91,7 +91,6 @@ export interface StatusBase {
    * `MANIFEST.grafo.json`); `null` quando o grafo ainda não foi semeado
    * (o app segue 100% funcional — fallback lexical).
    */
-  grafo: { nodos: number; arestas: number; hash: string; versao: string } | null
   ultimaImportacao: MetaRecord | null
   ultimaNomenclatura: MetaRecord | null
   embutida: boolean
@@ -396,7 +395,6 @@ export async function semearBaseEmbutida(
   if ((await baseCompleta()) && !forcar) {
     await completarStoresFase7().catch(() => false)
     await completarStoresFase9().catch(() => false)
-    await completarGrafoMeta().catch(() => false)
     return statusBase()
   }
 
@@ -545,7 +543,6 @@ export async function semearBaseEmbutida(
   })
 
   // Phase 10-01 — carimbo do grafo (derivado; sem `clear()` em nada fiscal).
-  await completarGrafoMeta().catch(() => false)
 
   invalidarCacheBuscaTexto()
   onProgress('Finalizado', 100)
@@ -553,7 +550,7 @@ export async function semearBaseEmbutida(
 }
 
 export async function statusBase(): Promise<StatusBase> {
-  const [ncm, cst, cstClassTrib, referencia, nomenclatura, nbs, cnae, anexos, produtosDfe, metaCred, metaInd, ultima, ultimaNom, cnaeNbs, lcNbs, classificacoesConsolidadas, grafoMeta] =
+  const [ncm, cst, cstClassTrib, referencia, nomenclatura, nbs, cnae, anexos, produtosDfe, metaCred, metaInd, ultima, ultimaNom, cnaeNbs, lcNbs, classificacoesConsolidadas] =
     await Promise.all([
       db.ncm.count(),
       db.cst.count(),
@@ -571,7 +568,6 @@ export async function statusBase(): Promise<StatusBase> {
       db.cnaeNbs.count().catch(() => 0),
       db.lcNbs.count().catch(() => 0),
       db.classificacoesConsolidadas.count().catch(() => 0),
-      db.grafometa.get('atual').catch(() => undefined),
     ])
   const embutida = await db.meta.get('base_embutida')
   const valorEmbutida = embutida?.valor as { geradoEm?: unknown } | undefined
@@ -599,10 +595,6 @@ export async function statusBase(): Promise<StatusBase> {
     lcNbs,
     classificacoesConsolidadas,
     resumoCnaeNbs: `${pt(cnae)} regras · ${pt(cnaesComNbs)} com NBS`,
-    grafo:
-      grafoMeta && typeof grafoMeta.hash === 'string'
-        ? { nodos: grafoMeta.nodos, arestas: grafoMeta.arestas, hash: grafoMeta.hash, versao: grafoMeta.versao }
-        : null,
     ultimaImportacao: ultima ?? null,
     ultimaNomenclatura: ultimaNom ?? null,
     embutida: Boolean(embutida),
@@ -755,38 +747,6 @@ export async function completarStoresFase9(): Promise<boolean> {
   return completou
 }
 
-/**
- * Completa o carimbo do grafo (Phase 10-01).
- *
- * Lê `grafo/MANIFEST.grafo.json` da base embutida e grava em `grafometa`
- * (`id: 'atual'`). Merge por `put`, nunca `clear()` — stores fiscais
- * intactas. Idempotente e best-effort: sem o arquivo (checkout antigo),
- * `grafometa` segue vazia e `statusBase().grafo` é `null` (fallback
- * lexical, sem quebrar o boot).
- *
- * Devolve `true` quando gravou o carimbo.
- */
-export async function completarGrafoMeta(): Promise<boolean> {
-  try {
-    if (!db.tables.some((t) => t.name === 'grafometa')) return false
-    const raw = await lerArquivoBase('grafo/MANIFEST.grafo.json')
-    const mani = JSON.parse(raw) as Partial<GrafoMeta>
-    if (!mani || typeof mani.hash !== 'string' || typeof mani.nodos !== 'number' || typeof mani.arestas !== 'number') {
-      return false
-    }
-    await db.grafometa.put({
-      id: 'atual',
-      hash: mani.hash,
-      versao: typeof mani.versao === 'string' ? mani.versao : 'grafo-v1',
-      nodos: mani.nodos,
-      arestas: mani.arestas,
-      geradoEm: typeof mani.geradoEm === 'string' ? mani.geradoEm : new Date().toISOString(),
-    })
-    return true
-  } catch {
-    return false
-  }
-}
 
 /** Apaga apenas a base importada (SPEC R10.12). */
 export async function apagarBaseImportada(): Promise<void> {  await Promise.all([
@@ -800,7 +760,6 @@ export async function apagarBaseImportada(): Promise<void> {  await Promise.all(
     db.cnaeNbs.clear().catch(() => undefined),
     db.lcNbs.clear().catch(() => undefined),
     db.classificacoesConsolidadas.clear().catch(() => undefined),
-    db.grafometa.clear().catch(() => undefined),
     db.anexos.clear().catch(() => undefined),
     db.produtosDfe.clear().catch(() => undefined),
     db.classificacaoProduto.clear(),

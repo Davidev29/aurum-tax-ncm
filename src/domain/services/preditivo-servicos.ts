@@ -2,7 +2,7 @@
  * Predição informativa de serviços (NBS) — camada preditiva por nomes/sinônimos.
  *
  * Problema (pedido do usuário): algumas atividades NÃO puxam NBS no fluxo
- * oficial (sem vínculo na base, RAG estrito vazio, CNAE sem NBS mapeado),
+ * oficial (sem vínculo na base, busca lexical estrito vazio, CNAE sem NBS mapeado),
  * mas BATEM com os termos do sistema (título NBS, descrição do vínculo,
  * descrição do cClassTrib/anexo LC 214). Antes, esses casos morriam em
  * "NÃO SEI / regra geral seca" — sem nenhuma pista.
@@ -16,7 +16,7 @@
  *   "Sugestão preditiva — apenas informativa, confirme com o contador"
  *   e o botão "Classificar oficialmente" (que valida via resolvedor).
  *
- * Fine-tuning NBS v2: este módulo é o "cérebro preditivo" do pack de
+ * Calibragem NBS v2: este módulo é o "cérebro preditivo" do pack de
  * serviços — scoring ponderado título×2 + descrição×1 + bônus benefício,
  * com expansão sinonímica em lote e tolerância casaToken (radical/fuzzy).
  */
@@ -38,7 +38,7 @@ import { db } from '@/infrastructure/db/schema'
 
 /** Aviso fixo exibido em TODA sugestão preditiva (nunca é decisão final). */
 export const AVISO_PREDITIVO_INFORMATIVO =
-  'Sugestão preditiva da Aurum AI — apenas informativa, NÃO é decisão final. Confirme com o contador e classifique oficialmente antes de escriturar.'
+  'Sugestão preditiva da busca automática — apenas informativa, NÃO é decisão final. Confirme com o contador e classifique oficialmente antes de escriturar.'
 
 export interface SugestaoPreditivaServico {
   /** NBS 9 dígitos (só dígitos) ou cct quando for hipótese sem NBS direto. */

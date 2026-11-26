@@ -26,20 +26,7 @@ import { existsSync, promises as fsp } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { autoUpdater } from 'electron-updater'
-import type * as TipoGrafo from './ia/grafo-service.cjs'
 import { caminhoBanco, copiarBanco, prepararBanco, registrarIpcDb } from './main/db'
-
-/**
- * Grafo fiscal (Phase 10-02): carregado com `require` preguiçoso porque o
- * `grafo-service.cjs` é COPIADO para `electron/dist/` (nunca bundlado —
- * ver `electron/esbuild.mjs`). Um `import` estático faria o esbuild ou
- * embutir o serviço no `main.js` (duplicação) ou emitir um `require` para
- * `./ia/grafo-service.cjs`, caminho que não existe em `dist/`.
- */
-function servicoGrafo(): typeof TipoGrafo {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require('./grafo-service.cjs') as typeof TipoGrafo
-}
 
 /** URL do servidor Vite, definida pelo script `dev:electron` (cross-env). */
 const URL_DEV = process.env.VITE_DEV_SERVER_URL ?? ''
@@ -371,60 +358,6 @@ function registrarIpc(): void {
     return { ok: true }
   })
 
-  // -----------------------------------------------------------------------
-  // Busca local determinística (grafo fiscal — RAG lexical + 2-hops).
-  // O worker LLM foi removido: sem `ia:classificar`, `ia:buscar`,
-  // `ia:conversar` ou `ia:status`. A classificação é 100% local e
-  // determinística (Top-20 lexical + seletor ancorado + resolvedor).
-  // -----------------------------------------------------------------------
-
-  /**
-   * `ia:grafo` — consulta o grafo fiscal local (Phase 10-02 / GRAFO-02):
-   * FTS + expansão 2-hops com caminho auditável. Sem `.lbug` responde
-   * `{ ok:false, fallback:'lexical' }` (o renderer cai no lexical atual).
-   * Rota direta ao `grafo-service` (sem worker).
-   */
-  ipcMain.handle(
-    'ia:grafo',
-    async (
-      _evento,
-      args?: { texto?: string; consulta?: string; k?: number; anoReferencia?: number; modoVetor?: 'hibrido' | 'fts-puro' },
-    ) => {
-      try {
-        const a = args ?? {}
-        const texto = String(a.texto ?? a.consulta ?? '')
-        // Fail-closed: texto vazio nunca consulta (o renderer cai no lexical).
-        if (!texto.trim()) return { ok: false, fallback: 'lexical', erro: 'texto vazio' }
-        return await servicoGrafo().grafoConsultar(
-          {
-            texto: String(a.texto ?? a.consulta ?? ''),
-            k: Number(a.k) > 0 ? Number(a.k) : 5,
-            ...(a.anoReferencia !== undefined && a.anoReferencia !== null ? { anoReferencia: Number(a.anoReferencia) } : {}),
-            ...(a.modoVetor === 'fts-puro' ? { modoVetorForcado: 'fts-puro' } : {}),
-          },
-          { app },
-        )
-      } catch (erro) {
-        return { ok: false, fallback: 'lexical', erro: mensagemDeErro(erro) }
-      }
-    },
-  )
-
-  /**
-   * `ia:grafo-uso` — escritor do overlay (Phase 10-05 / GRAFO-08):
-   * `registrarUso({tipo, termo, codigo, emitente, peso})` com TTL 90d + teto
-   * 5000 + demote. Só reordena — nunca cria redução. Best-effort, nunca lança.
-   */
-  ipcMain.handle(
-    'ia:grafo-uso',
-    async (_evento, args?: { tipo?: string; termo?: string | null; codigo?: string | null; emitente?: string | null; peso?: number }) => {
-      try {
-        return await servicoGrafo().registrarUso(args ?? {}, { app })
-      } catch (erro) {
-        return { ok: false, erro: mensagemDeErro(erro) }
-      }
-    },
-  )
 }
 
 /** Extrai texto das notas de release (string | array de releases). */
@@ -707,3 +640,4 @@ app.on('window-all-closed', () => {
 })
 
 export {}
+

@@ -1,11 +1,11 @@
 /**
- * Dicionário comercial da Aurum AI — nomes populares → NCM exato.
+ * Dicionário comercial da busca automática — nomes populares → NCM exato.
  *
  * Problema: a TEC usa vocabulário técnico e omite nomes de mercado.
  * "Parmesão" não existe em nenhuma descrição oficial (o item 0406.90.10
  * chama-se "Com um teor de umidade inferior a 36,0%, em peso (massa dura)");
  * o mesmo vale para provolone, gorgonzola, mortadela, presunto etc. Sem esta
- * ponte, o RAG lexical nunca matcha e a IA responde NÃO SEI até para o
+ * ponte, o busca lexical lexical nunca matcha e a busca responde NÃO SEI até para o
  * trivial — enquanto o ambíguo real ("coalho" = queijo ou enzima?) deve
  * continuar pedindo contexto.
  *
@@ -64,7 +64,7 @@ export const DICIONARIO_COMERCIAL: EntradaDicionarioComercial[] = [
   { ncm: '21069030', categoria: 'alimentos-bebidas', termos: ['whey', 'whey protein', 'creatina', 'suplemento whey'] },
   { ncm: '22030000', categoria: 'alimentos-bebidas', termos: ['cerveja', 'cerveja pilsen', 'cerveja latao', 'cerveja garrafa'] },
   // --- ponte mercado → TEC (auditoria de precisão, nov/2026): TEC omite estes
-  // nomes de mercado; sem o pin o RAG nunca os alcança ---
+  // nomes de mercado; sem o pin o busca lexical nunca os alcança ---
   { ncm: '04029900', categoria: 'alimentos-bebidas', termos: ['leite condensado', 'leite condensado com acucar', 'lata de leite condensado', 'leite moca', 'moca leite condensado', 'leitinho condensado'] },
   { ncm: '17019900', categoria: 'alimentos-bebidas', termos: ['acucar cristal', 'acucar refinado', 'acucar de confeiteiro', 'acucar branco', 'acucar granulado', 'acucar granulado de cana'] },
   { ncm: '10063021', categoria: 'alimentos-bebidas', termos: ['arroz branco', 'arroz tipo 1', 'arroz polido', 'arroz longo fino', 'arroz classe tipo 1', 'arroz agulhinha'] },
@@ -171,7 +171,7 @@ export const DICIONARIO_COMERCIAL: EntradaDicionarioComercial[] = [
   // NOTA: pins usam SEMPRE forma qualificada ("para abate/reprodução",
   // "caipira", "para postura") — o "X vivo" nu fica sem pin de propósito:
   // sem destinação o funil do chat pergunta antes de afirmar (reprodução ×
-  // abate muda a subposição) e o RAG tolerante cobre o léxico na Consulta.
+  // abate muda a subposição) e o busca lexical tolerante cobre o léxico na Consulta.
   { ncm: '01012100', categoria: 'animais-vivos', termos: ['cavalo reprodutor', 'egua reprodutora', 'cavalo de raca pura'] },
   { ncm: '01012900', categoria: 'animais-vivos', termos: ['cavalo vivo para abate', 'egua viva para abate', 'potro vivo para engorda'] },
   { ncm: '01041090', categoria: 'animais-vivos', termos: ['ovelha viva para reproducao', 'carneiro vivo para reproducao', 'ovelha viva para abate'] },

@@ -1,9 +1,9 @@
 /**
  * Cartões de Serviços (Phase 7) — CNAE + NBS no padrão do kit.
  *
- * Reuso total: `FaixaTributaria`, `CartaoEnxuto`, `MolduraAurumAI`,
- * `BarraConfiancaAurumAI`, `SeloAurumAI`, `BotaoDetalhePremium`,
- * `ModalNcmsAnalisados`, `ModalSimulacaoIA`, `ModalAuditoriaIA`, `Btn`.
+ * Reuso total: `FaixaTributaria`, `CartaoEnxuto`, `MolduraResultado`,
+ * `BarraConfiancaResultado`, `SeloResultado`, `BotaoDetalhePremium`,
+ * `ModalNcmsAnalisados`, `ModalSimulacaoBusca`, `ModalAuditoriaBusca`, `Btn`.
  * Novo aqui: só o cabeçalho CNAE (`FaixaCnae`) e a composição (`CartaoCnae`).
  */
 import { useEffect, useState, type ReactElement, type ReactNode } from 'react'
@@ -14,22 +14,22 @@ import { corSituacaoCnae, rotuloAnexoSimples } from '@/domain/services/cnae'
 import { descricaoHipotese } from '@/domain/services/verificacao-servicos'
 import type { HipoteseLegal } from '@/domain/services/verificacao-servicos'
 import type { AtividadeCnae } from '@/application/consultar-por-cnpj'
-import { VALOR_BASE_IA } from '@/infrastructure/ia/classificacao-ia-repo'
-import { nivelDeConfianca } from '@/domain/aurum-ai'
+import { VALOR_BASE_BUSCA } from '@/infrastructure/busca/classificacao-repo'
+import { nivelDeConfianca } from '@/domain/services/confianca-busca'
 import { useUi } from '@/store/ui'
 import { Btn, Painel } from './kit'
 import { FaixaTributaria } from './faixa-tributaria'
 import { CartaoEnxuto } from './consulta-enxuta'
 import {
-  BarraConfiancaAurumAI,
-  MolduraAurumAI,
-  SeloAurumAI,
-} from './aurum-ai'
+  BarraConfiancaResultado,
+  MolduraResultado,
+  SeloResultado,
+} from './resultado-automatico'
 import {
   BotaoDetalhePremium,
-  ModalAuditoriaIA,
+  ModalAuditoriaBusca,
   ModalNcmsAnalisados,
-  ModalSimulacaoIA,
+  ModalSimulacaoBusca,
 } from './consulta-premium'
 import { PillAnexos, BotaoVerLegislacao } from './cartoes'
 import { LINK_LC214 } from '@/domain/constants'
@@ -617,9 +617,9 @@ export function CartaoCnae({
       <SecaoNbsCnae atividade={atividade} />
 
       {decisao && resultado ? (
-        <MolduraAurumAI detalhe={`classificou o NBS da atividade ${atividade.codigoFormatado}`}>
+        <MolduraResultado detalhe={`classificou o NBS da atividade ${atividade.codigoFormatado}`}>
           <div className="flex flex-wrap items-center gap-2">
-            <BarraConfiancaAurumAI valor={atividade.confiancaFinal} compact />
+            <BarraConfiancaResultado valor={atividade.confiancaFinal} compact />
             <span className="text-[11px] text-slate-500 dark:text-slate-400">
               nível {nivelDeConfianca(atividade.confiancaFinal)}
             </span>
@@ -636,13 +636,13 @@ export function CartaoCnae({
               {atividade.motivoEstado}
             </p>
           ) : null}
-          <div className="aurum-ai-acoes" role="group" aria-label="Explorar decisão da IA">
+          <div className="resultado-auto-acoes" role="group" aria-label="Explorar decisão automática">
             {resultado.candidatos.length ? (
               <BotaoDetalhePremium
                 icone="🔎"
                 rotulo="NBSs analisados"
                 contagem={Math.min(resultado.candidatos.length, 8)}
-                variante="ia"
+                variante="busca"
                 titulo="Ver os NBS avaliados — abre em modal glass"
                 onClick={() => setModal('ncms')}
               />
@@ -651,7 +651,7 @@ export function CartaoCnae({
               <BotaoDetalhePremium
                 icone="🧮"
                 rotulo="Simulação"
-                titulo={`Simulação sobre ${fmtMoeda(VALOR_BASE_IA)} — abre em modal glass`}
+                titulo={`Simulação sobre ${fmtMoeda(VALOR_BASE_BUSCA)} — abre em modal glass`}
                 onClick={() => setModal('simulacao')}
               />
             ) : null}
@@ -674,10 +674,10 @@ export function CartaoCnae({
             codigoPreferido={resultado.codigoEscolhido}
             subtitulo={`A busca automática avaliou ${resultado.candidatos.length} pista(s) para esta atividade.`}
           />
-          <ModalSimulacaoIA
+          <ModalSimulacaoBusca
             aberto={modal === 'simulacao'}
             onFechar={() => setModal(null)}
-            titulo={`Simulação exemplificativa (${fmtMoeda(VALOR_BASE_IA)})`}
+            titulo={`Simulação exemplificativa (${fmtMoeda(VALOR_BASE_BUSCA)})`}
           >
             {resultado.calculo ? (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -701,14 +701,14 @@ export function CartaoCnae({
                 </div>
               </div>
             ) : null}
-          </ModalSimulacaoIA>
-          <ModalAuditoriaIA
+          </ModalSimulacaoBusca>
+          <ModalAuditoriaBusca
             aberto={modal === 'auditoria'}
             onFechar={() => setModal(null)}
             fontes={resultado.fontes}
             nota={`Motivo: ${resultado.motivo} · CNAE origem ${atividade.codigoFormatado}.`}
           />
-        </MolduraAurumAI>
+        </MolduraResultado>
       ) : null}
     </article>
   )
@@ -797,12 +797,12 @@ export function BlocoFiscalNbs({ cl }: { cl: Classificacao }): ReactElement {
   )
 }
 
-export function SeloServicosAurumAI(): ReactElement {
-  return <SeloAurumAI variante="compacto" />
+export function SeloServicosBusca(): ReactElement {
+  return <SeloResultado variante="compacto" />
 }
 
 export function ResumoConfiancaServicos({ valor }: { valor: number }): ReactElement {
-  return <BarraConfiancaAurumAI valor={valor} compact />
+  return <BarraConfiancaResultado valor={valor} compact />
 }
 
 export function DetalhesPerguntasServicos({ itens }: { itens: string[] }): ReactElement | null {

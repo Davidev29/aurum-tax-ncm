@@ -10,7 +10,7 @@
  * - Vitest (`VITEST=true`): banco por ARQUIVO de teste, clonado do template
  *   criado em `tests/setup.ts` (`AURUM_TEST_TEMPLATE`). O contador vive em
  *   `globalThis`, então cada re-importação isolada ganha um arquivo próprio —
- *   sem vazamento entre arquivos, mesmo no mesmo worker;
+ *   sem vazamento entre arquivos, mesmo no mesmo motor;
  * - demais casos Node: `./prisma/dev.db` (relativo à raiz do projeto).
  *
  * Robustez SQLite aplicada em toda conexão:
@@ -70,7 +70,7 @@ function seqGlobal(): number {
 function caminhoTestes(): string {
   const template = process.env.AURUM_TEST_TEMPLATE ?? ''
   // Sufixo aleatório por cópia: o contador em `globalThis` supostamente basta,
-  // mas com workers reciclados ele pode repetir — duas suítes no mesmo arquivo
+  // mas com motors reciclados ele pode repetir — duas suítes no mesmo arquivo
   // rasgariam uma à outra. Colisão aqui = banco malformado no teste vizinho.
   const id = `${process.pid}-${process.env.VITEST_WORKER_ID ?? '0'}-${seqGlobal()}-${Math.random().toString(36).slice(2, 10)}`
   const destino = join(tmpdir(), `aurum-test-${id}.db`)
@@ -116,18 +116,18 @@ export function resolverCaminhoBanco(caminhoExplicito?: string): string {
 }
 
 function aplicarPragmas(p: PrismaClientLike): Promise<void> {
-  // `busy_timeout` PRIMEIRO: sob contenção (seed + sync + UI, workers de teste
-  // disputando o template), os PRAGMAs seguintes esperam em vez de lançar
-  // `SQLITE_BUSY` e derrubar a conexão — era o `PRAGMA journal_mode=WAL`
+  // `busy_timeout` PRIMEIRO: sob contenção (seed + sync + UI, motors de teste
+  // disputando o template), os Pbusca lexicalMAs seguintes esperam em vez de lançar
+  // `SQLITE_BUSY` e derrubar a conexão — era o `Pbusca lexicalMA journal_mode=WAL`
   // falhando no setup dos testes. Cada pragma é best-effort individual: um
   // setter que o driver recusa (ex.: WAL em FS sem lock) não impede os demais.
-  // PRAGMAs devolvem linha em setter ou getter — sempre via query.
+  // Pbusca lexicalMAs devolvem linha em setter ou getter — sempre via query.
   return (async () => {
     const pragmas = [
-      'PRAGMA busy_timeout=5000;',
-      'PRAGMA journal_mode=WAL;',
-      'PRAGMA synchronous=NORMAL;',
-      'PRAGMA foreign_keys=ON;',
+      'Pbusca lexicalMA busy_timeout=5000;',
+      'Pbusca lexicalMA journal_mode=WAL;',
+      'Pbusca lexicalMA synchronous=NORMAL;',
+      'Pbusca lexicalMA foreign_keys=ON;',
     ]
     for (const pragma of pragmas) {
       try {
@@ -189,12 +189,12 @@ async function garantirSchema(p: PrismaClientLike): Promise<void> {
 }
 
 /**
- * Checagem de integridade (`PRAGMA integrity_check`). Devolve `'ok'` ou o
+ * Checagem de integridade (`Pbusca lexicalMA integrity_check`). Devolve `'ok'` ou o
  * texto do problema. Arquivo zerado/ausente conta como `'ok'` — o bootstrap
  * acima o materializa.
  */
 export async function checarIntegridade(p: PrismaClientLike): Promise<string> {
-  const linhas = (await p.$queryRawUnsafe('PRAGMA integrity_check;')) as Array<Record<string, unknown>>
+  const linhas = (await p.$queryRawUnsafe('Pbusca lexicalMA integrity_check;')) as Array<Record<string, unknown>>
   const valores = linhas.map((l) => String(Object.values(l)[0] ?? ''))
   if (valores.length === 1 && valores[0].toLowerCase() === 'ok') return 'ok'
   return valores.join('; ').slice(0, 500) || 'integridade-desconhecida'

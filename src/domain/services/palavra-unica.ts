@@ -2,20 +2,20 @@
  * Trava de especificidade sem lastro — palavra única sem contexto.
  *
  * Problema: com uma única palavra (ex.: "chocolate") e sem nenhum refino
- * (destinação/composição/uso), a IA escolhia o NCM mais específico que casava
+ * (destinação/composição/uso), a busca escolhia o NCM mais específico que casava
  * ("Chocolate branco", 1704.90.10) em vez do genérico ("Chocolate") — ou seja,
  * atribuía qualidade/complemento (branco, recheado, ao leite…) sem nenhuma
  * entrada que comprovasse o qualificador. O mesmo valia para verbo isolado
  * (ex.: "plantar" virando "semente para semeadura" sem contexto).
  *
- * Regra (vale para o determinístico e para o fallback Aurum AI):
+ * Regra (vale para o determinístico e para o fallback busca automática):
  * - entrada minimalista = 1 único token relevante no conjunto
  *   (descrição + destinação + composição + uso) e nenhum refino preenchido;
- * - com entrada minimalista, a IA NUNCA decide por um NCM cujo item próprio
+ * - com entrada minimalista, a busca NUNCA decide por um NCM cujo item próprio
  *   carrega qualificador não comprovado quando existe concorrente genérico
  *   (sem extras) com lastro — prefere o genérico ("retorna só ele");
  * - se vários genéricos empatam (ex.: "Chocolate" recheado × não recheado),
- *   a IA sugere o primeiro genérico como hipótese provisória baixa ancorada
+ *   a busca sugere o primeiro genérico como hipótese provisória baixa ancorada
  *   (a verificar com 1–2 detalhes) — NÃO SEI fica só para o sem-lastro;
  * - verbo provável no infinitivo sem lastro literal na base também é NÃO SEI
  *   (a ação não comprova o produto);
@@ -113,7 +113,7 @@ const SUBSTANTIVOS_TERMINADOS_EM_AR_ER_IR = new Set([
  * Heurística conservadora de verbo no infinitivo ("plantar", "correr",
  * "congelar"): token longo terminado em -ar/-er/-ir, fora da allowlist de
  * substantivos. Com palavra única, verbo sem lastro literal na base não
- * comprova produto — a IA deve pedir contexto em vez de inferir o
+ * comprova produto — a busca deve pedir contexto em vez de inferir o
  * substantivo ("plantar" ≠ "semente" comprovada).
  */
 export function ehVerboProvavel(token: unknown): boolean {

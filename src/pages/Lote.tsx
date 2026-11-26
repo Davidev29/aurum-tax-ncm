@@ -1,15 +1,15 @@
-/**
+﻿/**
  * Tela **Classificação em lote** (SPEC §6) — com classificação assistida.
  *
  * Fluxo 1 · 2 · 3:
  * 1. Enviar CSV/XLSX (COD/SKU, NOME DO PRODUTO, NCM, CFOP, CST, PIS, COFINS);
- * 2. Revisar com a IA — nome + NCM = tributação provável. Com 1 opção a IA
+ * 2. Revisar com a busca — nome + NCM = tributação provável. Com 1 opção a busca
  *    confirma; com N opções ela explica por que há N
  *    e pré-seleciona a mais provável — a decisão final é do usuário;
  * 3. Salvar todos como produtos (upsert por SKU).
  *
  * Paridade v1: "Salvar todos" grava só linhas com SKU **e** classificação.
- * Anti-alucinação: todo comentário da IA vem de `analiseIA` (template sobre
+ * Anti-alucinação: todo comentário da busca vem de `analiseIA` (template sobre
  * CST/cClassTrib/redução/anexo/base legal oficiais) — nenhum artigo é inferido.
  * Garantia de revisão: nada é gravado sem o modal "Revisar antes de salvar"
  * (o que será salvo × o que ficará de fora + aceite explícito do usuário).
@@ -17,7 +17,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { EMITENTE_PADRAO } from '@/domain/entities'
 import { fmtNcm } from '@/domain/services/format'
-import type { AnaliseLoteIA } from '@/domain/services/analise-lote-ia'
+import type { AnaliseLoteBusca } from '@/domain/services/analise-lote'
 import { baixarModeloLote, exportarLotePDF } from '@/infrastructure/exporters/relatorios'
 import { registrarExportador } from '@/infrastructure/pdf/menu-exportacao'
 import type { LinhaLote } from '@/infrastructure/exporters/relatorios'
@@ -34,12 +34,12 @@ import {
   ZonaArquivo,
 } from '@/ui/cartoes'
 import {
-  AtribuicaoAurumAI,
-  BarraConfiancaAurumAI,
-  FontesAurumAI,
-  MolduraAurumAI,
-  SeloAurumAI,
-} from '@/ui/aurum-ai'
+  AtribuicaoResultado,
+  BarraConfiancaResultado,
+  FontesResultado,
+  MolduraResultado,
+  SeloResultado,
+} from '@/ui/resultado-automatico'
 import { BarraProgresso, Btn, Check, Modal, Painel, Texto } from '@/ui/kit'
 import { Entrada, Revelar } from '@/ui/motion'
 import { Campo, Olho, Secao, SecaoInformacoesAdicionais } from '@/ui/detalhes'
@@ -153,7 +153,7 @@ export function Lote() {
               <h2 className="text-base font-black tracking-tight sm:text-lg">
                 Classificação em lote
               </h2>
-              <SeloAurumAI variante="compacto" titulo="Classificação assistida: nome + NCM = tributação provável, sempre validada pela base oficial" />
+              <SeloResultado variante="compacto" titulo="Classificação assistida: nome + NCM = tributação provável, sempre validada pela base oficial" />
             </div>
             <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-slate-500 dark:text-slate-400">
               Envie CSV/Excel com colunas COD/SKU, NOME DO PRODUTO, NCM, CFOP, CST, PIS, COFINS.
@@ -162,7 +162,7 @@ export function Lote() {
               <strong> pré-seleciona a tributação integral de segurança</strong> — você confere e escolhe pela operação real.
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <AtribuicaoAurumAI detalhe="nome + NCM = tributação provável" />
+              <AtribuicaoResultado detalhe="nome + NCM = tributação provável" />
               <span className="lote-garantia" title="A classificação em lote roda 100% local neste computador: lê o nome + NCM e indica entre as tributações oficiais da base do sistema.">
                 💻 Classificação automática — 100% local
               </span>
@@ -240,7 +240,7 @@ export function Lote() {
             <div className="lote-como-funciona mt-4 grid gap-2 sm:grid-cols-3">
               {[
                 { t: '1 · NCM manda', d: 'Cada linha é resolvida pelo motor único (vínculos oficiais ou regra geral).' },
-                { t: '2 · Nome compara', d: 'Com 2+ opções, a IA mostra a aderência do nome a cada base legal — sem fixar benefício.' },
+                { t: '2 · Nome compara', d: 'Com 2+ opções, a busca automática mostra a aderência do nome a cada base legal — sem fixar benefício.' },
                 { t: '3 · Você decide', d: 'A integral já vem pré-selecionada por segurança — troque só com benefício confirmado e salve.' },
               ].map((c) => (
                 <div key={c.t} className="lote-mini">
@@ -777,7 +777,7 @@ function LinhaLote({
         style={{ animationDelay: `${atraso}ms` }}
       >
         <td className="min-w-[220px]">
-          <button type="button" onClick={onAlternar} className="lote-expansor" aria-expanded={aberto} title={aberto ? 'Recolher análise da IA' : 'Expandir análise da IA'}>
+          <button type="button" onClick={onAlternar} className="lote-expansor" aria-expanded={aberto} title={aberto ? 'Recolher análise automática' : 'Expandir análise automática'}>
             <span className={`lote-chevron${aberto ? ' is-aberto' : ''}`} aria-hidden="true">▸</span>
             <span className="min-w-0 text-left">
               <span className="block truncate font-mono text-[11px] font-black">{item.codigo || '—'}</span>
@@ -793,7 +793,7 @@ function LinhaLote({
           <CelulaIA item={item} indiceEscolhido={indiceEscolhido} trocouSugestao={Boolean(trocouSugestao)} />
         </td>
         <td className="text-right" onClick={(e) => e.stopPropagation()}>
-          <Olho onClick={onDetalhe} titulo="Ver todos os tributos do item + análise da IA" />
+          <Olho onClick={onDetalhe} titulo="Ver todos os tributos do item + análise automática" />
         </td>
       </tr>
       {aberto ? (
@@ -843,14 +843,14 @@ function CelulaIA({ item, indiceEscolhido, trocouSugestao }: { item: ItemLote; i
     return (
       <span className="lote-ia lote-ia--ok" title={a.resumo}>
         <span aria-hidden="true">✓</span> única · confirmada
-        <BarraConfiancaAurumAI valor={a.confianca} compact />
+        <BarraConfiancaResultado valor={a.confianca} compact />
       </span>
     )
   }
   return (
     <span className="lote-ia lote-ia--multi" title={a.resumo}>
       <span aria-hidden="true">🛡</span> integral sugerida · Opção {a.maisProvavelIndice + 1}/{a.totalOpcoes}
-      <BarraConfiancaAurumAI valor={a.confianca} compact />
+      <BarraConfiancaResultado valor={a.confianca} compact />
       {trocouSugestao ? (
         <span className="lote-ia-trocou" title={`Você escolheu a Opção ${indiceEscolhido + 1}; a segurança sugeria a integral (Opção ${a.maisProvavelIndice + 1}). A decisão final é sua.`}>
           você optou pela {indiceEscolhido + 1}
@@ -879,17 +879,17 @@ function PainelAnaliseIA({
   onDetalhe: () => void
 }) {
   const escolher = useLote((s) => s.escolher)
-  const a: AnaliseLoteIA | null | undefined = item.analiseIA
+  const a: AnaliseLoteBusca | null | undefined = item.analiseIA
   if (!a) return null
   const sugerida = a.maisProvavelIndice
 
   return (
     <div className="lote-analise animate-fade-up" aria-label={`Análise automática para ${item.codigo || 'item'}`}>
       <div className="lote-analise-cab">
-        <SeloAurumAI variante="compacto" />
+        <SeloResultado variante="compacto" />
         <span className="text-[11px] font-black uppercase tracking-wide">{a.titulo}</span>
         <span className="ml-auto flex flex-wrap items-center gap-1.5">
-          <BarraConfiancaAurumAI valor={a.confianca} />
+          <BarraConfiancaResultado valor={a.confianca} />
           <button type="button" onClick={onDetalhe} className="lote-link" title="Abrir o cartão completo (regime anterior + Reforma + análise)">
             👁 cartão completo
           </button>
@@ -999,12 +999,12 @@ function PainelAnaliseIA({
       ) : null}
 
       <p className="lote-orientacao">🧭 {a.orientacaoEscolha}</p>
-      <FontesAurumAI fontes={a.fontes} />
+      <FontesResultado fontes={a.fontes} />
     </div>
   )
 }
 
-/** Modal compacto do item do lote — regime anterior + Reforma + análise IA. */
+/** Modal compacto do item do lote — regime anterior + Reforma + análise automática. */
 function ModalLoteDetalhe({ item, indiceOriginal, onFechar }: { item: ItemLote | null; indiceOriginal: number; onFechar: () => void }) {
   const escolher = useLote((s) => s.escolher)
   const c = item?.escolhida
@@ -1024,7 +1024,7 @@ function ModalLoteDetalhe({ item, indiceOriginal, onFechar }: { item: ItemLote |
       {item && a ? (
         <div className="space-y-3">
           <AvisoNcmExtinto nomenclatura={item.nomenclatura} />
-          <MolduraAurumAI detalhe={a.titulo}>
+          <MolduraResultado detalhe={a.titulo}>
             <p className="text-xs leading-relaxed">{a.resumo}</p>
             {a.porqueMultiplas ? (
               <p className="mt-2 text-xs leading-relaxed"><strong>💬 Por que {a.totalOpcoes}?</strong> {a.porqueMultiplas}</p>
@@ -1045,12 +1045,12 @@ function ModalLoteDetalhe({ item, indiceOriginal, onFechar }: { item: ItemLote |
                     </option>
                   ))}
                 </select>
-                <BarraConfiancaAurumAI valor={a.confianca} compact />
+                <BarraConfiancaResultado valor={a.confianca} compact />
               </div>
             ) : null}
             <p className="mt-2 text-[11px] leading-relaxed text-slate-500">🧭 {a.orientacaoEscolha}</p>
-            <FontesAurumAI fontes={a.fontes} />
-          </MolduraAurumAI>
+            <FontesResultado fontes={a.fontes} />
+          </MolduraResultado>
           <Secao titulo="Regime anterior" icone="🧾">
             <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
               <Campo rotulo="CFOP" valor={item.cfop || '—'} mono />
@@ -1272,3 +1272,5 @@ function paraLinhaLote(it: ItemLote): LinhaLote {
     manual: it.manual,
   }
 }
+
+

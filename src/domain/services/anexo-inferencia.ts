@@ -6,7 +6,7 @@
  * V é provisório (precisaConfirmar=true → pedir folha para III×V).
  * Puro e testável.
  */
-import { extrairAnexoRobusto, type AnexoId } from './valores-chat'
+import { extrairAnexoRobusto, type AnexoId } from './valores-texto'
 
 export type OrigemAnexo = 'explicito' | 'atividade' | null
 

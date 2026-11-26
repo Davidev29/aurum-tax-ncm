@@ -61,7 +61,7 @@ export interface SugestaoNbsJson {
   trilha: EtapaTrilhaServico[]
   foraDeEscopo?: boolean
   /**
-   * Predição informativa por nomes/sinônimos (fine-tuning NBS v2).
+   * Predição informativa por nomes/sinônimos (calibragem NBS v2).
    * Preenchida quando o fluxo oficial dá regra geral ou vazio, MAS há
    * lastro nos termos do sistema. Cada item tem `apenasInformativo: true`
    * — a UI exibe como sugestão a verificar, NUNCA como decisão final.
@@ -248,7 +248,7 @@ export async function classificarServicoPorDescricao(
         if (!nucleo.length) continue
         efetiva = nucleo.join(' ')
       }
-      // RAG estrito aqui (precisão); a tolerância entra na última bala.
+      // busca lexical estrito aqui (precisão); a tolerância entra na última bala.
       const achados = await buscarNbsPorTexto(efetiva, 30, { tolerante: false })
       for (const item of achados) {
         const atual = agregados.get(item.codigo)
@@ -330,7 +330,7 @@ export async function classificarServicoPorDescricao(
       }
     }
   }
-  // Última rede de segurança: RAG tolerante (OR ponderado com radical/fuzzy)
+  // Última rede de segurança: busca lexical tolerante (OR ponderado com radical/fuzzy)
   // sobre original + expandida + unigramas. O determinístico usava SÓ AND —
   // qualquer ruído ("online", "delivery") zerava tudo.
   if (!agregados.size) {
@@ -350,7 +350,7 @@ export async function classificarServicoPorDescricao(
       if (agregados.size >= 12) break
     }
     if (agregados.size) {
-      trilha.push({ etapa: 'RAG tolerante', detalhe: 'match obtido no OR ponderado (radical/fuzzy) — confiança segue o cálculo padrão' })
+      trilha.push({ etapa: 'busca lexical tolerante', detalhe: 'match obtido no OR ponderado (radical/fuzzy) — confiança segue o cálculo padrão' })
     }
   }
 

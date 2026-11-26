@@ -15,8 +15,8 @@ ui/pages/store  →  application  →  domain
 | Camada | Papel | Pode importar |
 |---|---|---|
 | `domain/*` | Regra fiscal pura (LC 214/2025): entidades, serviços, constantes | `domain/*` apenas (**alvo** — ver §5) |
-| `application/*` | Casos de uso + ports (orquestram domain + infrastructure) | `domain`, `ai/guards`, `infrastructure` (via ports), outros `application` |
-| `infrastructure/*` | Adaptadores: db, parsers, exporters, bridge/Electron, repos IA | `domain`, `application` (tipos/ports) |
+| `application/*` | Casos de uso + ports (orquestram domain + infrastructure) | `domain`, `infrastructure` (via ports), outros `application` |
+| `infrastructure/*` | Adaptadores: db, parsers, exporters, bridge/Electron, repos de busca determinística | `domain`, `application` (tipos/ports) |
 | `store/*` | Estado zustand (fatia por tela) | `application`, `domain`, `infrastructure` |
 | `pages/*`, `simples/*` | Apresentação React (alvo: só via `application` — ver §5) | `store`, `ui`, `application`, `domain` (format/services) |
 | `ui/*` | Kit visual sem negócio (`kit`, `Layout`, `motion`, `skeleton`) | quase nada (só `domain/constants`, `store/ui` no `kit`) |
@@ -50,8 +50,6 @@ Fronteiras que `infrastructure` implementa e `application` consome:
 - Trilha auditável dupla: `audit_log` (SQLite) + `logs/*.jsonl` (best-effort
   Node) via `src/application/log-rotacao.ts` (teto 5 MiB, 3 gerações, scrub
   de `descricao` com `removerPII`).
-- Overlay de aprendizado (`application/grafo-overlay.ts`) — só reordena
-  (boost com teto), nunca cria redução; resolvedor tem veto total; nunca lança.
 
 ## 5. Pages só via application (alvo + violações conhecidas)
 
@@ -70,7 +68,7 @@ Fronteiras que `infrastructure` implementa e `application` consome:
   `services/validacao-produto.ts` (→ `infrastructure/db`, `base/*`);
   `services/validacao-produto.ts` (→ tipo de `application/produtos`);
   `tutorial.ts` (→ tipo de `store/ui`); `constants/aliases.ts` (→ db);
-  `simples/nucleo.ts`, `simples/validacao.ts`, `services/percentual-chat.ts`
+  `simples/nucleo.ts`, `simples/validacao.ts`
   (→ `simples/*`).
 - Migração de exemplo já aplicada: `NfeXmlPolida` dedupou `apurarIbsCbs`
   (cache por referência `apuracaoUnica`); o próximo passo é expor a apuração
@@ -85,12 +83,8 @@ Fronteiras que `infrastructure` implementa e `application` consome:
 - Chart.js: registro central em `src/ui/chart-registry.ts`
   (`garantirChartsRegistrados`, idempotente). Migração pendente nos 4 pontos
   que ainda registram direto: `simples/Graficos.tsx:26`, `pages/NfeXml.tsx:58`,
-  `ui/grafico-chat.tsx:31` (+plugin de sombra 56-64),
   `simples-projection/SimuladorSegregacao.tsx:34`. **Não** importar o registry
   no boot — puxaria o `chart.js` para o chunk inicial.
-- Logs: `application/log-rotacao.ts` criado; integração pendente —
-  `anexarConsultaIaJsonl` (`infrastructure/ia/classificacao-ia-repo.ts:93`)
-  deve delegar a `acrescentarLog('consultas-ia.jsonl', …)`.
 - A11y junto: skip-link `#conteudo` + `aria-label` nos 5 botões só-ícone do
   `Layout`; `Modal` (`ui/kit.tsx`) com foco inicial, focus-trap (Tab) e
   retorno de foco a quem abriu.

@@ -4,7 +4,7 @@
  * Clicar em "Ler no sistema" abre a norma **dentro da aplicação**
  * (`ModalLegislacao`): texto interno quando o site oficial permite, senão a
  * página original embutida — com Baixar PDF, Imprimir e Recarregar, sem sair
- * do app. O detalhamento por trecho (artigo/parágrafo) acontece na
+ * do app. O detalhamento por trecho (artigo/parábase local) acontece na
  * **Consulta**, via modal "Visualizar legislação" que ancora no `#artNNN`.
  *
  * Os decretos do RICMS-CE vivem no portal SEFAZLEGIS (SPA sem link profundo

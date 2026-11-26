@@ -4,7 +4,7 @@
  * Espelho de `@/domain/constants/dicionario-comercial` (bens) para o domínio
  * NBS. Problema: a base NBS usa juridiquês ("Fornecimento dos serviços de
  * educação (Anexo II)") e omite o nome que o usuário digita ("autoescola",
- * "dentista", "show"). Sem esta ponte, o RAG lexical nunca matcha e a IA
+ * "dentista", "show"). Sem esta ponte, o busca lexical lexical nunca matcha e a busca
  * responde vazio até para o trivial.
  *
  * Papel: FONTE DE CANDIDATOS, nunca decisão. Cada pin passa pelo resolvedor

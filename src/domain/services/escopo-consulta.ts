@@ -1,7 +1,7 @@
 /**
- * Escopo da Aurum AI — barreira anti-alucinação (pura, sem I/O).
+ * Escopo da busca automática — barreira anti-alucinação (pura, sem I/O).
  *
- * Política em 3 níveis (fine-tuning v2):
+ * Política em 3 níveis (calibragem v2):
  * - NÍVEL 1 — DENTRO DO SISTEMA: NCM/NBS, IBS/CBS, Simples/DAS/Fator R,
  *   NF-e/XML, lote, produtos, tabelas, legislação do app, conceitos fiscais
  *   simples (o que é IBS, diferença III×V, sublimite…). Responde com tools
@@ -23,7 +23,7 @@ import { normalizarBusca, STOPWORDS_BUSCA } from './busca-texto'
 import { SINONIMOS_FISCAIS } from './vocabulario'
 import { DICIONARIO_COMERCIAL } from '@/domain/constants/dicionario-comercial'
 import { extrairSinais } from './classificador-descricao'
-import { detectarConta, detectarTempo } from './basico-chat'
+import { detectarConta, detectarTempo } from './basico-texto'
 
 /**
  * Mensagem fixa de escopo — a ÚNICA resposta para pedidos externos ao

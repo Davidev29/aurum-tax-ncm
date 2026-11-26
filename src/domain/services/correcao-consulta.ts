@@ -1,5 +1,5 @@
 /**
- * Correção ortográfica de runtime da Aurum AI (autonomia do RAG).
+ * Correção ortográfica de runtime da busca automática (autonomia do busca lexical).
  *
  * Espelho em código de `recursos-ia/conhecimento/erros-comuns.json`
  * (single-source auditável — mesma tabela, sem ler arquivo em runtime,

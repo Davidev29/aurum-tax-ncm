@@ -6,8 +6,7 @@
  * - os 107 NBS da base viva têm contexto (grupo + cluster + vínculos reais);
  * - os 5 códigos duplos (200043×200044) expõem a nota de duplo enquadramento;
  * - sugestões (determinística + preditivas) carregam o contexto;
- * - a camada `origem: 'contexto-personalizado'` do preditivo funciona;
- * - JSON curado e espelho TS consistentes.
+ * - a camada `origem: 'contexto-personalizado'` do preditivo funciona.
  */
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
@@ -19,7 +18,6 @@ import {
   ITENS_CONTEXTO_NBS,
   NOTA_DUAL_XI,
   obterContextoNbs,
-  type GrupoNbsId,
 } from '@/domain/constants/contexto-nbs'
 import { pontuarAlvoPreditivo, sugerirPreditivoServicos } from '@/domain/services/preditivo-servicos'
 import { classificarServicoPorDescricao } from '@/application/classificacao-inteligente-servicos'
@@ -191,27 +189,3 @@ describe('contexto na descrição preditiva', () => {
   })
 })
 
-describe('JSON curado × espelho TS', () => {
-  it('grupos consistentes (cct, anexo, redução)', () => {
-    const p = path.resolve(__dirname, '..', 'recursos-ia', 'conhecimento', 'contexto-nbs.json')
-    const j = JSON.parse(fs.readFileSync(p, 'utf-8')) as {
-      versao: string
-      total_itens: number
-      grupos: { grupo: GrupoNbsId; cct: string; anexo: string; reducao_ibs: number }[]
-      itens: { nbs: string; grupo: GrupoNbsId }[]
-    }
-    expect(j.versao).toBe('contexto-nbs-v1')
-    expect(j.total_itens).toBe(107)
-    expect(j.itens).toHaveLength(107)
-    for (const g of j.grupos) {
-      const ts = GRUPOS_CONTEXTO_NBS[g.grupo]
-      expect(ts.cct).toBe(g.cct)
-      expect(ts.anexo).toBe(g.anexo)
-      expect(ts.reducaoIBS).toBe(g.reducao_ibs)
-    }
-    const tsCods = new Set(ITENS_CONTEXTO_NBS.map((i) => i.nbs))
-    for (const it of j.itens) {
-      expect(tsCods.has(it.nbs)).toBe(true)
-    }
-  })
-})

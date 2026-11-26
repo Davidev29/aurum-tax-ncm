@@ -1,19 +1,19 @@
 /**
  * Consulta premium — herói compacto + excesso em modais glass.
  *
- * Princípio: UM veredito reina (NCM + confiança + 1 linha fiscal + CTA
+ * Princípio: UM resultado reina (NCM + confiança + 1 linha fiscal + CTA
  * primário). Todo o resto — NCMs analisados, raciocínio, JSON, auditoria,
  * detalhes fiscais, simulação — mora em botões que abrem o `Modal` padrão
  * do sistema (glassmorphism, `.glass-box`).
  *
  * O modal "NCMs analisados" marca a referência preferida da busca com selo +
- * linha cintilante em espectro (`LinhaPreferidaAurumAI`).
+ * linha cintilante em espectro (`LinhaPreferidaResultado`).
  */
 import type { ReactNode } from 'react'
 import type { Classificacao, NomenclaturaNcm } from '@/domain/entities'
 import { fmtNbs, fmtNcm, fmtPct, norm } from '@/domain/services/format'
 import { Modal, Pill } from './kit'
-import { FontesAurumAI, IconeAurumPremium, LinhaPreferidaAurumAI } from './aurum-ai'
+import { FontesResultado, IconeResultado, LinhaPreferidaResultado } from './resultado-automatico'
 import { anexoOficial, observacoesFiscais } from '@/domain/services/calculo'
 import { rotuloAnexoOficial } from '@/domain/constants/tributarios'
 import { NcmBreadcrumb } from './ncm-contexto'
@@ -47,14 +47,14 @@ export function BotaoDetalhePremium({
   icone: string
   rotulo: string
   contagem?: number
-  variante?: 'padrão' | 'ia'
+  variante?: 'padrão' | 'busca'
   titulo?: string
   onClick: () => void
 }) {
   return (
     <button
       type="button"
-      className={`btn-detalhe-premium${variante === 'ia' ? ' btn-detalhe-premium--ia' : ''}`}
+      className={`btn-detalhe-premium${variante === 'busca' ? ' btn-detalhe-premium--busca' : ''}`}
       title={titulo ?? rotulo}
       onClick={onClick}
     >
@@ -129,8 +129,8 @@ export function ModalNcmsAnalisados({
                   {it.titulo}
                 </span>
                 {preferido ? (
-                  <span className="aurum-ai-selo-preferido" title={`A busca usou este ${rotulo} como referência preferida`}>
-                    <IconeAurumPremium tamanho="sm" /> Referência preferida
+                  <span className="resultado-auto-selo-preferido" title={`A busca usou este ${rotulo} como referência preferida`}>
+                    <IconeResultado tamanho="sm" /> Referência preferida
                   </span>
                 ) : it.selo ? (
                   <span className="shrink-0 rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-400">
@@ -143,7 +143,7 @@ export function ModalNcmsAnalisados({
                   {it.subtitulo}
                 </span>
               ) : null}
-              {preferido ? <LinhaPreferidaAurumAI /> : null}
+              {preferido ? <LinhaPreferidaResultado /> : null}
             </button>
           )
         })}
@@ -155,7 +155,7 @@ export function ModalNcmsAnalisados({
       </div>
       <p className="mt-3 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
         Escolher um item ancora no painel oficial (0/1/N + regra geral) — a decisão final é sempre
-        validada pelo resolvedor oficial, nunca só pela IA.
+        validada pelo resolvedor oficial, nunca apenas por heurística.
       </p>
     </Modal>
   )
@@ -163,7 +163,7 @@ export function ModalNcmsAnalisados({
 
 /* -------------------------------------------------- raciocínio + JSON (modal) -- */
 
-export function ModalRaciocinioIA({
+export function ModalRaciocinioBusca({
   aberto,
   onFechar,
   justificativa,
@@ -228,7 +228,7 @@ export function ModalRaciocinioIA({
 
 /* -------------------------------------------------- auditoria (modal) -- */
 
-export function ModalAuditoriaIA({
+export function ModalAuditoriaBusca({
   aberto,
   onFechar,
   fontes,
@@ -250,7 +250,7 @@ export function ModalAuditoriaIA({
       largura="max-w-2xl"
     >
       <div className="space-y-3 text-xs leading-relaxed">
-        <FontesAurumAI fontes={fontes.length ? fontes : ['Nomenclatura vigente (TEC)', 'Vínculos oficiais da Reforma (CST × cClassTrib)']} />
+        <FontesResultado fontes={fontes.length ? fontes : ['Nomenclatura vigente (TEC)', 'Vínculos oficiais da Reforma (CST × cClassTrib)']} />
         <p className="text-[11px] text-slate-500 dark:text-slate-400">{nota}</p>
         {extra}
       </div>
@@ -277,7 +277,7 @@ function vigenciaCctTexto(inicio: unknown, fim: unknown): string | null {
  * 1) **O que é** — NCM herói + descrição abaixo + 1 linha de metadados
  *    (`Cap. 01 · Animais vivos · Pos. 0105 · Vigente desde …`);
  * 2) **Quanto paga** — CST/cClassTrib em destaque + reduções em badges
- *    grandes + 1 parágrafo único de significado (sem triplicar);
+ *    grandes + 1 parábase local único de significado (sem triplicar);
  * 3) **Condições** — chips; 4) **Prova** — docs/simulação/observações.
  * Campos vazios (`—`) nunca renderizam no modal; detalhe técnico vai para
  * `<details>Dedados técnicos</details>`. Apresentação pura.
@@ -593,7 +593,7 @@ export function ModalDetalheFiscal({
 
 /* -------------------------------------------------- simulação (modal) -- */
 
-export function ModalSimulacaoIA({
+export function ModalSimulacaoBusca({
   aberto,
   onFechar,
   titulo = 'Simulação exemplificativa',

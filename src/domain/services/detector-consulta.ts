@@ -2,7 +2,7 @@
  * Detector de intenção da busca unificada (Consulta NCM / Serviços NBS).
  *
  * Funções puras — sem IndexedDB, sem estado. O orquestrador (store/página)
- * usa a intenção para decidir quais workers disparar em paralelo:
+ * usa a intenção para decidir quais motors disparar em paralelo:
  * - dígitos (≥2) → seção **Exata · via número** (`sugerirNomenclatura` +
  *   `resolverClassificacoes` quando 8 dígitos; no domínio `nbs`, `sugerirNbs` +
  *   `resolverClassificacoesNbs` somente com 9 dígitos);
@@ -51,9 +51,9 @@ export const LIMITES_ENTRADA_UNIFICADA = {
   /**
    * Predição assistiva desde a 1ª palavra relevante: ≥1 token útil OU texto
    * corrido ≥4 chars. Antes exigia frase expressiva (≥2 tokens ou ≥10 chars),
-   * então "queijo", "celular", "camiseta" mostravam só o nome e nunca a IA —
-   * parecia que "a IA nunca sabia nada". O custo continua controlado pelo
-   * debounce (600 ms) + RAG lexical local.
+   * então "queijo", "celular", "camiseta" mostravam só o nome e nunca a busca —
+   * parecia que "a busca nunca sabia nada". O custo continua controlado pelo
+   * debounce (600 ms) + busca lexical lexical local.
    */
   descricaoTokensMinimos: 1,
   descricaoCharsMinimos: 4,
@@ -111,7 +111,7 @@ export function detectarIntencaoConsulta(entrada: unknown, dominio: DominioConsu
 
   // A partir daqui há letras — sempre alimenta a seção Por nome.
   // A predição usa tokens RELEVANTES (sem "para", "de", "com"): "para" sozinho
-  // não acende a IA, mas "queijo" sozinho já acende.
+  // não acende a busca, mas "queijo" sozinho já acende.
   const tokens = tokensRelevantes(texto)
   const deveBuscarNome = texto.length >= LIMITES_ENTRADA_UNIFICADA.textoMinimo
   const fraseExpressiva = tokens.length >= LIMITES_ENTRADA_UNIFICADA.descricaoTokensMinimos

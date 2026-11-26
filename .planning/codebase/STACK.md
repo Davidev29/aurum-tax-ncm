@@ -40,7 +40,7 @@
 | tsc | `tsconfig.json` | `npm run typecheck` — portão strict |
 | Vitest | `vitest.config.ts` | `environment: 'node'`; coverage v8 (parcial — ver TESTING.md) |
 | `tests/setup.ts` | template SQLite em `%TEMP%` | `prisma db push --skip-generate` + `node:sqlite` |
-| Scripts npm | `package.json` | `base` (+`base:completa`), `dev`, `build`, `dist`, `dist:win`, `ofuscar`/`verificar`, `grafo:*`, `ia:*` |
+| Scripts npm | `package.json` | `base` (+`base:completa`), `dev`, `build`, `dist`, `dist:win`, `ofuscar`/`verificar` |
 
 ## Dependencies (diretas, runtime)
 
@@ -65,7 +65,7 @@ Dev: electron, electron-builder, vite, @vitejs/plugin-react, tailwindcss, typesc
 
 ## Data Assets
 
-`public/base/` (embutido, versionado): `reforma.json` 1,5 MB · `classificacoes-consolidadas.json` 1,7 MB · `nomenclatura.json` 2,8 MB · `cnae-nbs.json` 1,3 MB · `classificacao-tributaria.json` 0,3 MB · `parametros.json` · `grafo/grafo.lbug` 6,1 MB · `grafo/vetores.json` 12 MB (não embarcado) · `MANIFEST.json` (hashes).
+`public/base/` (embutido, versionado): `reforma.json` 1,5 MB · `classificacoes-consolidadas.json` 1,7 MB · `nomenclatura.json` 2,8 MB · `cnae-nbs.json` 1,3 MB · `classificacao-tributaria.json` 0,3 MB · `parametros.json` · `MANIFEST.json` (hashes).
 
 Fontes brutas: `bases-fonte/` (JSONs oficiais + vivos). Bases consumidas pelo main e pelo renderer; nenhuma via rede em runtime.
 

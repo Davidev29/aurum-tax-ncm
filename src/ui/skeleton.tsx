@@ -2,7 +2,7 @@
  * Loading Skeleton da Consulta unificada — sensação de processamento por seção.
  *
  * Cada seção (Exata / Por nome / Predição assistiva) tem seu próprio estado
- * de carga; enquanto o worker correspondente resolve, a seção exibe o
+ * de carga; enquanto o motor correspondente resolve, a seção exibe o
  * esqueleto em vez de "piscar" vazia. Usa a classe `.skeleton` dos tokens
  * (`src/index.css`) + `animate-pulse-soft`, com `aria-busy`/`role=status`
  * para leitores de tela.

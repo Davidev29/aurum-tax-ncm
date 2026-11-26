@@ -1,5 +1,5 @@
 /**
- * Cobertura ampla dos benefícios de serviços (fine-tuning v4) — todos os
+ * Cobertura ampla dos benefícios de serviços (calibragem v4) — todos os
  * casos com NFSE e redução/diferimento > 0 têm hipótese com contexto.
  *
  * Matriz coberta (cct → grupo): 011003, 200001, 200016, 200017, 200019,
@@ -190,3 +190,4 @@ describe('pins CNAE → hipóteses (fluxo CNPJ)', () => {
     expect(pinsHipotesesPorCnae(cnae)).toEqual(ccts)
   })
 })
+

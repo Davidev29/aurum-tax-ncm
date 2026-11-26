@@ -1,10 +1,9 @@
 /**
- * Fine-tuning NBS/Serviços v2 — a IA entende mais setores e raciocina melhor.
+ * Vocabulário determinístico NBS/Serviços — cobertura de setores e sinais.
  *
  * Cobre:
  * - vocabulário expandido (dia a dia → juridiquês NBS);
- * - sinais por setor + perguntas de refino + ambiguidades (raciocínio);
- * - pack de conhecimento (servicos-nbs.json + frases-modelo-servicos.json).
+ * - sinais por setor + perguntas de refino + ambiguidades.
  */
 import { describe, expect, it } from 'vitest'
 import { SINONIMOS_SERVICOS, expandirSinonimoServico } from '@/domain/services/vocabulario-servicos'
@@ -13,10 +12,8 @@ import {
   extrairSinaisServicos,
   perguntasComplementaresServicos,
 } from '@/domain/services/classificador-descricao-servicos'
-import fs from 'node:fs'
-import path from 'node:path'
 
-describe('vocabulario-servicos (fine-tuning v2+v3)', () => {
+describe('vocabulario-servicos (calibragem v2+v3)', () => {
   it('cobre os setores novos (TI, transporte, beleza, financeiro...)', () => {
     expect(expandirSinonimoServico('frete')).toBe('transporte')
     expect(expandirSinonimoServico('advogado')).toBe('advogados')
@@ -63,20 +60,4 @@ describe('sinais por setor (raciocínio)', () => {
   })
 })
 
-describe('pack fine-tuning (conhecimento)', () => {
-  it('servicos-nbs.json existe e tem raciocínio em 7 etapas', () => {
-    const p = path.resolve(__dirname, '..', 'recursos-ia', 'conhecimento', 'servicos-nbs.json')
-    const j = JSON.parse(fs.readFileSync(p, 'utf8'))
-    expect(j.versao).toMatch(/finetuning-servicos/)
-    expect(j.raciocinio.etapas).toHaveLength(7)
-    expect(j.principio).toMatch(/resolvedor/i)
-  })
 
-  it('frases-modelo-servicos.json existe com casos preditivos e negativos', () => {
-    const p = path.resolve(__dirname, '..', 'recursos-ia', 'conhecimento', 'frases-modelo-servicos.json')
-    const j = JSON.parse(fs.readFileSync(p, 'utf8'))
-    expect(j.frases.length).toBeGreaterThanOrEqual(8)
-    expect(j.frases.some((f: { tipo?: string }) => f.tipo === 'preditiva')).toBe(true)
-    expect(j.frases.some((f: { tipo?: string }) => f.tipo === 'sem-lastro')).toBe(true)
-  })
-})

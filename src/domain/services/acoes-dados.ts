@@ -239,7 +239,7 @@ export function avaliarAcoesDados(
 
   /* ---- trava anti-roubo: classificação fiscal pura não é dados ---- */
   // "tem algum ncm de banana", "08031000", "camiseta 100% algodão" sem nenhum
-  // sinal de movimento → zera tudo (o RAG decide).
+  // sinal de movimento → zera tudo (o busca lexical decide).
   const pareceClassificacaoPura =
     /\bncm\b|\bnbs\b/.test(n) && !temClienteXml && !temFornecedor && !temVendido && !temComprado &&
     !temTop && !temLista && !temDiferido && !temReducao && !temCredito && !temDebito && !anafora

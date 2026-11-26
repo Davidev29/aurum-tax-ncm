@@ -29,7 +29,6 @@ Arquitetura: renderer com `contextIsolation: true`, `nodeIntegration: false` —
 | `db:op` | renderer → main | `DbOp → resultado` | Banco SQLite via Prisma; allowlist de 11 ops/tabelas + validação de domínio + tetos |
 | `db:transaction` | renderer → main | `DbOp[] → resultado[]` | Transação SQLite real (tudo-ou-nada), ≤500 ops |
 | `db:snapshot` | renderer → main | `→ { ok, caminho }` | Snapshot pré-restore rotativo (`pre-restore-*.bak`) |
-| `ia:grafo` / `ia:grafo-uso` | renderer → main | texto/k → resultado | Grafo fiscal local (FTS+2hops+PageRank) no `utilityProcess`; overlay local |
 | `atualizacao:versao` / `:verificar` / `:baixar` / `:instalar` | renderer → main | manual | Sem efeito fora do empacotado |
 | `atualizacao:evento` | main → renderer (push) | `{ tipo }` | Progresso do auto-updater |
 | `menu:acao` | main → renderer (push) | `{ acao }` | Menu nativo (Arquivo/Exibir/Ajuda; atalhos `Ctrl/Cmd+O/E`, `Shift+L`) |
@@ -48,7 +47,7 @@ Contrato e fallback:
 | Fonte | Formato | Ingestão | Destino |
 |---|---|---|---|
 | Bases raiz (`classificacao_tributaria.json`, `reforma_tributaria_por_ncm.json`, `Tabela_NCM_Vigente_*.json`) | JSON | `npm run base` → `scripts/build-base.mjs` (3FN + `MANIFEST.json` sha256) | `public/base/*.json` → `dist/base` |
-| `public/base/*.json` (`reforma`, `classificacao-tributaria`, `nomenclatura`, `cnae-nbs`, `parametros`, `grafo/*`) | JSON/LBDBG | `useBase.iniciar()` via IPC | Repositórios locais + grafo |
+| `public/base/*.json` (`reforma`, `classificacao-tributaria`, `nomenclatura`, `cnae-nbs`, `parametros`) | JSON | `useBase.iniciar()` via IPC | Repositórios locais |
 | SQLite (`aurum.db`) | Prisma schema (`prisma/schema.prisma`) | IPC `db:op` (bridge) ou Prisma direto em scripts | 27 tabelas (empresas, produtos, notas, audit_log, cest, cfop, auxiliares…) |
 | Siscomex vigente | JSON ~3 MB | `ncm-sync.ts` (hash canônico, merge) | `ncmNomenclatura` |
 | CFF/DFe | JSON/endpoint | `cff-sync.ts` (hash/etag) | `cst`, `cstClassTrib`, `referencia` |

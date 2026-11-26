@@ -2,10 +2,10 @@
 gsd_state_version: '1.0'
 status: shipped
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 33
-  completed_plans: 32
+  total_phases: 9
+  completed_phases: 9
+  total_plans: 31
+  completed_plans: 30
   percent: 100
 ---
 
@@ -38,7 +38,7 @@ Last activity: 2026-11-13 — v1.2.0: remoção da Calculadora e Consulta NCM pr
 - Electron sobre Tauri — maduro, equipe conhece
 - **SQLite + Prisma sobre Dexie/IndexedDB** (superseded, decidido na reconstrução p/ v1.0.0): 27 tabelas, IPC `db:op` validado no main, `aurum.db` em userData, snapshots rotativos e quarantine no boot
 - Zustand sobre Redux — slices mínimos por tela
-- Classificação 100% client-side; classificação determinística local (léxico + grafo fiscal + resolvedor oficial), sem LLM em runtime
+- Classificação 100% client-side; classificação determinística local (léxico + resolvedor oficial), sem modelos externos
 - Tailwind CSS 4 + tokens `brand`/`aurum`
 - Atualização de dados acoplada ao update do programa (GitHub Releases), não sync avulso da NCM
 - **Venda avulsa (v1.1.0)**: sem conta, sem chave, sem ativação — licença perpétua da versão no Pedido; atualização opcional via GitHub Releases
@@ -47,8 +47,8 @@ Last activity: 2026-11-13 — v1.2.0: remoção da Calculadora e Consulta NCM pr
 
 - Auto-update sem verificação de assinatura (Windows/mac/Linux) — assinar antes de distribuir amplamente
 - CSP inexistente — endurecimento pendente
-- `.planning` do GSD antigo substituído por este registro enxuto; fases 1–10 concluídas
-- Otimização estrutural pendente: monstros de código (`aurum-ai-chat.ts`, `NfeXml.tsx`), Clean Architecture nominal, ~195 catches engolidos, CI mínimo
+- `.planning` do GSD antigo substituído por este registro enxuto; fases 1–9 concluídas
+- Otimização estrutural pendente: monstros de código (`NfeXml.tsx`), Clean Architecture nominal, catches engolidos, CI mínimo
 
 ## Session Continuity
 

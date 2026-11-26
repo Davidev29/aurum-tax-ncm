@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Protocolo do banco SQLite — tipos e metadados compartilhados.
  *
  * Zero dependências (sem Node, sem Prisma, sem DOM): importado pelo renderer
@@ -70,14 +70,12 @@ export const STORE_META: Record<string, StoreMeta> = {
   produtosDfe: { pk: 'id', auto: false, delegate: 'produtoDfe' },
   audit_log: { pk: 'id', auto: true, delegate: 'auditLog' },
   cest: { pk: 'codigo', auto: false, delegate: 'tabelaCest' },
-  ia_feedback: { pk: 'id', auto: true, delegate: 'iaFeedback' },
+  feedback_busca: { pk: 'id', auto: true, delegate: 'feedbackBusca' },
   cnae: { pk: 'codigo7', auto: false, delegate: 'cnaeAnexo' },
   consultasCnpj: { pk: 'cnpj', auto: false, delegate: 'consultaCnpj' },
-  conversasEmitente: { pk: 'conversaId', auto: false, delegate: 'conversaEmitente' },
   cnaeNbs: { pk: 'id', auto: true, delegate: 'cnaeNbsLink' },
   lcNbs: { pk: 'id', auto: true, delegate: 'lcNbsRelation' },
   classificacoesConsolidadas: { pk: 'cnae7', auto: false, delegate: 'classificacaoConsolidada' },
-  grafometa: { pk: 'id', auto: false, delegate: 'grafoMeta' },
 }
 
 /** Todas as stores conhecidas (allowlist do IPC + `contarTodos`). */
@@ -128,14 +126,12 @@ export const CAMPOS_POR_STORE: Record<string, string[]> = {
   produtosDfe: ['id', 'sistema', 'codClassProd', 'codGrupo', 'descrGrupo', 'descricao', 'tipoPrestacao', 'flags', 'sincronizadoEm'],
   audit_log: ['id', 'quando', 'tabela', 'chave', 'operacao', 'autor', 'antes', 'depois'],
   cest: ['codigo', 'descricao', 'ncm'],
-  ia_feedback: ['id', 'quando', 'descricao', 'via', 'decisao', 'confianca', 'motivo', 'mock'],
+  feedback_busca: ['id', 'quando', 'descricao', 'via', 'decisao', 'confianca', 'motivo', 'mock'],
   cnae: ['codigo7', 'codigoFormatado', 'descricao', 'situacao', 'anexos', 'fatorR'],
   consultasCnpj: ['cnpj', 'razaoSocial', 'fantasia', 'porte', 'situacao', 'opcaoSimples', 'cnaePrincipal', 'cnaesSecundarios', 'quando'],
-  conversasEmitente: ['conversaId', 'emitenteId', 'empresaAtivaId', 'titulo', 'mensagens', 'updatedAt', 'createdAt'],
   cnaeNbs: ['id', 'cnae7', 'cnae', 'nbs', 'fonte'],
   lcNbs: ['id', 'lc', 'nbs', 'cct', 'descricaoLc', 'descricaoNbs', 'descricaoCct', 'onerosa', 'exterior', 'indop', 'local'],
   classificacoesConsolidadas: ['cnae7', 'codigoFormatado', 'descricao', 'fonteDescricao', 'anexoSimples', 'situacao', 'fatorR', 'vedacoes', 'nbsVinculadas', 'beneficiosReforma', 'divergencia', 'estadoNbs'],
-  grafometa: ['id', 'hash', 'versao', 'nodos', 'arestas', 'geradoEm'],
 }
 
 /** Remove campos que não são coluna (paridade schemaless do Dexie). */
@@ -148,3 +144,4 @@ export function somenteConhecidos(tabela: string, registro: Record<string, unkno
   }
   return out
 }
+

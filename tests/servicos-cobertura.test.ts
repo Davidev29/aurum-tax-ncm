@@ -1,7 +1,7 @@
 /**
  * Cobertura de busca por descrição (serviços) — nunca volta vazia sem motivo.
  *
- * Contrato (pedido do usuário: "IA não sugere nada é inaceitável"):
+ * Contrato (pedido do usuário: "não sugerir nada é inaceitável"):
  * - com benefício na base → NBS ancorado (nbs_provavel setado);
  * - sem benefício mas com setor → orientação setorial honesta + perguntas
  *   específicas + trilha com o setor (nunca "nada");

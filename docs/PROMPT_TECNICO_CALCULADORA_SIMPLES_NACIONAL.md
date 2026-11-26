@@ -19,10 +19,10 @@ Construir uma **CALCULADORA standalone** do Simples Nacional (LC 123/2006 + refo
 - Segregação de receita por anexo (ST e não-ST).
 - Fator R (limiar 28%) decidindo III vs V.
 - Híbrido CBS por fora (débitos/créditos DRE).
-- Relatório analítico multi-cenário + insights IA read-only.
+- Relatório analítico multi-cenário + insights por template, read-only.
 - Exportações CSV/JSON/PDF, guia DAS (PGDAS), gráficos.
 
-Toda a matemática deve ser **pura** (sem I/O, rede, banco). Toda a UI consome o motor; a IA apenas lê.
+Toda a matemática deve ser **pura** (sem I/O, rede, banco). Toda a UI consome o motor; os insights apenas leem.
 
 ---
 
@@ -549,11 +549,11 @@ Whitelist anti-alucinação: coleta todos os números citáveis (premissas, fato
 
 ---
 
-## 18. IA INSIGHTS (READ-ONLY)
+## 18. INSIGHTS POR TEMPLATE (READ-ONLY)
 
 ### Tipos
 - `NivelInsight = 'OPORTUNIDADE' | 'ALERTA' | 'INFO'`.
-- `AiInsight = { insightId, titulo, texto, nivel, cenariosRef: ScenarioId[], valoresCitados: number[] }`.
+- `InsightTemplate = { insightId, titulo, texto, nivel, cenariosRef: ScenarioId[], valoresCitados: number[] }`.
 
 ### `validarInsights(report, insights)`
 - `permitidos = coletarNumerosPermitidos(report)`.
@@ -571,13 +571,13 @@ Whitelist anti-alucinação: coleta todos os números citáveis (premissas, fato
 - `gerarInsightsMatriz`: 4 insights (veredito, fator r, híbrido, ação).
 - `gerarInsightsFoco`: 3 insights (veredito, memória, ação).
 
-### `SYSTEM_PROMPT_IA`
-Modo leitura, uso exclusivo do JSON canônico, máx. 5 insights, pt-BR executivo, 2ª pessoa, sem juridiquês. Ordem: veredito → Fator r/gap → híbrido vs convencional → próximos passos.
+### Templates determinísticos
+Textos gerados por template a partir do JSON canônico, máx. 5 insights, pt-BR executivo, 2ª pessoa, sem juridiquês. Ordem: veredito → Fator r/gap → híbrido vs convencional → próximos passos. Nenhuma chamada a modelo externo.
 
-### `montarPrompt(report)`
-Envia `SYSTEM_PROMPT_IA` + JSON canônico. Resposta esperada `{"insights": [...]}`.
+### `gerarInsights(report)`
+Aplica os templates ao JSON canônico e devolve `{"insights": [...]}`, validados por `validarInsights`.
 
-**Regra:** IA nunca altera valores; todo número citado deve estar na whitelist.
+**Regra:** os insights nunca alteram valores; todo número citado deve estar na whitelist.
 
 ---
 
@@ -592,7 +592,7 @@ Envia `SYSTEM_PROMPT_IA` + JSON canônico. Resposta esperada `{"insights": [...]
 ### `csvRelatorioAnalitico(r)` / `jsonRelatorioAnalitico(r, insights)` / `exportarRelatorioAnaliticoCSV/JSON/PDF`
 - CSV: empresa, origem, CNPJ, competência, anexo em foco, matriz exibida?, premissas (RBT12, RBA, receita, folha, Fator r, gap), tabela de cenários, deltas.
 - JSON: `{exportadoEm, report: r, insights}`.
-- PDF premium (A4, timbrado + rodapé + marca d'água): capa, KPIs, faixa veredito, seção 1 duelo, Fator r, memória do híbrido, demais anexos, insights IA, metodologia.
+- PDF premium (A4, timbrado + rodapé + marca d'água): capa, KPIs, faixa veredito, seção 1 duelo, Fator r, memória do híbrido, demais anexos, insights por template, metodologia.
 - Arquivo: `Relatorio-Simples-{tag}-{competencia}-{hash}`.
 
 ### `RISCOS_PDF` / `pdfText(v)`
@@ -618,7 +618,7 @@ Sanitiza glifos não suportados pela Roboto embutida (✓, ⚠, ✕, setas, −,
 
 ### Modais
 - `DasModal`: guia DAS (PGDAS) — documento oficial, composição, barras ITF, QR placeholder, imprimir.
-- `InsightsModal`: relatório analítico premium — tabs Resumo/Comparativo/Gráficos/Insights IA/Método.
+- `InsightsModal`: relatório analítico premium — tabs Resumo/Comparativo/Gráficos/Insights/Método.
 
 ### Máscaras
 - `moeda`: `R$ 0,00` (parseMoeda: dígitos / 100).
@@ -755,7 +755,7 @@ Componente puro (props: final, bruta?, dasBruto, dasFinal, temST). Sem cálculo/
 13. Parcela V redirecionada (Fator R ≥ 28%) deduz ISS, não ICMS.
 14. Restante automático guarda o anexo escolhido (badge V→III).
 15. Projeção de RBT12: o mês corrente **nunca** entra no RBT12 (retroativo).
-16. IA nunca altera valores; todo número citado deve estar na whitelist `coletarNumerosPermitidos` (tolerância 0,011).
+16. Os insights nunca alteram valores; todo número citado deve estar na whitelist `coletarNumerosPermitidos` (tolerância 0,011).
 17. Matriz III×V só aparece quando `modo === 'cnpj'` E anexos elegíveis contêm III e V.
 18. Fator R só quando Anexo V envolvido.
 19. Exportações ignoram o filtro de texto (exportam cache inteiro).
@@ -766,7 +766,7 @@ Componente puro (props: final, bruta?, dasBruto, dasFinal, temST). Sem cálculo/
 ## 25. REGRAS DE PARIDADE E NÃO-MODIFICAÇÃO
 
 - **Não modificar absolutamente nada na aplicação atual.** Este prompt é apenas especificação para um sistema separado.
-- O motor determinístico é a única fonte de verdade numérica; UI, IA e PDF apenas consomem.
+- O motor determinístico é a única fonte de verdade numérica; UI, insights e PDF apenas consomem.
 - Toda função de cálculo deve ser **pura** (sem I/O, rede, banco).
 - Fidelidade aos vetores ouro (EX1–EX5) e às bordas (RBT12 0 / 4.800.001, sublimite 3.600.000, Fator R 28%).
 - `motor_simples.py` é port fiel do TS e usado apenas para ground-truth; em produção o motor é o TS original. Divergência intencional: `r2` do Python adiciona `1e-9` antes do `round`; o TS usa `Math.round(n*100)/100` com guardas para NaN/±Infinity.
@@ -782,7 +782,7 @@ Componente puro (props: final, bruta?, dasBruto, dasFinal, temST). Sem cálculo/
 - `src/simples/segregacao-st.ts` — segregação com ST.
 - `src/simples/segregacao-receita.ts` — segregação por anexo.
 - `src/simples/relatorio-analitico.ts` — orquestrador do relatório.
-- `src/simples/ia-insights.ts` — insights IA read-only.
+- `src/simples/insights.ts` - insights por template, read-only.
 - `src/simples/export.ts` — exportação CSV/JSON.
 - `src/simples/export-relatorio-analitico.ts` — exportação do relatório (CSV/JSON/PDF).
 - `src/simples/page.tsx` — UI (wizard 3 etapas).
@@ -795,7 +795,7 @@ Componente puro (props: final, bruta?, dasBruto, dasFinal, temST). Sem cálculo/
 - `src/domain/simples/creditos.ts` — créditos CBS por despesa.
 - `tests/simples-*.test.ts` — vetores de teste.
 - `finetune_simples_inverso/motor_simples.py` — port Python (ground-truth).
-- `docs/fine-tuning-simples-fatorR.md` — documentação de fine-tuning.
+- `docs/PROPOSTA-REFATORACAO-SIMPLES-NACIONAL.md` - proposta fiscal do Fator R (parte determinística).
 
 ---
 

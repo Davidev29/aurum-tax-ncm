@@ -1,6 +1,6 @@
 /**
  * Exportação do Relatório Analítico e Inteligente (CSV / JSON / PDF premium).
- * Consome SOMENTE o `ReportAnalitico` + `AiInsight[]` — nunca recalcula.
+ * Consome SOMENTE o `ReportAnalitico` + `Insight[]` — nunca recalcula.
  *
  * Padrão visual idêntico aos relatórios de XML/NFe (`relatorios.ts`):
  * timbrado + rodapé + marca d'água compartilhados, com o emitente do
@@ -14,7 +14,7 @@ import { baixar, montarCSV, rodape, timbrado } from '@/infrastructure/exporters/
 import { fundoMarcaDagua, OURO_AURUM } from '@/infrastructure/pdf/marca-dagua';
 import { fmtCarga, fmtMoeda } from '@/domain/services/format';
 import type { Emitente } from '@/domain/entities';
-import type { AiInsight, NivelInsight } from './ia-insights';
+import type { Insight, NivelInsight } from './insights';
 import type { ReportAnalitico, ScenarioId } from './relatorio-analitico';
 
 const VERDE = '#067647';
@@ -58,7 +58,7 @@ const RISCOS_PDF: Array<[RegExp, string]> = [
   [/[\uFE0F\u200D]/g, ''],
 ];
 
-/** Sanitiza qualquer texto (inclusive IA e dados do usuário) para o PDF. */
+/** Sanitiza qualquer texto (inclusive insights automáticos e dados do usuário) para o PDF. */
 export function pdfText(v: unknown): string {
   let s = String(v ?? '');
   for (const [rx, rep] of RISCOS_PDF) s = s.replace(rx, rep);
@@ -150,7 +150,7 @@ function linhaIcone(forma: FormaIcone, texto: string, opts?: { bold?: boolean; f
 
 /* --------------------------------- CSV/JSON ------------------------------- */
 
-export function jsonRelatorioAnalitico(r: ReportAnalitico, insights: AiInsight[]): string {
+export function jsonRelatorioAnalitico(r: ReportAnalitico, insights: Insight[]): string {
   return JSON.stringify({ exportadoEm: new Date().toISOString(), report: r, insights }, null, 2);
 }
 
@@ -184,7 +184,7 @@ export function exportarRelatorioAnaliticoCSV(r: ReportAnalitico): void {
   baixar(`${nomeBase(r)}.csv`, csvRelatorioAnalitico(r), 'text/csv;charset=utf-8');
 }
 
-export function exportarRelatorioAnaliticoJSON(r: ReportAnalitico, insights: AiInsight[]): void {
+export function exportarRelatorioAnaliticoJSON(r: ReportAnalitico, insights: Insight[]): void {
   baixar(`${nomeBase(r)}.json`, jsonRelatorioAnalitico(r, insights), 'application/json');
 }
 
@@ -206,7 +206,7 @@ const tituloSecao = (n: string, titulo: string) => ({
   margin: [0, 10, 0, 5] as [number, number, number, number],
 });
 
-const faixaVeredito = (texto: string) => ({
+const faixaMenorCarga = (texto: string) => ({
   columns: [
     { width: 15, ...iconeCanvas('check'), margin: [6, 7, 0, 6] as [number, number, number, number] },
     { width: '*', text: pdfText(texto), bold: true, color: '#FFFFFF', fontSize: 8.5, margin: [2, 6, 6, 6] as [number, number, number, number] },
@@ -253,7 +253,7 @@ function corEmitente(e: Emitente): string {
  */
 export async function exportarRelatorioAnaliticoPDF(
   r: ReportAnalitico,
-  insights: AiInsight[],
+  insights: Insight[],
   emitente: Emitente,
 ): Promise<void> {
   const { baixarPdf } = await import('@/infrastructure/pdf/setup');
@@ -264,8 +264,8 @@ export async function exportarRelatorioAnaliticoPDF(
   const menor = r.comparativo.menorCargaScenarioId ? cen(r, r.comparativo.menorCargaScenarioId) : null;
   const dataGeracao = new Date(r.geradoEm).toLocaleString('pt-BR');
 
-  const porId = (id: string): AiInsight | undefined => insights.find((i) => i.insightId === id);
-  const vereditoTxt = porId('ins_veredito')?.texto ?? '';
+  const porId = (id: string): Insight | undefined => insights.find((i) => i.insightId === id);
+  const menorCargaTxt = porId('ins_veredito')?.texto ?? '';
   const memoriaTxt = porId('ins_memoria')?.texto ?? '';
   const acaoTxt = porId('ins_acao')?.texto ?? '';
   const fatorTxt = porId('ins_fator_r')?.texto ?? '';
@@ -314,8 +314,8 @@ export async function exportarRelatorioAnaliticoPDF(
       layout: 'noBorders' as const, margin: [0, 0, 0, 2] as [number, number, number, number],
     });
   }
-  if (menor) push(faixaVeredito(`Veredito: menor carga — ${menor.scenarioId.replace('_', ' · ')} (${fmtMoeda(menor.totalPagar)}). Regra do DAS: ${r.premissas.regraDas}.`));
-  if (vereditoTxt) push({ text: pdfText(vereditoTxt), fontSize: 8, italics: true, color: '#344054', margin: [0, 0, 0, 4] as [number, number, number, number] });
+  if (menor) push(faixaMenorCarga(`Menor carga — ${menor.scenarioId.replace('_', ' · ')} (${fmtMoeda(menor.totalPagar)}). Regra do DAS: ${r.premissas.regraDas}.`));
+  if (menorCargaTxt) push({ text: pdfText(menorCargaTxt), fontSize: 8, italics: true, color: '#344054', margin: [0, 0, 0, 4] as [number, number, number, number] });
 
   // Seção 1 — duelo conforme elegibilidade (sempre na base da GUIA;
   // com sublimite o ICMS/ISS/IBS fora é igual nos dois regimes e sai à parte)
@@ -368,7 +368,7 @@ export async function exportarRelatorioAnaliticoPDF(
           ? `Vantagem do híbrido — economia de ${fmtMoeda(Math.abs(d.deltaRs))}. Motivo: os créditos de CBS (${fmtMoeda(memFoco.creditosCbs)}) abatem os débitos (${fmtMoeda(memFoco.debitosCbs)}) e a CBS por fora cai para ${fmtMoeda(memFoco.cbsARecolher)}.`
           : `Empate técnico em ${fmtMoeda(d.convTotal)}. Motivo: os totais coincidem; prefira o convencional pela guia única.`,
     ));
-    if (vereditoTxt) push({ text: pdfText(vereditoTxt), fontSize: 8, italics: true, color: '#344054', margin: [0, 3, 0, 0] as [number, number, number, number] });
+    if (menorCargaTxt) push({ text: pdfText(menorCargaTxt), fontSize: 8, italics: true, color: '#344054', margin: [0, 3, 0, 0] as [number, number, number, number] });
   }
 
   // Fator r (só com matriz, que implica III/V elegíveis)
@@ -447,9 +447,9 @@ export async function exportarRelatorioAnaliticoPDF(
     });
   }
 
-  // Insights da IA — cada um com seu ícone de nível
+  // Insights da busca — cada um com seu ícone de nível
   push(tituloSecao(comMatriz ? '5' : '3', 'Insights da Inteligência Tributária — modo leitura'));
-  push({ text: pdfText('A IA apenas interpreta os números acima; ela não calcula nem altera valores.'), fontSize: 7.5, color: CINZA, margin: [0, 0, 0, 4] as [number, number, number, number] });
+  push({ text: pdfText('A leitura automática apenas interpreta os números acima; ela não calcula nem altera valores.'), fontSize: 7.5, color: CINZA, margin: [0, 0, 0, 4] as [number, number, number, number] });
   insights.forEach((ins, i) => {
     push({
       columns: [
@@ -476,7 +476,7 @@ export async function exportarRelatorioAnaliticoPDF(
     const convCen = cen(r, d.convId);
     const comFatorR = r.contexto.mostrarFatorR;
     const totalQuadros = comFatorR ? 5 : 3;
-    push({ text: pdfText(`Como este relatório foi montado: ${totalQuadros} contas simples, com os números deste cálculo em cada quadro. A IA só interpreta — não calcula.`), fontSize: 7.5, color: CINZA, margin: [0, 0, 0, 4] as [number, number, number, number] });
+    push({ text: pdfText(`Como este relatório foi montado: ${totalQuadros} contas simples, com os números deste cálculo em cada quadro. A leitura automática só interpreta — não calcula.`), fontSize: 7.5, color: CINZA, margin: [0, 0, 0, 4] as [number, number, number, number] });
     push(quadroProfessor(
       '1',
       'Alíquota efetiva do DAS',

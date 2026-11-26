@@ -513,7 +513,7 @@ export const SINONIMOS_SERVICOS: Record<string, string> = {
   pilotar: 'transporte',
   entregar: 'transporte',
   // TI / software (só segurança mapeia p/ oficial XI; resto honesto)
-  // Variações linguísticas (fine-tuning §3): dev, SaaS, licenciamento,
+  // Variações linguísticas (calibragem §3): dev, SaaS, licenciamento,
   // "programação de computadores" (CNAE 6201–6209 / LC 116 item 1).
   programador: 'servico',
   programadora: 'servico',

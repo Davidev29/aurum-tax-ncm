@@ -1,10 +1,10 @@
 /**
- * Vocabulário fiscal da Aurum AI — sinônimos, radicais e sinais por capítulo.
+ * Vocabulário fiscal da busca automática — sinônimos, radicais e sinais por capítulo.
  *
- * Papel: dar "contexto de entendimento maior" ao RAG. O usuário digita com
+ * Papel: dar "contexto de entendimento maior" ao busca lexical. O usuário digita com
  * palavras do dia a dia ("boi", "celular", "camiseta"); a nomenclatura oficial
  * usa vocabulário técnico ("bovino", "telefone", "camisa"). Sem esta ponte, o
- * RAG lexical nunca matcha e a IA responde NÃO SEI para tudo.
+ * busca lexical lexical nunca matcha e a busca responde NÃO SEI para tudo.
  *
  * Regras:
  * - Chave e valor já normalizados (sem acento, minúsculas).
@@ -197,7 +197,7 @@ export const SINONIMOS_FISCAIS: Record<string, string> = {
   cafe: 'cafe',
   acucar: 'acucar',
   queijo: 'queijo',
-  // --- nomes populares de queijo (ausentes na TEC — pool p/ o RAG; o pin
+  // --- nomes populares de queijo (ausentes na TEC — pool p/ o busca lexical; o pin
   // exato vive no dicionário comercial). `coalho`/`prato`/`minas` sozinhos
   // NÃO entram: também são enzima, louça e estado.
   parmesao: 'queijo',
@@ -1175,7 +1175,7 @@ export function expandirSinonimoFiscal(token: string): string | null {
 
 /**
  * Expansão em lote com cache: mapeia N tokens de uma vez sem re-hash por
- * token. Usado pelo RAG para montar `consultasEfetivas` e pelo seletor IA.
+ * token. Usado pelo busca lexical para montar `consultasEfetivas` e pelo seletor IA.
  * Retorna os tokens expandidos (sem duplicatas, ordem estável).
  */
 const _cacheExpansaoLote = new Map<string, string[]>()
@@ -1205,11 +1205,11 @@ export function tamanhoVocabularioFiscal(): number {
 }
 
 /**
- * Radicalização simples pt-BR para o RAG (sem dependências).
+ * Radicalização simples pt-BR para o busca lexical (sem dependências).
  * Remove plurais e sufixos comuns para aproximar "camisetas"→"camiseta",
  * "bovinos"→"bovin", "queijos"→"queij".
  *
- * Com memoização: o RAG chama `radicalizar` O(tokens × docs) vezes por
+ * Com memoização: o busca lexical chama `radicalizar` O(tokens × docs) vezes por
  * consulta; o cache limita o custo ao vocabulário distinto da sessão.
  */
 const _cacheRadical = new Map<string, string>()
@@ -1242,7 +1242,7 @@ export function radicalizar(token: string): string {
   return t
 }
 
-/** Distância de Levenshtein com teto (para fuzzy barato no RAG). */
+/** Distância de Levenshtein com teto (para fuzzy barato no busca lexical). */
 export function distanciaLevenshtein(a: string, b: string, teto = 2): number {
   const s = String(a || '')
   const t = String(b || '')

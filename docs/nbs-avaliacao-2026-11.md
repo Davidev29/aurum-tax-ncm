@@ -17,7 +17,7 @@
 ## 1. Escopo e método
 
 1. Inventário completo do uso de NBS no código (1 subagente de exploração muito
-   a fundo: tipos, stores, telas, IA, grafo, build, testes, docs).
+   a fundo: tipos, stores, telas, busca determinística, build, testes, docs).
 2. Extração e análise integral da publicação oficial (painel MDIC — ver §3).
 3. Análise da nova fonte entregue (`NBSa_DE-PARAa_…(Planilha1).csv`, a
    correlação oficial 1.1→2.0).
@@ -35,8 +35,8 @@
 | Marcadores | CST `200` / cClassTrib `200028` (Anexo II, art. 129, redução 60%) e `200038` (Anexo IX, art. 138) | fixos na fonte CFF |
 | **Consulta** | `resolverClassificacoesNbs` (prefixo/exato, senão regra geral `000/000001`), busca textual, `sugerirNbs`, legenda LC 116 | `src/infrastructure/base/classificacao-repo.ts` |
 | **CNAEs** | Ponte CNAE→NBS (qualclasstrib, não-oficial): 6.641 links / 508 CNAEs / 588 NBS; `classificacoes-consolidadas.json` (1.145 templates) | `bases-fonte/CNAE X NBS.qualclasstrib.json` |
-| **Contexto curado** | `contexto-nbs.ts` (~107 NBS em 23 grupos) + `dicionario-servicos.ts` (pins) — usados pela IA | espelho de curadoria, sem fonte oficial única |
-| **IA / RAG / grafo** | Índice IA ignora NBS (só NCM); grafo tem nós `NBS:` + `MAPEIA` | sem alterações |
+| **Contexto curado** | `contexto-nbs.ts` (~107 NBS em 23 grupos) + `dicionario-servicos.ts` (pins) — usados pela busca determinística | espelho de curadoria, sem fonte oficial única |
+| **Busca determinística** | Busca lexical cobre NBS e NCM | sem alterações |
 | **Armazenamento** | Stores SQLite (`nbs`, `cnaeNbs`, `lcNbs`, `classificacoesConsolidadas`) + base embutida versionada | OK |
 | **DE-PARA 1.1↔2.0** | **Não existia no sistema** — o CSV estava no drop-in, fora de qualquer build | **ausente** |
 | **Nomenclatura oficial NBS** | **Não existia** — só os 122 códigos dos vínculos eram conhecidos; descrições da tabela oficial não estavam embutidas | **ausente** |
@@ -264,8 +264,8 @@ o ponto fica registrado (justificativa legal: LC 214/2025 remete à NBS vigente)
 - **Config → Bases**: 2 contadores ("NBS oficial" e "NBS DE-PARA")
 
 **Não mudou (de propósito):** stores do SQLite, Prisma, backup, seed,
-`nbs` (122 vínculos), resolvedor, CST/cClassTrib, Anexo IX, IA, grafo, testes de
-contagem existentes. Decisão: dados oficiais **estáticos** do build — errados/ausentes
+`nbs` (122 vínculos), resolvedor, CST/cClassTrib, Anexo IX, busca determinística,
+testes de contagem existentes. Decisão: dados oficiais **estáticos** do build — errados/ausentes
 não devem apagar dado do usuário; layout de pastas segue o que o projeto já faz
 (artefatos em `public/base/`, nada no SQLite).
 

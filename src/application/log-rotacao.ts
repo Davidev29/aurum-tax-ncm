@@ -1,5 +1,5 @@
 /**
- * Append JSONL com rotação + scrub — integrado em `anexarConsultaIaJsonl`
+ * Append JSONL com rotação + scrub — integrado em `anexarConsultaJsonl`
  * (`src/infrastructure/ia/classificacao-ia-repo.ts`).
  *
  * - Teto 5 MiB por arquivo, 3 gerações (`base`, `base.1`, `base.2`, `base.3`);

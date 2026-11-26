@@ -930,7 +930,7 @@ export const GRUPOS_CONTEXTO_NBS: Record<GrupoNbsId, GrupoContextoNbs> = {
       'Hotel avulso sem agência',
       'Guia autônomo sem agência (verificar)',
     ],
-    condicoes: ['AGÊNCIA de turismo (não só transporte ou hotel)'],
+    condicoes: ['AGÊNCbusca de turismo (não só transporte ou hotel)'],
     consultasTipicas: ['agência de viagens', 'pacote turístico', 'agência de turismo'],
     termosPopulares: ['turismo', 'agencia', 'pacote', 'viagem', 'viagens', 'turistico', 'receptivo'],
     perguntasRefino: [

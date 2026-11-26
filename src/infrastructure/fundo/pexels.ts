@@ -1,5 +1,5 @@
 /**
- * Fundo animado do módulo Aurum AI via Pexels (imagens externas, opcional).
+ * Fundo animado do módulo busca automática via Pexels (imagens externas, opcional).
  *
  * - A chave de API fica EMBUTIDA no código (`CHAVE_API_PEXELS`) —
  *   não há campo no sistema para digitá-la.
@@ -151,7 +151,7 @@ export function normalizarFotos(json: unknown): FotoFundo[] {
   return fotos
     .map((f) => ({
       url: String(f?.src?.large ?? f?.src?.landscape ?? ''),
-      alt: String(f?.alt ?? 'Fundo do chat Aurum AI'),
+      alt: String(f?.alt ?? 'Fundo do chat busca automática'),
       autor: String(f?.photographer ?? 'Pexels'),
     }))
     .filter((f) => f.url.startsWith('http'))

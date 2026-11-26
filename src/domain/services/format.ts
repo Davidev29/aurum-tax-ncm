@@ -45,7 +45,7 @@ const FMT_INT_CACHE = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 
 const FMT_NUM3_CACHE = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 })
 
 /**
- * Formatador de moeda eficiente para a conversa direta (fine-tuning v6).
+ * Formatador de moeda eficiente para a conversa direta (calibragem v6).
  * - Reusa `Intl.NumberFormat` singleton (sem alocação por chamada).
  * - Fast-path para number finito; `null/NaN/Infinity/''` → `quandoVazio`.
  * - `-0` normalizado para `R$ 0,00`.

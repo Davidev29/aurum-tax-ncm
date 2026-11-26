@@ -1,7 +1,7 @@
 /**
- * Aurum AI — corpus offline da LC 214/2025 (fine-tuning v3).
+ * busca automática — corpus offline da LC 214/2025 (calibragem v3).
  *
- * Problema que resolve: a IA citava a LC 214 só por tabela (CST × cClassTrib)
+ * Problema que resolve: a busca citava a LC 214 só por tabela (CST × cClassTrib)
  * e resumos de 1 linha em `tributarios.ts`, sem conseguir EXPLICAR um artigo
  * de forma clara e técnica nem PESQUISAR ("o que diz o art. 128?", "onde a
  * lei fala de cesta básica?").
@@ -10,11 +10,11 @@
  * - Este arquivo É a fonte embarcada no bundle (Vite/Electron) — funciona
  *   100% offline, sem rede, sem depender do Planalto no momento da resposta.
  * - Cada verbete tem `link` com âncora (`lcp214.htm#art128`) para a íntegra
- *   oficial no Planalto — a IA sempre oferece o link após o resumo curado.
+ *   oficial no Planalto — a busca sempre oferece o link após o resumo curado.
  * - Espelho auditável em `recursos-ia/conhecimento/lc214-artigos.json`
  *   (mesmo conteúdo, para curadoria/versionamento fora do bundle).
  *
- * Fine-tuning = template determinístico (sem LLM inventando texto legal):
+ * Calibragem = template determinístico (sem serviço externo inventando texto legal):
  * - `explicarArtigoLC214()` segue o molde fixo: O que diz → Em linguagem
  *   clara → Leitura técnica → Quando aplica → Exemplo → Base oficial + link
  *   → Próximo passo. O modelo nunca recita a lei "literalmente" — deixa
@@ -104,7 +104,7 @@ export const ARTIGOS_LC214: ArtigoLC214[] = [
     aliases: ['cesta basica alcance', 'cesta basica operacionalizacao', 'cesta basica condicoes', 'cadeia cesta basica'],
     resumo: 'Artigo-ponte da cesta básica: disciplina o alcance e a operacionalização da alíquota zero do art. 125 (Anexo I). O zero em si está no art. 125.',
     claro: 'É o artigo que detalha COMO vale o zero da cesta — quais elos e condições. O imposto zerado está no art. 125.',
-    tecnico: 'Sem efeito próprio de alíquota — remete ao art. 125/Anexo I. A IA resolve pelo vínculo oficial (CST 200 × cClassTrib 200003), nunca pelo nome do alimento.',
+    tecnico: 'Sem efeito próprio de alíquota — remete ao art. 125/Anexo I. A busca resolve pelo vínculo oficial (CST 200 × cClassTrib 200003), nunca pelo nome do alimento.',
     quandoAplica: 'Quando a base legal do NCM remete ao art. 126 ou ao Anexo I.',
     anexo: 'I',
     reducao: 'zero (100%)',
@@ -131,7 +131,7 @@ export const ARTIGOS_LC214: ArtigoLC214[] = [
     aliases: ['reducao 60%', 'educacao saude', 'medicamentos alimentos', 'dispositivos medicos', 'higiene insumos agropecuarios', 'cultura'],
     resumo: 'Reduz em 60% as alíquotas de IBS/CBS para o rol do artigo: educação, saúde, dispositivos médicos, medicamentos, alimentos, higiene, insumos agropecuários, cultura e outros.',
     claro: 'A lista grande dos 60%: escola, hospital, remédio, comida, fralda, semente, teatro — tudo com 60% de desconto no IBS/CBS.',
-    tecnico: 'Redução 60% IBS/CBS condicionada ao enquadramento em inciso do art. 128 + anexo (II–VII, conforme o bem/serviço). Cada NCM/NBS carrega o CST/cClassTrib do inciso correspondente; sem vínculo oficial, a IA trata como hipótese a verificar.',
+    tecnico: 'Redução 60% IBS/CBS condicionada ao enquadramento em inciso do art. 128 + anexo (II–VII, conforme o bem/serviço). Cada NCM/NBS carrega o CST/cClassTrib do inciso correspondente; sem vínculo oficial, a busca trata como hipótese a verificar.',
     quandoAplica: 'Bens/serviços de ao menos um inciso do art. 128, com comprovação (registro ANVISA para medicamentos, p. ex.).',
     exemplo: 'Medicamento do inciso → IBS 19%×0,40 + CBS 11,3%×0,40 sobre R$ 1.000.',
     anexo: null,
@@ -572,7 +572,7 @@ export function pesquisarLC214(termo: string, limite = 3): ResultadoPesquisaLC21
 }
 
 /**
- * Disponibilidade do corpus (para status/debug e para a IA citar).
+ * Disponibilidade do corpus (para status/debug e para a busca citar).
  * Sempre offline: embarcado no bundle, sem fetch.
  */
 export function disponibilidadeLC214(): {
@@ -594,7 +594,7 @@ export function disponibilidadeLC214(): {
 }
 
 /**
- * Texto determinístico do artigo no molde fine-tuning v3:
+ * Texto determinístico do artigo no molde calibragem v3:
  * O que diz → Em linguagem clara → Leitura técnica → Quando aplica →
  * Exemplo → Base oficial + link → Próximo passo.
  */

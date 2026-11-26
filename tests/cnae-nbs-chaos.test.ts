@@ -6,11 +6,11 @@
  * - (b–d) veredito 2026/2027/2033 difere (ano explícito em todo veredito);
  * - (e) cache por NBS (contador do resolvedor = nº de NBS únicas);
  * - (f) conferência divergente → `divergencia`, sem consolidar;
- * - (g) template consolidado reutilizado em menu + CNPJ + chat;
+ * - (g) template consolidado reutilizado em menu + CNPJ;
  * - (h) CNAE de bens → faixa NCM (badge distinto, sem resolvedor);
  * - (i) 98-NBS com destaque + escolha funcional.
- * Preserva: `__COMPARAR_*__` intactos, rollback v13→v14 aditivo,
- * `npm run base` sem os arquivos-fonte degrada gracioso, três badges
+ * Preserva: rollback v13→v14 aditivo, `npm run base` sem os arquivos-fonte
+ * degrada gracioso, três badges
  * distintos, sem-lastro nunca com redução.
  *
  * Fixtures próprios semeados via `importarBase` (padrão Phase 7/09) —
@@ -33,11 +33,6 @@ import { consultarPorCnpj } from '@/application/consultar-por-cnpj'
 import {
   construirClassificacoesConsolidadas,
 } from '../scripts/build-base.mjs'
-import {
-  blocoNbsDoCnae,
-  responderChat,
-} from '@/application/aurum-ai-chat'
-import { detectarIntencaoChat } from '@/domain/services/detector-chat'
 import {
   estatisticasCacheCnaeNbs,
   limparCacheVereditosNbs,
@@ -116,7 +111,7 @@ const NBS_0162 = [...Array.from({ length: 24 }, (_, i) => `2000000${String(i + 1
 /** 98 NBS sintéticas em `4322-3/03` (caso i). */
 const NBS_4322 = Array.from({ length: 98 }, (_, i) => `300000${String(i + 1).padStart(3, '0')}`)
 
-/** Template consolidado de `0161-0/01` (caso g: mesma fonte p/ menu+CNPJ+chat). */
+/** Template consolidado de `0161-0/01` (caso g: mesma fonte p/ menu+CNPJ). */
 const TEMPLATE_0161: ClassificacaoConsolidada = {
   cnae7: '0161001',
   codigoFormatado: '0161-0/01',
@@ -322,7 +317,7 @@ describe('chaos-09(f) — divergência marca, NÃO consolida', () => {
 
 /* ------------------------------------------------- (g) template reutilizado --- */
 
-describe('chaos-09(g) — template consolidado reutilizado em menu + CNPJ + chat', () => {
+describe('chaos-09(g) — template consolidado reutilizado em menu + CNPJ', () => {
   it('caso 10 — menu: store consultarCnae(`0161-0/01`) → regra + 1 NBS + ano', async () => {
     await useCnaes.getState().carregarLista(true)
     const achados = filtrarCnaes(useCnaes.getState().lista, '0161-0/01')
@@ -335,7 +330,7 @@ describe('chaos-09(g) — template consolidado reutilizado em menu + CNPJ + chat
     expect(consulta?.vereditos[0]?.anoReferencia).toBe(2033)
     if (consulta?.regra.estado !== 'ok') throw new Error('regra esperada')
     expect(consulta.regra.anexoSimples).toEqual(['III'])
-    // Vedação veio do template consolidado (mesma fonte do CNPJ/chat).
+    // Vedação veio do template consolidado (mesma fonte do CNPJ).
     expect(consulta.regra.vedacaoTextual).toContain(
       'Atividade permitida no Simples Nacional (vedação-teste do template).',
     )
@@ -373,14 +368,6 @@ describe('chaos-09(g) — template consolidado reutilizado em menu + CNPJ + chat
     expect(atv.regras.anexoSimples).toEqual(['III'])
     expect(atv.regras.situacao).toBe('Permitido')
   })
-
-  it('caso 12 — chat: `consultarCnaeNbs` cita NBS + ano + regra (sem rede)', async () => {
-    const r = await responderChat('CNAE 0161-0/01 quais NBS e benefícios?')
-    expect(r.tipoCodigo).toBe('cnae')
-    expect(r.texto).toContain('118.032.100')
-    expect(r.texto).toContain('ref. 2033')
-    expect(r.texto).toMatch(/Anexo Simples/)
-  }, 30000)
 })
 
 /* ------------------------------------------------- (h) bens → NCM --- */
@@ -398,13 +385,11 @@ describe('chaos-09(h) — CNAE de bens aponta NCM', () => {
     expect(estatisticasCacheCnaeNbs.resolvidas).toBe(0)
   })
 
-  it('caso 14 — faixa bens: resumo + bloco do chat citam bens→NCM, sem NBS inventado', async () => {
+  it('caso 14 — faixa bens: resumo cita bens→NCM, sem NBS inventado', async () => {
     const c: ConsultaCnae = await consultarPorCnae('4711-3/02', { anoReferencia: 2033 })
     expect(c.estadoNbs).toBe('bens→NCM')
     expect(c.resumo).toContain('bens')
     expect(c.resumo).toContain('NCM')
-    expect(blocoNbsDoCnae(c)).toMatch(/bens.*NCM/)
-    expect(blocoNbsDoCnae(c)).not.toMatch(/NBS \d/)
   }, 30000)
 })
 
@@ -431,21 +416,11 @@ describe('chaos-09(i) — 98 NBS: destaque + escolha', () => {
 /* ------------------------------------------------- preserva --- */
 
 describe('chaos-09 — preserva (regressão zero)', () => {
-  it('caso 17 — `__COMPARAR_*__` intactos (nunca viram cnae)', () => {
-    expect(
-      detectarIntencaoChat('__COMPARAR_ANEXOS__ RBT12=500000 RECEITA=40000 FOLHA=0 ANEXO_ATUAL=III').intencao,
-    ).not.toBe('cnae')
-    expect(
-      detectarIntencaoChat('__COMPARAR_HIBRIDO__ RBT12=500000 RECEITA=40000 FOLHA=0 ANEXO=III DESPESA=0').intencao,
-    ).not.toBe('cnae')
-  })
-
-  it('caso 18 — schema único SQLite: stores Phase 9 intactas, sem cadeia Dexie', async () => {
+  it('caso 18 — schema único SQLite: stores fiscais intactas, sem cadeia Dexie', async () => {
     expect(DB_VERSION).toBe(1)
     expect(STORES.CNAE_NBS).toBe('cnaeNbs')
     expect(STORES.LC_NBS).toBe('lcNbs')
     expect(STORES.CLASS_CONSOLIDADA).toBe('classificacoesConsolidadas')
-    expect(STORES.GRAFOMETA).toBe('grafometa')
     // Stores Phase 9 seguem povoadas junto das demais — nenhum `clear()` destrutivo.
     expect(await db.cnae.count()).toBeGreaterThan(0)
     expect(await db.cnaeNbs.count()).toBeGreaterThan(0)
@@ -455,7 +430,6 @@ describe('chaos-09 — preserva (regressão zero)', () => {
       'utf8',
     )
     expect(schema).toContain('model CnaeNbsLink')
-    expect(schema).toContain('model GrafoMeta')
     expect(schema).not.toContain('this.version(')
   })
 

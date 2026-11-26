@@ -25,7 +25,7 @@
 
 ◈ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ◈
 
-**Versão `1.2.0` · `9` views · `173` suítes Vitest · `1.951` casos · `typecheck` limpo (app + electron)**
+**Versão `1.2.0` · `8` views · suítes Vitest (contagem atual: ver `npm test`) · `typecheck` limpo (app + electron)**
 
 *Estado auditado em **13/11/2026** a partir da árvore de trabalho (branch `main`).*
 
@@ -44,10 +44,10 @@
 | Sinal | Valor real (árvore de trabalho) |
 |---|---|
 | 🖥️ Views no menu | **8** — Consulta NCM · Simples Nacional · Serviços (NBS) · Consulta de CNAEs · Classificação em lote · Produtos · Tabelas auxiliares · Legislação |
-| 🧪 Testes | **173 arquivos** · **1.951 casos** — `npm test` → **tudo passando** · `npm run typecheck` limpo (app + electron) |
+| 🧪 Testes | Suítes e casos atualizados — execute `npm test` para a contagem vigente · `npm run typecheck` limpo (app + electron) |
 | ✅ Tipos | `npm run typecheck` (`tsc --noEmit` + `tsc -p tsconfig.electron.json`) — **limpo** |
 | 📦 Instaladores locais | `release/` com `Setup 1.2.0` + `Portátil 1.2.0` (ignorado no git, gerado por `npm run dist:win`) |
-| 🗄️ Base embutida | `public/base/` versionada: `reforma.json` 1,5 MB · `nomenclatura.json` 2,8 MB · `classificacoes-consolidadas.json` 1,7 MB · `cnae-nbs.json` 1,3 MB · `nbs-nomenclatura.json` (NBS 2.00 oficial) · `nbs-depara.json` (DE-PARA 1.1↔2.0) · `parametros.json` (IBS 19 + CBS 9 de referência, editável) · grafo `grafo.lbug` 6,1 MB · `vetores.json` 12 MB (versionado p/ busca local; não empacotado no instalador) |
+| 🗄️ Base embutida | `public/base/` versionada: `reforma.json` 1,5 MB · `nomenclatura.json` 2,8 MB · `classificacoes-consolidadas.json` 1,7 MB · `cnae-nbs.json` 1,3 MB · `nbs-nomenclatura.json` (NBS 2.00 oficial) · `nbs-depara.json` (DE-PARA 1.1↔2.0) · `parametros.json` (IBS 19 + CBS 9 de referência, editável) · `MANIFEST.json` |
 | 📥 Formatos de entrada | **CSV/XLSX de lote** (`COD/SKU; NOME; NCM; CFOP; CST; PIS; COFINS`) |
 
 ### ◆ Arquitetura em uma figura
@@ -60,7 +60,7 @@ flowchart LR
     end
     subgraph DOM["● Domínio puro"]
         R[Resolvedor NCM/NBS] --> H[Herança por família]
-        G[Grafo fiscal local] --> F[Fallback lexical]
+        R --> F[Busca lexical determinística]
     end
     subgraph INF["▲ Infraestrutura"]
         D[(SQLite + Prisma no main)] --- B[Base embutida versionada]
@@ -139,7 +139,7 @@ Artefatos em `./release/` (ignorado no git):
 | `AurumTaxNCM-Setup-<versão>-win-x64.exe` | Instalador NSIS (PT-BR, por usuário, atalho + desinstalador) |
 | `AurumTaxNCM-Portatil-<versão>-win-x64.exe` | Versão portátil (sem instalar) |
 
-O instalador leva **só o app**: interface + base tributária embutida + grafo fiscal + conhecimento curado. Fora do instalador: `.planning/`, `docs/`, `tests/`, `scripts/` e artefatos de build intermediários. A classificação roda 100% local e offline (léxico + sinônimos + grafo + resolvedor oficial). Dados do usuário (XMLs, SQLite `aurum.db`) vivem em `%APPDATA%` e sobrevivem a atualizações.
+O instalador leva **só o app**: interface + base tributária embutida. Fora do instalador: `.planning/`, `docs/`, `tests/`, `scripts/` e artefatos de build intermediários. A classificação roda 100% local e offline (léxico + sinônimos + resolvedor oficial). Dados do usuário (XMLs, SQLite `aurum.db`) vivem em `%APPDATA%` e sobrevivem a atualizações.
 
 ---
 
@@ -254,9 +254,7 @@ projeção        = RBT12(t) = Σ R[m], m ∈ [t−12, t−1]; nova < 12m usa m�
 | `npm run dev` | Vite (127.0.0.1:5173) + Electron lado a lado |
 | `npm run dev:web` | Só Vite no navegador |
 | `npm run build` | `db:generate` + `base:completa` + `typecheck` (app + electron) + Vite + Electron + ofuscar + verificar |
-| `npm run base` / `base:completa` | Gera a base embutida (+ índice lexical, validação do conhecimento) |
-| `npm run grafo:rebuild` / `grafo:avaliar` | Reconstrói o grafo fiscal (`scripts/build-grafo.mjs --forcar`) / avalia o recall do grafo |
-| `npm run ia:indice` / `ia:testar-indice` / `ia:validar-conhecimento` / `ia:cobertura` | Pipeline de busca local (índice lexical, teste top-k, curadoria, cobertura PT↔EN) |
+| `npm run base` / `base:completa` | Gera a base embutida (NCM/NBS/CNAE, validação) |
 | `npm run ofuscar` / `verificar` | Ofusca o build / valida o build |
 | `npm run typecheck` / `npm test` | Tipos app + electron (`tsc --noEmit` + `tsc -p tsconfig.electron.json`) / Vitest (`vitest run`) |
 | `npm run db:generate` / `db:push` | Regenera o client Prisma via `scripts/prisma-generate.cjs` + DDL embarcado (após editar `prisma/schema.prisma`) / aplica o schema no banco de dev |
@@ -268,15 +266,14 @@ projeção        = RBT12(t) = Σ R[m], m ∈ [t−12, t−1]; nova < 12m usa m�
 ```text
 aurum-tax-ncm/
 ├── electron/            # main.ts, preload.ts, esbuild.mjs
-│   ├── dist/            # compilados (main.js, preload.cjs)
-│   └── ia/              # grafo fiscal local (grafo-service.cjs + caminhos-ia.cjs)
+│   └── dist/            # compilados (main.js, preload.cjs)
 ├── src/
-│   ├── App.tsx          # shell com 9 views
-│   ├── pages/           # 14 arquivos para 9 views: Consulta, ConsultaServicos,
+│   ├── App.tsx          # shell com 8 views
+│   ├── pages/           # 14 arquivos para 8 views: Consulta, ConsultaServicos,
 │   │                    #  ConsultaCnaes, Lote, NfeXml, NfeXmlPolida (+ NfeNatureza,
 │   │                    #  NfeConferenciaProdutos, NfePendentes, NfeCalendarioAnual, ModalRelatorioNfe), Produtos, Auxiliares, Legislacao
 │   ├── simples/         # módulo Simples isolado (tabelas, calculo, store, page,
-│   │                    #  DasModal, relatorio-analitico, exports, ia-insights)
+│   │                    #  DasModal, relatorio-analitico, exports, insights)
 │   ├── simples-projection/ # projeção dividida v2 (camada aditiva sobre simples/):
 │   │                    #  motor puro (janela-rbt12, cenario-dividido, baseline,
 │   │                    #  das-segregado, simular-segregacao, fator-r-dividido,
@@ -290,23 +287,21 @@ aurum-tax-ncm/
 │   ├── application/     # casos de uso (produtos, empresas, lote, backup, CFF/Siscomex,
 │   │                    #  NFe insights/relatório/apuração, Simples, reclassificação,
 │   │                    #  log com rotação (`log-rotacao.ts`, 5 MiB × 3 gerações, com scrub de PII),
-│   │                    #  assistente por templates aurum-ai-*.ts)
+│   │                    #  insights por templates determinísticos)
 │   ├── infrastructure/  # SQLite/Prisma, base, parsers (lote/NFe), CFOP/curadoria, PDF/CSV,
 │   │                    #  CFF/Siscomex/BrasilAPI, bridge IPC
-│   ├── store/           # Zustand (ui com 9 ViewId, sessão, consulta,
-│   │                    #  lote, nfe, produtos, base, ia (só observabilidade), dialogo, fundo, novidades…)
+│   ├── store/           # Zustand (ui com 8 ViewId, sessão, consulta,
+│   │                    #  lote, nfe, produtos, base, dialogo, fundo, novidades…)
 │   ├── ui/              # Layout, kit, Marca, ModalLegislacao, motion,
 │   │                    #  ErroFatal (barreira por view/global) + chart-registry (Chart.js central),
 │   │                    #  consulta-enxuta/premium, servicos, cartoes, cest,
-│   │                    #  diferimento-opcoes, grafo-trilha, aurum-ai (selos/UI)…
+│   │                    #  diferimento-opcoes, resultado-automatico (selos/UI)…
 │   └── modais/          # globais (empresas/config/emitente/backup…), pagina
-├── recursos-ia/         # busca local: índice lexical + conhecimento curado + grafo
 ├── bases-fonte/         # JSONs-fonte oficiais + vivos (ver tabela abaixo)
-├── scripts/             # build-base, build-grafo, gerar-indice-ia (lexical),
-│                        #  cobertura, ofuscar, verificar, after-pack…
-├── tests/               # 144 suítes · 1.675 casos (tudo passando)
-├── docs/                # SPEC, arquitetura, diagnósticos, manuais (.docx fora do installer)
-├── public/base/         # base JSON embutida versionada + MANIFEST + grafo
+├── scripts/             # build-base, cobertura, ofuscar, verificar, after-pack…
+├── tests/               # suítes Vitest (contagem atual: ver `npm test`)
+├── docs/                # SPEC, arquitetura e manuais (.docx fora do installer)
+├── public/base/         # base JSON embutida versionada + MANIFEST
 ├── build/               # icon.ico/png/icns, LICENCA.rtf/txt (NSIS PT-BR; icns p/ mac, png p/ linux)
 └── release/             # instaladores gerados (ignorado no git)
 ```
@@ -318,7 +313,7 @@ Arquitetura: **React + Clean Architecture** — `domain` (regras puras) → `app
 - **Desktop:** Electron 44 + electron-builder (NSIS PT-BR, DMG, AppImage)
 - **Front:** React 19, Vite 8 (`base: './'` p/ file://), TailwindCSS 4, Zustand 5, Framer Motion, Chart.js
 - **Dados:** SQLite via Prisma 6 — tabelas em `aurum.db` (`%APPDATA%`), Prisma no processo main + IPC, validação de domínio em toda escrita, seed transacional por lote, snapshot pré-restore, `integrity_check` + quarentena no boot. XLSX (SheetJS), pdfmake
-- **Busca local:** léxico + sinônimos curados + dicionário comercial + grafo fiscal local (FTS + 2-hops + PageRank, com fallback lexical idêntico) + resolvedor oficial como única verdade. O assistente Aurum AI responde por templates validados — todo número exibido vem do motor (IBS/CBS, DAS, RBT12)
+- **Busca determinística local:** léxico + sinônimos curados + dicionário comercial + resolvedor oficial como única verdade. Insights por templates validados — todo número exibido vem do motor (IBS/CBS, DAS, RBT12)
 - **Qualidade:** TypeScript strict, Vitest + SQLite/Prisma (banco por arquivo), esbuild, ofuscação + verificação de build, CI no GitHub Actions (`typecheck` + `vitest --coverage`)
 
 ### Dados / base tributária

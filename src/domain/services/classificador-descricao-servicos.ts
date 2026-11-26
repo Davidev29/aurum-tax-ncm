@@ -24,7 +24,7 @@ export interface EntradaDescricaoServico {
 export type ConfiancaServico = 'alta' | 'media' | 'baixa'
 
 /** Sinais fiscais de serviços (ids estáveis, usados em testes).
- * Fine-tuning NBS v2: cobertura por setor da Reforma (LC 214/2025) —
+ * Calibragem NBS v2: cobertura por setor da Reforma (LC 214/2025) —
  * cada sinal mapeia gatilhos do dia a dia → hipótese de Anexo/cct,
  * sem nunca decidir sozinho (a prova é o vínculo NBS + resolvedor). */
 export type SinalServico =
@@ -84,7 +84,7 @@ const REGRAS_SINAL: { sinal: SinalServico; gatilhos: string[] }[] = [
   { sinal: 'AUDIOVISUAL', gatilhos: ['filme', 'filmes', 'serie', 'series', 'novela', 'novelas', 'cinema', 'documentario', 'documentarios', 'jornalistico', 'jornalisticos', 'programa', 'programas', 'auditorio', 'entrevista', 'entrevistas', 'clipe', 'clipes', 'audiovisual', 'audiovisuais', 'filmagem', 'podcast', 'streaming', 'live', 'cinegrafista', 'cineasta', 'roteirista', 'roteiro', 'youtuber', 'influencer', 'streamer', 'blogueiro', 'locutor', 'apresentador', 'reporter', 'jornalista', 'filmar'] },
   { sinal: 'SOBERANIA_SEGURANCA', gatilhos: ['soberania', 'seguranca', 'administracao', 'publica', 'defesa'] },
   { sinal: 'CIBERSEGURANCA', gatilhos: ['cibernetica', 'informacao', 'software', 'socio', 'brasileiro', 'firewall', 'pentest', 'lgpd', 'antivirus', 'ciberataque', 'invasao', 'invasoes', 'ransomware', 'phishing', 'malware', 'criptografia', 'hacker', 'datacenter', 'licenca'] },
-  // --- fine-tuning NBS v2+v3: setores que antes caíam em "sem lastro" ---
+  // --- calibragem NBS v2+v3: setores que antes caíam em "sem lastro" ---
   { sinal: 'TI_SOFTWARE', gatilhos: ['software', 'app', 'aplicativo', 'sistema', 'site', 'ecommerce', 'programacao', 'desenvolvimento', 'suporte', 'helpdesk', 'nuvem', 'cloud', 'hospedagem', 'backup', 'dominio', 'instalacao', 'configuracao', 'programador', 'desenvolvedor', 'webdesigner', 'website', 'hardware', 'formatacao', 'upgrade'] },
   { sinal: 'SERV_PROFISSIONAL', gatilhos: ['advogado', 'advogados', 'advogada', 'advogadas', 'juridico', 'contador', 'contadores', 'contadora', 'contabilistas', 'contabeis', 'auditoria', 'auditor', 'pericia', 'peritos', 'peticao', 'consultoria', 'assessoria', 'engenheiro', 'engenheiros', 'engenharia', 'arquiteto', 'arquitetos', 'arquitetura', 'urbanista', 'projeto', 'laudo', 'vistoria', 'tradutor', 'traducao', 'despachante', 'corretor', 'intermediacao', 'administrador', 'administradores', 'agronomo', 'topografo', 'laudos', 'vistorias', 'parecer', 'consultores', 'coaching', 'mentor', 'fotografos', 'tradutores', 'interpretes', 'despachantes', 'corretagem', 'cartorio', 'tabeliao', 'assistente', 'bibliotecario', 'biologo', 'economista', 'estatistico', 'museologo', 'quimico', 'profissao', 'conselho'] },
   { sinal: 'TRANSPORTE_LOGISTICA', gatilhos: ['transporte', 'frete', 'carreto', 'mudanca', 'entrega', 'delivery', 'motoboy', 'taxi', 'logistica', 'armazenagem', 'estoque', 'van', 'onibus', 'motorista', 'caminhao', 'truck', 'carreta', 'kombi', 'microonibus', 'mototaxi', 'freteiro', 'carreteiro', 'caminhoneiro', 'entregador', 'motofrete', 'fretamento', 'transportadora', 'embarcador', 'guincho', 'reboque', 'mudancas', 'carretos', 'transfer', 'logistico', 'dirigir', 'entregar', 'zpe', 'exportado', 'exportados', 'ferroviario', 'hidroviario', 'metro', 'urbano', 'urbanos', 'coletivo', 'trem', 'barca', 'passageiros'] },
@@ -261,7 +261,7 @@ export function analisarDescricaoServico(entrada: EntradaDescricaoServico): Anal
   if (sinais.includes('TOMADOR_EXTERIOR')) {
     ambiguidades.push('Tomador no exterior pode mudar o enquadramento (exportação de serviços) — confirmar o local do tomador.')
   }
-  // Fine-tuning NBS v2 — raciocínio por setor (condições que mudam o Anexo/cct).
+  // Calibragem NBS v2 — raciocínio por setor (condições que mudam o Anexo/cct).
   // Só viram ambiguidade (teto `media`) quando há risco real de Anexo errado;
   // o resto é refino via perguntas, sem penalizar a confiança do caso claro
   // (ex.: "aula de inglês online" continua `alta` no determinístico).
@@ -278,7 +278,7 @@ export function analisarDescricaoServico(entrada: EntradaDescricaoServico): Anal
   const unico = tokens.length === 1 ? tokens[0] : ''
   // Palavra única conhecida do sistema (vocábulo, gatilho ou pin) com ≥3
   // letras já é pesquisável ("show", "spa", "bar", "taxi", "app", "aula"):
-  // antes exigia ≥5 e a IA "não sugeria nada" para o trivial.
+  // antes exigia ≥5 e a busca "não sugeria nada" para o trivial.
   const unicoConhecido =
     unico.length >= 3 &&
     (SINONIMOS_SERVICOS[unico] !== undefined ||
@@ -310,7 +310,7 @@ export function perguntasComplementaresServicos(analise: AnaliseDescricaoServico
   if (analise.sinais.includes('CULTURA_EVENTO') || analise.sinais.includes('AUDIOVISUAL')) {
     perguntas.push('O serviço destina-se a produção nacional (teatro, show, filme, evento)? Qual o tipo de produção?')
   }
-  // Fine-tuning NBS v2 — refino por setor (raciocínio guiado).
+  // Calibragem NBS v2 — refino por setor (raciocínio guiado).
   if (analise.sinais.includes('TI_SOFTWARE')) {
     perguntas.push('É desenvolvimento, licenciamento, suporte ou hospedagem? O uso é próprio ou revenda? Presencial ou remoto?')
   }
@@ -341,7 +341,7 @@ export function perguntasComplementaresServicos(analise: AnaliseDescricaoServico
   if (analise.sinais.includes('PUBLICIDADE_MARKETING')) {
     perguntas.push('É criação, veiculação ou impressão? Qual o meio (digital, impresso, externo?)')
   }
-  // Fine-tuning v4 — refino dos novos setores com benefício.
+  // Calibragem v4 — refino dos novos setores com benefício.
   if (analise.sinais.includes('PESQUISA_ICT')) {
     perguntas.push('A prestadora é ICT sem fins lucrativos? Quem é o tomador (governo ou contribuinte regular)?')
   }

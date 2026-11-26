@@ -7,7 +7,7 @@
 
 ## Security
 
-**Pontos fortes (verificados):** `contextIsolation:true`, `nodeIntegration:false`; preload mínimo (`window.aurum`); DevTools só em dev; `will-navigate` travado (só dev-server/`dist/index.html`); `setWindowOpenHandler` → deny; lock single-instance; IPC do main denso em validação (allowlist de ops/tabelas do `db:op`, anti-traversão, tetos, CNPJ/chave NF-e); grafo fiscal fail-closed sem interpolação em Cypher; build fail-closed (`verificar-build`).
+**Pontos fortes (verificados):** `contextIsolation:true`, `nodeIntegration:false`; preload mínimo (`window.aurum`); DevTools só em dev; `will-navigate` travado (só dev-server/`dist/index.html`); `setWindowOpenHandler` → deny; lock single-instance; IPC do main denso em validação (allowlist de ops/tabelas do `db:op`, anti-traversão, tetos, CNPJ/chave NF-e); build fail-closed (`verificar-build`).
 
 ### Crítico
 
@@ -30,7 +30,7 @@
 
 ## Tech Debt
 
-- **Monstros de código**: `aurum-ai-chat.ts`, `modais/globais.tsx`, `simples/page.tsx`.
+- **Monstros de código**: `modais/globais.tsx`, `simples/page.tsx`.
 - **Clean Architecture nominal**: `infrastructure` é namespace universal (109 imports em `application/`, 32 em `pages/`, …); `domain/` importa infra (11) e a feature `simples/` (3). Refatorar = portas + composition root.
 - **Erros engolidos**: ~195 catches "best-effort" com comentário no corpo (bancos/rede falham em silêncio). Zero `console.log` em runtime, mas silêncio ≠ higiene — ao menos log local estruturado nas camadas de infra.
 - **Motores paralelos/duplicação**: `round2` ×6, `aliqIBS/aliqCBS` ×7 sítios, fonte única de referência IBS/CBS (tabela viva `parametros.json` + override do usuário em Configurações → Alíquotas; fallback embarcado 19/11,3) + re-exports "compat" em `simples/`, duplicação `NfeXml` × `NfeXmlPolida`.
@@ -46,7 +46,7 @@
 
 ## Performance
 
-- Busca lexical/grafo local: <50ms tipicamente; busca por substring varre em memória (não há índice `contains`) — medir com base grande.
+- Busca lexical local: <50ms tipicamente; busca por substring varre em memória (não há índice `contains`) - medir com base grande.
 - **Tabela virtualizada ausente** (sem react-window/virtuoso): telas de tabela grandes contam com paginação/filtros; se o volume passar de milhares de linhas renderizadas, adicionar virtualização.
 - `dump` do `build-base` regenera artefatos (1,5–2,8 MB) — determinístico, mas versionar cautelosamente (diff em `public/base/*` pode ser grande).
 

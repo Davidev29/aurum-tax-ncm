@@ -32,7 +32,7 @@
 - **Limpeza ao trocar de view** via `registrarLimpeza(view, fn)` em `store/ui.ts`.
 - **Prisma + SQLite via processo main** (não Dexie). Singleton `PrismaClient` no main (`electron/main/db.ts`); no renderer, acesso via IPC `db:op` (`DriverIpc` → `src/infrastructure/db/driver-prisma.ts`) com allowlist de operações/tabelas, tetos (lote 2000, 4 MB, transação 500 ops), `"where"` estruturado e `removerOnde` exigindo critério.
 - **Tabelas (27)** + KEK/índices fora do backup; backup/restore JSON transacional e validado; `integrity_check` no boot com backend `node:sqlite` + quarentena.
-- **Auditoria append-only** — `audit_log` nunca atualizado pela UI; trilha `via:grafo`/determinístico.
+- **Auditoria append-only** - `audit_log` nunca atualizado pela UI; trilha determinística.
 
 ## Styling
 
@@ -44,5 +44,5 @@
 
 ## Git & Commits
 
-- Histórico: `feat:`/`fix:`/`chore:` em pt-BR (`2572b6b feat: Aurum Tax NCM v1.0.0…` … `4a57222 chore(grafo): …`).
+- Histórico: `feat:`/`fix:`/`chore:` em pt-BR (`2572b6b feat: Aurum Tax NCM v1.0.0…` … `4a57222 chore(base): …`).
 - `.gitignore` cobre: `node_modules/`, `dist/`, `electron/dist/`, `release/`, `coverage/`, `.vitest/`, `logs/*`, artefatos de build/certificado, `*.db`. **`public/base/*.json` e `prisma/schema.prisma|schema.sql` são versionados por design** (base embutida determinística, verificada por `verificar-build.mjs`).

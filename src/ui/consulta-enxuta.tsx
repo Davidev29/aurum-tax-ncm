@@ -17,7 +17,7 @@ import { limparTextoFiscal } from '@/domain/services/texto-fiscal'
 import { observacoesFiscais } from '@/domain/services/calculo'
 import { FaixaTributaria } from './faixa-tributaria'
 import { Btn } from './kit'
-import { IconeAurumPremium, SeloAurumAI } from './aurum-ai'
+import { IconeResultado, SeloResultado } from './resultado-automatico'
 import { BotaoDetalhePremium, ModalDetalheFiscal } from './consulta-premium'
 import { BotaoVerLegislacao, type BloqueioSistema } from './cartoes'
 import { AvisoIntegralFallback, PillAnexos } from './cartoes'
@@ -30,14 +30,14 @@ export function CartaoEnxuto({
   cl,
   nomenclatura,
   bloqueios,
-  destaqueIA = false,
+  destaqueBusca = false,
   onSalvar,
   onReclassificar,
 }: {
   cl: Classificacao
   nomenclatura?: NomenclaturaNcm | null
   bloqueios?: BloqueioSistema[] | null
-  destaqueIA?: boolean
+  destaqueBusca?: boolean
   /** Recebe a classificação ATIVA (respeita a opção de diferimento escolhida). */
   onSalvar?: (cl: Classificacao) => void
   onReclassificar?: () => void
@@ -91,10 +91,10 @@ export function CartaoEnxuto({
   const legendaNbs = ehNbs ? (visivel.detalheNbs ?? null) : null
 
   return (
-    <article className={`panel animate-fade-up p-4 sm:p-5 ${destaqueIA ? 'aurum-ai-destaque' : ''}`} aria-label={`${rotuloCodigo} ${codigoFormatado} — ${r.descricaoCClassTrib ?? 'classificação'}`}>
-      {destaqueIA ? (
+    <article className={`panel animate-fade-up p-4 sm:p-5 ${destaqueBusca ? 'resultado-auto-destaque' : ''}`} aria-label={`${rotuloCodigo} ${codigoFormatado} — ${r.descricaoCClassTrib ?? 'classificação'}`}>
+      {destaqueBusca ? (
         <div className="mb-2 flex items-center gap-2">
-          <SeloAurumAI variante="compacto" />
+          <SeloResultado variante="compacto" />
         </div>
       ) : null}
       <FaixaTributaria redIBS={redIBS} redCBS={redCBS} anexo={anexo} baseLegal={baseLegal} />
@@ -222,7 +222,7 @@ export function CartaoEnxuto({
       </div>
 
       {/* Excesso comportado: botões premium → modais glass padrão. */}
-      <div className="aurum-ai-acoes" role="group" aria-label="Detalhes da classificação">
+      <div className="resultado-auto-acoes" role="group" aria-label="Detalhes da classificação">
         <BotaoDetalhePremium
           icone="📋"
           rotulo="Detalhes fiscais"
@@ -262,7 +262,7 @@ export function CartaoMultiplo({
   itens,
   nomenclatura,
   bloqueios,
-  destaqueIA = false,
+  destaqueBusca = false,
   onSalvar,
   onReclassificar,
 }: {
@@ -270,7 +270,7 @@ export function CartaoMultiplo({
   itens: { __uid: string; classificacao: Classificacao; manual?: unknown }[]
   nomenclatura?: NomenclaturaNcm | null
   bloqueios?: Record<string, BloqueioSistema[] | null>
-  destaqueIA?: boolean
+  destaqueBusca?: boolean
   onSalvar?: (cl: Classificacao) => void
   onReclassificar?: () => void
 }): ReactElement {
@@ -305,7 +305,7 @@ export function CartaoMultiplo({
 
   return (
     <article
-      className={`panel animate-fade-up p-4 sm:p-5 ${destaqueIA ? 'aurum-ai-destaque' : ''}`}
+      className={`panel animate-fade-up p-4 sm:p-5 ${destaqueBusca ? 'resultado-auto-destaque' : ''}`}
       aria-label={`${rotuloCodigo} ${codigoFormatado} — ${itens.length} tributações possíveis`}
     >
       {/* Cabeçalho único: NCM + Siscomex aparecem 1x (antes repetiam em N cartões). */}
@@ -511,7 +511,7 @@ function DetalheTributacaoSelecionada({
         ) : null}
       </div>
 
-      <div className="aurum-ai-acoes" role="group" aria-label="Detalhes da classificação">
+      <div className="resultado-auto-acoes" role="group" aria-label="Detalhes da classificação">
         <BotaoDetalhePremium
           icone="📋"
           rotulo="Detalhes fiscais"
@@ -543,7 +543,7 @@ function DetalheTributacaoSelecionada({
  *
  * Anti-alucinação por construção: texto 100% estático (prop `mensagem` com
  * valor padrão fixo), sem NCM, sem CST, sem cálculo, sem candidatos e sem
- * chamada a worker/LLM. Abaixo da mensagem, 3 exemplos do que a IA atende
+ * chamada a motor/serviço externo. Abaixo da mensagem, 3 exemplos do que a busca atende
  * (texto puro, sem botões que disparem classificação).
  */
 export function CartaoForaDeEscopo({ mensagem }: { mensagem: string }): ReactElement {
@@ -555,7 +555,7 @@ export function CartaoForaDeEscopo({ mensagem }: { mensagem: string }): ReactEle
       aria-label="Pedido fora do escopo do sistema"
     >
       <div className="flex items-center gap-2 text-sm font-black text-slate-700 dark:text-slate-200">
-        <IconeAurumPremium tamanho="md" />
+        <IconeResultado tamanho="md" />
         <span>Fora do meu escopo</span>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-slate-700 dark:text-slate-200">{mensagem}</p>

@@ -71,7 +71,7 @@ export const PERGUNTA_FATOR_R =
   'A folha de salários (incluindo pró-labore) dos últimos 12 meses representa 28% ou mais do faturamento? Se sim, o enquadramento tende ao Anexo Simples III; se não, ao Anexo V.'
 
 /**
- * Teto de confiança imposto pela Situação do CNAE (a matriz veta, a IA pontua).
+ * Teto de confiança imposto pela Situação do CNAE (a matriz veta, a busca pontua).
  * `Permitido` não veta; `Permitido com ressalvas` veta em média (0.60);
  * `Depende da atividade` nunca ancora sozinho (força modo manual/IA com contexto).
  */

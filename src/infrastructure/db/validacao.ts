@@ -339,15 +339,15 @@ const VALIDADORES: Record<string, (r: Rec) => void> = {
     if (r.descricao !== undefined && r.descricao !== null) texto(r.descricao, 'cest', 'descricao', 2000, false)
     if (r.ncm !== undefined) textoOuNulo(r.ncm, 'cest', 'ncm', 50)
   },
-  ia_feedback: (r) => {
-    if (r.id !== undefined) inteiro(r.id, 'ia_feedback', 'id')
-    texto(r.quando, 'ia_feedback', 'quando', 100)
-    texto(r.descricao, 'ia_feedback', 'descricao', TETO_TEXTO, false)
-    texto(r.via, 'ia_feedback', 'via', 100)
-    textoOuNulo(r.decisao, 'ia_feedback', 'decisao', 500)
-    numero(r.confianca, 'ia_feedback', 'confianca')
-    textoOuNulo(r.motivo, 'ia_feedback', 'motivo', 2000)
-    if (r.mock !== undefined) booleanoOuNulo(r.mock, 'ia_feedback', 'mock')
+  feedback_busca: (r) => {
+    if (r.id !== undefined) inteiro(r.id, 'feedback_busca', 'id')
+    texto(r.quando, 'feedback_busca', 'quando', 100)
+    texto(r.descricao, 'feedback_busca', 'descricao', TETO_TEXTO, false)
+    texto(r.via, 'feedback_busca', 'via', 100)
+    textoOuNulo(r.decisao, 'feedback_busca', 'decisao', 500)
+    numero(r.confianca, 'feedback_busca', 'confianca')
+    textoOuNulo(r.motivo, 'feedback_busca', 'motivo', 2000)
+    if (r.mock !== undefined) booleanoOuNulo(r.mock, 'feedback_busca', 'mock')
   },
   cnae: (r) => {
     digitos(r.codigo7, 'cnae', 'codigo7', [7])

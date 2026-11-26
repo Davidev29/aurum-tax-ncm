@@ -386,7 +386,7 @@ model TabelaCest {
 }
 
 // Feedback "Não é esse" da Sugestão IA (store `ia_feedback`, `++id`).
-model IaFeedback {
+model FeedbackBusca {
   id        Int      @id @default(autoincrement())
   quando    String
   descricao String
@@ -424,19 +424,6 @@ model ConsultaCnpj {
   quando           String
 }
 
-// Conversas da Aurum AI por emitente (keyPath `conversaId`).
-model ConversaEmitente {
-  conversaId     String @id
-  emitenteId     String
-  empresaAtivaId Int?
-  titulo         String
-  mensagens      Json
-  updatedAt      String
-  createdAt      String
-
-  @@index([emitenteId])
-  @@index([updatedAt])
-}
 
 // Links CNAE → NBS da fonte ponte (store `cnaeNbs`, `++id`).
 model CnaeNbsLink {
@@ -485,14 +472,3 @@ model ClassificacaoConsolidada {
   estadoNbs         String
 }
 
-// Carimbo do grafo fiscal local (keyPath `id`, sempre 'atual').
-model GrafoMeta {
-  id       String @id
-  hash     String
-  versao   String
-  nodos    Int
-  arestas  Int
-  geradoEm String
-
-  @@index([hash])
-}

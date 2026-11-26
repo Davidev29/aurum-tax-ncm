@@ -1,5 +1,5 @@
 /**
- * simples-projection — adaptadores e ferramentas LLM (Etapa 5).
+ * simples-projection — adaptadores e ferramentas determinísticas (Etapa 5).
  */
 import { describe, expect, it } from 'vitest';
 import { prepararEntradaProjecao } from '@/simples-projection/entrada';
@@ -92,7 +92,7 @@ describe('relatorio — contrato de saída', () => {
   });
 });
 
-describe('ferramentas LLM — specs e dispatcher', () => {
+describe('ferramentas determinísticas — specs e dispatcher', () => {
   it('3 specs estáveis no padrão do projeto + schema OpenAI-compatível', () => {
     const specs = specsFerramentasProjecao();
     expect(specs.map((s) => s.nome)).toEqual(['projetarRBT12', 'simularCenarioDividido', 'prepararEntradaProjecao']);

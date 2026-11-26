@@ -1,5 +1,5 @@
-/**
- * Consulta por CNPJ (Phase 7) — BrasilAPI → CNAEs → 1 consulta Aurum AI NBS
+﻿/**
+ * Consulta por CNPJ (Phase 7) — BrasilAPI → CNAEs → 1 consulta busca automática NBS
  * por atividade de serviço.
  *
  * Fluxo: valida DV → cache SQLite (TTL 30 dias) → BrasilAPI (única rede da
@@ -25,8 +25,8 @@ import {
   type HipoteseLegal,
 } from '@/domain/services/verificacao-servicos'
 import { db } from '@/infrastructure/db/schema'
-import { classificarComIAServicos } from '@/infrastructure/ia/classificacao-ia-servicos-repo'
-import type { ResultadoConsultaIaServicos } from '@/infrastructure/ia/classificacao-ia-servicos-repo'
+import { classificarComBuscaServicos } from '@/infrastructure/busca/classificacao-servicos-repo'
+import type { ResultadoConsultaServicosBusca } from '@/infrastructure/busca/classificacao-servicos-repo'
 import { registrarAuditoria } from '@/application/auditoria'
 import { consultarPorCnae } from '@/application/consultar-por-cnae'
 import {
@@ -56,7 +56,7 @@ export interface AtividadeCnae {
   cnaeTabela: CnaeAnexo | null
   estado: EstadoAtividadeCnae
   motivoEstado: string | null
-  resultado: ResultadoConsultaIaServicos | null
+  resultado: ResultadoConsultaServicosBusca | null
   /** Confiança final = min(IA, teto da matriz CNAE). */
   confiancaFinal: number
   /** Benefícios da Reforma que o CNAE sugere (texto oficial, sem vínculo inventado). */
@@ -64,7 +64,7 @@ export interface AtividadeCnae {
   /** A decisão NBS é coerente com as hipóteses? */
   coerencia: CoerenciaServico
   /**
-   * Predição informativa por nomes/sinônimos (fine-tuning NBS v2).
+   * Predição informativa por nomes/sinônimos (calibragem NBS v2).
    * Preenchida quando a atividade NÃO puxa NBS mas BATE com os termos do
    * sistema. Cada item tem `apenasInformativo: true` — nunca decisão final.
    */
@@ -186,7 +186,7 @@ async function classificarAtividadeGate(
     }
   }
   // Conferência contra a tabela da Reforma (vale para todos os estados com
-  // tabela: a IA usa para comparar, a UI exibe como hipótese a verificar).
+  // tabela: a busca usa para comparar, a UI exibe como hipótese a verificar).
   let hipoteses: HipoteseLegal[] = []
   try {
     hipoteses = await buscarHipotesesLegais(textoBuscavelCnae(tabela), 3, {
@@ -201,7 +201,7 @@ async function classificarAtividadeGate(
       descricao: tabela.descricao,
       cnaeTabela: tabela,
       estado: 'manual-obrigatorio',
-      motivoEstado: 'Situação "Depende da atividade" — a IA nunca ancora sozinha; use o modo manual com contexto.',
+      motivoEstado: 'Situação "Depende da atividade" — a busca nunca ancora sozinha; use o modo manual com contexto.',
       resultado: null,
       confiancaFinal: 0,
       hipoteses,
@@ -216,10 +216,10 @@ async function classificarAtividadeGate(
     const tentativas = chaves.length
       ? [chaves.join(' '), textoBuscavelCnae(tabela)]
       : [textoBuscavelCnae(tabela)]
-    let resultado: ResultadoConsultaIaServicos | null = null
+    let resultado: ResultadoConsultaServicosBusca | null = null
     for (const descricao of tentativas) {
       try {
-        const r = await classificarComIAServicos({ descricao }, { cnaeOrigem: cnae7 })
+        const r = await classificarComBuscaServicos({ descricao }, { cnaeOrigem: cnae7 })
         if (r.codigoEscolhido && r.decisao) {
           resultado = r
           break
@@ -228,11 +228,16 @@ async function classificarAtividadeGate(
         /* próxima tentativa */
       }
     }
-    if (!resultado || !resultado.codigoEscolhido) {
+    const coerencia = resultado?.decisao
+      ? verificarCoerenciaServico(resultado.decisao.cClassTrib, hipoteses)
+      : 'sem-base'
+    // Sem hipótese na tabela da Reforma, não há lastro para ancorar um NBS:
+    // descrições genéricas ("Software") caem na regra geral, sem chute.
+    if (!resultado || !resultado.codigoEscolhido || !hipoteses.length) {
       // Serviço sem benefício mapeado na base atual → tributação integral
       // (regra geral), honesto e sem chute de NBS. Se a tabela da Reforma
       // sugere benefício, ele aparece como hipótese a verificar.
-      // Fine-tuning NBS v2 — predição informativa: mesmo sem NBS, se a
+      // Calibragem NBS v2 — predição informativa: mesmo sem NBS, se a
       // atividade BATER com os termos do sistema (nomes/sinônimos), sugere
       // pistas a título informativo (nunca decisão final).
       let preditivas: import('@/domain/services/preditivo-servicos').SugestaoPreditivaServico[] = []
@@ -261,12 +266,11 @@ async function classificarAtividadeGate(
       }
     }
     const teto = tetoConfiancaCnae(tabela.situacao)
-    const confiancaFinal = Math.min(resultado.confiancaIa, teto)
-    const motivo = teto < 1 && resultado.confiancaIa > teto
+    const confiancaFinal = Math.min(resultado.confianca, teto)
+    const motivo = teto < 1 && resultado.confianca > teto
       ? `${resultado.motivo}/teto-matriz-ressalva`
       : resultado.motivo
-    const coerencia = verificarCoerenciaServico(resultado.decisao?.cClassTrib, hipoteses)
-    // Repassa as preditivas do GATE (quando a confiança não é alta ou há
+    // Repassa as preditivas da busca (quando a confiança não é alta ou há
     // regra geral, o determinístico já anexou pistas informativas).
     const preditivasGate = resultado.sugestao?.sugestoesPreditivas ?? []
     return {
@@ -279,7 +283,7 @@ async function classificarAtividadeGate(
         (coerencia === 'divergente'
           ? 'Atenção: o NBS decidido diverge das hipóteses da tabela da Reforma para este CNAE — conferir destinação/operação.'
           : null),
-      resultado: { ...resultado, motivo, confiancaIa: confiancaFinal },
+      resultado: { ...resultado, motivo, confianca: confiancaFinal },
       confiancaFinal,
       hipoteses,
       coerencia,
@@ -456,19 +460,6 @@ export async function consultarPorCnpj(
     doCache,
     resumo: veredito.resumo,
   })
-  // GRAFO-08: CNAEs da carteira (via CNPJ) alimentam o overlay.
-  try {
-    const { registrarCnaeUso } = await import('./grafo-overlay')
-    for (const a of atividades.slice(0, 10)) {
-      try {
-        const cnae7 = String((a as { cnae7?: unknown }).cnae7 ?? (a as { codigo?: unknown }).codigo ?? '').replace(/\D+/g, '')
-        if (/^\d{7}$/.test(cnae7)) registrarCnaeUso(cnae7, cnpj)
-      } catch {
-        /* item best-effort */
-      }
-    }
-  } catch {
-    /* overlay nunca quebra o CNPJ */
-  }
   return veredito
 }
+

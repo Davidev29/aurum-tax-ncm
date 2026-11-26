@@ -7,8 +7,6 @@
  * Embaralha TUDO que é JavaScript entregue no instalador:
  *   1. Renderer: `dist/assets/*.js` (React/Vite)
  *   2. Main: `electron/dist/main.js` + `preload.cjs`
- *   3. Busca local: `electron/dist/grafo-service.cjs` + `caminhos-ia.cjs`
- *      (CJS puros copiados pelo esbuild)
  *
  * Preset médio SEGURO (nunca quebra Electron/React):
  *   compact + simplify + stringArray(0.75) + rotate/shuffle.
@@ -53,10 +51,10 @@ function listarAlvos() {
     }
   }
   if (!soRenderer) {
-    // Electron: main + preload + helpers da busca local copiados (CJS puros).
-    for (const f of ['main.js', 'preload.cjs', 'caminhos-ia.cjs', 'grafo-service.cjs']) {
+    // Electron: main + preload (CJS puros gerados pelo esbuild).
+    for (const f of ['main.js', 'preload.cjs']) {
       const p = path.join(DIR_ELECTRON, f)
-      if (fs.existsSync(p)) alvos.push({ tipo: f === 'renderer' ? 'x' : 'electron', caminho: p })
+      if (fs.existsSync(p)) alvos.push({ tipo: 'electron', caminho: p })
     }
   }
   return alvos
@@ -116,7 +114,7 @@ async function main() {
     for (const a of alvos) {
       const conteudo = fs.readFileSync(a.caminho, 'utf8')
       const sint = checarSintaxe(a.caminho)
-      const ofusc = conteudo.includes(MARCADOR) || conteudo.includes('__AURUM_IA_OFUSCADO__')
+      const ofusc = conteudo.includes(MARCADOR)
       console.log(`  ${ofusc ? 'OFUSCADO' : 'LEGÍVEL ' } ${sint.ok ? 'syntax-ok' : 'SYNTAX-FAIL'} ${path.relative(RAIZ, a.caminho)}`)
       if (!sint.ok) fails++
     }
@@ -157,7 +155,7 @@ async function main() {
     }
   }
   console.log(`[ofuscar-build] PASS: ${alvos.length - pulados} ofuscado(s), ${pulados} já ofuscado(s). ${totalAntes} → ${totalDepois} bytes.`)
-  console.log('[ofuscar-build] Validação: node --check em todos + smoke do worker IA. Build pronto para electron-builder.')
+  console.log('[ofuscar-build] Validação: node --check em todos os arquivos. Build pronto para electron-builder.')
 }
 
 main().catch((e) => {

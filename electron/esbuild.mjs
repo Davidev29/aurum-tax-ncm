@@ -18,7 +18,7 @@
  */
 
 import { build } from 'esbuild'
-import { copyFileSync, rmSync } from 'node:fs'
+import { rmSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -40,13 +40,11 @@ const opcoesComuns = {
   sourcemap: false,
   minify: true,
   legalComments: 'none',
-  // `electron`/`electron-updater` são fornecidos pelo runtime e nunca
-  // bundlados. `@ladybugdb/core` (grafo fiscal 10-02) também fica externo:
-  // o `grafo-service.cjs` o carrega com try/catch preguiçoso.
+  // `electron`/`electron-updater` são fornecidos pelo runtime e nunca bundlados.
   // `@prisma/client` fica externo: motores nativos (`.node`) não podem ser
   // bundlados nem carregados de dentro do asar (ver `asarUnpack` no
   // package.json) — o main os carrega de `node_modules` no runtime.
-  external: ['electron', 'electron-updater', '@xenova/transformers', 'vectra', '@ladybugdb/core', '@prisma/client', '.prisma/client/*', './ia/grafo-service.cjs', './grafo-service.cjs'],
+  external: ['electron', 'electron-updater', '@prisma/client', '.prisma/client/*'],
 }
 
 async function compilar() {
@@ -68,24 +66,9 @@ async function compilar() {
     outfile: saidaPreload,
   })
 
-  // Grafo fiscal (10-02 / GRAFO-02): runtime Cypher/FTS consultado
-  // DIRETAMENTE pelo processo principal (`electron/main.ts`, canais
-  // `ia:grafo`/`ia:grafo-uso`) via `require('./grafo-service.cjs')`
-  // relativo — COPIADO, nunca bundlado. `@ladybugdb/core` fica external
-  // (try/catch preguiçoso). `caminhos-ia.cjs` vai junto (o grafo-service
-  // resolve os diretórios por ele).
-  const caminhosOrigem = path.join(raizElectron, 'ia', 'caminhos-ia.cjs')
-  const caminhosDestino = path.join(pastaSaida, 'caminhos-ia.cjs')
-  copyFileSync(caminhosOrigem, caminhosDestino)
-  const grafoOrigem = path.join(raizElectron, 'ia', 'grafo-service.cjs')
-  const grafoDestino = path.join(pastaSaida, 'grafo-service.cjs')
-  copyFileSync(grafoOrigem, grafoDestino)
-
   console.log('✔ Electron compilado com sucesso:')
   console.log(`   ${saidaMain}`)
   console.log(`   ${saidaPreload}`)
-  console.log(`   ${caminhosDestino} (copiado, sem bundle)`)
-  console.log(`   ${grafoDestino} (copiado, sem bundle — grafo fiscal 10-02)`)
 }
 
 compilar().catch((erro) => {

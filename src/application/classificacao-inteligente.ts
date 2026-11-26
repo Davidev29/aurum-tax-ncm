@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Classificação inteligente por descrição livre — etapa 2 (orquestração).
  *
  * Pipeline (chain-of-thought do prompt, auditável em `trilha`):
@@ -92,7 +92,7 @@ export interface SugestaoNcmJson {
   /**
    * Pedido fora do escopo do sistema (conhecimento geral, tarefas externas,
    * jailbreak…). Quando `true`, a `justificativa` é a mensagem fixa de
-   * escopo e a UI exibe o cartão de recusa — sem worker, sem chute.
+   * escopo e a UI exibe o cartão de recusa — sem motor, sem chute.
    */
   foraDeEscopo?: boolean
 }
@@ -100,7 +100,7 @@ export interface SugestaoNcmJson {
 /** Bônus de desempate quando o capítulo do candidato é prioritário. */
 const BONUS_CAPITULO = 40
 /**
- * Bônus de família curada (fine-tuning RAG + lexical): candidato cujo capítulo
+ * Bônus de família curada (calibragem busca lexical + lexical): candidato cujo capítulo
  * está nos 7 capítulos 100% mapeados da LC (`REGRAS_CAPITULO`) ganha lastro
  * extra — a lei opera por família ali, então o match lexical nesse capítulo
  * tem respaldo normativo além do texto. Nunca decide sozinho (soma ao score).
@@ -189,7 +189,7 @@ export async function classificarPorDescricao(
   limiteCandidatos = 12,
 ): Promise<SugestaoNcmJson> {
   // Barreira anti-alucinação (primeira coisa): pedido fora do escopo do
-  // sistema NÃO é classificado, NÃO acorda worker e NÃO ganha chute —
+  // sistema NÃO é classificado, NÃO acorda motor e NÃO ganha chute —
   // retorna a mensagem fixa de escopo. Sem lastro fiscal + com marcador
   // externo, qualquer "resposta" seria invenção.
   const textoPedido = [entrada.descricao, entrada.destinacao ?? '', entrada.composicao ?? '', entrada.uso ?? ''].join(' ').trim()
@@ -273,7 +273,7 @@ export async function classificarPorDescricao(
   // Etapa 2 — candidatos: agrega resultados de cada consulta efetiva.
   // ESTRITO aqui (`tolerante: false`): match fraco não pode virar "alta".
   // A tolerância do determinístico é só via `consultasTolerantes` (drop-1 com
-  // trilha auditável). O RAG tolerante (fuzzy/OR) vive no fallback IA + Por nome.
+  // trilha auditável). O busca lexical tolerante (fuzzy/OR) vive no fallback busca + Por nome.
   const agregados = new Map<string, CandidatoRanckeado>()
   const efetivas = consultasEfetivas(analise)
   async function agregar(consultas: string[]): Promise<void> {
@@ -283,8 +283,8 @@ export async function classificarPorDescricao(
         let score = item.score
         const cap = capituloDe(item.codigo)
         if (analise.capitulosPrioritarios.includes(cap)) score += BONUS_CAPITULO
-        // Fine-tuning família: capítulo curado (100% mapeado na LC) reforça o
-        // match lexical — a lei opera por família ali (RAG + lexical com lastro).
+        // Calibragem família: capítulo curado (100% mapeado na LC) reforça o
+        // match lexical — a lei opera por família ali (busca lexical + lexical com lastro).
         if (regraDoCapitulo(cap)) score += BONUS_FAMILIA_CURADA
         // Seção prioritária como contexto fraco (nunca decide sozinha).
         const sec = secaoDoCapitulo(cap)?.numero
@@ -423,12 +423,12 @@ export async function classificarPorDescricao(
       )
       .join(' · '),
   })
-  // Etapa 3b — herança por família (RAG + lexical): detalha a origem para a
+  // Etapa 3b — herança por família (busca lexical + lexical): detalha a origem para a
   // trilha e cita exceções ativas que quebram a herança automática.
   const herdados = resolvidos.filter((r) => r.heranca)
   if (herdados.length) {
     trilha.push({
-      etapa: 'Herança por família (RAG + lexical)',
+      etapa: 'Herança por família (busca lexical + lexical)',
       detalhe: herdados
         .map((r) => `${fmtNcm(r.cand.item.codigo)}: ${r.heranca?.origem} ${r.heranca?.prefixo} (${r.heranca?.irmaosVinculados} irmãos, confiança ${r.heranca?.confianca}${r.heranca?.aConfirmar ? ', a confirmar' : ''})`)
         .join(' · '),
@@ -485,7 +485,7 @@ export async function classificarPorDescricao(
   // com exceção ativa. Exceção de família com vínculo EXATO não trava (a base
   // oficial já resolveu a destinação) e regra geral pura sem hipótese também
   // não (não há benefício afirmado para confirmar) — sem isso, descrições
-  // claras ("boi para reprodução") cairiam para o worker sem motivo.
+  // claras ("boi para reprodução") cairiam para o motor sem motivo.
   const temRiscoBase = analise.ambiguidades.length > 0
   const familiaEnvolvida = (herdado?.aConfirmar ?? false) || topo.hipotese != null
   const temRisco = temRiscoBase || familiaEnvolvida
@@ -594,3 +594,4 @@ export async function resumoBeneficios(): Promise<{ cClassTrib: string; nome: st
     }))
     .sort((a, b) => b.totalNcm - a.totalNcm)
 }
+

@@ -45,7 +45,7 @@ export const STOPWORDS_BUSCA = new Set([
 
 /**
  * Tokens relevantes da consulta: `tokenizarBusca` menos stopwords.
- * É isto que o RAG usa para casar — "ração PARA cães" vira ["racao","caes"],
+ * É isto que o busca lexical usa para casar — "ração PARA cães" vira ["racao","caes"],
  * em vez de exigir o literal "para" no texto oficial (que nunca existe).
  */
 export function tokensRelevantes(v: unknown): string[] {
@@ -71,7 +71,7 @@ export function prefixosHierarquia(codigo: string): string[] {
 
 /**
  * Conjunto de tokens pré-computado para um texto normalizado.
- * Evita `split` repetido no hot loop do RAG (O(docs) por consulta).
+ * Evita `split` repetido no hot loop do busca lexical (O(docs) por consulta).
  */
 export function tokensDoTextoNorm(normTexto: string): string[] {
   if (!normTexto) return []
@@ -244,12 +244,12 @@ export function pareceCodigoNcm(v: unknown): boolean {
   return s.length > 0 && /^[\d.\s/-]+$/.test(s)
 }
 
-/* ---------------------------------- RAG proativo (2ª fase, tolerante) -- */
+/* ---------------------------------- busca lexical proativo (2ª fase, tolerante) -- */
 
 import { casaToken, radicalizar } from './vocabulario'
 import { limparTextoFiscal } from './texto-fiscal'
 
-/** Cache do fuzzy: pares (q|o) já medidos (o RAG repete pares entre docs). */
+/** Cache do fuzzy: pares (q|o) já medidos (o busca lexical repete pares entre docs). */
 const _cacheFuzzy = new Map<string, boolean>()
 const _LIMITE_CACHE_FUZZY = 20000
 function casaTokenComCache(q: string, o: string): boolean {
@@ -273,7 +273,7 @@ function tokensDoNorm(normTexto: string): string[] {
  * cobertura + bônus — sem zerar o candidato porque faltou 1 termo, mas sem
  * deixar match fraco empatar com match forte.
  *
- * É a 2ª fase do RAG: a 1ª (`pontuarCandidato`, AND estrito) garante precisão;
+ * É a 2ª fase do busca lexical: a 1ª (`pontuarCandidato`, AND estrito) garante precisão;
  * esta garante cobertura ("mais opções" em vez de lista vazia), mas só com
  * lastro mínimo.
  */

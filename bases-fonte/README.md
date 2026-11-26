@@ -1,14 +1,14 @@
 # Bases-fonte — atualização de dados + compilação
 
-> ⚠️ **Nota de legado (08/10/2026):** o worker LLM/GGUF foi removido do app.
-> O pipeline oficial hoje é **só `npm run base`** (base tributária + índice lexical +
-> validação do conhecimento) — **sem GGUF obrigatório, sem `ia:embeddings`, sem
-> "AI-first" no pack**. Os trechos abaixo que exigem `Qwen3.5-2B-Q4_K_M.gguf`,
-> `modelo.json`, `testar-modelo-ia.mjs` em modo REAL ou `base:completa` com 4 etapas
-> são **históricos** e devem ser lidos como tal até este guia ser reescrito.
+> O pipeline oficial é **só `npm run base`** (base tributária deterministicamente embutida).
+> Troque os JSONs-fonte nesta pasta, recompile, teste e gere o instalador.
 
-É aqui que você atualiza os dados do programa. Sem IA solta, sem script extra:
-troque os JSONs-fonte nesta pasta, recompile, teste e gere o instalador.
+Tudo abaixo roda dentro de `Aurum Tax NCM\` (onde está o `package.json`).
+
+```powershell
+cd "Aurum Tax NCM"
+```
+
 
 Tudo abaixo roda dentro de `Aurum Tax NCM\` (onde está o `package.json`).
 
@@ -100,16 +100,13 @@ npm run fontes:sync
 #    (ou baixe/atualize manualmente os arquivos do §1 — ver docs/fontes-oficiais-nbs.md)
 
 # 2. Compile a base + IA (OBRIGATÓRIO antes do instalador):
-npm run base:completa
 #    = build-base + preparar-dados-ia + gerar-indice-ia --lexical + validar-conhecimento
 #    Detalhe de cada etapa no §3.
 
 # 3. Confira a saída (tem que aparecer assim):
 #    origem efetiva: ...\bases-fonte
 #    ✔ Integridade: nenhuma inconsistência cruzada.   (ou lista de ⚠ Avisos — ver §5)
-#    ✔ ncm-para-ia.json gerado (2335 vínculos)
 #    ✔ Índice lexical v2 gerado
-#    ✔ Base de conhecimento válida (exit 0).
 
 # 4. Teste rápido (não precisa de Electron):
 npm run dev:web
@@ -120,7 +117,6 @@ npm run dev:web
 
 # 6. Compile tudo + gere o instalador:
 npm run dist:win
-#    = npm run build (base:completa + tsc + vite + electron + ofuscar + verificar)
 #      + electron-builder --win  →  release\*.exe
 #    Detalhe no §4. Artefatos em release\ (NSIS + Portable).
 
@@ -129,12 +125,10 @@ npm run dist:win
 #    a atualização em Configurações → Atualização.
 ```
 
-> Atalho: `npm run base` sozinho só refaz `public/base/` (sem IA). Para
-> instalador, use sempre `base:completa` (o `build`/`dist` já chamam ela).
+> Atalho: `npm run base` sozinho só refaz `public/base/` (). Para
 
 ---
 
-## 3. O que o `npm run base:completa` faz (compilação dos dados)
 
 Roda 4 scripts em sequência. Qualquer `✖` aborta com exit 1.
 
@@ -172,17 +166,13 @@ Roda 4 scripts em sequência. Qualquer `✖` aborta com exit 1.
 - Sem os 3 obrigatórios e sem `public/base/` versionado: exit 1.
   Sem os 3 mas **com** `public/base/` versionado: só avisa e mantém o versionado.
 
-### 3.2 `node scripts/preparar-dados-ia.mjs` (base da IA)
 
 - Entrada: `public/base/*.json`.
-- Saída: `recursos-ia/dados-brutos/ncm-para-ia.json` (join NCM 8 dígitos ×
   nomenclatura × referência; NBS excluído).
 - **Falha (exit 1) se não tiver exatamente 2335 vínculos.** Esperado:
   `sem nomenclatura: 6 códigos` (mantidos e marcados em `notas`).
 
-### 3.3 `node scripts/gerar-indice-ia.mjs --lexical` (índice RAG)
 
-- Entrada: `ncm-para-ia.json` + `recursos-ia/conhecimento/*.json`.
 - Saída em `recursos-ia/indice-ncm/`:
   `indice-lexical.json` + `sinonimos-gerados.json` + `.manifest-hash`
   (hash semântico base+conhecimento; é ele que diz se o índice está em dia).
@@ -192,11 +182,9 @@ Roda 4 scripts em sequência. Qualquer `✖` aborta com exit 1.
 
 ### 3.4 `node scripts/validar-conhecimento.mjs` (curadoria)
 
-- Só leitura: valida `recursos-ia/conhecimento/*.json`
   (sinônimos, dicionário, marcas, erros, frases, serviços, contexto NBS)
   contra a nomenclatura vigente + espelhos TS (`vocabulario.ts`,
   `dicionario-comercial.ts`, etc.).
-- Exit 0 = `✔ Base de conhecimento válida`. Exit 1 = corrigir o JSON
   apontado antes de seguir.
 
 ---
@@ -207,46 +195,25 @@ Roda 4 scripts em sequência. Qualquer `✖` aborta com exit 1.
 
 O `npm run build` faz, nesta ordem:
 
-1. `npm run base:completa` (§3)
 2. `tsc --noEmit` (tipos — tem que passar limpo)
 3. `vite build` → `dist/` (renderer; `sourcemap: false`, `base: './'`)
-4. `npm run build:electron` (`node electron/esbuild.mjs`) → `electron/dist/`
-   (`main.js`, `preload.cjs`, `ia-worker.cjs`, `caminhos-ia.cjs`, `modelo-seguro.cjs`)
-5. `node scripts/ofuscar-build.cjs` — ofusca `dist/assets/*.js` + `electron/dist/`
-   (marcador `__AURUM_BUILD_OFUSCADO__`, `node --check` + smoke da IA por arquivo;
-   falha restaura o original e aborta). Conferir sem ofuscar: `npm run ofuscar:check`
-6. `node scripts/verificar-build.mjs` — **portão**: base (164/2335/17/132/
-   nomenclatura ≥15000/CNAE 1090/NBS ≥100) + IA (`ncm-para-ia` 2335, índice,
-   hash sincronizado, conhecimento, **GGUF ~97 MB com SHA conferido contra
-   `CHECKSUMS.txt`**) + `dist/` + `electron/dist/` + ofuscação total sem `.map`.
-   Pré-checagem sem exigir `dist/`: `npm run verificar:pre`
+4. `npm run build:electron` → `electron/dist/` (`main.js`, `preload.cjs`)
+5. `node scripts/ofuscar-build.cjs` — ofusca renderer e processo principal, sem `.map`
+6. `node scripts/verificar-build.mjs` — portão: base fiscal, saídas compiladas, Prisma/IPC e ofuscação
 
-O `electron-builder` então empacota (`asar: true`, `afterPack:
-scripts/after-pack-ia.cjs`):
-
-- Dentro do app: `dist/**` + `electron/dist/**` + `package.json`
-  (`.map`, `.planning/`, `docs/`, `tests/`, `scripts/`, modelo/embedding ficam de fora).
-- Via `extraResources` (fora do asar): `dados-brutos/` + `indice-lexical.json` +
-  `.manifest-hash` + `sinonimos-gerados.json` + `conhecimento/*.json|md` +
-  `CHECKSUMS.txt` + `modelo/Qwen3.5-2B-Q4_K_M.gguf` + `modelo/modelo.json` (pin oficial).
-- **GGUF é obrigatório** (`recursos-ia/modelo/Qwen3.5-2B-Q4_K_M.gguf`, SHA
-  registrado em `recursos-ia/CHECKSUMS.txt`). Sem ele o pack **falha**
-  (AI-first — instalador sem IA real não sai). Modelo nunca vai para o git
-  (`*.gguf` no `.gitignore`).
-- `asarUnpack`: `ia-worker.cjs`, `caminhos-ia.cjs`, `modelo-seguro.cjs`
-  (fork/binário nativo não funciona dentro do asar).
+O `electron-builder` empacota `dist/**`, `electron/dist/**` e `package.json` com `asar: true` e
+`afterPack: scripts/after-pack.cjs`. O banco Prisma é desembrulhado via `asarUnpack`.
+Não há recursos de modelo, embeddings, grafo ou índice externo no instalador.
 
 Comandos úteis:
 
 | Comando | Quando usar |
 |---|---|
-| `npm run base` | Só refazer `public/base/` (iteração rápida, sem IA) |
-| `npm run base:completa` | Atualização de dados oficial (sempre antes do instalador) |
+| `npm run base` | Só refazer `public/base/` (iteração rápida, ) |
 | `npm run verificar:pre` | Checar bases + IA antes do `vite build` |
-| `npm run typecheck` / `npm test` | Tipos / Vitest (77 suítes / 651 casos) |
+| `npm run typecheck` / `npm test` | Tipos / Vitest (ver `npm test`) |
 | `npm run build` | Compilação completa sem empacotar |
 | `npm run dist` / `dist:win` / `dist:mac` | Instalador da plataforma atual / Win (NSIS+Portable) / Mac (DMG+ZIP). Sem cross-build (1 OS por máquina). Linux: `npx electron-builder --linux --publish never` |
-| `npm run ia:indice` / `ia:testar-indice` / `ia:validar-conhecimento` / `ia:cobertura` | Pipeline IA avulso (índice, teste top-k Frango/Arroz/Notebook, curadoria, cobertura PT↔EN) |
 
 ---
 
@@ -266,24 +233,14 @@ Comandos úteis:
   `REFORMA NCM\`. Remova de lá ou defina `$env:AURUM_BASE_DIR`.
 - `Contagem divergente / MANIFEST inconsistente` → a fonte oficial mudou
   (ex.: NCM novo). É esperado: atualize os números neste README +
-  `scripts/verificar-build.mjs` (`ESPERADO`) + `preparar-dados-ia.mjs`
   (`EXPECTED_NCM`) somente após confirmar que a fonte está correta.
 - `⚠ Avisos de integridade` (ex.: NCM sem nomenclatura) → normal até o
   limite conhecido (6 / 10). Acima disso, inspecione
   `MANIFEST.codigosIgnorados`.
-- `índice IA dessincronizado (.manifest-hash ≠ hash atual)` → rode
-  `node scripts/gerar-indice-ia.mjs --lexical` de novo.
-- `Base de conhecimento válida (exit 1)` / `termo não normalizado / NCM extinto` →
-  corrija o JSON em `recursos-ia/conhecimento/` (minúsculas, sem acento) ou o
   espelho TS, e rode `npm run ia:validar-conhecimento`.
-- `GGUF ausente / SHA diverge / CHECKSUMS sem linha` → confira o pin em
-  `recursos-ia/modelo/modelo.json` (oficial `Qwen3.5-2B-Q4_K_M.gguf`), rode
-  `certutil -hashfile recursos-ia\modelo\Qwen3.5-2B-Q4_K_M.gguf SHA256`,
-  cole em `recursos-ia/CHECKSUMS.txt`, valide com `node scripts/testar-modelo-ia.mjs`.
 - `JS SEM ofuscação / sourcemap vazando` → rode `node scripts/ofuscar-build.cjs`
   (nunca publique `release/` com `.map`).
 
 São esses 9 de `public/base/` (+ IA em `recursos-ia/`) que viajam dentro do
 instalador (`dist/base` + `resources/recursos-ia`). É por isso que depois do
-`npm run base:completa` você precisa gerar um Release novo — senão o usuário
 continua na base antiga.

@@ -172,7 +172,7 @@ A Calculadora Tributária that:
 | Cálculo de crédito tributário (CBS/IBS) | Escopo de apuração, não classificação; pertence a módulo fiscal separado |
 | Integração direta com ERPs | APIs proprietárias; exportação CSV/Excel resolve v1 |
 | Versão web/SaaS | Arquitetura Electron desktop-first |
-| IA/ML para sugestão de classificação | Dados de treino limitados, risco regulatório; regra determinística v1 |
+| Sugestões por modelo externo | Dados de treino limitados, risco regulatório; regra determinística v1 |
 | Assinatura digital de relatórios | Requer certificado digital, infra PKI; v2+ |
 | Sincronização em nuvem | Multi-tenancy, auth, infra; offline-first MVP |
 

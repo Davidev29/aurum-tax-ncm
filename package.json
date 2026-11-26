@@ -17,14 +17,6 @@
   "main": "electron/dist/main.js",
   "scripts": {
     "base": "node scripts/build-base.mjs",
-    "base:completa": "node scripts/build-base.mjs && node scripts/preparar-dados-ia.mjs && node scripts/gerar-indice-ia.mjs --lexical && node scripts/validar-conhecimento.mjs",
-    "ia:indice": "node scripts/gerar-indice-ia.mjs",
-    "ia:embeddings": "node scripts/gerar-embeddings.mjs",
-    "ia:testar-indice": "node scripts/testar-indice-ia.mjs",
-    "ia:validar-conhecimento": "node scripts/validar-conhecimento.mjs",
-    "grafo:rebuild": "node scripts/build-grafo.mjs --forcar",
-    "grafo:avaliar": "node scripts/avaliar-grafo-rag.cjs",
-    "ia:cobertura": "node scripts/cobertura-traducao.mjs --min 8 --top 25",
     "ofuscar": "node scripts/ofuscar-build.cjs",
     "ofuscar:check": "node scripts/ofuscar-build.cjs --check",
     "verificar": "node scripts/verificar-build.mjs",
@@ -38,7 +30,7 @@
     "db:push": "cross-env DATABASE_URL=\"file:./prisma/dev.db\" prisma db push --accept-data-loss --skip-generate",
     "prebuild:electron": "node scripts/kill-electron.mjs && npm run db:generate",
     "build:electron": "node electron/esbuild.mjs",
-    "build": "npm run db:generate && npm run base:completa && npm run typecheck && vite build && npm run build:electron && node scripts/ofuscar-build.cjs && node scripts/verificar-build.mjs",
+    "build": "npm run db:generate && npm run base && npm run typecheck && vite build && npm run build:electron && node scripts/ofuscar-build.cjs && node scripts/verificar-build.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.electron.json",
     "test": "node --experimental-sqlite node_modules/vitest/vitest.mjs run",
     "test:watch": "node --experimental-sqlite node_modules/vitest/vitest.mjs",
@@ -48,7 +40,6 @@
     "dist:mac": "npm run build && electron-builder --mac --publish never",
     "dist:linux": "npm run build && electron-builder --linux --publish never",
     "icon": "node scripts/make-icon.mjs",
-    "ia:catalogo": "node scripts/gerar-catalogo-rag.mjs --check",
     "fontes:sync": "node scripts/fontes-sync.mjs"
   },
   "dependencies": {
@@ -118,66 +109,12 @@
       "!**/docs/**",
       "!**/tests/**",
       "!**/scripts/**",
-      "!**/electron/spike/**",
-      "!**/recursos-ia/modelo/**",
-      "!**/recursos-ia/embedding/**"
+      "!**/electron/spike/**"
     ],
     "asar": true,
-    "afterPack": "scripts/after-pack-ia.cjs",
-    "extraResources": [
-      {
-        "from": "recursos-ia/conhecimento",
-        "to": "recursos-ia/conhecimento",
-        "filter": [
-          "**/*.json",
-          "**/*.md"
-        ]
-      },
-      {
-        "from": "recursos-ia/CHECKSUMS.txt",
-        "to": "recursos-ia/CHECKSUMS.txt"
-      },
-      {
-        "from": "public/base/grafo/grafo.lbug",
-        "to": "recursos-ia/grafo/grafo.lbug"
-      },
-      {
-        "from": "public/base/grafo/grafo.lbug.json",
-        "to": "recursos-ia/grafo/grafo.lbug.json"
-      },
-      {
-        "from": "public/base/grafo/MANIFEST.grafo.json",
-        "to": "recursos-ia/grafo/MANIFEST.grafo.json"
-      },
-      {
-        "from": "recursos-ia/embedding/vetores-ncm.json",
-        "to": "recursos-ia/embedding/vetores-ncm.json"
-      },
-      {
-        "from": "recursos-ia/embedding/MANIFEST-embedding.json",
-        "to": "recursos-ia/embedding/MANIFEST-embedding.json"
-      },
-      {
-        "from": "recursos-ia/indice-ncm/indice-lexical.json",
-        "to": "recursos-ia/indice-ncm/indice-lexical.json"
-      },
-      {
-        "from": "recursos-ia/indice-ncm/sinonimos-gerados.json",
-        "to": "recursos-ia/indice-ncm/sinonimos-gerados.json"
-      },
-      {
-        "from": "recursos-ia/indice-ncm/.manifest-hash",
-        "to": "recursos-ia/indice-ncm/.manifest-hash"
-      },
-      {
-        "from": "recursos-ia/dados-brutos/ncm-para-ia.json",
-        "to": "recursos-ia/dados-brutos/ncm-para-ia.json"
-      }
-    ],
+    "afterPack": "scripts/after-pack.cjs",
+    "extraResources": [],
     "asarUnpack": [
-      "electron/dist/caminhos-ia.cjs",
-      "electron/dist/grafo-service.cjs",
-      "dist/base/grafo/grafo.lbug",
       "node_modules/@prisma/**/*",
       "node_modules/.prisma/**/*"
     ],

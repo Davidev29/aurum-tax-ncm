@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Banco local — SQLite via Prisma (substitui Dexie/IndexedDB v14).
  *
  * Banco NOVO, sem migração de dados legados (decisão do projeto): o seed das
@@ -61,8 +61,8 @@ import type { ModoLote } from './db-protocolo'
 /** Versão do schema SQLite (banco novo — sem cadeia de migração Dexie). */
 export const SQLITE_SCHEMA_VERSAO = 1
 
-/** Feedback "Não é esse" da Sugestão IA (antes: Dexie `ia_feedback`). */
-export interface IaFeedback {
+/** Feedback "Não é esse" da busca automática. */
+export interface FeedbackBusca {
   id?: number
   quando: string
   descricao: string
@@ -73,7 +73,7 @@ export interface IaFeedback {
   mock?: boolean
 }
 
-/** Conversa da Aurum AI gravada no perfil do emitente (antes: Dexie v12). */
+/** Conversa da busca automática gravada no perfil do emitente (antes: Dexie v12). */
 export interface ConversaEmitente {
   conversaId: string
   emitenteId: string
@@ -95,8 +95,8 @@ export interface MetaRecord {
   atualizadoEm?: string
 }
 
-/** Carimbo do grafo fiscal local (antes: Dexie `grafometa` v14). */
-export interface GrafoMeta {
+/** Carimbo do base fiscal local (antes: Dexie `grafometa` v14). */
+export interface BaseGrafoMeta {
   /** Chave única — sempre `'atual'` (um carimbo por banco). */
   id: string
   hash: string
@@ -151,14 +151,13 @@ class BancoLocal {
   cest = new Tabela<TabelaCest, string>('cest')
 
   /** Feedback "Não é esse" da Sugestão IA. */
-  iaFeedback = new Tabela<IaFeedback, number>('ia_feedback')
+  feedbackBusca = new Tabela<FeedbackBusca, number>('feedback_busca')
 
   /** CNAE × Anexo Simples (arquivo vivo). */
   cnae = new Tabela<CnaeAnexo, string>('cnae')
 
   /** Cache de consultas por CNPJ (BrasilAPI + TTL). */
   consultasCnpj = new Tabela<ConsultaCnpj, string>('consultasCnpj')
-  conversasEmitente = new Tabela<ConversaEmitente, string>('conversasEmitente')
 
   /** Links CNAE → NBS da fonte ponte. */
   cnaeNbs = new Tabela<CnaeNbsLink, number>('cnaeNbs')
@@ -167,8 +166,8 @@ class BancoLocal {
   /** Templates consolidados por CNAE (chave `cnae7`). */
   classificacoesConsolidadas = new Tabela<ClassificacaoConsolidada, string>('classificacoesConsolidadas')
 
-  /** Carimbo do grafo fiscal local (chave `id`, sempre `'atual'`). */
-  grafometa = new Tabela<GrafoMeta, string>('grafometa')
+  /** Carimbo do base fiscal local (chave `id`, sempre `'atual'`). */
+  grafometa = new Tabela<BaseGrafoMeta, string>('grafometa')
 
   /** Tabelas existentes (paridade `db.tables` do Dexie — sempre as 27). */
   get tables(): Array<{ name: string }> {
@@ -252,8 +251,8 @@ class BancoLocal {
     return this.auditLog
   }
 
-  get ia_feedback(): Tabela<IaFeedback, number> {
-    return this.iaFeedback
+  get feedback_busca(): Tabela<FeedbackBusca, number> {
+    return this.feedbackBusca
   }
 }
 
@@ -280,16 +279,14 @@ const TABELAS_POR_NOME: Record<string, Tabela<Record<string, unknown>, string | 
   [STORES.CLASSPROD]: db.classificacaoProduto as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.AUDIT]: db.auditLog as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.CEST]: db.cest as unknown as Tabela<Record<string, unknown>, string | number>,
-  [STORES.IAFEEDBACK]: db.iaFeedback as unknown as Tabela<Record<string, unknown>, string | number>,
+  [STORES.FEEDBACK_BUSCA]: db.feedbackBusca as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.ANEXOS]: db.anexos as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.PRODUTOSDFE]: db.produtosDfe as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.CNAE]: db.cnae as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.CONSULTAS_CNPJ]: db.consultasCnpj as unknown as Tabela<Record<string, unknown>, string | number>,
-  [STORES.CONVERSAS_EMITENTE]: db.conversasEmitente as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.CNAE_NBS]: db.cnaeNbs as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.LC_NBS]: db.lcNbs as unknown as Tabela<Record<string, unknown>, string | number>,
   [STORES.CLASS_CONSOLIDADA]: db.classificacoesConsolidadas as unknown as Tabela<Record<string, unknown>, string | number>,
-  [STORES.GRAFOMETA]: db.grafometa as unknown as Tabela<Record<string, unknown>, string | number>,
 }
 
 /* -------------------------------------------------------------------------- */
@@ -329,9 +326,9 @@ export async function contarTodos(): Promise<Record<string, number>> {
   }
   const [
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
-    cfop, cstIcms, cstPisCofins, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
-    anexos, produtosDfe, cnae, consultasCnpj, conversasEmitente,
-    cnaeNbs, lcNbs, classificacoesConsolidadas, grafometa, meta,
+    cfop, cstIcms, cstPisCofins, reclassificacoesManuais, classificacaoProduto, auditLog, cest, feedbackBusca,
+    anexos, produtosDfe, cnae, consultasCnpj,
+    cnaeNbs, lcNbs, classificacoesConsolidadas, meta,
   ] = await Promise.all([
     contar(STORES.NCM),
     contar(STORES.NBS),
@@ -348,24 +345,23 @@ export async function contarTodos(): Promise<Record<string, number>> {
     contar(STORES.CLASSPROD),
     contar(STORES.AUDIT),
     contar(STORES.CEST),
-    contar(STORES.IAFEEDBACK),
+    contar(STORES.FEEDBACK_BUSCA),
     contar(STORES.ANEXOS),
     contar(STORES.PRODUTOSDFE),
     contar(STORES.CNAE),
     contar(STORES.CONSULTAS_CNPJ),
-    contar(STORES.CONVERSAS_EMITENTE),
     contar(STORES.CNAE_NBS),
     contar(STORES.LC_NBS),
     contar(STORES.CLASS_CONSOLIDADA),
-    contar(STORES.GRAFOMETA),
     contar(STORES.META),
   ])
   return {
     ncm, nbs, cst, cstClassTrib, referencia, ncmNomenclatura, empresas, produtos,
-    cfop, cstIcms, cstPisCofins, reclassificacoesManuais, classificacaoProduto, auditLog, cest, iaFeedback,
-    anexos, produtosDfe, cnae, consultasCnpj, conversasEmitente,
-    cnaeNbs, lcNbs, classificacoesConsolidadas, grafometa, meta,
+    cfop, cstIcms, cstPisCofins, reclassificacoesManuais, classificacaoProduto, auditLog, cest, feedbackBusca,
+    anexos, produtosDfe, cnae, consultasCnpj,
+    cnaeNbs, lcNbs, classificacoesConsolidadas, meta,
   }
 }
 
 export type { Colecao, Tabela }
+

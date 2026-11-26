@@ -1,14 +1,15 @@
-/**
+﻿/**
  * Tela **Consulta Serviços**: busca NBS manual + automática por CNPJ.
  *
  * Espelho enxuto de `store/consulta.ts` para o domínio NBS (9 dígitos):
  * - exato 9 dígitos → `resolverClassificacoesNbs`;
  * - prefixo → `sugerirNbs`;
  * - texto → `buscarNbsPorTexto`;
- * - frase → Aurum AI de serviços (`classificarComIAServicos`, `via` auditável).
+ * - frase → busca automática de serviços (`classificarComBuscaServicos`, `via` auditável).
  *
  * Aba CNPJ: `consultarPorCnpj` (BrasilAPI + 1 GATE NBS por CNAE).
  */
+import type { ViaClassificacao } from '@/infrastructure/busca/classificacao-repo'
 import { create } from 'zustand'
 import { SUGGEST_LIMITS } from '@/domain/constants'
 import type { Classificacao } from '@/domain/entities'
@@ -23,12 +24,11 @@ import {
 } from '@/infrastructure/base/classificacao-repo'
 import type { EntradaDescricaoServico } from '@/application/classificacao-inteligente-servicos'
 import {
-  classificarComIAServicos,
-} from '@/infrastructure/ia/classificacao-ia-servicos-repo'
-import { registrarFeedbackIa } from '@/infrastructure/ia/classificacao-ia-repo'
-import type { CandidatoIa } from '@/infrastructure/bridge'
+  classificarComBuscaServicos,
+} from '@/infrastructure/busca/classificacao-servicos-repo'
+import { registrarFeedbackBusca } from '@/infrastructure/busca/classificacao-repo'
+import type { CandidatoBusca } from '@/infrastructure/busca/classificacao-repo'
 import type { ResultadoCalculo } from '@/domain/entities'
-import type { ViaClassificacao } from '@/store/ia'
 import {
   consultarPorCnpj,
   type VereditoEmpresa,
@@ -79,23 +79,14 @@ interface ServicosState {
   sugestao: import('@/application/classificacao-inteligente-servicos').SugestaoNbsJson | null
   classificandoDescricao: boolean
   via: ViaClassificacao | null
-  candidatosIa: CandidatoIa[]
-  decisaoIa: Classificacao | null
-  calculoIa: ResultadoCalculo | null
-  codigoIa: string | null
-  confiancaIa: number
-  motivoIa: string | null
-  mockIa: boolean
-  feedbackIaEnviado: boolean
-  fichaIa: import('@/application/classificacao-ia-servicos').FichaAbsolutaServico | null
-  vereditoIa: import('@/application/classificacao-ia-servicos').VereditoServico | null
-  fontesIa: string[]
-  grafoCypherIa: string | null
-  graphPathsIa: string[][]
-  caminhoGrafoIa: string[] | null
-  provenienciaGrafoIa: Array<{ de: string; para: string; tipo: string; origem: string; confianca: number; anoReferencia?: number | null }> | null
-  boostGrafoIa: 'uso_local' | null
-  boostValorGrafoIa: number
+  candidatosBusca: CandidatoBusca[]
+  decisaoBusca: Classificacao | null
+  calculoBusca: ResultadoCalculo | null
+  codigoBusca: string | null
+  confiancaBusca: number
+  motivoBusca: string | null
+  feedbackEnviado: boolean
+  fontesBusca: string[]
 
   cnpjEntrada: string
   buscandoCnpj: boolean
@@ -112,8 +103,8 @@ interface ServicosState {
   escolherUnificada: (codigo: string) => Promise<void>
   classificarDescricao: (entrada?: EntradaDescricaoServico) => Promise<void>
   usarSugestao: () => Promise<void>
-  usarSugestaoIa: () => Promise<void>
-  feedbackIaNegativo: () => Promise<void>
+  usarSugestaoBusca: () => Promise<void>
+  feedbackNegativo: () => Promise<void>
   consultarCnpj: (cnpj?: string, forcar?: boolean) => Promise<void>
   limpar: () => void
 }
@@ -142,23 +133,14 @@ export const useServicos = create<ServicosState>((set, get) => ({
   classificandoDescricao: false,
 
   via: null,
-  candidatosIa: [],
-  decisaoIa: null,
-  calculoIa: null,
-  codigoIa: null,
-  confiancaIa: 0,
-  motivoIa: null,
-  mockIa: true,
-  feedbackIaEnviado: false,
-  fichaIa: null,
-  vereditoIa: null,
-  fontesIa: [],
-  grafoCypherIa: null,
-  graphPathsIa: [],
-  caminhoGrafoIa: null,
-  provenienciaGrafoIa: null,
-  boostGrafoIa: null,
-  boostValorGrafoIa: 0,
+  candidatosBusca: [],
+  decisaoBusca: null,
+  calculoBusca: null,
+  codigoBusca: null,
+  confiancaBusca: 0,
+  motivoBusca: null,
+  feedbackEnviado: false,
+  fontesBusca: [],
 
   cnpjEntrada: '',
   buscandoCnpj: false,
@@ -235,16 +217,14 @@ export const useServicos = create<ServicosState>((set, get) => ({
         sugestao: null,
         classificandoDescricao: false,
         via: null,
-        candidatosIa: [],
-        decisaoIa: null,
-        calculoIa: null,
-        codigoIa: null,
-        confiancaIa: 0,
-        motivoIa: null,
-        feedbackIaEnviado: false,
-        fichaIa: null,
-        vereditoIa: null,
-        fontesIa: [],
+        candidatosBusca: [],
+        decisaoBusca: null,
+        calculoBusca: null,
+        codigoBusca: null,
+        confiancaBusca: 0,
+        motivoBusca: null,
+        feedbackEnviado: false,
+        fontesBusca: [],
       })
       return
     }
@@ -283,16 +263,14 @@ export const useServicos = create<ServicosState>((set, get) => ({
         sugestao: null,
         classificandoDescricao: false,
         via: null,
-        candidatosIa: [],
-        decisaoIa: null,
-        calculoIa: null,
-        codigoIa: null,
-        confiancaIa: 0,
-        motivoIa: null,
-        feedbackIaEnviado: false,
-        fichaIa: null,
-        vereditoIa: null,
-        fontesIa: [],
+        candidatosBusca: [],
+        decisaoBusca: null,
+        calculoBusca: null,
+        codigoBusca: null,
+        confiancaBusca: 0,
+        motivoBusca: null,
+        feedbackEnviado: false,
+        fontesBusca: [],
       })
     }
     await Promise.allSettled(tarefas)
@@ -305,19 +283,6 @@ export const useServicos = create<ServicosState>((set, get) => ({
     seqDescricao++
     set({ entrada: fmtNbs(digitos) })
     await get().consultar(digitos)
-    // GRAFO-08: escolha NBS alimenta o overlay.
-    try {
-      const termo = get().entrada || digitos
-      void import('@/application/grafo-overlay').then((m) => {
-        try {
-          m.registrarEscolhaUso(String(termo).slice(0, 120), digitos)
-        } catch {
-          /* best-effort */
-        }
-      }).catch(() => undefined)
-    } catch {
-      /* overlay nunca quebra */
-    }
   },
 
   classificarDescricao: async (entrada) => {
@@ -333,51 +298,34 @@ export const useServicos = create<ServicosState>((set, get) => ({
         sugestao: null,
         classificandoDescricao: false,
         via: null,
-        candidatosIa: [],
-        decisaoIa: null,
-        calculoIa: null,
-        codigoIa: null,
-        confiancaIa: 0,
-        motivoIa: null,
-        feedbackIaEnviado: false,
-        fichaIa: null,
-        vereditoIa: null,
-        fontesIa: [],
-        grafoCypherIa: null,
-        graphPathsIa: [],
-        caminhoGrafoIa: null,
-        provenienciaGrafoIa: null,
-        boostGrafoIa: null,
-        boostValorGrafoIa: 0,
+        candidatosBusca: [],
+        decisaoBusca: null,
+        calculoBusca: null,
+        codigoBusca: null,
+        confiancaBusca: 0,
+        motivoBusca: null,
+        feedbackEnviado: false,
+        fontesBusca: [],
       })
       return
     }
     const seq = ++seqDescricao
-    set({ classificandoDescricao: true, feedbackIaEnviado: false })
+    set({ classificandoDescricao: true, feedbackEnviado: false })
     try {
-      const r = await classificarComIAServicos(e)
+      const r = await classificarComBuscaServicos(e)
       if (seq !== seqDescricao) return
       set({
         sugestao: r.sugestao,
         classificandoDescricao: false,
         via: r.via,
-        candidatosIa: r.candidatos,
-        decisaoIa: r.decisao,
-        calculoIa: r.calculo,
-        codigoIa: r.codigoEscolhido,
-        confiancaIa: r.confiancaIa,
-        motivoIa: r.motivo,
-        mockIa: r.mock,
-        feedbackIaEnviado: false,
-        fichaIa: r.ficha,
-        vereditoIa: r.veredito,
-        fontesIa: r.fontes,
-        grafoCypherIa: (r as { grafoCypher?: string | null }).grafoCypher ?? null,
-        graphPathsIa: (r as { graphPaths?: string[][] }).graphPaths ?? [],
-        caminhoGrafoIa: (r as { caminhoGrafo?: string[] | null }).caminhoGrafo ?? null,
-        provenienciaGrafoIa: (r as { provenienciaGrafo?: { de: string; para: string; tipo: string; origem: string; confianca: number; anoReferencia?: number | null }[] | null }).provenienciaGrafo ?? null,
-        boostGrafoIa: (r as { boostGrafo?: 'uso_local' | null }).boostGrafo ?? null,
-        boostValorGrafoIa: (r as { boostValorGrafo?: number }).boostValorGrafo ?? 0,
+        candidatosBusca: r.candidatos,
+        decisaoBusca: r.decisao,
+        calculoBusca: r.calculo,
+        codigoBusca: r.codigoEscolhido,
+        confiancaBusca: r.confianca,
+        motivoBusca: r.motivo,
+        feedbackEnviado: false,
+        fontesBusca: r.fontes,
       })
     } catch {
       if (seq !== seqDescricao) return
@@ -385,22 +333,14 @@ export const useServicos = create<ServicosState>((set, get) => ({
         sugestao: null,
         classificandoDescricao: false,
         via: null,
-        candidatosIa: [],
-        decisaoIa: null,
-        calculoIa: null,
-        codigoIa: null,
-        confiancaIa: 0,
-        motivoIa: null,
-        feedbackIaEnviado: false,
-        fichaIa: null,
-        vereditoIa: null,
-        fontesIa: [],
-        grafoCypherIa: null,
-        graphPathsIa: [],
-        caminhoGrafoIa: null,
-        provenienciaGrafoIa: null,
-        boostGrafoIa: null,
-        boostValorGrafoIa: 0,
+        candidatosBusca: [],
+        decisaoBusca: null,
+        calculoBusca: null,
+        codigoBusca: null,
+        confiancaBusca: 0,
+        motivoBusca: null,
+        feedbackEnviado: false,
+        fontesBusca: [],
       })
     }
   },
@@ -412,30 +352,29 @@ export const useServicos = create<ServicosState>((set, get) => ({
     await get().consultar(s)
   },
 
-  usarSugestaoIa: async () => {
-    const s = get().codigoIa
+  usarSugestaoBusca: async () => {
+    const s = get().codigoBusca
     if (!s) return
     set({ entrada: s })
     await get().consultar(s)
   },
 
-  feedbackIaNegativo: async () => {
+  feedbackNegativo: async () => {
     const s = get()
-    if (!s.codigoIa && s.via !== 'ia' && s.via !== 'grafo' && s.via !== 'grafo+ia') return
-    if (s.feedbackIaEnviado) return
+    if (!s.codigoBusca) return
+    if (s.feedbackEnviado) return
     try {
-      await registrarFeedbackIa({
+      await registrarFeedbackBusca({
         descricao: s.entrada,
-        via: s.via ?? 'ia',
-        decisao: s.codigoIa,
-        confianca: s.confiancaIa,
+        via: s.via ?? 'sem-resultado',
+        decisao: s.codigoBusca,
+        confianca: s.confiancaBusca,
         motivo: 'feedback-negativo',
-        mock: s.mockIa,
       })
     } catch {
       /* feedback é best-effort */
     }
-    set({ feedbackIaEnviado: true })
+    set({ feedbackEnviado: true })
   },
 
   consultarCnpj: async (cnpj, forcar) => {
@@ -473,17 +412,14 @@ export const useServicos = create<ServicosState>((set, get) => ({
       sugestao: null,
       classificandoDescricao: false,
       via: null,
-      candidatosIa: [],
-      decisaoIa: null,
-      calculoIa: null,
-      codigoIa: null,
-      confiancaIa: 0,
-      motivoIa: null,
-      mockIa: true,
-      feedbackIaEnviado: false,
-      fichaIa: null,
-      vereditoIa: null,
-      fontesIa: [],
+      candidatosBusca: [],
+      decisaoBusca: null,
+      calculoBusca: null,
+      codigoBusca: null,
+      confiancaBusca: 0,
+      motivoBusca: null,
+      feedbackEnviado: false,
+      fontesBusca: [],
       cnpjEntrada: '',
       buscandoCnpj: false,
       vereditoEmpresa: null,
@@ -492,3 +428,5 @@ export const useServicos = create<ServicosState>((set, get) => ({
 }))
 
 registrarLimpeza('servicos', () => useServicos.getState().limpar())
+
+

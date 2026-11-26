@@ -21,22 +21,6 @@ export function App() {
   const view = useUi((s) => s.view);
   // (layout XML removido junto com o módulo de NF-e)
 
-  // GRAFO-08: job incremental do overlay ao abrir + ocioso (<1s, nunca
-  // rebuild diário — só poda TTL + teto). Best-effort, nunca lança.
-  useEffect(() => {
-    try {
-      void import('@/application/grafo-overlay').then((m) => {
-        try {
-          m.agendarJobOverlay()
-        } catch {
-          /* job nunca quebra o boot */
-        }
-      }).catch(() => undefined)
-    } catch {
-      /* ignora */
-    }
-  }, [])
-
   // Pré-carrega a Consulta em idle: é a tela mais visitada e o chunk já fica
   // quente sem bloquear a primeira dobra.
   useEffect(() => {

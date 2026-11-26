@@ -1,7 +1,7 @@
 /**
  * Contrato de saída do relatório (Etapa 5 — implementado).
  * Envelope canônico: serieMensal + payback + economiaTotal + alertas +
- * insightsSugeridos (container vazio para a LLM preencher depois).
+ * insightsSugeridos (container vazio para a serviço externo preencher depois).
  */
 import { RBT12_MAX, SUBLIMITE } from '@/simples/tabelas';
 import type { AlertaFiscal, LinhaCenarioMensal, RelatorioProjecao } from './types';

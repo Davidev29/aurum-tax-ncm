@@ -16,38 +16,34 @@ Top 3 níveis (`node_modules/`, `build/`, `dist/`, `release/`, `electron/dist/` 
 │   │                    NfeXml/NfeXmlPolida (+ NfeNatureza, NfeConferenciaProdutos, NfePendentes,
 │   │                     NfeCalendarioAnual, ModalRelatorioNfe), Produtos, Auxiliares, Legislacao
 │   ├── simples/      ← módulo Simples isolado (tabelas, calculo, store, DasModal, InsightsModal,
-│   │                    relatorio-analitico, ia-insights, exports)
+│   │                    relatorio-analitico, insights, exports)
 │   ├── simples-projection/ ← projeção dividida v2 (camada aditiva sobre `simples/`)
 │   ├── ui/           ← Layout, kit, cartoes, detalhes, dialogos, motion, skeleton, Marca,
 │   │                    ModalLegislacao, TourGuiado, ErroFatal
 │   ├── modais/       ← globais (Empresas/Config/Backup/Atualização/Aparência), pagina, reclassificacao,
 │   │                     escolha-tributacao, produto-manual
-│   ├── store/        ← 17 stores (ui, sessao, consulta(+servicos,+cnaes), referencia, lote, nfe,
-│   │                    produtos, auxiliares, base, ia, fundo, novidades,
+│   ├── store/        ← 16 stores (ui, sessao, consulta(+servicos,+cnaes), referencia, lote, nfe,
+│   │                    produtos, auxiliares, base, fundo, novidades,
 │   │                    tutorial, dialogo)
-│   ├── domain/       ← entities, legislacao, capitulos, services/ (calculo, classificacao(+ia), busca-texto,
-│   │                    detector-*, cnae(+nbs), referencia-service, format, hierarquia-fiscal, revogacao, vigencia…)
+│   ├── domain/       ← entities, legislacao, capitulos, services/ (calculo, classificacao, busca-texto,
+│   │                    cnae(+nbs), referencia-service, format, hierarquia-fiscal, revogacao, vigencia…)
 │   ├── application/  ← base, atualizacao, backup, auditoria, reclassificacao, revalidacao, produtos,
 │   │                    empresas, emitente, ncm-sync, cff-sync, classificacao-inteligente…,
-│   │                    aurum-ai-* (orquestrador RAG+tools determinístico), grafo-consumo, auxiliares, aux-meta
-│   ├── infrastructure/ ← db/ (schema=types, db-protocolo, driver-prisma, validacao…), base/, ia/,
+│   │                    auxiliares, aux-meta
+│   ├── infrastructure/ ← db/ (schema=types, db-protocolo, driver-prisma, validacao…), base/,
 │   │                     siscomex/, cff/, receita/brasilapi, parsers/lote,
 │   │                     exporters/relatorios, pdf/, bridge, fundo/pexels, legislacao-texto
-│   ├── ai/           ← guards de segurança (injection, PII) — os únicos guards sobreviventes da era Aurum AI
+│   ├── ai/           ← guards de segurança (injection, PII)
 │   ├── aurum/        ← (removido na v1.1.0 — era o módulo de licença/conta Aurumbit)
 │   └── domain/constants/  ← seeds, capitulos, cst, cnae-nbs… (dados embutidos)
 ├── electron/
 │   ├── main.ts · preload.ts · esbuild.mjs
 │   ├── main/db.ts                       ← IPC `db:op`/`db:transaction`/`db:snapshot` (Prisma no main)
-│   └── ia/ (grafo fiscal: grafo-service.cjs, caminhos-ia.cjs)
 ├── public/
-│   └── base/             ← bases embutidas (reforma.json, nomenclatura.json, MANIFEST.json, grafo/grafo.lbug…)
-├── scripts/            ← build-base.mjs, build-grafo.mjs, gerar-indice-ia.mjs, ofuscar-build.cjs,
-│                          validar-conhecimento.mjs, verificar-build.mjs… (ver npm scripts)
-│   └── grafo/
-├── recursos-ia/        ← conhecimento curado + índice léxico + grafo + embeddings (12 MB) + dados-brutos
-├── tests/ (176→172 arquivos após limpeza v1.1.0)
-├── docs/               ← SPEC-LOGICA-NEGOCIO.md + diagnósticos/manuais (.docx fora do installer)
+│   └── base/             ← bases embutidas (reforma.json, nomenclatura.json, MANIFEST.json…)
+├── scripts/            ← build-base.mjs, ofuscar-build.cjs, verificar-build.mjs… (ver npm scripts)
+├── tests/ (176→172 arquivos após limpeza v1.1.0; contagem atual: ver `npm test`)
+├── docs/               ← SPEC-LOGICA-NEGOCIO.md, ARQUITETURA.md e manuais (.docx fora do installer)
 ├── build/              ← icon.ico/png/icns, LICENCA.txt/.rtf (NSIS PT-BR)
 ├── dist/ · release/    ← saída de build/empacotamento (git-ignored)
 └── prisma/             ← schema.prisma (27 tabelas) + dev.db (git-ignored)
@@ -91,8 +87,6 @@ Top 3 níveis (`node_modules/`, `build/`, `dist/`, `release/`, `electron/dist/` 
 | `public/base/nomenclatura.json` | versionado | ~2,8 MB | Nomenclatura NCM vigente |
 | `public/base/reforma.json` | versionado | ~1,5 MB | CST × cClassTrib + vínculos NCM 2.335 |
 | `public/base/classificacoes-consolidadas.json` | versionado | ~1,7 MB | Vínculos consolidados |
-| `public/base/grafo/grafo.lbug` | versionado | ~6,1 MB | Grafo fiscal (FTS + 2-hops + PageRank) |
-| `public/base/grafo/vetores.json` | versionado | ~12 MB | Vetores 384-d (não embarcados no instalador) |
 | `public/base/parametros.json` | versionado | ~0,5 KB | IBS/CBS de referência (editável na UI) |
 
 | `aurum.db` | `<userData>` | — | SQLite (empresas/produtos/notas/…) |

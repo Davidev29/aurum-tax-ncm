@@ -32,10 +32,7 @@
  *   - classificacoes-consolidadas.json  templates por CNAE com descrições conferidas (Phase 9)
  *   - nbs-nomenclatura.json          NBS 2.00 oficial completa (hierarquia + descrições; novo)
  *   - nbs-depara.json                DE-PARA NBS 1.1 ↔ 2.0 (correlação oficial; novo)
- *   - MANIFEST.json                  metadados, contagens e checksums (+fontesVivas, +grafo)
- *   - grafo/grafo.lbug               grafo fiscal local (Phase 10-01; nativo ou JSON portátil)
- *   - grafo/grafo.lbug.json          espelho portátil do grafo (sempre JSON)
- *   - grafo/MANIFEST.grafo.json      versão, hash, contadores do grafo (rebuild por hash)
+ *   - MANIFEST.json                  metadados, contagens e checksums (+fontesVivas)
  *
  * Por que normalizar?
  *   O JSON de origem tem 16 MB porque repete a mesma referencia (2,5 KB) em cada
@@ -44,7 +41,6 @@
  */
 
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -974,98 +970,6 @@ function escrever(nome, dados) {
   return { arquivo: nome, bytes: buf.length, sha256: sha256(buf) };
 }
 
-// ---------------------------------------------------------------------------
-// Gatilho 06-03/IA-03: rebuild do índice IA se a base tributária mudou
-// ---------------------------------------------------------------------------
-// Compara o hash SEMÂNTICO do MANIFEST (contagens + sha256 dos artefatos,
-// ignorando `geradoEm`) com `recursos-ia/indice-ncm/.manifest-hash`. Se
-// divergir, regenera via `scripts/gerar-indice-ia.mjs`. NUNCA falha o build
-// da base: qualquer problema aqui vira aviso e o build segue exit 0.
-
-async function gatilhoIndiceIA(manifest, arquivosSaida) {
-  try {
-    const INDICE_DIR = path.join(PROJECT_ROOT, 'recursos-ia', 'indice-ncm');
-    const HASH_FILE = path.join(INDICE_DIR, '.manifest-hash');
-    const GERADOR = path.join(PROJECT_ROOT, 'scripts', 'gerar-indice-ia.mjs');
-    const BASE_IA = path.join(PROJECT_ROOT, 'recursos-ia', 'dados-brutos', 'ncm-para-ia.json');
-
-    let hashAtual = null;
-    try {
-      const { calcularHashManifest } = await import('./gerar-indice-ia.mjs');
-      hashAtual = calcularHashManifest(OUT_DIR);
-    } catch {
-      console.log('   índice IA: gerador 06-03 ilegível — gatilho ignorado.');
-      return;
-    }
-    if (!hashAtual) {
-      console.log('   índice IA: MANIFEST ilegível — gatilho ignorado.');
-      return;
-    }
-
-    const anterior = fs.existsSync(HASH_FILE) ? fs.readFileSync(HASH_FILE, 'utf8').trim() : null;
-    if (anterior === hashAtual) {
-      console.log('   índice IA: em dia (hash MANIFEST inalterado) — rebuild ignorado.');
-      return;
-    }
-    if (!fs.existsSync(GERADOR) || !fs.existsSync(BASE_IA)) {
-      console.log('   índice IA: gerador ou base 06-02 ausente — gatilho ignorado (rode 06-02/06-03).');
-      return;
-    }
-    console.log('   índice IA: MANIFEST mudou — regenerando índice...');
-    execFileSync(process.execPath, [GERADOR], { stdio: 'inherit', cwd: PROJECT_ROOT });
-    fs.mkdirSync(INDICE_DIR, { recursive: true });
-    fs.writeFileSync(HASH_FILE, hashAtual + '\n');
-    console.log('   índice IA: rebuild OK.');
-  } catch (err) {
-    console.log(`   índice IA: gatilho ignorado (${String(err.message).split('\n')[0]}). Build da base preservado.`);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Gatilho 10-01/GRAFO-01: rebuild do grafo fiscal se a base tributária mudou
-// ---------------------------------------------------------------------------
-// `scripts/build-grafo.mjs` compara o hash semântico da base (o mesmo do
-// gatilho 06-03, que já inclui o conhecimento curado) com
-// `public/base/grafo/MANIFEST.grafo.json` e só reconstrói quando diverge.
-// NUNCA falha o build da base: qualquer problema aqui vira aviso e exit 0.
-
-async function gatilhoGrafo(manifest) {
-  try {
-    const { buildGrafo } = await import('./build-grafo.mjs');
-    const resultado = await buildGrafo();
-    if (manifest && resultado && !resultado.skipped) {
-      manifest.grafo = {
-        versao: resultado.versao,
-        geradoEm: resultado.geradoEm,
-        nodos: resultado.nodos,
-        arestas: resultado.arestas,
-        hash: resultado.hash,
-        hashBase: resultado.hashBase,
-        embedding: resultado.embedding,
-      };
-      escrever('MANIFEST.json', manifest);
-      console.log('   grafo: MANIFEST.json carimbado com o resumo do grafo.');
-      // Phase 10-04: vetores SEMPRE após rebuild do grafo. Sem isso o
-      // índice vetorial dessincroniza (aliases novos fora do cosine) e o
-      // runtime cai p/ FTS-puro pelo guarda `hashGrafo`. `--hash` de
-      // propósito: build determinístico e offline (p/ vetores reais, rode
-      // `node scripts/gerar-embeddings.mjs` manualmente com rede). Nunca falha.
-      try {
-        execFileSync(
-          process.execPath,
-          [path.join(PROJECT_ROOT, 'scripts', 'gerar-embeddings.mjs'), '--hash'],
-          { stdio: 'inherit', cwd: PROJECT_ROOT },
-        );
-        console.log('   vetores: regenerados após o rebuild do grafo.');
-      } catch (errVet) {
-        console.log(`   vetores: gatilho ignorado (${String(errVet.message).split('\n')[0]}). Runtime usa FTS-puro até a próxima geração.`);
-      }
-    }
-  } catch (err) {
-    console.log(`   grafo: gatilho ignorado (${String(err.message).split('\n')[0]}). Build da base preservado.`);
-  }
-}
-
 async function main() {
   console.log(' Aurum Tax NCM — compilação da base tributária');
   console.log(`   procura em: ${DIRS_FONTES.join('  |  ')}`);
@@ -1097,7 +1001,6 @@ async function main() {
     if (saidasOk) {
       console.warn(`\n⚠ Fontes ausentes (${ausentes.join(', ')}) — usando public/base/ versionado.`);
       console.warn('  Para atualizar: jogue os JSONs em bases-fonte/ e rode `npm run base`.');
-      await gatilhoGrafo();
       return;
     }
     console.error(`\n✖ Arquivos de origem ausentes: ${ausentes.join(', ')}`);
@@ -1415,9 +1318,6 @@ async function main() {
     arquivos: arquivosSaida,
   };
   escrever('MANIFEST.json', manifest);
-
-  await gatilhoIndiceIA(manifest, arquivosSaida);
-  await gatilhoGrafo(manifest);
 
   const totalBytes = arquivosSaida.reduce((s, a) => s + a.bytes, 0);
   console.log('\n Resultado:');

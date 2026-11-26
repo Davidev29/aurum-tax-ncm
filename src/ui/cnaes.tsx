@@ -4,10 +4,10 @@
  * Reuso, não reinvenção:
  * - `FaixaCnae` + `BlocoConferenciaReforma` vêm de `ui/servicos.tsx`
  *   (cabeçalho CNAE + conferência com a tabela da Reforma);
- * - `MolduraAurumAI` (destaque da NBS mais provável) e
- *   `BarraConfiancaAurumAI` (teto de confiança da matriz CNAE, 0–1 legítimo)
- *   vêm de `ui/aurum-ai.tsx`;
- * - `FaixaTributaria` dá o herói fiscal de cada veredito.
+ * - `MolduraResultado` (destaque da NBS mais provável) e
+ *   `BarraConfiancaResultado` (teto de confiança da matriz CNAE, 0–1 legítimo)
+ *   vêm de `ui/resultado-automatico.tsx`;
+ * - `FaixaTributaria` dá o herói fiscal de cada resultado.
  *
  * Nota honesta: `CartaoEnxuto` NÃO é reutilizado aqui — ele apresenta
  * `Classificacao` do vínculo NBS, enquanto o painel do CNAE apresenta
@@ -29,7 +29,7 @@ import type {
 import { fmtMoeda } from '@/domain/services/format'
 import { FaixaTributaria } from './faixa-tributaria'
 import { BlocoConferenciaReforma, FaixaCnae } from './servicos'
-import { BarraConfiancaAurumAI, MolduraAurumAI } from './aurum-ai'
+import { BarraConfiancaResultado, MolduraResultado } from './resultado-automatico'
 
 /* ------------------------------------------------- bloco de regras (sempre) --- */
 
@@ -71,7 +71,7 @@ export function BlocoRegrasCnae({ consulta }: { consulta: ConsultaCnae }): React
     <div className="space-y-3">
       <FaixaCnae atividade={atividade} />
       <div className="flex flex-wrap items-center gap-2">
-        <BarraConfiancaAurumAI valor={tetoConfiancaCnae(regra.situacao)} compact />
+        <BarraConfiancaResultado valor={tetoConfiancaCnae(regra.situacao)} compact />
         <span className="text-[11px] text-slate-500 dark:text-slate-400">
           teto da matriz CNAE
         </span>
@@ -97,7 +97,7 @@ export function BlocoRegrasCnae({ consulta }: { consulta: ConsultaCnae }): React
   )
 }
 
-/* ------------------------------------------------- cartão da NBS (veredito) --- */
+/* ---------------------------------------------------------- cartão da NBS ----- */
 
 /** Selo do ano de referência — a precificação muda conforme o ano. */
 export function SeloAnoReferencia({
@@ -127,9 +127,9 @@ export function SeloAnoReferencia({
 }
 
 /**
- * Cartão de UM veredito NBS: faixa tributária, CST/cClassTrib, reduções,
+ * Cartão de um resultado NBS: faixa tributária, CST/cClassTrib, reduções,
  * precificação no ano de referência e badges de benefício/lastro.
- * Com `destaque`, ganha a `MolduraAurumAI` (NBS mais provável / escolhida).
+ * Com `destaque`, ganha a `MolduraResultado` (NBS mais provável / escolhida).
  */
 export function CartaoCnaeNbs({
   veredito,
@@ -217,7 +217,7 @@ export function CartaoCnaeNbs({
   )
   if (!destaque) return corpo
   return (
-    <MolduraAurumAI detalhe="destacou a NBS mais provável do CNAE">{corpo}</MolduraAurumAI>
+    <MolduraResultado detalhe="destacou a NBS mais provável do CNAE">{corpo}</MolduraResultado>
   )
 }
 
@@ -358,7 +358,7 @@ function numeroBr(v: string): number | null {
 }
 
 /**
- * Memória de cálculo do veredito: mostra QUAL base foi usada, a alíquota de
+ * Memória de cálculo do resultado: mostra QUAL base foi usada, a alíquota de
  * referência do ano, a redução aplicada, a alíquota efetiva e cada passo da
  * fórmula — com base editável para projetar outra operação (proporcional).
  */

@@ -7,7 +7,7 @@
  * Regra de exibição:
  * - Matriz III×V SOMENTE em CNPJ dual (contexto.mostrarMatrizIIIV).
  * - Caso contrário: duelo Convencional × Híbrido do anexo em foco.
- * - Insights IA + metodologia vivem no InsightsModal (botão na página).
+ * - Insights automáticos + metodologia vivem no InsightsModal (botão na página).
  */
 import { fmtCarga, fmtCnpj, fmtMoeda } from '@/domain/services/format';
 import { Painel, Pill } from '@/ui/kit';
@@ -80,9 +80,9 @@ export function RelatorioAnalitico({ report }: { report: ReportAnalitico }) {
   const gaugePct = Math.min(100, (f.valor / 0.4) * 100);
   const marcoPct = (0.28 / 0.4) * 100;
 
-  const veredito = menor
+  const menorCarga = menor
     ? `Menor carga: ${menor.anexo === 'III' ? 'Anexo III' : menor.anexo === 'V' ? 'Anexo V' : `Anexo ${menor.anexo}`} no ${menor.regime === 'CONVENCIONAL' ? 'convencional' : 'híbrido'} — ${fmtMoeda(menor.totalPagar)}`
-    : 'Informe RBT12 e receita para apurar o veredito';
+    : 'Informe RBT12 e receita para apurar o menorCarga';
 
   const elegiveisLabel = report.contexto.anexosElegiveis.join(', ') || d.anexo;
 
@@ -136,7 +136,7 @@ export function RelatorioAnalitico({ report }: { report: ReportAnalitico }) {
           <h3 className="text-xs font-black tracking-tight">Sumário executivo</h3>
         </div>
         <div className="space-y-2 p-3">
-          <p className="rounded-xl bg-[#0F3D3E] px-3 py-2 text-xs font-bold text-white" role="status">✓ {veredito}</p>
+          <p className="rounded-xl bg-[#0F3D3E] px-3 py-2 text-xs font-bold text-white" role="status">✓ {menorCarga}</p>
           {comMatriz ? (
             <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
               <Kpi rotulo="Menor total" valor={menor ? fmtMoeda(menor.totalPagar) : '—'} sub={menor ? `${menor.scenarioId.replace('_', ' · ')}` : undefined} destaque />

@@ -607,7 +607,7 @@ export function SimplesNacional() {
             {etapa === 3 ? (
               gerando && !cena.mostrando ? (
                 <div className="animate-slide-in m-4 space-y-2 overflow-hidden rounded-2xl border border-[var(--line)] bg-white p-3 dark:bg-slate-900" aria-busy="true">
-                  <p className="text-[13px] font-black">Aurum AI calculando…</p>
+                  <p className="text-[13px] font-black">busca automática calculando…</p>
                   <div className="skeleton h-10 w-2/3" />
                   <div className="skeleton h-10 w-full" />
                   <div className="skeleton h-10 w-full" />

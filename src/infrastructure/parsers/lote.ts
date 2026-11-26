@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Leitura de planilhas (CSV/XLSX/TXT) para classificação em lote e importação
  * de empresas.
  *
@@ -20,7 +20,7 @@
  * - os erros saem em `pt-BR` com a linha exata, em vez de "undefined";
  * - o resultado já traz os totais que a tela precisa (classificadas, regra
  *   geral, ambíguas, inválidas), evitando reprocessar na camada de UI.
- * - a **Aurum AI assistida** (`analisarItemLoteIA`) compara o **nome** com os
+ * - a **busca automática assistida** (`analisarItemLote`) compara o **nome** com os
  *   textos oficiais (comparativo) mas NUNCA fixa benefício em lista múltipla:
  *   com 2+ tributações (incluindo a hipótese de diferimento do Anexo IX) a
  *   sugestão pré-selecionada é sempre a tributação INTEGRAL de segurança —
@@ -29,7 +29,7 @@
 import * as XLSX from 'xlsx'
 import { fmtCnpj, norm, normalizeHeader } from '../../domain/services/format'
 import { interpretarEntradaNcm } from '../../domain/services/classificacao'
-import { analisarItemLoteIA, type AnaliseLoteIA } from '../../domain/services/analise-lote-ia'
+import { analisarItemLote, type AnaliseLoteBusca } from '../../domain/services/analise-lote'
 import type { Classificacao, Empresa, NomenclaturaNcm } from '../../domain/entities'
 import { resolverClassificacoes } from '../base/classificacao-repo'
 
@@ -186,12 +186,12 @@ export interface ItemLote {
   /** Nomenclatura vigente — quando `dataFim` preenchida, o NCM está extinto. */
   nomenclatura?: NomenclaturaNcm | null
   /**
-   * Análise assistida da Aurum AI (nome + NCM = tributação provável).
+   * Análise assistida da busca automática (nome + NCM = tributação provável).
    * Sempre presente após `processarArquivoLote` — inclusive para NCM
    * inválido (situação `invalida`, sem opções). A `escolhida` inicial já é
    * a `maisProvavel` desta análise (escolha assistida pré-selecionada).
    */
-  analiseIA?: AnaliseLoteIA | null
+  analiseIA?: AnaliseLoteBusca | null
 }
 
 export interface ResumoLote {
@@ -202,7 +202,7 @@ export interface ResumoLote {
   manuais: number
   semNcm: number
   ambiguos: number
-  /** Linhas com sugestão forte da IA (múltiplas + nome desempatou). */
+  /** Linhas com sugestão forte da busca (múltiplas + nome desempatou). */
   assistidas?: number
   /** Mantido por compatibilidade — sempre 0 (alerta nome × NCM removido). */
   divergentes?: number
@@ -270,24 +270,8 @@ export async function processarArquivoLote(
         veredito = await resolverClassificacoes(chave)
         cache.set(chave, veredito)
       }
-      // Phase 10-05: desempate multi-opção via caminho do grafo (só reordena;
-      // sem grafo, ordem oficial bit-idêntica). Best-effort, nunca lança.
-      // NOTA: o grafo NUNCA decide benefício no lote — só reordena oficiais;
       // a pré-seleção final é sempre a integral (ver análise abaixo).
       let listaEfetiva = veredito.lista
-      try {
-        if (veredito.lista.length > 1) {
-          const { consultarGrafoPrimeiro, desempatarPorGrafo } = await import('@/application/grafo-consumo')
-          const textoLote = String(cel(row, map.nome) || chave).slice(0, 120) || chave
-          const g = await consultarGrafoPrimeiro(textoLote, 5).catch(() => null)
-          if (g && g.trilha.usouGrafo) {
-            const r = desempatarPorGrafo(veredito.lista, g.trilha, chave)
-            if (r.usouGrafo) listaEfetiva = r.lista
-          }
-        }
-      } catch {
-        /* desempate é best-effort; mantém a ordem oficial */
-      }
       // Diferimento no lote: o Anexo IX condicional (ex.: CST 200/200038)
       // conta como 2ª tributação (hipótese 515 de diferimento na operação,
       // mesma regra da Consulta). Sem esta expansão, o condicional único
@@ -340,13 +324,13 @@ export async function processarArquivoLote(
       item.regraGeral = veredito.regraGeral
       item.manual = veredito.manual || veredito.lista.some((c) => c.manual != null)
       item.nomenclatura = veredito.nomenclatura
-      // Aurum AI assistida no LOTE (regra de segurança):
+      // busca automática assistida no LOTE (regra de segurança):
       // - 1 vínculo oficial (unica): fixa o oficial, com a integral como
       //   ALTERNATIVA trocável (finalidade/descrição podem não dar lastro);
       // - 2+ tributações (incluindo diferimento): NUNCA fixa benefício —
       //   a análise sugere a INTEGRAL e o usuário escolhe pela operação real.
       // - regra-geral / manual / extinto: sem alternativa, como antes.
-      const analise = analisarItemLoteIA({
+      const analise = analisarItemLote({
         nome: item.nome,
         ncm: chave,
         classificacoes: listaEfetiva,
@@ -359,9 +343,9 @@ export async function processarArquivoLote(
       const sugerida = listaEfetiva[analise.maisProvavelIndice] ?? listaEfetiva[0] ?? null
       item.escolhida = sugerida
     } else {
-      // Sem veredito do motor (NCM inválido): a IA ainda explica o que
+      // Sem veredito do motor (NCM inválido): a busca ainda explica o que
       // fazer — sem inventar tributação (lista vazia, situação `invalida`).
-      item.analiseIA = analisarItemLoteIA({
+      item.analiseIA = analisarItemLote({
         nome: item.nome,
         ncm: item.ncm,
         classificacoes: [],
@@ -436,3 +420,6 @@ export async function importarEmpresasDoArquivo(file: File): Promise<Empresa[]> 
   if (!lote.length) throw new Error('Nenhuma empresa válida encontrada.')
   return lote
 }
+
+
+

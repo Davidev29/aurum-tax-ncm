@@ -2,10 +2,10 @@
  * Simples Nacional — Relatório Analítico e Inteligente em modal.
  *
  * Todo o bloco "Relatório Analítico e Inteligente" vive aqui (condensado):
- * Resumo + Comparativo + Gráficos (barras/donut/tabela/deltas) + IA + Método.
+ * Resumo + Comparativo + Gráficos (barras/donut/tabela/deltas) + Insights + Método.
  * Exportações (CSV / JSON / PDF) ficam no topo do modal.
  *
- * Componente PURO de leitura: apenas formata `ReportAnalitico` + `AiInsight`.
+ * Componente PURO de leitura: apenas formata `ReportAnalitico` + `Insight`.
  * Nenhum cálculo aqui — qualquer número novo deve vir do orquestrador.
  */
 import { useEffect, useRef, useState } from 'react';
@@ -16,10 +16,10 @@ import { EMITENTE_PADRAO } from '@/domain/entities';
 import { useSessao } from '@/store/sessao';
 import { toast } from '@/store/ui';
 import { exportarRelatorioAnaliticoCSV, exportarRelatorioAnaliticoJSON, exportarRelatorioAnaliticoPDF } from './export-relatorio-analitico';
-import type { AiInsight } from './ia-insights';
+import type { Insight } from './insights';
 import type { ReportAnalitico, ScenarioId } from './relatorio-analitico';
 
-type TabId = 'resumo' | 'comparativo' | 'graficos' | 'ia' | 'metodo';
+type TabId = 'resumo' | 'comparativo' | 'graficos' | 'insights' | 'metodo';
 type ChartView = 'barras' | 'donut' | 'tabela' | 'delta';
 
 function cenario(report: ReportAnalitico, id: ScenarioId) {
@@ -30,7 +30,7 @@ const TABS: { id: TabId; rotulo: string }[] = [
   { id: 'resumo', rotulo: 'Resumo' },
   { id: 'comparativo', rotulo: 'Comparativo' },
   { id: 'graficos', rotulo: 'Gráficos' },
-  { id: 'ia', rotulo: 'Insights IA' },
+  { id: 'insights', rotulo: 'Insights' },
   { id: 'metodo', rotulo: 'Método' },
 ];
 
@@ -41,7 +41,7 @@ const VIEWS: { id: ChartView; rotulo: string }[] = [
   { id: 'delta', rotulo: 'Deltas' },
 ];
 
-const ICONE_NIVEL: Record<AiInsight['nivel'], string> = {
+const ICONE_NIVEL: Record<Insight['nivel'], string> = {
   OPORTUNIDADE: '●',
   ALERTA: '▲',
   INFO: '◆',
@@ -124,10 +124,10 @@ function Donut({ partes }: { partes: { rotulo: string; valor: number; cor: strin
   );
 }
 
-export function InsightsModal({ report, insights, aberto, onFechar }: { report: ReportAnalitico; insights: AiInsight[]; aberto: boolean; onFechar: () => void }) {
+export function InsightsModal({ report, insights, aberto, onFechar }: { report: ReportAnalitico; insights: Insight[]; aberto: boolean; onFechar: () => void }) {
   const [tab, setTab] = useState<TabId>('resumo');
   const [view, setView] = useState<ChartView>('barras');
-  const [filtro, setFiltro] = useState<'TODOS' | AiInsight['nivel']>('TODOS');
+  const [filtro, setFiltro] = useState<'TODOS' | Insight['nivel']>('TODOS');
   const [memAberta, setMemAberta] = useState<string | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -185,7 +185,7 @@ export function InsightsModal({ report, insights, aberto, onFechar }: { report: 
   const manual = report.empresa.origem === 'MANUAL';
   const elegiveisLabel = report.contexto.anexosElegiveis.join(', ') || d.anexo;
 
-  const veredito = menor
+  const menorCarga = menor
     ? `Menor carga: ${menor.anexo === 'III' ? 'Anexo III' : menor.anexo === 'V' ? 'Anexo V' : `Anexo ${menor.anexo}`} no ${menor.regime === 'CONVENCIONAL' ? 'convencional' : 'híbrido'} — ${fmtMoeda(menor.totalPagar)}`
     : d.vencedor === 'EMPATE'
       ? `Empate no Anexo ${d.anexo} — ${fmtMoeda(d.convTotal)}`
@@ -206,7 +206,7 @@ export function InsightsModal({ report, insights, aberto, onFechar }: { report: 
     : [{ rotulo: `${d.convId} → ${d.hibId}`, valor: d.deltaRs }];
 
   const insightsFiltrados = insights.filter((ins) => filtro === 'TODOS' || ins.nivel === filtro);
-  const contagem = (n: AiInsight['nivel']) => insights.filter((i) => i.nivel === n).length;
+  const contagem = (n: Insight['nivel']) => insights.filter((i) => i.nivel === n).length;
 
   return createPortal(
     <div
@@ -255,7 +255,7 @@ export function InsightsModal({ report, insights, aberto, onFechar }: { report: 
               className={`whitespace-nowrap rounded-t-lg px-4 py-2 text-sm font-bold transition ${tab === t.id ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
             >
               {t.rotulo}
-              {t.id === 'ia' ? <span className="ml-1 rounded-full bg-slate-200 px-1.5 text-xs dark:bg-slate-700">{insights.length}</span> : null}
+              {t.id === 'insights' ? <span className="ml-1 rounded-full bg-slate-200 px-1.5 text-xs dark:bg-slate-700">{insights.length}</span> : null}
             </button>
           ))}
         </nav>
@@ -263,7 +263,7 @@ export function InsightsModal({ report, insights, aberto, onFechar }: { report: 
           <div className="mx-auto w-full max-w-[920px]">
           {tab === 'resumo' ? (
             <div className="space-y-2.5">
-              <p className="rounded-xl bg-[#0F3D3E] px-4 py-3 text-[15px] font-bold leading-relaxed text-white" role="status">✓ {veredito}</p>
+              <p className="rounded-xl bg-[#0F3D3E] px-4 py-3 text-[15px] font-bold leading-relaxed text-white" role="status">✓ {menorCarga}</p>
               {report.premissas.guiaSemFora ? (
                 <p className="rounded-xl bg-amber-50 px-4 py-2 text-[12px] leading-relaxed text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                   Sublimite estourado ({report.premissas.regraDas}): os duelos abaixo comparam a <strong>guia DAS</strong> (sem ICMS/ISS/IBS). O fora da guia é igual nos dois regimes e sai à parte.
@@ -567,7 +567,7 @@ export function InsightsModal({ report, insights, aberto, onFechar }: { report: 
             </div>
           ) : null}
 
-          {tab === 'ia' ? (
+          {tab === 'insights' ? (
             <div className="space-y-2">
               <div className="flex flex-wrap gap-1" role="group" aria-label="Filtrar por nível">
                 {(['TODOS', 'OPORTUNIDADE', 'ALERTA', 'INFO'] as const).map((n) => (
@@ -595,7 +595,7 @@ export function InsightsModal({ report, insights, aberto, onFechar }: { report: 
                   <p className="mt-1 font-mono text-xs text-slate-400">ref: {ins.cenariosRef.join(' · ')}</p>
                 </article>
               ))}
-              <p className="text-xs text-slate-400">Textos gerados por IA em modo leitura a partir do motor — a IA não altera valores.</p>
+              <p className="text-xs text-slate-400">Textos gerados automaticamente em modo leitura a partir do motor — não alteram valores.</p>
             </div>
           ) : null}
 
@@ -606,7 +606,7 @@ export function InsightsModal({ report, insights, aberto, onFechar }: { report: 
                 <ol className="mt-1.5 space-y-1 text-sm leading-relaxed">
                   <li><strong>1. Entradas.</strong> RBT12 {fmtMoeda(report.premissas.rbt12)} · receita {fmtMoeda(report.premissas.receitaMes)}{report.contexto.mostrarFatorR ? <> · folha 12m {fmtMoeda(report.premissas.folha12)}</> : null} · CBS ref. {fmtCarga(report.premissas.cbsRef * 100)}.</li>
                   <li><strong>2. Motor.</strong> Aplica os {report.contexto.mostrarFatorR ? '5' : '3'} quadros abaixo e gera Convencional × Híbrido do Anexo {d.anexo}.</li>
-                  <li><strong>3. Leitura.</strong> A IA só interpreta os números — não calcula nem altera valores.</li>
+                  <li><strong>3. Leitura.</strong> A leitura automática só interpreta os números — não calcula nem altera valores.</li>
                 </ol>
               </div>
               {(() => {

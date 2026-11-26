@@ -158,7 +158,7 @@ export interface RelatorioProjecao {
   payback: PaybackInfo;
   economiaTotal: number;
   alertas: AlertaFiscal[];
-  /** Container vazio — preenchido pela LLM depois (motor nunca gera texto). */
+  /** Container vazio — preenchido pela serviço externo depois (motor nunca gera texto). */
   insightsSugeridos: [];
   /** Diagnóstico do Fator R mês a mês (mãe × nova × unificado). Opcional p/ compat. */
   analiseFatorR?: import('./fator-r-dividido').AnaliseFatorR;

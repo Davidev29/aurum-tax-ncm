@@ -1,7 +1,7 @@
 /**
  * Guards transversais código-first (C-007/C-008) — NÃO delegar ao prompt/fine-tune.
  * - `detectarInjection`: re-export do detector fiscal-independente.
- * - `removerPII`: strip de CNPJ/CPF/email/telefone antes de grafo/MCP/IPC/log/histórico.
+ * - `removerPII`: strip de CNPJ/CPF/email/telefone antes de base local/MCP/IPC/log/histórico.
  * - `hashEmitente`: identifica o emitente no overlay sem persistir CNPJ cru.
  * - `MENSAGEM_RECUSA_INJECTION`: recusa fixa (auditoria + consistência).
  */
@@ -35,7 +35,7 @@ export function contarMascaras(texto: unknown): { cnpj: number; cpf: number; ema
   return { cnpj: conta(RE_CNPJ), cpf: conta(RE_CPF), email: conta(RE_EMAIL), fone: conta(RE_FONE) }
 }
 
-/** Remove PII de texto livre antes de enviar a grafo/MCP/IPC/log/modelo. */
+/** Remove PII de texto livre antes de enviar a MCP/IPC/log/modelo. */
 export function removerPII(texto: unknown): string {
   return String(texto ?? '')
     .replace(RE_CNPJ, '[CNPJ]')
@@ -44,7 +44,7 @@ export function removerPII(texto: unknown): string {
     .replace(RE_FONE, '[FONE]')
 }
 
-/** True quando o texto ainda contém PII aparente (pós-filtro de saída da IA). */
+/** True quando o texto ainda contém PII aparente (pós-filtro de saída da busca). */
 export function contemPII(texto: unknown): boolean {
   const s = String(texto ?? '')
   RE_CNPJ.lastIndex = 0; RE_CPF.lastIndex = 0; RE_EMAIL.lastIndex = 0; RE_FONE.lastIndex = 0

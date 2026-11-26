@@ -3,13 +3,13 @@
  *
  * - `detectarIntencaoConsulta` é pura: números → seção exata, texto → nome,
  *   frase expressiva → predição assistiva, mista → todas;
- * - garante que a predição (worker caro) NÃO dispara em digitação curta.
+ * - garante que a predição (motor determinístico) NÃO dispara em digitação curta.
  */
 import { describe, expect, it } from 'vitest'
 import { detectarIntencaoConsulta } from '@/domain/services/detector-consulta'
 
 describe('detector da busca unificada', () => {
-  it('entrada vazia não dispara nenhum worker', () => {
+  it('entrada vazia não dispara nenhum processamento extra', () => {
     const r = detectarIntencaoConsulta('')
     expect(r.tipo).toBe('vazia')
     expect(r.deveBuscarExato).toBe(false)
@@ -32,13 +32,13 @@ describe('detector da busca unificada', () => {
     expect(exato.digitos).toBe('02011000')
   })
 
-  it('nome curto já acende nome + predição assistiva (RAG proativo)', () => {
+  it('nome curto já acende nome + predição assistiva (busca proativa)', () => {
     const r = detectarIntencaoConsulta('queijo')
     expect(r.tipo).toBe('textual')
     expect(r.deveBuscarExato).toBe(false)
     expect(r.deveBuscarNome).toBe(true)
     // 1 palavra relevante basta: "queijo", "celular", "camiseta" já mostram
-    // a predição assistiva (antes exigia frase expressiva e a IA "nunca sabia").
+    // a predição assistiva (antes exigia frase expressiva e não encontrava nada).
     expect(r.deveBuscarDescricao).toBe(true)
   })
 

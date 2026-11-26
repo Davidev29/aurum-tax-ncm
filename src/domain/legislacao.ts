@@ -3,7 +3,7 @@
  * ancoragem.
  *
  * Utilidade (pedido do usuário): todos os produtos referenciam algum
- * artigo/parágrafo da lei. Por isso:
+ * artigo/parábase local da lei. Por isso:
  * - o menu **Legislação** abre cada norma **na íntegra em nova aba**,
  *   organizada em grupos (base federal, decretos federais, RICMS-CE, portais);
  * - na **Consulta**, "Visualizar legislação" abre um **modal** com `iframe`

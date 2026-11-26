@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Tela **Consulta NCM** — busca unificada com **resposta automática única**.
  *
  * Um único input orquestra 3 frentes em paralelo (fan-out por intenção):
@@ -6,7 +6,7 @@
  *   `resolverClassificacoes` quando 8 dígitos);
  * - texto (≥2 chars) → **Base oficial · por nome** (`buscarNomenclaturaPorTexto`);
  * - frase expressiva → **✨ busca automática · resposta** (`classificarPorDescricao` /
- *   fallback `classificarComIA`).
+ *   fallback `classificarComBusca`).
  *
  * Para não confundir, há UM protagonista por intenção (preferindo a busca no
  * texto): entrada numérica exata ancora no painel oficial; entrada textual
@@ -23,7 +23,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Classificacao, Produto } from '@/domain/entities'
 import { listarProdutos } from '@/application/produtos'
-import { fmtConfiancaAurumAI, nivelDeConfianca } from '@/domain/aurum-ai'
+import { fmtConfiancaBusca, nivelDeConfianca } from '@/domain/services/confianca-busca'
 import { fmtMoeda, fmtNcm, MASK, norm } from '@/domain/services/format'
 import { detectarIntencaoConsulta } from '@/domain/services/detector-consulta'
 import { nomeCapitulo } from '@/domain/constants/capitulos'
@@ -37,13 +37,13 @@ import { useConsulta } from '@/store/consulta'
 import { toast } from '@/store/ui'
 import { type BloqueioSistema } from '@/ui/cartoes'
 import { CartaoEnxuto, CartaoForaDeEscopo, CartaoMultiplo } from '@/ui/consulta-enxuta'
-import { BarraConfiancaAurumAI, CarregandoAurumAI, IconeAurumPremium, MolduraAurumAI, StatusAurumAI } from '@/ui/aurum-ai'
+import { BarraConfiancaResultado, CarregandoBusca, IconeResultado, MolduraResultado, StatusResultado } from '@/ui/resultado-automatico'
 import {
   BotaoDetalhePremium,
-  ModalAuditoriaIA,
+  ModalAuditoriaBusca,
   ModalNcmsAnalisados,
-  ModalRaciocinioIA,
-  ModalSimulacaoIA,
+  ModalRaciocinioBusca,
+  ModalSimulacaoBusca,
 } from '@/ui/consulta-premium'
 import { Btn, Painel, Texto, Vazio } from '@/ui/kit'
 import { Entrada, Revelar } from '@/ui/motion'
@@ -59,12 +59,12 @@ import {
   resolverPorPrefixo,
   sugerirNomenclatura,
 } from '@/infrastructure/base/classificacao-repo'
-import { VALOR_BASE_IA } from '@/infrastructure/ia/classificacao-ia-repo'
+import { VALOR_BASE_BUSCA } from '@/infrastructure/busca/classificacao-repo'
 import { bloqueiosParaCcts } from '@/application/cff-sync'
 
 /** Fan-out leve (prefixo + nome): ~350 ms — sugestão acompanha a digitação. */
 const DEBOUNCE_RAPIDO = 350
-/** Predição assistiva (RAG + lexical + grafo): ~900 ms após parar de digitar. */
+/** Predição assistiva (busca lexical + base oficial): ~900 ms após parar de digitar. */
 const DEBOUNCE_DESCRICAO = 900
 /** Dropdown instantâneo sob o input: ~220 ms, só leitura (não commita store). */
 const DEBOUNCE_QUICK = 220
@@ -86,7 +86,7 @@ export function Consulta() {
   /**
    * Input local reativo: o texto aparece na hora (0 ms visual) e só commita
    * para a store + fan-out após 3 s parado. Sem isso, cada tecla publicava no
-   * Zustand global → re-render de ~20 subscriptions + Dexie/RAG na main thread
+   * Zustand global → re-render de ~20 subscriptions + Dexie/busca lexical na main thread
    * → sensação de "trava/engole letra".
    */
   const [entrada, setEntradaLocal] = useState(entradaStore)
@@ -104,9 +104,10 @@ export function Consulta() {
   const sugestao = useConsulta((s) => s.sugestao)
   const classificando = useConsulta((s) => s.classificandoDescricao)
   const classificarDescricao = useConsulta((s) => s.classificarDescricao)
-  const codigoIaAtual = useConsulta((s) => s.codigoIa)
-  /** Camada IA (06-06): `ia` = fallback acionou; `deterministico` = primário venceu sem worker. */
+  const codigoAtual = useConsulta((s) => s.codigo)
+  /** Origem da resposta: `deterministico` (base local) ou `sem-resultado`. */
   const via = useConsulta((s) => s.via)
+  const decisaoBusca = useConsulta((s) => s.decisaoBusca)
 
   const nomenclaturaBase = useBase((s) => s.status?.nomenclatura ?? 0)
   const basePronta = useBase((s) => s.pronta)
@@ -162,7 +163,7 @@ export function Consulta() {
   }, [entradaStore, entrada])
 
   // Fan-out com duplo debounce curto: leve (~350 ms: prefixo/nome/exato) e
-  // pesado (~900 ms: predição RAG + lexical + grafo). O input visual continua
+  // pesado (~900 ms: busca lexical + base oficial). O input visual continua
   // instantâneo (estado local); só a BUSCA espera após a última tecla.
   // Enter/Buscar força imediato. Campo é BUSCA, não escolha: esvaziar o input
   // limpa a tela na hora (invalida fan-outs pendentes) e aguarda a nova consulta.
@@ -174,8 +175,8 @@ export function Consulta() {
       ultimoCommit.current = ''
       setEntradaStore('')
       setAtivoTexto(-1)
-      // `consultarUnificada('')` limpa resultados/sugestões/IA E invalida
-      // workers em voo (seq++), então nenhum resultado velho repopula a tela.
+      // `consultarUnificada('')` limpa resultados/sugestões/busca E invalida
+      // consultas em voo (seq++), então nenhum resultado velho repopula a tela.
       void consultarUnificada('')
       return
     }
@@ -465,13 +466,13 @@ export function Consulta() {
    *   base oficial aparece abaixo como alternativa compacta.
    */
   const ehExatoNumerico = intencao.deveClassificarExato
-  const prioridadeIA = !ehExatoNumerico && mostrarDescricao
+  const prioridadeBusca = !ehExatoNumerico && mostrarDescricao
   // Painel oficial ancorado a partir da busca (ex.: "Classificar oficialmente"):
   // mantém a borda animada para deixar claro que foi a busca que classificou.
   const digitosEntrada = norm(entrada)
-  const origemIAOficial =
+  const origemBuscaOficial =
     digitosEntrada.length === 8 &&
-    (digitosEntrada === norm(codigoIaAtual ?? '') ||
+    (digitosEntrada === norm(codigoAtual ?? '') ||
       (sugestao?.ncm_provavel ? digitosEntrada === norm(sugestao.ncm_provavel) : false))
 
   return (
@@ -640,12 +641,12 @@ export function Consulta() {
             </span>
             {classificando ? (
               <span className="flex items-center gap-1.5 font-semibold text-brand-600 dark:text-aurum-200" role="status" aria-live="polite">
-                <IconeAurumPremium tamanho="sm" />
+                <IconeResultado tamanho="sm" />
                 Buscando…
-                <span className="aurum-ai-pensando-pontos" aria-hidden="true">
-                  <span className="aurum-ai-pensando-ponto" />
-                  <span className="aurum-ai-pensando-ponto" />
-                  <span className="aurum-ai-pensando-ponto" />
+                <span className="resultado-auto-pensando-pontos" aria-hidden="true">
+                  <span className="resultado-auto-pensando-ponto" />
+                  <span className="resultado-auto-pensando-ponto" />
+                  <span className="resultado-auto-pensando-ponto" />
                 </span>
               </span>
             ) : algumaCarga ? (
@@ -685,11 +686,11 @@ export function Consulta() {
       ) : (
         <Revelar className={`mt-6 space-y-4${quickAberto ? ' conteudo-esmaecido' : ''}`} inert={quickAberto ? true : undefined} aria-hidden={quickAberto || undefined}>
           {/* UMA resposta protagonista por vez — resto colapsado. */}
-          {prioridadeIA ? (
+          {prioridadeBusca ? (
             <section aria-label="Resposta automática" className="space-y-3">
               <h3 className="flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 <span className="inline-flex items-center gap-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-violet-800 dark:bg-violet-950/60 dark:text-violet-200">
-                  <IconeAurumPremium tamanho="sm" /> Resposta automática
+                  <IconeResultado tamanho="sm" /> Resposta automática
                 </span>
                 {via === 'deterministico' ? (
                   <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-black normal-case text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -697,17 +698,17 @@ export function Consulta() {
                   </span>
                 ) : null}
                 {classificando ? (
-                  <StatusAurumAI estado="processando">
+                  <StatusResultado estado="processando">
                     <span className="font-semibold normal-case text-brand-600 dark:text-aurum-200">
                       analisando…
                     </span>
-                  </StatusAurumAI>
+                  </StatusResultado>
                 ) : null}
               </h3>
-              {classificando && !sugestao && via !== 'ia' && via !== 'grafo' && via !== 'grafo+ia' ? (
-                <CarregandoAurumAI entrada={entrada} />
+              {classificando && !sugestao && !decisaoBusca ? (
+                <CarregandoBusca entrada={entrada} />
               ) : (
-                <SecaoRespostaIA entrada={entrada} bloqueios={bloqueios} onSalvar={setParaSalvar} />
+                <SecaoRespostaBusca entrada={entrada} bloqueios={bloqueios} onSalvar={setParaSalvar} />
               )}
             </section>
           ) : null}
@@ -729,7 +730,7 @@ export function Consulta() {
                   nomenclatura={nomenclatura}
                   regraGeral={regraGeral}
                   bloqueios={bloqueios}
-                  destaqueIA={origemIAOficial}
+                  destaqueBusca={origemBuscaOficial}
                   onSalvar={setParaSalvar}
                   onReclassificar={() => setReclassificando(true)}
                 />
@@ -780,18 +781,18 @@ export function Consulta() {
           ) : null}
 
           {/* Número exato digitado junto de texto: a busca vira coadjuvante colapsada. */}
-          {!prioridadeIA && mostrarDescricao ? (
+          {!prioridadeBusca && mostrarDescricao ? (
             <details className="rounded-xl border border-violet-200 bg-violet-50/40 px-3 py-2 text-xs text-slate-600 dark:border-violet-900 dark:bg-violet-950/20 dark:text-slate-300">
               <summary className="cursor-pointer font-bold">
                 <span className="inline-flex items-center gap-1.5">
-                  <IconeAurumPremium tamanho="sm" /> Ver resposta automática para este texto
+                  <IconeResultado tamanho="sm" /> Ver resposta automática para este texto
                 </span>
               </summary>
               <div className="mt-2">
-                {classificando && !sugestao && via !== 'ia' && via !== 'grafo' && via !== 'grafo+ia' ? (
-                  <CarregandoAurumAI entrada={entrada} />
+                {classificando && !sugestao && !decisaoBusca ? (
+                  <CarregandoBusca entrada={entrada} />
                 ) : (
-                  <SecaoRespostaIA entrada={entrada} bloqueios={bloqueios} onSalvar={setParaSalvar} />
+                  <SecaoRespostaBusca entrada={entrada} bloqueios={bloqueios} onSalvar={setParaSalvar} />
                 )}
               </div>
             </details>
@@ -841,7 +842,7 @@ function PainelExato({
   nomenclatura,
   regraGeral,
   bloqueios,
-  destaqueIA = false,
+  destaqueBusca = false,
   onSalvar,
   onReclassificar,
 }: {
@@ -851,7 +852,7 @@ function PainelExato({
   regraGeral: boolean
   bloqueios: Record<string, BloqueioSistema[]>
   /** Borda animada ouro: este painel foi ancorado a partir do resultado automático. */
-  destaqueIA?: boolean
+  destaqueBusca?: boolean
   onSalvar: (c: Classificacao) => void
   onReclassificar: () => void
 }) {
@@ -889,7 +890,7 @@ function PainelExato({
             cl={resultados[0].classificacao}
             nomenclatura={nomenclatura}
             bloqueios={bloqueios[resultados[0].classificacao.cClassTrib] ?? null}
-            destaqueIA={destaqueIA}
+            destaqueBusca={destaqueBusca}
             onSalvar={(cl) => onSalvar(cl)}
             onReclassificar={onReclassificar}
           />
@@ -898,7 +899,7 @@ function PainelExato({
             itens={resultados}
             nomenclatura={nomenclatura}
             bloqueios={bloqueios}
-            destaqueIA={destaqueIA}
+            destaqueBusca={destaqueBusca}
             onSalvar={(cl) => onSalvar(cl)}
             onReclassificar={onReclassificar}
           />
@@ -909,7 +910,7 @@ function PainelExato({
               cl={r.classificacao}
               nomenclatura={nomenclatura}
               bloqueios={bloqueios[r.classificacao.cClassTrib] ?? null}
-              destaqueIA={destaqueIA}
+              destaqueBusca={destaqueBusca}
               onSalvar={(cl) => onSalvar(cl)}
               onReclassificar={r.manual ? onReclassificar : undefined}
             />
@@ -924,12 +925,13 @@ function PainelExato({
 
 /**
  * **✨ Resposta automática**: UM bloco protagonista que funde a predição
- * assistiva (`sugestao`) e a decisão validada do fallback (`via === 'ia'`).
- * A decisão validada tem precedência; a predição aparece quando o
- * determinístico venceu sem seletor. Tudo dentro da `MolduraAurumAI` (borda
- * animada ouro) para deixar claro que **foi a busca automática que classificou**.
+ * assistiva (`sugestao`) e a decisão validada pelo resolvedor oficial.
+ * A decisão validada tem precedência; a predição aparece quando a busca
+ * determinística não encontrou lastro. Tudo dentro da `MolduraResultado`
+ * (borda animada ouro) para deixar claro que **foi a busca automática que
+ * classificou**.
  */
-function SecaoRespostaIA({
+function SecaoRespostaBusca({
   entrada,
   bloqueios,
   onSalvar,
@@ -941,7 +943,7 @@ function SecaoRespostaIA({
   const sugestao = useConsulta((s) => s.sugestao)
   const classificando = useConsulta((s) => s.classificandoDescricao)
   const usarSugestao = useConsulta((s) => s.usarSugestao)
-  const via = useConsulta((s) => s.via)
+  const decisaoBusca = useConsulta((s) => s.decisaoBusca)
   const escolher = useConsulta((s) => s.escolherUnificada)
 
   const jsonPedido = sugestao
@@ -967,30 +969,29 @@ function SecaoRespostaIA({
   // recusa fixa — sem NCM, sem cálculo, sem candidatos, sem trilha expandida.
   if (sugestao?.foraDeEscopo) {
     return (
-      <MolduraAurumAI detalhe="recusa de escopo · sem consulta à base">
+      <MolduraResultado detalhe="recusa de escopo · sem consulta à base">
         <CartaoForaDeEscopo mensagem={sugestao.justificativa} />
-      </MolduraAurumAI>
+      </MolduraResultado>
     )
   }
 
-  // Decisão validada do fallback tem precedência sobre a predição simples.
-  // Phase 10-05: `ia` + `grafo` + `grafo+ia` exibem a decisão validada.
-  if (via === 'ia' || via === 'grafo' || via === 'grafo+ia') {
+  // A decisão validada pelo resolvedor tem precedência sobre a predição.
+  if (decisaoBusca) {
     return (
       <div className="space-y-2">
         {classificando ? (
           <div className="flex items-center gap-2 text-xs font-semibold text-brand-600 dark:text-aurum-200">
-            <span className="aurum-ai-pensando-pontos" aria-hidden="true">
-              <span className="aurum-ai-pensando-ponto" />
-              <span className="aurum-ai-pensando-ponto" />
-              <span className="aurum-ai-pensando-ponto" />
+            <span className="resultado-auto-pensando-pontos" aria-hidden="true">
+              <span className="resultado-auto-pensando-ponto" />
+              <span className="resultado-auto-pensando-ponto" />
+              <span className="resultado-auto-pensando-ponto" />
             </span>
             Reavaliando…
           </div>
         ) : null}
-        <MolduraAurumAI detalhe="decisão validada pela base oficial">
-          <RespostaIaValidada onSalvar={onSalvar} bloqueios={bloqueios} />
-        </MolduraAurumAI>
+        <MolduraResultado detalhe="decisão validada pela base oficial">
+          <RespostaBuscaValidada onSalvar={onSalvar} bloqueios={bloqueios} />
+        </MolduraResultado>
       </div>
     )
   }
@@ -1001,14 +1002,14 @@ function SecaoRespostaIA({
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-2 text-xs font-semibold text-brand-600 dark:text-aurum-200">
-          <span className="aurum-ai-pensando-pontos" aria-hidden="true">
-            <span className="aurum-ai-pensando-ponto" />
-            <span className="aurum-ai-pensando-ponto" />
-            <span className="aurum-ai-pensando-ponto" />
+          <span className="resultado-auto-pensando-pontos" aria-hidden="true">
+            <span className="resultado-auto-pensando-ponto" />
+            <span className="resultado-auto-pensando-ponto" />
+            <span className="resultado-auto-pensando-ponto" />
           </span>
           Refinando resposta para “{entrada.trim()}”…
         </div>
-        <MolduraAurumAI detalhe="predição assistiva · reavaliando">
+        <MolduraResultado detalhe="predição assistiva · reavaliando">
           <ConteudoSugestao
             sugestao={sugestao}
             jsonPedido={jsonPedido}
@@ -1019,7 +1020,7 @@ function SecaoRespostaIA({
             }}
             onEscolherAlternativa={(codigo) => void escolher(codigo)}
           />
-        </MolduraAurumAI>
+        </MolduraResultado>
       </div>
     )
   }
@@ -1034,7 +1035,7 @@ function SecaoRespostaIA({
   }
 
   return (
-    <MolduraAurumAI detalhe="predição assistiva · ancorada na base oficial">
+    <MolduraResultado detalhe="predição assistiva · ancorada na base oficial">
       <ConteudoSugestao
         sugestao={sugestao}
         jsonPedido={jsonPedido}
@@ -1045,7 +1046,7 @@ function SecaoRespostaIA({
         }}
         onEscolherAlternativa={(codigo) => void escolher(codigo)}
       />
-    </MolduraAurumAI>
+    </MolduraResultado>
   )
 }
 
@@ -1104,13 +1105,13 @@ function ConteudoSugestao({
       ) : null}
 
       {/* Excesso em botões premium → modais glass padrão. */}
-      <div className="aurum-ai-acoes" role="group" aria-label="Explorar resposta da IA">
+      <div className="resultado-auto-acoes" role="group" aria-label="Explorar resposta automática">
         {alternativas.length ? (
           <BotaoDetalhePremium
             icone="🔎"
             rotulo="NCMs analisados"
             contagem={alternativas.length}
-            variante="ia"
+            variante="busca"
             titulo="Ver as hipóteses confrontadas — a preferida ganha selo + linha espectro"
             onClick={() => setModal('ncms')}
           />
@@ -1145,7 +1146,7 @@ function ConteudoSugestao({
         subtitulo={`A busca automática confrontou ${alternativas.length + (sugestao.ncm_provavel ? 1 : 0)} hipótese(s) — a preferida está com selo + linha espectro.`}
         onEscolher={(codigo) => onEscolherAlternativa?.(codigo)}
       />
-      <ModalRaciocinioIA
+      <ModalRaciocinioBusca
         aberto={modal === 'raciocinio'}
         onFechar={() => setModal(null)}
         justificativa={sugestao.justificativa}
@@ -1157,84 +1158,54 @@ function ConteudoSugestao({
   )
 }
 
-/* --------------------------------- resultado automático (fallback 06-06) -- */
+/* ---------------------------- resultado automático (busca determinística) -- */
 
 /**
- * Conteúdo da decisão validada do fallback (`via === 'ia'`): herói comportado
- * DENTRO da `MolduraAurumAI` — barra de confiança + veredito compacto + cartão
- * enxuto + CTA primário. Excesso (NCMs analisados, simulação, auditoria) em
- * botões premium → modais glass padrão.
+ * Conteúdo da decisão validada pelo resolvedor: herói comportado DENTRO da
+ * `MolduraResultado` — barra de confiança + cartão enxuto + CTA primário.
+ * Excesso (NCMs analisados, simulação, auditoria) em botões premium → modais
+ * glass padrão.
  */
-function RespostaIaValidada({
+function RespostaBuscaValidada({
   onSalvar,
   bloqueios,
 }: {
   onSalvar: (c: Classificacao) => void
   bloqueios: Record<string, BloqueioSistema[]>
 }) {
-  const candidatos = useConsulta((s) => s.candidatosIa)
-  const decisao = useConsulta((s) => s.decisaoIa)
-  const nomenclaturaIa = useConsulta((s) => s.nomenclaturaIa)
-  const calculo = useConsulta((s) => s.calculoIa)
-  const codigoIa = useConsulta((s) => s.codigoIa)
-  const confianca = useConsulta((s) => s.confiancaIa)
-  const veredito = useConsulta((s) => s.vereditoIa)
-  const fontes = useConsulta((s) => s.fontesIa)
-  const feedbackEnviado = useConsulta((s) => s.feedbackIaEnviado)
-  const usarSugestaoIa = useConsulta((s) => s.usarSugestaoIa)
-  const feedbackNegativo = useConsulta((s) => s.feedbackIaNegativo)
+  const candidatosBusca = useConsulta((s) => s.candidatosBusca)
+  const decisaoBusca = useConsulta((s) => s.decisaoBusca)
+  const nomenclaturaBusca = useConsulta((s) => s.nomenclaturaBusca)
+  const calculoBusca = useConsulta((s) => s.calculoBusca)
+  const codigoBusca = useConsulta((s) => s.codigoBusca)
+  const confiancaBusca = useConsulta((s) => s.confiancaBusca)
+  const fontesBusca = useConsulta((s) => s.fontesBusca)
+  const feedbackEnviado = useConsulta((s) => s.feedbackEnviado)
+  const usarSugestaoBusca = useConsulta((s) => s.usarSugestaoBusca)
+  const feedbackNegativo = useConsulta((s) => s.feedbackNegativo)
   const escolher = useConsulta((s) => s.escolherUnificada)
-  const via = useConsulta((s) => s.via)
-  const grafoCypher = useConsulta((s) => s.grafoCypherIa)
-  const caminhoGrafo = useConsulta((s) => s.caminhoGrafoIa)
-  const provenienciaGrafo = useConsulta((s) => s.provenienciaGrafoIa)
-  const boostGrafo = useConsulta((s) => s.boostGrafoIa)
-  const boostValorGrafo = useConsulta((s) => s.boostValorGrafoIa)
   const [modal, setModal] = useState<'ncms' | 'simulacao' | 'auditoria' | null>(null)
 
-  const top = candidatos.slice(0, 8)
-  const nivel = nivelDeConfianca(confianca)
+  const top = candidatosBusca.slice(0, 8)
+  const nivel = nivelDeConfianca(confiancaBusca)
 
   return (
     <div
       className="space-y-2"
       role="status"
       aria-live="polite"
-      aria-label={`Resultado automático · confiança ${nivel} ${fmtConfiancaAurumAI(confianca)}`}
+      aria-label={`Resultado automático · confiança ${nivel} ${fmtConfiancaBusca(confiancaBusca)}`}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <BarraConfiancaAurumAI valor={confianca} compact />
-        {via === 'grafo' || via === 'grafo+ia' ? (
-          <span
-            className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
-            title="Resposta com caminho do grafo fiscal local (multi-hop auditável) — o resolvedor validou o código."
-            role="status"
-            aria-label={via === 'grafo+ia' ? 'via:grafo+ia' : 'via:grafo'}
-          >
-            {via === 'grafo+ia' ? 'via:grafo+ia' : 'via:grafo'}
-          </span>
-        ) : null}
+        <BarraConfiancaResultado valor={confiancaBusca} compact />
       </div>
-      {caminhoGrafo?.length && provenienciaGrafo?.length ? (
-        <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400" title="Base oficial + seu uso local (overlay só reordena)">
-          <strong>Por que sugeriu:</strong> base: {caminhoGrafo.join(' → ')}
-          {boostGrafo === 'uso_local' && Number(boostValorGrafo) > 0 ? (
-            <span className="font-mono font-bold"> + seu uso (boost: uso_local +{Number(boostValorGrafo)})</span>
-          ) : null}
-        </p>
-      ) : null}
 
-      {codigoIa && decisao ? (
+      {codigoBusca && decisaoBusca ? (
         <>
-          {veredito && veredito.exigeVerificacao ? (
-            <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-              <strong>Hipótese a verificar:</strong> {veredito.mensagemHipotese ?? 'condição legal a comprovar antes de escriturar.'}
-            </p>
-          ) : null}
           <CartaoEnxuto
-            cl={decisao}
-            nomenclatura={nomenclaturaIa}
-            bloqueios={bloqueios[decisao.cClassTrib] ?? null}
+            cl={decisaoBusca}
+            nomenclatura={nomenclaturaBusca}
+            bloqueios={bloqueios[decisaoBusca.cClassTrib] ?? null}
             onSalvar={(cl) => onSalvar(cl)}
           />
 
@@ -1243,11 +1214,11 @@ function RespostaIaValidada({
               variante="primary"
               tam="sm"
               onClick={() => {
-                void usarSugestaoIa()
+                void usarSugestaoBusca()
                 toast('Resultado enviado para classificação oficial.', 'ok')
               }}
             >
-              Classificar {fmtNcm(codigoIa)} oficialmente
+              Classificar {fmtNcm(codigoBusca)} oficialmente
             </Btn>
             <Btn
               tam="sm"
@@ -1261,22 +1232,22 @@ function RespostaIaValidada({
             </Btn>
           </div>
 
-          <div className="aurum-ai-acoes" role="group" aria-label="Explorar decisão da IA">
+          <div className="resultado-auto-acoes" role="group" aria-label="Explorar decisão automática">
             {top.length ? (
               <BotaoDetalhePremium
                 icone="🔎"
                 rotulo="NCMs analisados"
                 contagem={top.length}
-                variante="ia"
+                variante="busca"
                 titulo="Ver as pistas avaliadas — a referência preferida ganha selo + linha espectro"
                 onClick={() => setModal('ncms')}
               />
             ) : null}
-            {calculo ? (
+            {calculoBusca ? (
               <BotaoDetalhePremium
                 icone="🧮"
                 rotulo="Simulação"
-                titulo={`Simulação exemplificativa sobre ${fmtMoeda(VALOR_BASE_IA)} — abre em modal glass`}
+                titulo={`Simulação exemplificativa sobre ${fmtMoeda(VALOR_BASE_BUSCA)} — abre em modal glass`}
                 onClick={() => setModal('simulacao')}
               />
             ) : null}
@@ -1296,76 +1267,41 @@ function RespostaIaValidada({
               titulo: fmtNcm(c.codigo),
               subtitulo: c.descricao,
             }))}
-            codigoPreferido={codigoIa}
-            subtitulo={`A busca automática avaliou ${top.length} pista(s) — “${fmtNcm(codigoIa)}” foi a referência preferida (selo + linha espectro).`}
+            codigoPreferido={codigoBusca}
+            subtitulo={`A busca automática avaliou ${top.length} pista(s) — “${fmtNcm(codigoBusca)}” foi a referência preferida (selo + linha espectro).`}
             onEscolher={(codigo) => void escolher(codigo)}
           />
-          <ModalSimulacaoIA
+          <ModalSimulacaoBusca
             aberto={modal === 'simulacao'}
             onFechar={() => setModal(null)}
-            titulo={`Simulação exemplificativa (${fmtMoeda(VALOR_BASE_IA)})`}
-            nota={veredito?.exigeVerificacao ? 'Cálculo com a redução vigente (0% — alíquota cheia). A hipótese NÃO foi aplicada.' : undefined}
+            titulo={`Simulação exemplificativa (${fmtMoeda(VALOR_BASE_BUSCA)})`}
           >
-            {calculo ? (
+            {calculoBusca ? (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <div>
                   <div className="text-[10px] font-bold uppercase text-slate-400">IBS</div>
-                  <div className="font-mono font-bold">{fmtMoeda(calculo.vIBS)}</div>
+                  <div className="font-mono font-bold">{fmtMoeda(calculoBusca.vIBS)}</div>
                 </div>
                 <div>
                   <div className="text-[10px] font-bold uppercase text-slate-400">CBS</div>
-                  <div className="font-mono font-bold">{fmtMoeda(calculo.vCBS)}</div>
+                  <div className="font-mono font-bold">{fmtMoeda(calculoBusca.vCBS)}</div>
                 </div>
                 <div>
                   <div className="text-[10px] font-bold uppercase text-slate-400">Tributos</div>
-                  <div className="font-mono font-bold">{fmtMoeda(calculo.total)}</div>
+                  <div className="font-mono font-bold">{fmtMoeda(calculoBusca.total)}</div>
                 </div>
                 <div>
                   <div className="text-[10px] font-bold uppercase text-slate-400">Total c/ tributos</div>
-                  <div className="font-mono font-bold">{fmtMoeda(calculo.base + calculo.total)}</div>
+                  <div className="font-mono font-bold">{fmtMoeda(calculoBusca.base + calculoBusca.total)}</div>
                 </div>
               </div>
             ) : null}
-          </ModalSimulacaoIA>
-          <ModalAuditoriaIA
+          </ModalSimulacaoBusca>
+          <ModalAuditoriaBusca
             aberto={modal === 'auditoria'}
             onFechar={() => setModal(null)}
-            fontes={fontes}
-            nota={`Decisão validada pelo resolvedor oficial; cálculo sobre ${fmtMoeda(VALOR_BASE_IA)} — trilha em \`audit_log\` + \`logs/consultas-ia.jsonl\`.`}
-            extra={
-              grafoCypher || caminhoGrafo?.length ? (
-                <div className="space-y-2">
-                  {caminhoGrafo?.length && provenienciaGrafo?.length ? (
-                    <div className="rounded-xl border border-[var(--line)] bg-slate-50 p-3 dark:bg-slate-950/40">
-                      <div className="text-[11px] font-black uppercase tracking-wide text-slate-500">Trilha do grafo ({via === 'grafo+ia' ? 'via:grafo+ia' : 'via:grafo'})</div>
-                      <p className="mt-1 font-mono text-[11px]">{caminhoGrafo.join(' → ')}</p>
-                      <ul className="mt-1 space-y-1 font-mono text-[11px] text-slate-500">
-                        {provenienciaGrafo!.map((p, i) => (
-                          <li key={i}>
-                            {p.de} —[{p.tipo}/{p.origem} conf {p.confianca}
-                            {p.anoReferencia ? ` ano ${p.anoReferencia}` : ''}]→ {p.para}
-                          </li>
-                        ))}
-                      </ul>
-                      {boostGrafo === 'uso_local' ? (
-                        <p className="mt-1 text-[11px] text-slate-500">
-                          Boost de uso local: <span className="font-mono font-bold">uso_local +{Number(boostValorGrafo) || 0}</span> (teto 0.3, TTL 90d — só reordena).
-                        </p>
-                      ) : null}
-                      <p className="mt-1 text-[11px] text-slate-500">Relatório cita: {caminhoGrafo.join(' → ')}</p>
-                    </div>
-                  ) : null}
-                  {grafoCypher ? (
-                    <details className="rounded-xl border border-slate-200 bg-slate-950 p-3 dark:border-slate-800" open>
-                      <summary className="cursor-pointer text-[11px] font-bold text-slate-300">Cypher executado</summary>
-                      <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-emerald-100">
-                        {grafoCypher}
-                      </pre>
-                    </details>
-                  ) : null}
-                </div>
-              ) : undefined
-            }
+            fontes={fontesBusca}
+            nota={`Decisão validada pelo resolvedor oficial; cálculo sobre ${fmtMoeda(VALOR_BASE_BUSCA)} — trilha em \`audit_log\` + \`logs/consultas.jsonl\`.`}
           />
         </>
       ) : (
@@ -1410,14 +1346,6 @@ function RespostaIaValidada({
               </div>
             </div>
           )}
-          {veredito ? (
-            <details className="rounded-lg border border-dashed border-slate-300 bg-slate-50/60 px-2.5 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300">
-              <summary className="cursor-pointer font-bold">
-                🔎 Melhor pista (não é uma decisão)
-              </summary>
-              <p className="mt-1 leading-relaxed">{veredito.mensagemVigente}</p>
-            </details>
-          ) : null}
           {top.length ? (
             <div className="space-y-2">
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-2 dark:border-slate-800 dark:bg-slate-950/40">
@@ -1448,12 +1376,12 @@ function RespostaIaValidada({
                   ))}
                 </div>
               </div>
-              <div className="aurum-ai-acoes" role="group" aria-label="Pistas avaliadas">
+              <div className="resultado-auto-acoes" role="group" aria-label="Pistas avaliadas">
                 <BotaoDetalhePremium
                   icone="🔎"
                   rotulo="Pistas avaliadas"
                   contagem={top.length}
-                  variante="ia"
+                  variante="busca"
                   titulo="Ver as pistas avaliadas em modal glass"
                   onClick={() => setModal('ncms')}
                 />
@@ -1464,7 +1392,7 @@ function RespostaIaValidada({
             aberto={modal === 'ncms'}
             onFechar={() => setModal(null)}
             itens={top.map((c) => ({ codigo: c.codigo, titulo: fmtNcm(c.codigo), subtitulo: c.descricao }))}
-            codigoPreferido={codigoIa}
+            codigoPreferido={codigoBusca}
             subtitulo={
               top.length
                 ? `A busca automática avaliou ${top.length} correspondência(s) da base oficial — toque para classificar oficialmente.`
@@ -1472,11 +1400,11 @@ function RespostaIaValidada({
             }
             onEscolher={(codigo) => void escolher(codigo)}
           />
-          <ModalAuditoriaIA
+          <ModalAuditoriaBusca
             aberto={modal === 'auditoria'}
             onFechar={() => setModal(null)}
-            fontes={fontes}
-            nota={`Sem decisão segura — trilha em \`audit_log\` + \`logs/consultas-ia.jsonl\`.`}
+            fontes={fontesBusca}
+            nota={`Sem decisão segura — trilha em \`audit_log\` + \`logs/consultas.jsonl\`.`}
           />
         </>
       )}
@@ -1663,3 +1591,5 @@ function ListaResultadoTexto({
     </div>
   )
 }
+
+
