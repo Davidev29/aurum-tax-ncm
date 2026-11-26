@@ -37,7 +37,7 @@ import {
   type ResultadoBuscaTexto,
 } from '@/infrastructure/base/classificacao-repo'
 import { buscarNoDicionarioComercial } from '@/domain/constants/dicionario-comercial'
-import { pareceCodigoNcm } from '@/domain/services/busca-texto'
+import { interpretarCodigo } from '@/domain/services/interpretar-codigo'
 import { detectarForaDeEscopo, MENSAGEM_FORA_DE_ESCOPO } from '@/domain/services/escopo-consulta'
 import { regraDoCapitulo, EXCECOES_FAMILIA } from '@/domain/services/regras-hierarquicas'
 import { secaoDoCapitulo } from '@/domain/services/hierarquia-fiscal'
@@ -49,12 +49,8 @@ import { db } from '@/infrastructure/db/schema'
  * só dígitos/pontuação, sem letras. Retorna os dígitos ou `null`.
  */
 export function hipoteseNcmParcial(descricao: unknown): string | null {
-  const cru = String(descricao ?? '')
-  if (!cru.trim() || !pareceCodigoNcm(cru)) return null
-  if (/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(cru)) return null
-  const dig = norm(cru)
-  if (dig.length >= 2 && dig.length <= 7) return dig
-  return null
+  const r = interpretarCodigo(descricao, 'ncm')
+  return r.kind === 'parcial' && !r.suspeitoDe ? r.digitos : null
 }
 
 async function sugerirNomenclaturaPrefixo(prefixo: string, limite = 5) {
@@ -212,6 +208,41 @@ export async function classificarPorDescricao(
       foraDeEscopo: true,
     }
   }
+  // Código NCM completo digitado (com ou sem máscara): caminho direto e
+  // determinístico. Nunca cai no matching fuzzy de descrição — foi exatamente
+  // assim que `3913.90.50` virava `6815.99.14`.
+  const codigoDireto = interpretarCodigo(entrada.descricao, 'ncm')
+  if (codigoDireto.kind === 'ok' && !codigoDireto.suspeitoDe) {
+    const r = await resolverClassificacoes(codigoDireto.digitos)
+    const dec = r.lista[0]
+    const tipo = dec && !r.regraGeral ? montarTipoExcecao(dec) : null
+    const codigoFmt = fmtNcm(codigoDireto.digitos)
+    const justificativa = r.extinto
+      ? `NCM ${codigoFmt} está extinto na nomenclatura vigente — vínculo histórico descartado: tributação integral (CST ${dec?.cst ?? REGRA_GERAL.cst}/cClassTrib ${dec?.cClassTrib ?? REGRA_GERAL.cClassTrib}).`
+      : tipo
+        ? `NCM ${codigoFmt} — "${dec?.descricao ?? r.nomenclatura?.descricao ?? ''}". ${tipo.tipo}`
+        : `NCM ${codigoFmt} — sem vínculo vigente na base da Reforma: tributação integral (CST ${REGRA_GERAL.cst}/cClassTrib ${REGRA_GERAL.cClassTrib}), sem exceção enquadrável.`
+    return {
+      ncm_provavel: codigoFmt,
+      descricao_ncm: r.nomenclatura?.descricao ?? dec?.descricao ?? null,
+      excecao_enquadravel: Boolean(tipo),
+      tipo_excecao: tipo?.tipo ?? null,
+      justificativa,
+      confianca: 'alta',
+      alternativas: r.lista.slice(1).map((c) => fmtNcm(c.codigo)),
+      cst: dec?.cst ?? REGRA_GERAL.cst,
+      cClassTrib: dec?.cClassTrib ?? REGRA_GERAL.cClassTrib,
+      anexo: tipo?.anexo ?? null,
+      baseLegal: tipo?.baseLegal ?? null,
+      urlLegislacao: tipo?.url ?? null,
+      perguntasComplementares: [],
+      trilha: [
+        { etapa: 'Código NCM', detalhe: `código completo informado: ${codigoFmt}` },
+        { etapa: 'Verificação de exceções (base da Reforma)', detalhe: r.extinto ? 'NCM extinto → regra geral' : r.lista.map((c) => `${c.cst}/${c.cClassTrib}`).join(', ') || 'sem vínculo → regra geral' },
+      ],
+    }
+  }
+
   // Hipótese de NCM parcial (2–7 dígitos): a entrada JÁ é um começo de
   // código, não uma descrição. Retorna os filhos vigentes como alternativas
   // navegáveis em vez de NÃO SEI seco — autonomia sem inventar NCM.

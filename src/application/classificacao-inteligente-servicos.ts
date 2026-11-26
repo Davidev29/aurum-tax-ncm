@@ -24,7 +24,7 @@ import {
   type ConfiancaServico,
   type EntradaDescricaoServico,
 } from '@/domain/services/classificador-descricao-servicos'
-import { fmtNbs, norm } from '@/domain/services/format'
+import { fmtNbs } from '@/domain/services/format'
 import {
   buscarNbsPorTexto,
   resolverClassificacoesNbs,
@@ -36,6 +36,7 @@ import { buscarNoDicionarioServicos } from '@/domain/constants/dicionario-servic
 import { obterContextoNbs } from '@/domain/constants/contexto-nbs'
 import { db } from '@/infrastructure/db/schema'
 import { temMarcadorExterno } from '@/domain/services/escopo-consulta'
+import { interpretarCodigo } from '@/domain/services/interpretar-codigo'
 
 export type { EntradaDescricaoServico, ConfiancaServico }
 
@@ -84,10 +85,9 @@ export const MENSAGEM_FORA_DE_ESCOPO_SERVICOS =
  *   automaticamente pelo classificador (DE-PARA é apenas referência).
  */
 function codigoNbsDireto(descricao: unknown): { codigo: string; legado: boolean } | null {
-  const cru = String(descricao ?? '').trim()
-  if (!cru || /[A-Za-zÀ-ÖØ-öø-ÿ]/.test(cru) || !/^[\d.\s/-]+$/.test(cru)) return null
-  if (/^\d\.\d{4}\.\d{2}\.\d{2}$/.test(cru)) return { codigo: norm(cru), legado: true }
-  if (/^\d{9}$/.test(cru) || /^\d{3}\.\d{3}\.\d{3}$/.test(cru)) return { codigo: norm(cru), legado: false }
+  const r = interpretarCodigo(descricao, 'nbs')
+  if (r.kind === 'ok' && !r.suspeitoDe) return { codigo: r.digitos, legado: false }
+  if (r.kind === 'legado') return { codigo: r.digitos, legado: true }
   return null
 }
 
@@ -124,13 +124,8 @@ function resultadoCodigoNbs(
 
 /** NBS parcial digitado como texto (2–8 dígitos, só dígitos/pontuação). */
 export function hipoteseNbsParcial(descricao: unknown): string | null {
-  const cru = String(descricao ?? '')
-  if (!cru.trim()) return null
-  if (/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(cru)) return null
-  if (!/^[\d.\s/-]+$/.test(cru.trim())) return null
-  const dig = norm(cru)
-  if (dig.length >= 2 && dig.length <= 8) return dig
-  return null
+  const r = interpretarCodigo(descricao, 'nbs')
+  return r.kind === 'parcial' && !r.suspeitoDe ? r.digitos : null
 }
 
 const ANEXO_ROMANO: Record<string, string> = {

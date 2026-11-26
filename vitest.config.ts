@@ -14,6 +14,10 @@ export default defineConfig({
     // Suíte I/O-heavy: seeds de ~28k linhas SQLite por arquivo + workers em
     // paralelo disputando disco. 30s evita flakes sob carga (padrão: 5s).
     testTimeout: 30000,
+    // Várias suítes semeiam as mesmas tabelas (cnae_nbs / ncm); acima de 4
+    // workers o SQLite passa a falhar com UNIQUE transitório. Limitar workers
+    // mantém a suíte determinística sem desligar o paralelismo.
+    maxWorkers: 2,
     coverage: {
       provider: 'v8',
       include: ['src/domain/**', 'src/application/**', 'src/infrastructure/**'],

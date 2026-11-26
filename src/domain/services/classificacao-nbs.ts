@@ -8,6 +8,7 @@ import type { Classificacao } from '../entities'
 import { contextoRegraGeral } from '@/infrastructure/base/classificacao-repo'
 import { montarRegraGeral } from './classificacao'
 import { fmtNbs, norm } from './format'
+import { interpretarCodigo } from './interpretar-codigo'
 
 export type EntradaNbsKind = 'ok' | 'invalido'
 
@@ -19,9 +20,9 @@ export interface EntradaNbs {
 }
 
 export function interpretarEntradaNbs(v: unknown): EntradaNbs {
-  const digitos = norm(v)
-  if (digitos.length === 9) return { kind: 'ok', codigo: digitos, digitos: 9 }
-  return { kind: 'invalido', codigo: digitos, digitos: digitos.length }
+  const r = interpretarCodigo(v, 'nbs')
+  if (r.kind === 'ok') return { kind: 'ok', codigo: r.digitos, digitos: 9 }
+  return { kind: 'invalido', codigo: r.digitos, digitos: r.digitos.length }
 }
 
 /** Regra geral dos serviços: `000|000001` (tributação integral). */

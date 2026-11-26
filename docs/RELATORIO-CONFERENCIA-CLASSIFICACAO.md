@@ -61,6 +61,14 @@
 
 `src/infrastructure/db/schema.ts` ainda declarava `BaseGrafoMeta`/`grafometa` e `src/infrastructure/db/validacao.ts` mantinha validadores de `conversasEmitente`/`grafometa` — tabelas que não existem mais no schema. Removidos; typecheck limpo.
 
+### 4.4 Normalização avançada de códigos digitados
+
+Criado `src/domain/services/interpretar-codigo.ts` — única porta de interpretação de NCM/NBS/CNAE/CNPJ. Normaliza dígitos unicode (fullwidth, arábico-indic, devanagari), aceita máscaras e separadores (`.`, espaço, `-`, `/`), prefixos (`NCM:`, `NBS`, `CNPJ`, `CNAE`) e detecta o tipo suspeito quando o formato aponta para outro código. `interpretarEntradaNcm`/`interpretarEntradaNbs`, `hipoteseNcmParcial`, `hipoteseNbsParcial`, `codigoNbsDireto` e `pareceCodigoNcm` agora delegam a ele.
+
+Efeito direto: `3913.90.50` e `39139050` resolvem para o **mesmo** NCM (extinto, regra geral) em vez de casar fuzzy com `6815.99.14`; `8599-6/01` não vira prefixo NCM; `12.345.678/0001-90` é reconhecido como CNPJ; `123.012.300` resolve como NBS 2.00. Coberto por `tests/interpretar-codigo.test.ts` (26 casos) e pelos canários atualizados em `auditoria-ncm.test.ts`.
+
+Também passei a limitar `maxWorkers: 2` no `vitest.config.ts`: com mais workers as suítes que semeiam SQLite colidiam com `UNIQUE (cnae7, nbs)` de forma intermitente.
+
 ### 4.3 Expectativas incorretas dos agentes (corrigidas na bateria)
 
 - `classificarComBusca('Cerveja latao')`: o agente esperou `total=0`; a base dá regra geral `000/000001` → **303** (19% + 11,3% de R$ 1.000). Expectativa corrigida.
@@ -75,7 +83,7 @@ Não houve alteração de regra fiscal nestes pontos — são limitações atuai
 | # | Fragilidade | Impacto tributário |
 |---|---|---|
 | 1 | `Quitosan` (`3913.90.50`, extinto em 30/09/2026) continua em `ncm_provavel`; o resolvedor degrada para 000/000001 e exibe aviso | Nenhum benefício indevido; sugestão ainda mostra código extinto |
-| 2 | `3913.90.50` digitado com pontos casa fuzzy com `6815.99.14` (falso positivo); sem pontos retorna `null` | Nenhum benefício indevido (ambos regra geral) |
+| 2 | ~~`3913.90.50` digitado com pontos casa fuzzy com `6815.99.14`; sem pontos retorna `null`~~ **Corrigido** pela normalização unificada (§4.4): ambos resolvem para `3913.90.50` | Antes: falso positivo de NCM; agora: nenhum |
 | 3 | "Carne bovina fresca desossada" elege `0201.20.10` ("Quartos dianteiros") | NCM impreciso; tributação permanece 100/100 Anexo I |
 | 4 | Pin curado de token único ("Mozzarela") acerta o NCM mas confiança cai para `baixa` | Apenas apresentação; não muda CST/cClassTrib |
 | 5 | "psicologia" elege `123.011.100` (saúde) em vez de `123.019.800` (psicologia) | Mesmo CST/cClassTrib/redução/anexo (200/200029) |

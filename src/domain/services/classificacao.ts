@@ -13,6 +13,7 @@ import type {
   VinculoNcm,
 } from '../entities'
 import { fmtNbs, fmtNcm, norm } from './format'
+import { interpretarCodigo } from './interpretar-codigo'
 
 /** Peças resolvidas pelo repositório (join 3NF) antes de montar a classificação. */
 export interface ContextoClassificacao {
@@ -335,12 +336,12 @@ export interface EntradaNcm {
 }
 
 export function interpretarEntradaNcm(v: unknown): EntradaNcm {
-  const digitos = norm(v)
-  if (digitos.length === 8) return { kind: 'ok', codigo: digitos, digitos: 8 }
-  if (digitos.length > 8) {
-    return { kind: 'truncado', codigo: digitos.slice(0, 8), digitos: digitos.length }
+  const r = interpretarCodigo(v, 'ncm')
+  if (r.kind === 'ok') return { kind: 'ok', codigo: r.digitos, digitos: 8 }
+  if (r.kind === 'truncado') {
+    return { kind: 'truncado', codigo: r.digitos.slice(0, 8), digitos: r.digitos.length }
   }
-  return { kind: 'invalido', codigo: digitos, digitos: digitos.length }
+  return { kind: 'invalido', codigo: r.digitos, digitos: r.digitos.length }
 }
 
 /* -------------------------------------------------------------------------- */

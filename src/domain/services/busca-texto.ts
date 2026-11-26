@@ -240,13 +240,13 @@ export function pontuarCandidato(
 
 /** `true` quando a consulta parece ser um NCM (só dígitos, pontos e espaços). */
 export function pareceCodigoNcm(v: unknown): boolean {
-  const s = String(v ?? '').trim()
-  return s.length > 0 && /^[\d.\s/-]+$/.test(s)
+  return pareceCodigo(v, 'ncm')
 }
 
 /* ---------------------------------- busca lexical proativo (2ª fase, tolerante) -- */
 
 import { casaToken, radicalizar } from './vocabulario'
+import { pareceCodigo } from './interpretar-codigo'
 import { limparTextoFiscal } from './texto-fiscal'
 
 /** Cache do fuzzy: pares (q|o) já medidos (o busca lexical repete pares entre docs). */
