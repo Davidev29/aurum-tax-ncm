@@ -376,24 +376,6 @@ const VALIDADORES: Record<string, (r: Rec) => void> = {
     arr(r.cnaesSecundarios, 'consultasCnpj', 'cnaesSecundarios')
     texto(r.quando, 'consultasCnpj', 'quando', 100)
   },
-  conversasEmitente: (r) => {
-    texto(r.conversaId, 'conversasEmitente', 'conversaId', 200)
-    texto(r.emitenteId, 'conversasEmitente', 'emitenteId', 200)
-    if (r.empresaAtivaId !== undefined && r.empresaAtivaId !== null) {
-      inteiro(r.empresaAtivaId, 'conversasEmitente', 'empresaAtivaId')
-    }
-    texto(r.titulo, 'conversasEmitente', 'titulo', 500, false)
-    const mensagens = arr(r.mensagens, 'conversasEmitente', 'mensagens')
-    for (const m of mensagens) {
-      if (!m || typeof m !== 'object') falha('conversasEmitente', 'mensagem-invalida')
-      const mm = m as Rec
-      enumeracao(mm.papel, 'conversasEmitente', 'mensagem.papel', ['user', 'assistant'] as const)
-      texto(mm.texto, 'conversasEmitente', 'mensagem.texto', TETO_TEXTO, false)
-      texto(mm.quando, 'conversasEmitente', 'mensagem.quando', 100)
-    }
-    texto(r.updatedAt, 'conversasEmitente', 'updatedAt', 100)
-    texto(r.createdAt, 'conversasEmitente', 'createdAt', 100)
-  },
   cnaeNbs: (r) => {
     if (r.id !== undefined) inteiro(r.id, 'cnaeNbs', 'id')
     digitos(r.cnae7, 'cnaeNbs', 'cnae7', [7])
@@ -430,14 +412,6 @@ const VALIDADORES: Record<string, (r: Rec) => void> = {
       obj(r.divergencia, 'classificacoesConsolidadas', 'divergencia')
     }
     enumeracao(r.estadoNbs, 'classificacoesConsolidadas', 'estadoNbs', ESTADO_NBS)
-  },
-  grafometa: (r) => {
-    texto(r.id, 'grafometa', 'id', 100)
-    texto(r.hash, 'grafometa', 'hash', 200)
-    texto(r.versao, 'grafometa', 'versao', 100)
-    inteiro(r.nodos, 'grafometa', 'nodos')
-    inteiro(r.arestas, 'grafometa', 'arestas')
-    texto(r.geradoEm, 'grafometa', 'geradoEm', 100)
   },
 }
 

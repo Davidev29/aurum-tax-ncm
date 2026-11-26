@@ -77,6 +77,51 @@ export interface SugestaoNbsJson {
 export const MENSAGEM_FORA_DE_ESCOPO_SERVICOS =
   'Caro usuário, fui treinada e projetada para lhe atender no âmbito de classificação de serviços (NBS) e atividades (CNAE), porém coisas externas ao sistema não tenho permissão e nem suporte para responder. Obrigado pela atenção.'
 
+/**
+ * Código NBS digitado como entrada direta (não descrição livre).
+ * - oficial 2.00: `123.012.300` ou `123012300` (9 dígitos, X.XXX.XXX);
+ * - legado 1.1: `1.2502.20.00` (formato X.XXXX.XX.XX) — NÃO é convertido
+ *   automaticamente pelo classificador (DE-PARA é apenas referência).
+ */
+function codigoNbsDireto(descricao: unknown): { codigo: string; legado: boolean } | null {
+  const cru = String(descricao ?? '').trim()
+  if (!cru || /[A-Za-zÀ-ÖØ-öø-ÿ]/.test(cru) || !/^[\d.\s/-]+$/.test(cru)) return null
+  if (/^\d\.\d{4}\.\d{2}\.\d{2}$/.test(cru)) return { codigo: norm(cru), legado: true }
+  if (/^\d{9}$/.test(cru) || /^\d{3}\.\d{3}\.\d{3}$/.test(cru)) return { codigo: norm(cru), legado: false }
+  return null
+}
+
+/** Resultado padrão quando a entrada é um código NBS, não uma descrição. */
+function resultadoCodigoNbs(
+  codigo: string,
+  titulo: string,
+  justificativa: string,
+  confianca: ConfiancaServico,
+  trilha: EtapaTrilhaServico[],
+  cst: string | null,
+  cct: string | null,
+  anexo: string | null,
+  alternativas: string[] = [],
+): SugestaoNbsJson {
+  return {
+    nbs_provavel: fmtNbs(codigo),
+    descricao_nbs: titulo,
+    excecao_enquadravel: Boolean(cct && cct !== REGRA_GERAL_NBS.cClassTrib),
+    tipo_excecao: cct && cct !== REGRA_GERAL_NBS.cClassTrib ? justificativa : null,
+    justificativa,
+    confianca,
+    alternativas,
+    cst: cst ?? null,
+    cClassTrib: cct ?? null,
+    anexo,
+    baseLegal: null,
+    urlLegislacao: null,
+    perguntasComplementares: [],
+    trilha,
+    contextoNbs: obterContextoNbs(codigo),
+  }
+}
+
 /** NBS parcial digitado como texto (2–8 dígitos, só dígitos/pontuação). */
 export function hipoteseNbsParcial(descricao: unknown): string | null {
   const cru = String(descricao ?? '')
@@ -134,6 +179,53 @@ export async function classificarServicoPorDescricao(
       trilha: [{ etapa: 'Escopo', detalhe: 'pedido fora do âmbito de serviços — recusa fixa, sem consulta à base' }],
       foraDeEscopo: true,
     }
+  }
+
+  // Código NBS completo digitado como entrada: caminho direto e determinístico.
+  // NBS 1.1 (DE-PARA) NÃO é convertido automaticamente — sem lastro, sem chute.
+  const direto = codigoNbsDireto(entrada.descricao)
+  if (direto?.legado) {
+    return {
+      nbs_provavel: null,
+      descricao_nbs: null,
+      excecao_enquadravel: false,
+      tipo_excecao: null,
+      justificativa: `Código NBS ${String(entrada.descricao ?? '').trim()} usa a nomenclatura 1.1. A conversão DE-PARA é apenas referência: informe o código NBS 2.00 (X.XXX.XXX.XX) ou descreva o serviço para classificar.`,
+      confianca: 'baixa',
+      alternativas: [],
+      cst: null,
+      cClassTrib: null,
+      anexo: null,
+      baseLegal: null,
+      urlLegislacao: null,
+      perguntasComplementares: ['Informe o código NBS 2.00 correspondente ou descreva o serviço.'],
+      trilha: [{ etapa: 'Código NBS', detalhe: 'formato 1.1 (legado) — conversão DE-PARA não aplicada pelo classificador' }],
+    }
+  }
+  if (direto) {
+    const resolvido = await resolverClassificacoesNbs(direto.codigo)
+    const decisao = resolvido.lista[0]
+    const excecao = !resolvido.regraGeral && Boolean(decisao)
+    const tipo = excecao ? montarTipoExcecaoNbs(decisao!) : null
+    const vinculo = (await db.nbs.where('codigo').equals(direto.codigo).toArray().catch(() => []))[0]
+    const titulo = vinculo ? tituloNbs(vinculo) : `NBS ${fmtNbs(direto.codigo)}`
+    const justificativa = excecao
+      ? `NBS ${fmtNbs(direto.codigo)} — "${titulo}". ${tipo!.tipo}`
+      : `NBS ${fmtNbs(direto.codigo)} — código não possui vínculo vigente na base da Reforma: tributação integral (CST ${REGRA_GERAL_NBS.cst}/cClassTrib ${REGRA_GERAL_NBS.cClassTrib}), sem exceção enquadrável.`
+    const r = resultadoCodigoNbs(
+      direto.codigo,
+      titulo,
+      justificativa,
+      'alta',
+      [
+        { etapa: 'Código NBS', detalhe: `código oficial 2.00 informado: ${fmtNbs(direto.codigo)}` },
+        { etapa: 'Verificação de exceções (base da Reforma)', detalhe: resolvido.regraGeral ? 'sem vínculo → regra geral' : resolvido.lista.map((c) => `${c.cst}/${c.cClassTrib}`).join(', ') },
+      ],
+      decisao?.cst ?? REGRA_GERAL_NBS.cst,
+      decisao?.cClassTrib ?? REGRA_GERAL_NBS.cClassTrib,
+      tipo?.anexo ?? null,
+    )
+    return r
   }
 
   const parcial = hipoteseNbsParcial(entrada.descricao)

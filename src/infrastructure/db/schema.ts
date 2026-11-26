@@ -169,7 +169,7 @@ class BancoLocal {
   /** Carimbo do base fiscal local (chave `id`, sempre `'atual'`). */
   grafometa = new Tabela<BaseGrafoMeta, string>('grafometa')
 
-  /** Tabelas existentes (paridade `db.tables` do Dexie — sempre as 27). */
+  /** Tabelas existentes (paridade `db.tables` do Dexie — sempre as 24). */
   get tables(): Array<{ name: string }> {
     return TODAS_STORES.map((name) => ({ name }))
   }
