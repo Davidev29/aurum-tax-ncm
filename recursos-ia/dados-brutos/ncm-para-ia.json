@@ -1,8 +1,8 @@
 {
  "meta": {
-  "geradoEm": "2026-11-26T11:15:33.183Z",
+  "geradoEm": "2026-11-26T11:48:06.661Z",
   "fonte": "public/base (reforma.json + nomenclatura.json + classificacao-tributaria.json + MANIFEST.json)",
-  "manifestGeradoEm": "2026-11-26T11:15:32.807Z",
+  "manifestGeradoEm": "2026-11-26T11:48:06.085Z",
   "totalVinculos": 2335,
   "totalCodigosDistintos": 1675,
   "esperadoNcm": 2335,
